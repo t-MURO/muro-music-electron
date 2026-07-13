@@ -1,0 +1,829 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base CSS Variables */
+:root {
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-theme: 150ms ease;
+
+  /* Grid layout */
+  --sidebar-width: 200px;
+  --queue-width: 320px;
+  --media-controls-height: 120px;
+}
+
+/* Clean Light Theme (Default) */
+[data-theme="light"],
+:root {
+  /* Colors */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-tertiary: #e9ecef;
+  --color-bg-hover: #e2e6ea;
+  --color-bg-active: #dee2e6;
+
+  --color-text-primary: #212529;
+  --color-text-secondary: #6c757d;
+  --color-text-muted: #adb5bd;
+
+  --color-accent: #4361ee;
+  --color-accent-hover: #3a56d4;
+  --color-accent-light: rgba(67, 97, 238, 0.1);
+
+  --color-border: #cbd5e0;
+  --color-border-light: #d6dce4;
+
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+
+  /* Typography sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-xxl: 32px;
+
+  --line-height: 1.5;
+
+  /* Component-specific */
+  --table-row-height: 48px;
+  --button-height: 40px;
+  --input-height: 44px;
+  --icon-size: 20px;
+  --avatar-size: 48px;
+  --play-button-size: 48px;
+}
+
+/* Clean Dark Theme */
+[data-theme="dark"] {
+  /* Colors */
+  --color-bg-primary: #1a1a2e;
+  --color-bg-secondary: #16162a;
+  --color-bg-tertiary: #252542;
+  --color-bg-hover: #2a2a4a;
+  --color-bg-active: #323258;
+
+  --color-text-primary: #f8f9fa;
+  --color-text-secondary: #adb5bd;
+  --color-text-muted: #6c757d;
+
+  --color-accent: #4361ee;
+  --color-accent-hover: #5a75f0;
+  --color-accent-light: rgba(67, 97, 238, 0.2);
+
+  --color-border: #3a3a5a;
+  --color-border-light: #32324e;
+
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+
+  /* Typography sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-xxl: 32px;
+
+  --line-height: 1.5;
+
+  /* Component-specific */
+  --table-row-height: 48px;
+  --button-height: 40px;
+  --input-height: 44px;
+  --icon-size: 20px;
+  --avatar-size: 48px;
+  --play-button-size: 48px;
+}
+
+/* Compact Light Theme */
+[data-theme="compact-light"] {
+  /* Colors - Same as clean light */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-tertiary: #e9ecef;
+  --color-bg-hover: #e2e6ea;
+  --color-bg-active: #dee2e6;
+
+  --color-text-primary: #212529;
+  --color-text-secondary: #6c757d;
+  --color-text-muted: #adb5bd;
+
+  --color-accent: #4361ee;
+  --color-accent-hover: #3a56d4;
+  --color-accent-light: rgba(67, 97, 238, 0.1);
+
+  --color-border: #cbd5e0;
+  --color-border-light: #d6dce4;
+
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+
+  /* Shadows - Reduced for compact */
+  --shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.08);
+
+  /* Typography sizes - Compact theme (smaller) */
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-md: 12px;
+  --font-size-lg: 14px;
+  --font-size-xl: 18px;
+  --font-size-xxl: 24px;
+
+  --line-height: 1.3;
+
+  /* Component-specific - Compact */
+  --table-row-height: 32px;
+  --button-height: 28px;
+  --input-height: 32px;
+  --icon-size: 16px;
+  --avatar-size: 36px;
+  --play-button-size: 36px;
+
+  /* Spacing overrides for compact */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+
+  /* Layout overrides */
+  --sidebar-width: 180px;
+  --queue-width: 260px;
+  --media-controls-height: 80px;
+
+  /* Border radius - smaller for compact */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+}
+
+/* Compact Dark Theme */
+[data-theme="compact-dark"] {
+  /* Colors - Same as clean dark */
+  --color-bg-primary: #1a1a2e;
+  --color-bg-secondary: #16162a;
+  --color-bg-tertiary: #252542;
+  --color-bg-hover: #2a2a4a;
+  --color-bg-active: #323258;
+
+  --color-text-primary: #f8f9fa;
+  --color-text-secondary: #adb5bd;
+  --color-text-muted: #6c757d;
+
+  --color-accent: #4361ee;
+  --color-accent-hover: #5a75f0;
+  --color-accent-light: rgba(67, 97, 238, 0.2);
+
+  --color-border: #3a3a5a;
+  --color-border-light: #32324e;
+
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-danger: #dc3545;
+
+  /* Shadows - Reduced for compact */
+  --shadow-sm: 0 1px 1px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.3);
+
+  /* Typography sizes - Compact theme (smaller) */
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-md: 12px;
+  --font-size-lg: 14px;
+  --font-size-xl: 18px;
+  --font-size-xxl: 24px;
+
+  --line-height: 1.3;
+
+  /* Component-specific - Compact */
+  --table-row-height: 32px;
+  --button-height: 28px;
+  --input-height: 32px;
+  --icon-size: 16px;
+  --avatar-size: 36px;
+  --play-button-size: 36px;
+
+  /* Spacing overrides for compact */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+
+  /* Layout overrides */
+  --sidebar-width: 180px;
+  --queue-width: 260px;
+  --media-controls-height: 80px;
+
+  /* Border radius - smaller for compact */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
+}
+
+/* Terminal Theme */
+[data-theme="terminal"] {
+  /* Font override - Monospace */
+  --font-family: 'IBM Plex Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* Colors - Terminal green on black */
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #050706;
+  --color-bg-tertiary: #0b100d;
+  --color-bg-hover: #0f1812;
+  --color-bg-active: #1a241d;
+
+  --color-text-primary: #c3ffba;
+  --color-text-secondary: #7fd187;
+  --color-text-muted: #4a7850;
+
+  --color-accent: #4cff6a;
+  --color-accent-hover: #66ff7f;
+  --color-accent-light: rgba(76, 255, 106, 0.15);
+
+  --color-border: #2a3a30;
+  --color-border-light: #1a2820;
+
+  --color-success: #4cff6a;
+  --color-warning: #ffff00;
+  --color-danger: #ff4444;
+
+  /* Shadows - None for terminal */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Typography sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-xxl: 32px;
+
+  --line-height: 1.5;
+
+  /* Component-specific */
+  --table-row-height: 48px;
+  --button-height: 40px;
+  --input-height: 44px;
+  --icon-size: 20px;
+  --avatar-size: 48px;
+  --play-button-size: 48px;
+
+  /* Border radius - No rounded corners for terminal */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-full: 0px;
+}
+
+/* B&W Terminal Theme */
+[data-theme="bw-terminal"] {
+  /* Font override - Monospace */
+  --font-family: 'IBM Plex Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* Colors - White on black */
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #080808;
+  --color-bg-tertiary: #121212;
+  --color-bg-hover: #1a1a1a;
+  --color-bg-active: #262626;
+
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #606060;
+
+  --color-accent: #ffffff;
+  --color-accent-hover: #d0d0d0;
+  --color-accent-light: rgba(255, 255, 255, 0.12);
+
+  --color-border: #333333;
+  --color-border-light: #222222;
+
+  --color-success: #ffffff;
+  --color-warning: #a0a0a0;
+  --color-danger: #808080;
+
+  /* Shadows - None for terminal */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Typography sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+  --font-size-xl: 24px;
+  --font-size-xxl: 32px;
+
+  --line-height: 1.5;
+
+  /* Component-specific */
+  --table-row-height: 48px;
+  --button-height: 40px;
+  --input-height: 44px;
+  --icon-size: 20px;
+  --avatar-size: 48px;
+  --play-button-size: 48px;
+
+  /* Border radius - No rounded corners for terminal */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-full: 0px;
+}
+
+/* Compact B&W Terminal Theme */
+[data-theme="compact-bw-terminal"] {
+  /* Font override - Monospace */
+  --font-family: 'IBM Plex Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* Colors - White on black */
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #080808;
+  --color-bg-tertiary: #121212;
+  --color-bg-hover: #1a1a1a;
+  --color-bg-active: #262626;
+
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #a0a0a0;
+  --color-text-muted: #606060;
+
+  --color-accent: #ffffff;
+  --color-accent-hover: #d0d0d0;
+  --color-accent-light: rgba(255, 255, 255, 0.12);
+
+  --color-border: #333333;
+  --color-border-light: #222222;
+
+  --color-success: #ffffff;
+  --color-warning: #a0a0a0;
+  --color-danger: #808080;
+
+  /* Shadows - None for terminal */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Typography sizes - Compact */
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-md: 12px;
+  --font-size-lg: 14px;
+  --font-size-xl: 18px;
+  --font-size-xxl: 24px;
+
+  --line-height: 1.3;
+
+  /* Component-specific - Compact */
+  --table-row-height: 32px;
+  --button-height: 28px;
+  --input-height: 32px;
+  --icon-size: 16px;
+  --avatar-size: 36px;
+  --play-button-size: 36px;
+
+  /* Spacing overrides for compact */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+
+  /* Layout overrides */
+  --sidebar-width: 180px;
+  --queue-width: 260px;
+  --media-controls-height: 80px;
+
+  /* Border radius - No rounded corners for terminal */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-full: 0px;
+}
+
+/* Compact Terminal Theme */
+[data-theme="compact-terminal"] {
+  /* Font override - Monospace */
+  --font-family: 'IBM Plex Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+
+  /* Colors - Same as terminal */
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #050706;
+  --color-bg-tertiary: #0b100d;
+  --color-bg-hover: #0f1812;
+  --color-bg-active: #1a241d;
+
+  --color-text-primary: #c3ffba;
+  --color-text-secondary: #7fd187;
+  --color-text-muted: #4a7850;
+
+  --color-accent: #4cff6a;
+  --color-accent-hover: #66ff7f;
+  --color-accent-light: rgba(76, 255, 106, 0.15);
+
+  --color-border: #2a3a30;
+  --color-border-light: #1a2820;
+
+  --color-success: #4cff6a;
+  --color-warning: #ffff00;
+  --color-danger: #ff4444;
+
+  /* Shadows - None for terminal */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+
+  /* Typography sizes - Compact */
+  --font-size-xs: 10px;
+  --font-size-sm: 11px;
+  --font-size-md: 12px;
+  --font-size-lg: 14px;
+  --font-size-xl: 18px;
+  --font-size-xxl: 24px;
+
+  --line-height: 1.3;
+
+  /* Component-specific - Compact */
+  --table-row-height: 32px;
+  --button-height: 28px;
+  --input-height: 32px;
+  --icon-size: 16px;
+  --avatar-size: 36px;
+  --play-button-size: 36px;
+
+  /* Spacing overrides for compact */
+  --spacing-xs: 2px;
+  --spacing-sm: 4px;
+  --spacing-md: 8px;
+  --spacing-lg: 12px;
+  --spacing-xl: 16px;
+
+  /* Layout overrides */
+  --sidebar-width: 180px;
+  --queue-width: 260px;
+  --media-controls-height: 80px;
+
+  /* Border radius - No rounded corners for terminal */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-full: 0px;
+}
+
+/* B&W Terminal: Override accent buttons to use outline style */
+[data-theme="bw-terminal"] .bg-\[var\(--color-accent\)\],
+[data-theme="compact-bw-terminal"] .bg-\[var\(--color-accent\)\] {
+  background-color: transparent !important;
+  border: 1px solid var(--color-text-primary) !important;
+  color: var(--color-text-primary) !important;
+}
+
+[data-theme="bw-terminal"] .bg-\[var\(--color-accent\)\]:hover,
+[data-theme="compact-bw-terminal"] .bg-\[var\(--color-accent\)\]:hover {
+  background-color: var(--color-bg-hover) !important;
+  border-color: var(--color-text-secondary) !important;
+}
+
+[data-theme="bw-terminal"] .bg-\[var\(--color-accent\)\]:disabled,
+[data-theme="compact-bw-terminal"] .bg-\[var\(--color-accent\)\]:disabled {
+  border-color: var(--color-text-muted) !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* B&W Terminal: Play button outline style */
+[data-theme="bw-terminal"] .player-bar-play-button,
+[data-theme="compact-bw-terminal"] .player-bar-play-button {
+  background-color: transparent !important;
+  border: 2px solid var(--color-text-primary) !important;
+  color: var(--color-text-primary) !important;
+}
+
+[data-theme="bw-terminal"] .player-bar-play-button:hover,
+[data-theme="compact-bw-terminal"] .player-bar-play-button:hover {
+  background-color: var(--color-bg-hover) !important;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+}
+
+  body {
+    font-family: var(--font-family) sans-serif;
+    font-size: var(--font-size-md);
+    line-height: var(--line-height);
+    background-color: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    transition: background-color var(--transition-theme), color var(--transition-theme);
+  }
+
+@media (prefers-reduced-motion: no-preference) {
+  .theme-transition :where(button) {
+    transition: background-color var(--transition-theme), color var(--transition-theme),
+      border-color var(--transition-theme), box-shadow var(--transition-theme),
+      fill var(--transition-theme), stroke var(--transition-theme),
+      outline-color var(--transition-theme);
+  }
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-active);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Utility classes */
+.text-muted {
+  color: var(--color-text-muted);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.text-accent {
+  color: var(--color-accent);
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spinSlow 3s linear infinite;
+}
+
+@keyframes dragOverlayFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dragOverlayCard {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-overlay-animate {
+  animation: fadeIn var(--transition-fast);
+}
+
+.modal-panel-animate {
+  animation: slideUp var(--transition-normal);
+}
+
+.drag-overlay {
+  background: radial-gradient(
+    circle at top,
+    rgba(15, 23, 42, 0.65),
+    rgba(15, 23, 42, 0.45)
+  );
+  animation: dragOverlayFade 160ms ease-out;
+}
+
+.drag-overlay-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), #ffffff);
+  animation: dragOverlayCard 220ms ease-out;
+}
+
+[data-theme="dark"] .drag-overlay-card {
+  background: linear-gradient(135deg, rgba(26, 26, 46, 0.98), #1a1a2e);
+}
+
+.player-bar {
+  transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+.player-bar-button {
+  transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.player-bar-play-button {
+  transition: all var(--transition-fast);
+}
+
+.player-progress-bar {
+  position: relative;
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.player-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+
+.player-progress-fill::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.player-progress-bar:hover .player-progress-fill::after {
+  opacity: 1;
+}
+
+.player-volume-control {
+  position: relative;
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.player-volume-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+
+.player-volume-fill::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 10px;
+  background-color: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Theme Preview Thumbnails */
+[data-theme-preview="light"] {
+  background-color: #f8f9fa;
+}
+[data-theme-preview="light"] > div {
+  background-color: #ffffff;
+}
+
+[data-theme-preview="dark"] {
+  background-color: #16162a;
+}
+[data-theme-preview="dark"] > div {
+  background-color: #1a1a2e;
+}
+
+[data-theme-preview="terminal"] {
+  background-color: #000000;
+}
+[data-theme-preview="terminal"] > div {
+  background-color: #050706;
+}
+
+[data-theme-preview="compact-light"] {
+  background-color: #e9ecef;
+}
+[data-theme-preview="compact-light"] > div {
+  background-color: #ffffff;
+}
+
+[data-theme-preview="compact-dark"] {
+  background-color: #16162a;
+}
+[data-theme-preview="compact-dark"] > div {
+  background-color: #1a1a2e;
+}
+
+[data-theme-preview="compact-terminal"] {
+  background-color: #000000;
+}
+[data-theme-preview="compact-terminal"] > div {
+  background-color: #050706;
+}
+
+[data-theme-preview="bw-terminal"] {
+  background-color: #000000;
+}
+[data-theme-preview="bw-terminal"] > div {
+  background-color: #121212;
+}
+
+[data-theme-preview="compact-bw-terminal"] {
+  background-color: #000000;
+}
+[data-theme-preview="compact-bw-terminal"] > div {
+  background-color: #121212;
+}

@@ -1,0 +1,120 @@
+import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createBackend } from "./backend.mjs";
+import { createLocalFileResponse } from "./fileProtocol.mjs";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const appRoot = path.resolve(here, "..");
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "muro-file",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+    },
+  },
+]);
+
+let mainWindow = null;
+let backend = null;
+
+const createWindow = async () => {
+  mainWindow = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 960,
+    minHeight: 640,
+    title: "Muro Music",
+    backgroundColor: "#111111",
+    webPreferences: {
+      preload: path.join(here, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+  if (process.env.MURO_DEV_URL) {
+    await mainWindow.loadURL(process.env.MURO_DEV_URL);
+  } else {
+    await mainWindow.loadFile(path.join(appRoot, "dist", "index.html"));
+  }
+};
+
+const startApplication = async () => {
+  protocol.handle("muro-file", (request) => {
+    try {
+      const url = new URL(request.url);
+      if (url.hostname !== "local") {
+        return new Response("Invalid file URL", { status: 400 });
+      }
+      const filePath = decodeURIComponent(url.pathname.slice(1));
+      return createLocalFileResponse(request, filePath);
+    } catch {
+      return new Response("Invalid file URL", { status: 400 });
+    }
+  });
+
+  backend = createBackend({
+    cacheDir: path.join(app.getPath("cache"), "covers"),
+    emit: (sender, name, payload) => sender.send("muro:event", name, payload),
+  });
+
+  ipcMain.handle("muro:invoke", (event, command, args) =>
+    backend.invoke(command, args ?? {}, event.sender)
+  );
+  ipcMain.handle("muro:app-data-dir", () => app.getPath("userData"));
+  ipcMain.handle("muro:open-dialog", async (_event, options) => {
+    const properties = [];
+    if (options.directory) properties.push("openDirectory");
+    else properties.push("openFile");
+    if (options.multiple) properties.push("multiSelections");
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties,
+      filters: Array.isArray(options.filters) ? options.filters : undefined,
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return options.multiple ? result.filePaths : result.filePaths[0];
+  });
+  ipcMain.handle("muro:confirm-dialog", async (_event, message, options) => {
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: options.kind === "warning" ? "warning" : "question",
+      title: typeof options.title === "string" ? options.title : "Muro Music",
+      message,
+      buttons: ["Cancel", "OK"],
+      defaultId: 1,
+      cancelId: 0,
+      noLink: true,
+    });
+    return result.response === 1;
+  });
+  ipcMain.on("muro:native-drag", (event, payload) => {
+    event.sender.send("muro:event", "muro://native-drag", payload);
+  });
+
+  await createWindow();
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void createWindow().catch((error) => {
+        console.error("Failed to recreate the application window:", error);
+      });
+    }
+  });
+};
+
+app.whenReady().then(startApplication).catch((error) => {
+  console.error("Failed to start Muro Music Electron:", error);
+  app.quit();
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => backend?.close());

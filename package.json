@@ -1,0 +1,76 @@
+{
+  "name": "muro-music-electron",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A customizable desktop music library and player",
+  "author": "Muro Music contributors",
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "dev:renderer": "vite",
+    "dev:electron": "node scripts/dev-electron.cjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check:node": "node --check electron/main.mjs && node --check electron/backend.mjs && node --check electron/database.mjs && node --check electron/fileProtocol.mjs && node --check electron/metadata.mjs && node --check electron/preload.cjs && node --check scripts/dev-electron.cjs && node --check tests/audio-seek-smoke.mjs && node --check tests/file-protocol-smoke.mjs && node --check tests/run-audio-seek-smoke.cjs && node --check tests/run-smoke.cjs && node --check tests/run-renderer-smoke.cjs && node --check tests/renderer-smoke.mjs",
+    "check": "npm run typecheck && npm run check:node",
+    "test:smoke": "node tests/run-smoke.cjs",
+    "test:protocol": "node tests/file-protocol-smoke.mjs",
+    "test:audio-seek": "node tests/run-audio-seek-smoke.cjs",
+    "test:renderer": "node tests/run-renderer-smoke.cjs",
+    "build": "npm run check && vite build",
+    "start": "electron .",
+    "package": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@tanstack/react-virtual": "^3.11.2",
+    "better-sqlite3": "^12.10.0",
+    "essentia.js": "^0.1.3",
+    "lucide-react": "^0.542.0",
+    "music-metadata": "^11.13.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-router-dom": "^7.13.0",
+    "sharp": "^0.35.3",
+    "taglib-wasm": "^1.4.0",
+    "zustand": "^5.0.10"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "19.2.9",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "^4.6.0",
+    "autoprefixer": "^10.4.21",
+    "electron": "43.1.0",
+    "electron-builder": "^26.15.3",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.8.3",
+    "vite": "^7.3.1"
+  },
+  "build": {
+    "appId": "com.muro.music.electron",
+    "productName": "Muro Music Electron",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/taglib-wasm/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "icon": "build/icons/icon.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icons/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Audio",
+      "icon": "build/icons/icon.png"
+    }
+  }
+}

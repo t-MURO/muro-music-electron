@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@muro/desktop/runtime": ["src/desktop/runtime.ts"],
+      "@muro/desktop/events": ["src/desktop/events.ts"],
+      "@muro/desktop/paths": ["src/desktop/paths.ts"],
+      "@muro/desktop/dialogs": ["src/desktop/dialogs.ts"]
+    }
+  },
+  "include": ["src"],
+  "exclude": ["dist", "release", "node_modules"]
+}
