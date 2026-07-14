@@ -8,24 +8,31 @@
   "main": "electron/main.mjs",
   "scripts": {
     "postinstall": "electron-builder install-app-deps",
+    "keyfinder:build": "npm --prefix ../neo-key-finder/neo-keyfinder run native:build",
+    "keyfinder:build:release": "npm --prefix ../neo-key-finder/neo-keyfinder run native:build -- --release",
+    "predev:electron": "npm run keyfinder:build",
     "dev:renderer": "vite",
     "dev:electron": "node scripts/dev-electron.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:node": "node --check electron/main.mjs && node --check electron/backend.mjs && node --check electron/database.mjs && node --check electron/fileProtocol.mjs && node --check electron/metadata.mjs && node --check electron/preload.cjs && node --check scripts/dev-electron.cjs && node --check tests/audio-seek-smoke.mjs && node --check tests/file-protocol-smoke.mjs && node --check tests/run-audio-seek-smoke.cjs && node --check tests/run-smoke.cjs && node --check tests/run-renderer-smoke.cjs && node --check tests/renderer-smoke.mjs",
+    "check:node": "node --check electron/main.mjs && node --check electron/backend.mjs && node --check electron/database.mjs && node --check electron/fileProtocol.mjs && node --check electron/keyfinder.mjs && node --check electron/metadata.mjs && node --check electron/preload.cjs && node --check scripts/dev-electron.cjs && node --check tests/audio-seek-smoke.mjs && node --check tests/file-protocol-smoke.mjs && node --check tests/keyfinder-smoke.mjs && node --check tests/run-audio-seek-smoke.cjs && node --check tests/run-smoke.cjs && node --check tests/run-renderer-smoke.cjs && node --check tests/renderer-smoke.mjs",
     "check": "npm run typecheck && npm run check:node",
     "test:smoke": "node tests/run-smoke.cjs",
     "test:protocol": "node tests/file-protocol-smoke.mjs",
+    "pretest:keyfinder": "npm run keyfinder:build",
+    "test:keyfinder": "node tests/keyfinder-smoke.mjs",
     "test:audio-seek": "node tests/run-audio-seek-smoke.cjs",
     "test:renderer": "node tests/run-renderer-smoke.cjs",
     "build": "npm run check && vite build",
     "start": "electron .",
+    "prepackage": "npm run keyfinder:build",
     "package": "npm run build && electron-builder --dir",
+    "predist": "npm run keyfinder:build:release",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.11.2",
     "better-sqlite3": "^12.10.0",
-    "essentia.js": "^0.1.3",
+    "@neo-keyfinder/engine-client": "file:../neo-key-finder/neo-keyfinder/packages/engine-client",
     "lucide-react": "^0.542.0",
     "music-metadata": "^11.13.0",
     "react": "19.2.3",
@@ -58,6 +65,15 @@
     ],
     "asarUnpack": [
       "node_modules/taglib-wasm/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../neo-key-finder/neo-keyfinder/src-tauri/binaries",
+        "to": "keyfinder",
+        "filter": [
+          "keyfinder-native-*"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.music",

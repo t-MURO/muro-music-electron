@@ -85,7 +85,7 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
   }
 };
 
-export const createBackend = ({ cacheDir, emit }) => {
+export const createBackend = ({ cacheDir, emit, keyFinder }) => {
   const commands = {
     async import_files({ paths, dbPath }, sender) {
       const audioPaths = await collectAudioPaths(Array.isArray(paths) ? paths : []);
@@ -171,6 +171,10 @@ export const createBackend = ({ cacheDir, emit }) => {
         .prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?")
         .run(bpm ?? null, key ?? null, Math.floor(Date.now() / 1000), trackId);
     },
+    keyfinder_health: () => keyFinder.health(),
+    start_track_analysis: ({ tracks }, sender) =>
+      keyFinder.startAnalysis(Array.isArray(tracks) ? tracks : [], sender),
+    cancel_track_analysis: ({ jobId }) => keyFinder.cancelAnalysis(jobId),
     get_track_source_path: ({ dbPath, trackId }) =>
       openDatabase(dbPath).prepare("SELECT source_path FROM tracks WHERE id = ?").get(trackId)?.source_path ?? null,
     record_track_play: ({ dbPath, trackId }) => {
@@ -220,6 +224,9 @@ export const createBackend = ({ cacheDir, emit }) => {
       if (!handler) throw new Error(`Unsupported command: ${command}`);
       return handler(args, sender);
     },
-    close: closeDatabases,
+    close() {
+      keyFinder.close();
+      closeDatabases();
+    },
   };
 };

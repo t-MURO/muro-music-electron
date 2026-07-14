@@ -19,9 +19,6 @@ export default defineConfig({
       "@muro/desktop/dialogs": fromHere("./src/desktop/dialogs.ts"),
     },
   },
-  optimizeDeps: {
-    exclude: ["essentia.js"],
-  },
   build: {
     outDir: "dist",
     emptyOutDir: true,

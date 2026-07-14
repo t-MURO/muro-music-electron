@@ -7,9 +7,17 @@ import { openDatabase } from "../electron/database.mjs";
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-node-smoke-"));
 const dbPath = path.join(directory, "muro.db");
+let keyFinderClosed = false;
+const keyFinder = {
+  health: async () => ({ service: "keyfinder-native", protocolVersion: 1 }),
+  startAnalysis: async (tracks) => ({ jobId: `job-${tracks.length}` }),
+  cancelAnalysis: async (jobId) => ({ cancelled: jobId === "job-1" }),
+  close: () => { keyFinderClosed = true; },
+};
 const backend = createBackend({
   cacheDir: path.join(directory, "covers"),
   emit: () => {},
+  keyFinder,
 });
 
 try {
@@ -50,12 +58,23 @@ try {
   assert.equal(recent[0].play_count, 1);
   assert.equal(recent[0].bpm, 128);
 
+  assert.equal((await backend.invoke("keyfinder_health", {})).service, "keyfinder-native");
+  assert.deepEqual(
+    await backend.invoke("start_track_analysis", { tracks: [{ id: "track-1" }] }),
+    { jobId: "job-1" },
+  );
+  assert.deepEqual(
+    await backend.invoke("cancel_track_analysis", { jobId: "job-1" }),
+    { cancelled: true },
+  );
+
   await backend.invoke("reject_tracks", { dbPath, trackIds: ["track-1"] });
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 0);
   assert.deepEqual((await backend.invoke("load_playlists", { dbPath })).playlists[0].track_ids, []);
 } finally {
   backend.close();
+  assert.equal(keyFinderClosed, true);
   fs.rmSync(directory, { recursive: true, force: true });
 }
 

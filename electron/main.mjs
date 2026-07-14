@@ -3,9 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./backend.mjs";
 import { createLocalFileResponse } from "./fileProtocol.mjs";
+import { createKeyFinderService } from "./keyfinder.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
+const developmentKeyFinderBinaries = path.resolve(
+  appRoot,
+  "../neo-key-finder/neo-keyfinder/src-tauri/binaries",
+);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -61,9 +66,16 @@ const startApplication = async () => {
     }
   });
 
+  const keyFinder = createKeyFinderService({
+    binaryDirectories: app.isPackaged
+      ? [path.join(process.resourcesPath, "keyfinder")]
+      : [developmentKeyFinderBinaries],
+    emit: (sender, name, payload) => sender.send("muro:event", name, payload),
+  });
   backend = createBackend({
     cacheDir: path.join(app.getPath("cache"), "covers"),
     emit: (sender, name, payload) => sender.send("muro:event", name, payload),
+    keyFinder,
   });
 
   ipcMain.handle("muro:invoke", (event, command, args) =>

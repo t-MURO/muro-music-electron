@@ -3,12 +3,15 @@ import { createPortal } from "react-dom";
 import { invoke } from "@muro/desktop/runtime";
 import { t } from "../../i18n";
 import {
-  analyzeTrack,
+  analysisResultFromTrack,
+  cancelTrackAnalysis,
+  listenKeyFinderEvents,
   normalizeBpm,
   BPM_RANGES,
+  startTrackAnalysis,
   type AnalysisResult,
   type BpmRange,
-} from "../../lib/analyzer";
+} from "../../lib/keyfinder";
 import type { Track } from "../../types";
 
 type TrackAnalysis = {
@@ -39,7 +42,7 @@ export const AnalysisModal = ({
   const [selectedRange, setSelectedRange] = useState<BpmRange>(BPM_RANGES[0]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const jobIdRef = useRef<string | null>(null);
 
   // Initialize analyses when tracks change
   useEffect(() => {
@@ -56,71 +59,79 @@ export const AnalysisModal = ({
     }
   }, [isOpen, tracks]);
 
-  // Start analysis when modal opens
+  // Start the native KeyFinder job when the modal opens.
   useEffect(() => {
     if (!isOpen || tracks.length === 0 || isAnalyzing) {
       return;
     }
 
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    let disposed = false;
+    let removeListener: (() => void) | undefined;
+    const finishedJobs = new Set<string>();
 
     const runAnalysis = async () => {
       setIsAnalyzing(true);
-
-      for (let i = 0; i < tracks.length; i++) {
-        // Check if cancelled
-        if (abortController.signal.aborted) {
-          break;
-        }
-
-        const track = tracks[i];
-        // Show which track is being analyzed (0-indexed display as "1 of N")
-        setProgress({ current: i, total: tracks.length });
-
-        try {
-          // Use wide range for initial analysis to get raw BPM
-          const result = await analyzeTrack(track.sourcePath, {
-            bpmMin: 60,
-            bpmMax: 200,
-            signal: abortController.signal,
-          });
-
-          setAnalyses((prev) =>
-            prev.map((a) =>
-              a.track.id === track.id
-                ? { ...a, result, rawBpm: result.bpm, error: null }
-                : a
-            )
-          );
-        } catch (error) {
-          // Ignore abort errors
-          if (error instanceof DOMException && error.name === "AbortError") {
-            break;
+      setSaveError(null);
+      try {
+        removeListener = await listenKeyFinderEvents((event) => {
+          if (disposed) return;
+          if (event.event === "trackUpdated" && event.payload.track) {
+            const engineTrack = event.payload.track;
+            if (engineTrack.status === "completed") {
+              const result = analysisResultFromTrack(engineTrack);
+              setAnalyses((previous) => previous.map((analysis) =>
+                analysis.track.id === engineTrack.id
+                  ? { ...analysis, result, rawBpm: result.bpm, error: null }
+                  : analysis
+              ));
+            } else if (engineTrack.status === "failed") {
+              setAnalyses((previous) => previous.map((analysis) =>
+                analysis.track.id === engineTrack.id
+                  ? {
+                      ...analysis,
+                      result: null,
+                      rawBpm: 0,
+                      error: engineTrack.error?.message || "Analysis failed",
+                    }
+                  : analysis
+              ));
+            }
+          } else if (event.event === "jobProgress") {
+            setProgress({
+              current: Number(event.payload.completed) || 0,
+              total: Number(event.payload.total) || tracks.length,
+            });
+          } else if (event.event === "jobFinished") {
+            finishedJobs.add(event.jobId);
+            jobIdRef.current = null;
+            setIsAnalyzing(false);
           }
-          const errorMessage =
-            error instanceof Error ? error.message : "Analysis failed";
-          setAnalyses((prev) =>
-            prev.map((a) =>
-              a.track.id === track.id
-                ? { ...a, result: null, rawBpm: 0, error: errorMessage }
-                : a
-            )
-          );
+        });
+        const started = await startTrackAnalysis(tracks);
+        if (disposed) {
+          await cancelTrackAnalysis(started.jobId).catch(() => undefined);
+          return;
         }
-
-        // Update progress after track completes
-        setProgress({ current: i + 1, total: tracks.length });
+        if (!finishedJobs.has(started.jobId)) jobIdRef.current = started.jobId;
+      } catch (error) {
+        if (disposed) return;
+        const message = error instanceof Error ? error.message : "Analysis failed";
+        setAnalyses((previous) => previous.map((analysis) => ({
+          ...analysis,
+          error: message,
+        })));
+        setIsAnalyzing(false);
       }
-
-      setIsAnalyzing(false);
-      abortControllerRef.current = null;
     };
 
-    runAnalysis();
+    void runAnalysis();
 
     return () => {
-      abortController.abort();
+      disposed = true;
+      removeListener?.();
+      const jobId = jobIdRef.current;
+      jobIdRef.current = null;
+      if (jobId) void cancelTrackAnalysis(jobId).catch(() => undefined);
     };
   }, [isOpen, tracks]);
 
@@ -176,9 +187,8 @@ export const AnalysisModal = ({
   }, [analyses, dbPath, onAnalysisComplete, onClose]);
 
   const handleCancel = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    const jobId = jobIdRef.current;
+    if (jobId) void cancelTrackAnalysis(jobId).catch(() => undefined);
   }, []);
 
   const handleClose = useCallback(() => {
