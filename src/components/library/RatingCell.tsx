@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { memo, useState } from "react";
 
 type RatingCellProps = {
@@ -14,13 +15,13 @@ export const RatingCell = memo(
 
     return (
       <div
-        className="flex h-[var(--table-row-height)] items-center px-[var(--spacing-md)]"
+        className="flex h-[var(--table-row-height)] items-center px-2"
         title={`${rating} / 5`}
         onMouseLeave={() => setHoverValue(null)}
         role="cell"
       >
         <div
-          className="flex items-center gap-1 rounded-[var(--radius-sm)] -ml-5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+          className="flex items-center gap-px rounded-[var(--radius-sm)]"
           aria-label={`Rating for ${title}`}
           role="slider"
           tabIndex={0}
@@ -48,37 +49,19 @@ export const RatingCell = memo(
             }
           }}
         >
-          <button
-            aria-label="Clear rating"
-            className="flex h-5 w-5 items-center justify-center opacity-0"
-            onClick={(event) => {
-              event.stopPropagation();
-              onRate(trackId, 0);
-            }}
-            onMouseMove={() => setHoverValue(0)}
-            tabIndex={-1}
-            title="Clear rating"
-            type="button"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-                fill="var(--color-text-muted)"
-              />
-            </svg>
-          </button>
           {[1, 2, 3, 4, 5].map((star) => {
             const fill = Math.max(0, Math.min(1, displayRating - (star - 1)));
             return (
               <button
                 key={star}
                 aria-hidden="true"
-                className="relative h-5 w-5 select-none focus:outline-none"
+                className="relative h-3.5 w-3.5 select-none text-[var(--color-text-muted)] focus:outline-none"
                 onClick={(event) => {
                   event.stopPropagation();
                   const rect = event.currentTarget.getBoundingClientRect();
                   const isHalf = event.clientX - rect.left < rect.width / 2;
-                  onRate(trackId, isHalf ? star - 0.5 : star);
+                  const nextRating = isHalf ? star - 0.5 : star;
+                  onRate(trackId, nextRating === rating ? 0 : nextRating);
                 }}
                 onMouseMove={(event) => {
                   const rect = event.currentTarget.getBoundingClientRect();
@@ -87,18 +70,10 @@ export const RatingCell = memo(
                 }}
                 type="button"
               >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-                    fill="var(--color-text-muted)"
-                    opacity="0.3"
-                  />
-                  <path
-                    d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"
-                    fill="var(--color-accent)"
-                    style={{ clipPath: `inset(0 ${(1 - fill) * 100}% 0 0)` }}
-                  />
-                </svg>
+                <Star className="absolute inset-0 h-3.5 w-3.5" strokeWidth={1.5} />
+                <span className="absolute inset-0 overflow-hidden text-[var(--color-text-primary)]" style={{ width: `${fill * 100}%` }}>
+                  <Star className="h-3.5 w-3.5 max-w-none" fill="currentColor" strokeWidth={1.5} />
+                </span>
               </button>
             );
           })}

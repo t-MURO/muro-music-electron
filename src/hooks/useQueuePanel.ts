@@ -6,7 +6,7 @@ import { useResizable } from "./useResizable";
 export const useQueuePanel = () => {
   const [queuePanelWidth, setQueuePanelWidth] = useStickyState(
     "muro-queue-panel-width",
-    320,
+    328,
     {
       parse: parseDetailWidth,
       serialize: (value) => String(value),
@@ -34,10 +34,10 @@ export const useQueuePanel = () => {
   const toggleQueuePanelCollapsed = useCallback(() => {
     if (!queuePanelCollapsed) {
       widthRef.current = queuePanelWidth;
-      setQueuePanelWidth(80);
+      setQueuePanelWidth(56);
       setQueuePanelCollapsed(true);
     } else {
-      setQueuePanelWidth(widthRef.current || 320);
+      setQueuePanelWidth(widthRef.current || 328);
       setQueuePanelCollapsed(false);
     }
   }, [queuePanelCollapsed, queuePanelWidth, setQueuePanelCollapsed, setQueuePanelWidth]);

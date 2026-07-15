@@ -26,7 +26,7 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       // State
-      theme: "light",
+      theme: "studio",
       locale: "en",
       seekMode: "fast",
       dbPath: "",

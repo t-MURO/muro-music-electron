@@ -32,6 +32,7 @@ export { usePlayTracking } from "./usePlayTracking";
 export {
   useViewConfig,
   type LibraryView,
+  type CollectionFacet,
   type ViewType,
   type EmptyStateConfig,
   type TrackTableConfig,

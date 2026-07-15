@@ -63,6 +63,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const playlistMatch = useMatch("/playlists/:playlistId");
+  const collectionMatch = useMatch("/collection/:facet");
   const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
 
   // Get state from stores
@@ -114,11 +115,14 @@ function App() {
     if (location.pathname === "/inbox") return "inbox";
     if (location.pathname === "/settings") return "settings";
     if (location.pathname === "/recently-played") return "recentlyPlayed";
+    if (collectionMatch?.params.facet) {
+      return `collection:${collectionMatch.params.facet}` as LibraryView;
+    }
     if (playlistMatch?.params.playlistId) {
       return `playlist:${playlistMatch.params.playlistId}` as LibraryView;
     }
     return "library";
-  }, [location.pathname, playlistMatch]);
+  }, [collectionMatch, location.pathname, playlistMatch]);
 
   const navigateToView = useCallback(
     (newView: LibraryView) => {
@@ -135,6 +139,7 @@ function App() {
       pathname === "/inbox" ||
       pathname === "/settings" ||
       pathname === "/recently-played" ||
+      pathname.startsWith("/collection/") ||
       pathname.startsWith("/playlists/");
     if (!isKnownPath) {
       navigate("/", { replace: true });
@@ -430,7 +435,12 @@ function App() {
   } = useTrackEdit();
 
   // Panel state
-  const { sidebarWidth, startSidebarResize } = useSidebarPanel();
+  const {
+    sidebarCollapsed,
+    sidebarWidth,
+    startSidebarResize,
+    toggleSidebarCollapsed,
+  } = useSidebarPanel();
   const {
     queuePanelCollapsed,
     queuePanelWidth,
@@ -661,7 +671,15 @@ function App() {
         <AppLayout
           onSidebarResizeStart={startSidebarResize}
           onQueuePanelResizeStart={startQueuePanelResize}
-          sidebar={<Sidebar {...sidebarProps} />}
+          sidebarCollapsed={sidebarCollapsed}
+          detailCollapsed={queuePanelCollapsed}
+          sidebar={
+            <Sidebar
+              {...sidebarProps}
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={toggleSidebarCollapsed}
+            />
+          }
           main={
             <>
               <ContextMenu
@@ -708,8 +726,12 @@ function App() {
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
                   isSettings={viewConfig.type === "settings"}
+                  resultCount={sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
+                  onAddMusic={handleEmptyImport}
+                  onShowColumns={openColumnsMenu}
+                  onSort={() => handleSortChange("title")}
                 />
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
@@ -825,6 +847,7 @@ function App() {
               onToggleCollapsed={toggleQueuePanelCollapsed}
               queueTracks={queueTracks}
               currentTrack={currentTrack}
+              currentTrackDetails={currentTrack ? allTracks.find((track) => track.id === currentTrack.id) : null}
               onRemoveFromQueue={removeFromQueue}
               onReorderQueue={reorderQueue}
               onClearQueue={clearQueue}

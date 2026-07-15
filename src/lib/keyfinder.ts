@@ -82,6 +82,12 @@ export const startTrackAnalysis = (tracks: Track[]): Promise<{ jobId: string }> 
 export const cancelTrackAnalysis = (jobId: string): Promise<{ cancelled: boolean }> =>
   invoke("cancel_track_analysis", { jobId });
 
+export const getAudioWaveform = (
+  sourcePath: string,
+  points = 512,
+): Promise<{ peaks: number[] }> =>
+  invoke("generate_track_waveform", { sourcePath, points });
+
 export const listenKeyFinderEvents = (
   handler: (event: KeyFinderEvent) => void,
 ): Promise<UnlistenFn> =>

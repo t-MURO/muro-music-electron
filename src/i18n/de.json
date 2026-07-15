@@ -63,6 +63,7 @@
   "columns.dateModified": "Geandert",
   "columns.duration": "Dauer",
   "columns.bitrate": "Bitrate",
+  "columns.format": "Format",
   "columns.rating": "Bewertung",
   "header.playlist.subtitle": "{count} Titel",
   "header.playlist.notFound": "Playlist nicht gefunden",

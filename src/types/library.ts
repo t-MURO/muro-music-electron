@@ -71,6 +71,7 @@ export type ColumnKey =
   | "dateModified"
   | "duration"
   | "bitrate"
+  | "format"
   | "rating";
 
 export type ColumnConfig = {

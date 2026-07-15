@@ -25,6 +25,14 @@ export const getSortableValue = (
       return track.artists ?? track.artist;
     case "key":
       return track.key ?? null;
+    case "format": {
+      const pathParts = track.sourcePath.split(/[\\/]/);
+      const filename = pathParts[pathParts.length - 1] ?? "";
+      const extensionParts = filename.split(".");
+      return filename.includes(".")
+        ? (extensionParts[extensionParts.length - 1]?.toUpperCase() ?? null)
+        : null;
+    }
     case "date":
     case "dateAdded":
     case "dateModified": {

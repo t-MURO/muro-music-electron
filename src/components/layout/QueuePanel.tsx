@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, ListChecks, Music2, Play, Speaker, Trash2, X } from "lucide-react";
-import { convertFileSrc } from "@muro/desktop/runtime";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AudioLines,
+  GripVertical,
+  ListMusic,
+  Music2,
+  PanelRightClose,
+  PanelRightOpen,
+  Speaker,
+  X,
+} from "lucide-react";
 import { t } from "../../i18n";
 import { useDragSession } from "../../contexts/DragSessionContext";
 import { NowPlayingTrack } from "../queue/NowPlayingTrack";
@@ -12,9 +20,19 @@ type QueuePanelProps = {
   onToggleCollapsed: () => void;
   queueTracks: Track[];
   currentTrack: CurrentTrack | null;
+  currentTrackDetails?: Track | null;
   onRemoveFromQueue: (index: number) => void;
   onReorderQueue: (fromIndex: number, toIndex: number) => void;
   onClearQueue: () => void;
+};
+
+const formatDuration = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return hours > 0
+    ? `${hours}:${minutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
+    : `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
 export const QueuePanel = ({
@@ -22,301 +40,153 @@ export const QueuePanel = ({
   onToggleCollapsed,
   queueTracks,
   currentTrack,
+  currentTrackDetails,
   onRemoveFromQueue,
   onReorderQueue,
   onClearQueue,
 }: QueuePanelProps) => {
   const { startInternalDrag, endInternalDrag } = useDragSession();
-
-  // Drag state
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragY, setDragY] = useState<number>(0);
+  const [dragY, setDragY] = useState(0);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
-
-  // Refs for drag handling
   const dragStartRef = useRef<{ index: number; y: number; itemY: number } | null>(null);
   const itemRefsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
+  const totalDuration = useMemo(
+    () => queueTracks.reduce((total, track) => total + (track.durationSeconds || 0), 0),
+    [queueTracks],
+  );
 
-  const handleMouseDown = useCallback((e: React.MouseEvent, index: number) => {
-    // Don't start drag from the X button
-    const target = e.target as HTMLElement;
-    if (target.closest('[data-no-drag]')) return;
-
-    e.preventDefault();
-    const itemEl = itemRefsRef.current.get(index);
-    if (!itemEl) return;
-
-    const rect = itemEl.getBoundingClientRect();
-    dragStartRef.current = {
-      index,
-      y: e.clientY,
-      itemY: rect.top,
-    };
+  const handleMouseDown = useCallback((event: React.MouseEvent, index: number) => {
+    if ((event.target as HTMLElement).closest("[data-no-drag]")) return;
+    event.preventDefault();
+    const item = itemRefsRef.current.get(index);
+    if (!item) return;
+    dragStartRef.current = { index, y: event.clientY, itemY: item.getBoundingClientRect().top };
   }, []);
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMouseMove = (event: MouseEvent) => {
       if (!dragStartRef.current) return;
-
       const { index, y: startY, itemY } = dragStartRef.current;
-      const deltaY = e.clientY - startY;
-
-      // Start dragging after 4px movement
+      const deltaY = event.clientY - startY;
       if (dragIndex === null && Math.abs(deltaY) > 4) {
         setDragIndex(index);
         startInternalDrag("queue");
       }
-
-      if (dragIndex !== null) {
-        // Update drag position (vertical only)
-        setDragY(itemY + deltaY);
-
-        // Find drop target
-        const containerEl = containerRef.current;
-        if (containerEl) {
-          let newDropIndex: number | null = null;
-
-          for (let i = 0; i < queueTracks.length; i++) {
-            const itemEl = itemRefsRef.current.get(i);
-            if (!itemEl) continue;
-
-            const rect = itemEl.getBoundingClientRect();
-            const midY = rect.top + rect.height / 2;
-
-            if (e.clientY < midY) {
-              newDropIndex = i;
-              break;
-            }
-            newDropIndex = i + 1;
-          }
-
-          // Don't show drop indicator at current position or adjacent
-          if (newDropIndex === index || newDropIndex === index + 1) {
-            newDropIndex = null;
-          }
-
-          setDropIndex(newDropIndex);
+      if (dragIndex === null) return;
+      setDragY(itemY + deltaY);
+      let nextDropIndex: number | null = null;
+      for (let itemIndex = 0; itemIndex < queueTracks.length; itemIndex += 1) {
+        const item = itemRefsRef.current.get(itemIndex);
+        if (!item) continue;
+        const rect = item.getBoundingClientRect();
+        if (event.clientY < rect.top + rect.height / 2) {
+          nextDropIndex = itemIndex;
+          break;
         }
+        nextDropIndex = itemIndex + 1;
       }
+      if (nextDropIndex === index || nextDropIndex === index + 1) nextDropIndex = null;
+      setDropIndex(nextDropIndex);
     };
 
     const handleMouseUp = () => {
       if (dragIndex !== null && dropIndex !== null) {
-        // Calculate actual target index
-        let targetIndex = dropIndex;
-        if (dropIndex > dragIndex) {
-          targetIndex = dropIndex - 1;
-        }
-        if (targetIndex !== dragIndex) {
-          onReorderQueue(dragIndex, targetIndex);
-        }
+        const targetIndex = dropIndex > dragIndex ? dropIndex - 1 : dropIndex;
+        if (targetIndex !== dragIndex) onReorderQueue(dragIndex, targetIndex);
       }
-
-      // Reset drag state
       dragStartRef.current = null;
       setDragIndex(null);
       setDragY(0);
       setDropIndex(null);
       endInternalDrag();
     };
-
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragIndex, dropIndex, queueTracks.length, onReorderQueue, startInternalDrag, endInternalDrag]);
+  }, [dragIndex, dropIndex, endInternalDrag, onReorderQueue, queueTracks.length, startInternalDrag]);
 
-  // Get the dragged item for the floating preview
   const draggedTrack = dragIndex !== null ? queueTracks[dragIndex] : null;
 
-  return (
-    <aside className="flex h-full flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-bg-primary)]">
-      {/* Now Playing Section */}
-      <div className={collapsed ? "" : "border-b border-[var(--color-border-light)]"}>
-        {/* Header with collapse button - always visible and fixed position */}
-        <div
-          className="flex items-center gap-[var(--spacing-sm)] px-[var(--spacing-lg)] py-[var(--spacing-md)] pt-12"
-        >
-          {!collapsed && (
-            <>
-              <Play className="h-[14px] w-[14px] text-[var(--color-text-muted)]" />
-              <h3 className="flex-1 text-[var(--font-size-xs)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                {t("panel.nowPlaying")}
-              </h3>
-            </>
-          )}
-          <button
-            className={`flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)] shadow-[var(--shadow-sm)] transition-all duration-200 hover:border-[var(--color-accent)] hover:text-[var(--color-text-primary)] ${collapsed ? "" : "ml-auto"}`}
-            onClick={onToggleCollapsed}
-            title={collapsed ? "Expand panel" : "Collapse panel"}
-            type="button"
-          >
-            <ChevronRight
-              className={`h-4 w-4 text-[var(--color-text-muted)] transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
-            />
-          </button>
-        </div>
+  if (collapsed) {
+    return (
+      <aside className="flex h-full flex-col items-center border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)] py-5">
+        <button className="toolbar-icon-button" onClick={onToggleCollapsed} title="Expand queue" aria-label="Expand queue" type="button"><PanelRightOpen className="h-4 w-4" /></button>
+        <ListMusic className="mt-6 h-4 w-4 text-[var(--color-text-muted)]" />
+        {queueTracks.length > 0 && <span className="mt-2 text-[10px] tabular-nums text-[var(--color-accent)]">{queueTracks.length}</span>}
+      </aside>
+    );
+  }
 
-        {/* Now playing track - animated */}
-        <div
-          className={`overflow-hidden transition-all duration-200 ease-out ${
-            collapsed ? "max-h-0 opacity-0" : "max-h-24 opacity-100"
-          }`}
-        >
-          <div className="pb-[var(--spacing-md)]">
-            <NowPlayingTrack currentTrack={currentTrack} />
-          </div>
-        </div>
+  return (
+    <aside className="flex h-full flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div className="flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] px-4">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-primary)]">{t("panel.nowPlaying")}</h3>
+        <button className="toolbar-icon-button ml-auto" onClick={onToggleCollapsed} title="Collapse queue" aria-label="Collapse queue" type="button"><PanelRightClose className="h-4 w-4" /></button>
       </div>
 
-      {/* Queue and Output Sections - animated */}
-      <div
-        className={`flex min-h-0 flex-1 flex-col transition-all duration-200 ease-out ${
-          collapsed ? "opacity-0 pointer-events-none" : "opacity-100"
-        }`}
-      >
-        {/* Queue Section */}
-        <div className="flex-1 overflow-y-auto border-b border-[var(--color-border-light)]">
-          <div className="flex items-center gap-[var(--spacing-sm)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
-            <ListChecks className="h-[14px] w-[14px] text-[var(--color-text-muted)]" />
-            <h3 className="flex-1 text-[var(--font-size-xs)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-              {t("panel.queue")}
-            </h3>
-            {queueTracks.length > 0 && (
-              <button
-                onClick={onClearQueue}
-                className="rounded p-1 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)]"
-                title="Clear queue"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+      <div className="min-h-[198px] border-b border-[var(--color-border)] pt-5">
+        <NowPlayingTrack currentTrack={currentTrack} trackDetails={currentTrackDetails} />
+      </div>
 
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex h-14 shrink-0 items-center border-b border-[var(--color-border-light)] px-4">
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-primary)]">{t("panel.queue")}</h3>
+            <p className="mt-1 text-[10px] tabular-nums text-[var(--color-text-muted)]">{queueTracks.length} tracks · {formatDuration(totalDuration)}</p>
+          </div>
+          {queueTracks.length > 0 && <button className="ml-auto text-[11px] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]" onClick={onClearQueue} title="Clear queue" aria-label="Clear queue" type="button">Clear</button>}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto" ref={containerRef}>
           {queueTracks.length === 0 ? (
-            <p className="px-[var(--spacing-lg)] py-[var(--spacing-lg)] text-center text-[var(--font-size-sm)] text-[var(--color-text-muted)]">
-              Queue is empty
-            </p>
+            <div className="flex h-full min-h-28 flex-col items-center justify-center px-6 text-center text-[var(--color-text-muted)]"><Music2 className="mb-3 h-5 w-5" /><p className="text-xs">Queue is empty</p><p className="mt-1 text-[10px]">Right-click tracks to add them here.</p></div>
           ) : (
-            <div ref={containerRef} className="relative pb-[var(--spacing-md)]">
+            <div className="relative py-1">
               {queueTracks.map((track, index) => {
                 const isDragging = dragIndex === index;
+                const isCurrentQueueTrack = currentTrack?.id === track.id;
                 const showDropBefore = dropIndex === index;
                 const showDropAfter = dropIndex === queueTracks.length && index === queueTracks.length - 1;
-
                 return (
                   <div key={`${track.id}-queue-${index}`} className="relative">
-                    {/* Drop indicator before */}
-                    {showDropBefore && (
-                      <div className="absolute -top-0.5 left-0 right-0 h-0.5 bg-[var(--color-accent)]" />
-                    )}
-
+                    {showDropBefore && <div className="absolute -top-px left-3 right-3 z-10 h-px bg-[var(--color-accent)]" />}
                     <div
-                      ref={(el) => {
-                        if (el) itemRefsRef.current.set(index, el);
-                        else itemRefsRef.current.delete(index);
-                      }}
-                      onMouseDown={(e) => handleMouseDown(e, index)}
-                      className={`group flex cursor-grab items-center gap-2.5 px-[var(--spacing-lg)] py-1.5 transition-colors active:cursor-grabbing ${
-                        isDragging
-                          ? "opacity-30"
-                          : "hover:bg-[var(--color-bg-hover)]"
-                      }`}
+                      ref={(element) => { if (element) itemRefsRef.current.set(index, element); else itemRefsRef.current.delete(index); }}
+                      onMouseDown={(event) => handleMouseDown(event, index)}
+                      className={`group grid min-h-[49px] cursor-grab grid-cols-[16px_20px_minmax(0,1fr)_44px_38px_24px] items-center gap-1.5 border-b border-[var(--color-border-light)] px-3 text-[10px] active:cursor-grabbing ${isDragging ? "opacity-25" : "hover:bg-[var(--color-bg-hover)]"}`}
                     >
-                      {/* Album cover thumbnail */}
-                      <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)]">
-                        {track.coverArtPath ? (
-                          <img
-                            src={convertFileSrc(track.coverArtPath)}
-                            alt=""
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[var(--color-text-muted)]">
-                            <Music2 className="h-4 w-4" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-                          {track.title}
-                        </div>
-                        <div className="truncate text-[var(--font-size-xs)] font-light text-[var(--color-text-secondary)]">
-                          {track.artist}
-                        </div>
-                      </div>
-                      <button
-                        data-no-drag
-                        onClick={() => onRemoveFromQueue(index)}
-                        className="flex-shrink-0 rounded p-1 text-[var(--color-text-muted)] opacity-0 transition-all hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] group-hover:opacity-100"
-                        title="Remove from queue"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      {isCurrentQueueTrack
+                        ? <AudioLines className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                        : <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] opacity-60" />}
+                      <span className="text-center tabular-nums text-[var(--color-text-muted)]">{index + 1}</span>
+                      <div className="min-w-0"><div className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">{track.title}</div><div className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{track.artist}</div></div>
+                      <div className="text-right tabular-nums"><div className="font-semibold text-[var(--color-accent)]">{track.key || "—"}</div><div className="mt-0.5 text-[var(--color-text-muted)]">{track.bpm ? track.bpm.toFixed(1) : "—"}</div></div>
+                      <span className="text-right tabular-nums text-[var(--color-text-secondary)]">{track.duration}</span>
+                      <button data-no-drag onClick={() => onRemoveFromQueue(index)} className="toolbar-icon-button h-6 w-6 opacity-0 group-hover:opacity-100" title="Remove from queue" aria-label={`Remove ${track.title} from queue`} type="button"><X className="h-3.5 w-3.5" /></button>
                     </div>
-
-                    {/* Drop indicator after last item */}
-                    {showDropAfter && (
-                      <div className="absolute -bottom-0.5 left-0 right-0 h-0.5 bg-[var(--color-accent)]" />
-                    )}
+                    {showDropAfter && <div className="absolute -bottom-px left-3 right-3 z-10 h-px bg-[var(--color-accent)]" />}
                   </div>
                 );
               })}
             </div>
           )}
         </div>
-
-        {/* Output Section */}
-        <div className="mt-auto flex items-center justify-between bg-[var(--color-bg-secondary)] p-[var(--spacing-md)] px-[var(--spacing-lg)]">
-          <div className="flex items-center gap-[var(--spacing-sm)]">
-            <Speaker className="h-4 w-4 text-[var(--color-text-muted)]" />
-            <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
-              {t("panel.output")}
-            </span>
-          </div>
-          <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-            {t("panel.output.device")}
-          </span>
-        </div>
       </div>
 
-      {/* Floating drag preview - vertical movement only */}
+      <div className="flex h-14 shrink-0 items-center border-t border-[var(--color-border)] px-4">
+        <Speaker className="h-4 w-4 text-[var(--color-text-muted)]" />
+        <div className="ml-2"><div className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("panel.output")}</div><div className="mt-0.5 text-[11px] text-[var(--color-text-primary)]">{t("panel.output.device")}</div></div>
+      </div>
+
       {draggedTrack && dragIndex !== null && (
-        <div
-          className="pointer-events-none fixed z-50 bg-[var(--panel-bg)]/95 px-[var(--spacing-lg)] py-1.5 shadow-[var(--shadow-lg)] backdrop-blur-sm"
-          style={{
-            left: containerRef.current?.getBoundingClientRect().left ?? 0,
-            top: dragY,
-            width: containerRef.current?.getBoundingClientRect().width ?? 200,
-          }}
-        >
-          <div className="flex items-center gap-2.5">
-            {/* Album cover thumbnail */}
-            <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)]">
-              {draggedTrack.coverArtPath ? (
-                <img
-                  src={convertFileSrc(draggedTrack.coverArtPath)}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-[var(--color-text-muted)]">
-                  <Music2 className="h-4 w-4" />
-                </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-                {draggedTrack.title}
-              </div>
-              <div className="truncate text-[var(--font-size-xs)] font-light text-[var(--color-text-secondary)]">
-                {draggedTrack.artist}
-              </div>
-            </div>
-          </div>
+        <div className="pointer-events-none fixed z-50 border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-3 py-2 shadow-[var(--shadow-lg)]" style={{ left: containerRef.current?.getBoundingClientRect().left ?? 0, top: dragY, width: containerRef.current?.getBoundingClientRect().width ?? 240 }}>
+          <div className="truncate text-xs font-medium text-[var(--color-text-primary)]">{draggedTrack.title}</div>
+          <div className="truncate text-[10px] text-[var(--color-text-muted)]">{draggedTrack.artist}</div>
         </div>
       )}
     </aside>

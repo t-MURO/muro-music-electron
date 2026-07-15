@@ -86,7 +86,7 @@ export const TrackTable = memo(
       const observer = new MutationObserver(updateRowHeight);
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-theme"]
+        attributeFilter: ["data-theme", "data-table-density"]
       });
       return () => observer.disconnect();
     }, []);
@@ -215,15 +215,16 @@ export const TrackTable = memo(
     );
 
     return (
-      <div
-        ref={tableContainerRef}
-        className="relative min-h-0 flex-1 min-w-0 overflow-x-auto overflow-y-auto"
-        role="grid"
-        aria-rowcount={tracks.length}
-        aria-colcount={visibleColumns.length + 1}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-      >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div
+          ref={tableContainerRef}
+          className="relative min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto"
+          role="grid"
+          aria-rowcount={tracks.length}
+          aria-colcount={visibleColumns.length + 1}
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+        >
         <TableHeader
           columns={visibleColumns}
           tableWidth={tableWidth}
@@ -235,6 +236,11 @@ export const TrackTable = memo(
           onHeaderContextMenu={onHeaderContextMenu}
           onSortChange={onSortChange}
           sortState={sortState}
+          allSelected={tracks.length > 0 && selectedIds.size === tracks.length}
+          onToggleSelectAll={() => {
+            if (tracks.length > 0 && selectedIds.size === tracks.length) clearSelection();
+            else selectAll(tracks.map((track) => track.id));
+          }}
         />
         {tracks.length === 0 ? (
           <TableEmptyState
@@ -276,6 +282,13 @@ export const TrackTable = memo(
             );
           })}
         </div>
+        )}
+        </div>
+        {tracks.length > 0 && (
+          <div className="flex h-6 shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-[10px] tabular-nums text-[var(--color-text-muted)]">
+            <span>{selectedIds.size} of {tracks.length.toLocaleString()} selected</span>
+            <span className="ml-auto">{tracks.length.toLocaleString()} tracks in view</span>
+          </div>
         )}
       </div>
     );

@@ -63,6 +63,7 @@
   "columns.dateModified": "Date Modified",
   "columns.duration": "Duration",
   "columns.bitrate": "Bitrate",
+  "columns.format": "Format",
   "columns.rating": "Rating",
   "header.playlist.subtitle": "{count} tracks",
   "header.playlist.notFound": "Playlist not found",

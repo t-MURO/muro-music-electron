@@ -175,6 +175,8 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
     start_track_analysis: ({ tracks }, sender) =>
       keyFinder.startAnalysis(Array.isArray(tracks) ? tracks : [], sender),
     cancel_track_analysis: ({ jobId }) => keyFinder.cancelAnalysis(jobId),
+    generate_track_waveform: ({ sourcePath, points }) =>
+      keyFinder.generateWaveform(sourcePath, points),
     get_track_source_path: ({ dbPath, trackId }) =>
       openDatabase(dbPath).prepare("SELECT source_path FROM tracks WHERE id = ?").get(trackId)?.source_path ?? null,
     record_track_play: ({ dbPath, trackId }) => {

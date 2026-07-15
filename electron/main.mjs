@@ -7,6 +7,7 @@ import { createKeyFinderService } from "./keyfinder.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
+const developmentAppIcon = path.join(appRoot, "build", "icons", "icon.png");
 const developmentKeyFinderBinaries = path.resolve(
   appRoot,
   "../neo-key-finder/neo-keyfinder/src-tauri/binaries",
@@ -34,6 +35,7 @@ const createWindow = async () => {
     minWidth: 960,
     minHeight: 640,
     title: "Muro Music",
+    icon: app.isPackaged ? undefined : developmentAppIcon,
     backgroundColor: "#111111",
     webPreferences: {
       preload: path.join(here, "preload.cjs"),
@@ -53,6 +55,10 @@ const createWindow = async () => {
 };
 
 const startApplication = async () => {
+  if (!app.isPackaged && process.platform === "darwin") {
+    app.dock?.setIcon(developmentAppIcon);
+  }
+
   protocol.handle("muro-file", (request) => {
     try {
       const url = new URL(request.url);

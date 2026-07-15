@@ -12,6 +12,7 @@ const keyFinder = {
   health: async () => ({ service: "keyfinder-native", protocolVersion: 1 }),
   startAnalysis: async (tracks) => ({ jobId: `job-${tracks.length}` }),
   cancelAnalysis: async (jobId) => ({ cancelled: jobId === "job-1" }),
+  generateWaveform: async (_sourcePath, points) => ({ peaks: Array(points).fill(0.5) }),
   close: () => { keyFinderClosed = true; },
 };
 const backend = createBackend({
@@ -66,6 +67,10 @@ try {
   assert.deepEqual(
     await backend.invoke("cancel_track_analysis", { jobId: "job-1" }),
     { cancelled: true },
+  );
+  assert.equal(
+    (await backend.invoke("generate_track_waveform", { sourcePath: "smoke.mp3", points: 64 })).peaks.length,
+    64,
   );
 
   await backend.invoke("reject_tracks", { dbPath, trackIds: ["track-1"] });

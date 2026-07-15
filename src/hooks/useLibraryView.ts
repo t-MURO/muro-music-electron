@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { t } from "../i18n";
 import type { Playlist, Track } from "../types";
 
-export type LibraryView = "library" | "inbox" | "settings" | "recentlyPlayed" | `playlist:${string}`;
+export type CollectionFacet = "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
+export type LibraryView = "library" | "inbox" | "settings" | "recentlyPlayed" | `playlist:${string}` | `collection:${CollectionFacet}`;
 
-export type ViewType = "library" | "inbox" | "settings" | "playlist" | "recentlyPlayed";
+export type ViewType = "library" | "inbox" | "settings" | "playlist" | "recentlyPlayed" | "collection";
 
 export type EmptyStateConfig = {
   title: string;
@@ -39,6 +40,9 @@ const parsePlaylistId = (view: LibraryView): string | null => {
   return null;
 };
 
+const parseCollectionFacet = (view: LibraryView): CollectionFacet | null =>
+  view.startsWith("collection:") ? view.slice("collection:".length) as CollectionFacet : null;
+
 type UseViewConfigArgs = {
   view: LibraryView;
   playlists: Playlist[];
@@ -56,6 +60,7 @@ export const useViewConfig = ({
 }: UseViewConfigArgs): ViewConfig => {
   return useMemo(() => {
     const playlistId = parsePlaylistId(view);
+    const collectionFacet = parseCollectionFacet(view);
     const playlist = playlistId
       ? playlists.find((p) => p.id === playlistId) ?? null
       : null;
@@ -124,6 +129,42 @@ export const useViewConfig = ({
           emptyState: {
             title: t("recentlyPlayed.empty.title"),
             description: t("recentlyPlayed.empty.description"),
+          },
+          showImportActions: false,
+        },
+      };
+    }
+
+    if (collectionFacet) {
+      const labels: Record<CollectionFacet, string> = {
+        genres: "Genres",
+        artists: "Artists",
+        albums: "Albums",
+        labels: "Labels",
+        keys: "Keys",
+        bpm: "BPM",
+        formats: "Formats",
+      };
+      const collectionTracks = libraryTracks.filter((track) => {
+        if (collectionFacet === "genres") return Boolean(track.genre?.trim());
+        if (collectionFacet === "artists") return Boolean(track.artist.trim());
+        if (collectionFacet === "albums") return Boolean(track.album.trim());
+        if (collectionFacet === "labels") return Boolean(track.label?.trim());
+        if (collectionFacet === "keys") return Boolean(track.key?.trim());
+        if (collectionFacet === "bpm") return track.bpm !== undefined && track.bpm !== null;
+        return track.sourcePath.includes(".");
+      });
+      const title = labels[collectionFacet];
+      return {
+        type: "collection",
+        title,
+        subtitle: `${collectionTracks.length.toLocaleString()} tracks with ${title.toLowerCase()} metadata`,
+        playlist: null,
+        trackTable: {
+          tracks: collectionTracks,
+          emptyState: {
+            title: `No ${title.toLowerCase()} yet`,
+            description: `Add or edit track metadata to populate this collection.`,
           },
           showImportActions: false,
         },

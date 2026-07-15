@@ -3,3 +3,4 @@ dist/
 release/
 *.log
 .idea/
+.DS_Store

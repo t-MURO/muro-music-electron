@@ -102,6 +102,14 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
       return getClient().request("cancelJob", { jobId }, { timeoutMs: 5_000 });
     },
 
+    generateWaveform(sourcePath, points = 512) {
+      return getClient().request(
+        "generateWaveform",
+        { path: String(sourcePath), points: Math.max(32, Math.min(1024, Number(points) || 512)) },
+        { timeoutMs: 120_000 },
+      );
+    },
+
     close() {
       senders.clear();
       client?.close();
