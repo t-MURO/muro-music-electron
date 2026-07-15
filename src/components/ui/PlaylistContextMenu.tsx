@@ -8,6 +8,7 @@ type PlaylistContextMenuProps = {
   playlistName?: string;
   onEdit: () => void;
   onDelete: () => void;
+  onClose: () => void;
 };
 
 export const PlaylistContextMenu = ({
@@ -16,9 +17,10 @@ export const PlaylistContextMenu = ({
   playlistName,
   onEdit,
   onDelete,
+  onClose,
 }: PlaylistContextMenuProps) => {
   return (
-    <Popover isOpen={isOpen} position={position} className="w-52 py-1">
+    <Popover isOpen={isOpen} position={position} className="w-52 py-1" onClose={onClose}>
       {playlistName && (
         <div className="mx-2 mb-1 truncate rounded-[var(--radius-md)] bg-[var(--panel-muted)] px-2 py-1 text-xs font-medium text-[var(--color-text-muted)]">
           {playlistName}

@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("muro", {
   invoke: (command, args = {}) => ipcRenderer.invoke("muro:invoke", command, args),
   on,
   appDataDir: () => ipcRenderer.invoke("muro:app-data-dir"),
+  windowControl: (action) => ipcRenderer.invoke("muro:window-control", action),
+  isWindowMaximized: () => ipcRenderer.invoke("muro:window-is-maximized"),
   openDialog: (options = {}) => ipcRenderer.invoke("muro:open-dialog", options),
   confirmDialog: (message, options = {}) =>
     ipcRenderer.invoke("muro:confirm-dialog", message, options),

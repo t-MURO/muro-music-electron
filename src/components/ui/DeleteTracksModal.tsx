@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { HardDrive, Library, Trash2 } from "lucide-react";
 import { t } from "../../i18n";
+import type { DeleteMode } from "../../stores";
 import type { Track } from "../../types";
 
 type DeleteTracksModalProps = {
   tracks: Track[];
   isDeleting: boolean;
+  preferredMode: DeleteMode;
   onClose: () => void;
   onRemoveFromLibrary: () => void;
   onDeleteFromDisk: () => void;
@@ -15,16 +17,21 @@ type DeleteTracksModalProps = {
 export const DeleteTracksModal = ({
   tracks,
   isDeleting,
+  preferredMode,
   onClose,
   onRemoveFromLibrary,
   onDeleteFromDisk,
 }: DeleteTracksModalProps) => {
-  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const libraryButtonRef = useRef<HTMLButtonElement | null>(null);
+  const diskButtonRef = useRef<HTMLButtonElement | null>(null);
   const isOpen = tracks.length > 0;
 
   useEffect(() => {
     if (!isOpen) return;
-    const focusId = window.setTimeout(() => cancelRef.current?.focus(), 0);
+    const focusId = window.setTimeout(() => {
+      if (preferredMode === "disk") diskButtonRef.current?.focus();
+      else libraryButtonRef.current?.focus();
+    }, 0);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !isDeleting) {
         event.preventDefault();
@@ -36,7 +43,7 @@ export const DeleteTracksModal = ({
       window.clearTimeout(focusId);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isDeleting, isOpen, onClose]);
+  }, [isDeleting, isOpen, onClose, preferredMode]);
 
   if (!isOpen || typeof document === "undefined") return null;
 
@@ -83,8 +90,14 @@ export const DeleteTracksModal = ({
 
         <div className="grid gap-3 p-[var(--spacing-lg)] sm:grid-cols-2">
           <button
-            className="group rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4 text-left transition-colors hover:border-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            ref={libraryButtonRef}
+            className={`group rounded-[var(--radius-lg)] border bg-[var(--color-bg-secondary)] p-4 text-left transition-colors hover:border-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+              preferredMode === "library"
+                ? "border-[var(--color-accent)] ring-2 ring-[var(--color-accent-light)]"
+                : "border-[var(--color-border)]"
+            }`}
             data-delete-library-only
+            data-delete-preferred={preferredMode === "library" ? "true" : undefined}
             disabled={isDeleting}
             onClick={onRemoveFromLibrary}
             type="button"
@@ -98,8 +111,14 @@ export const DeleteTracksModal = ({
             </div>
           </button>
           <button
-            className="group rounded-[var(--radius-lg)] border border-red-500/30 bg-red-500/5 p-4 text-left transition-colors hover:border-red-500/60 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            ref={diskButtonRef}
+            className={`group rounded-[var(--radius-lg)] border bg-red-500/5 p-4 text-left transition-colors hover:border-red-500/60 hover:bg-red-500/10 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+              preferredMode === "disk"
+                ? "border-red-500 ring-2 ring-red-500/20"
+                : "border-red-500/30"
+            }`}
             data-delete-from-disk
+            data-delete-preferred={preferredMode === "disk" ? "true" : undefined}
             disabled={isDeleting}
             onClick={onDeleteFromDisk}
             type="button"
@@ -116,7 +135,6 @@ export const DeleteTracksModal = ({
 
         <div className="flex justify-end border-t border-[var(--color-border)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
           <button
-            ref={cancelRef}
             className="rounded-[var(--radius-md)] px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)] disabled:opacity-50"
             disabled={isDeleting}
             onClick={onClose}

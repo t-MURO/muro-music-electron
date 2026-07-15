@@ -27,6 +27,10 @@ export const useKeyboardShortcuts = ({
 }: UseKeyboardShortcutsArgs) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
       // Don't trigger shortcuts when typing in input fields
       const target = event.target as HTMLElement;
       const isInputField =

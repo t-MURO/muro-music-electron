@@ -15,6 +15,8 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   duration: "3:00",
   duration_seconds: 180,
   bitrate: "320 kbps",
+  key: ["8A", "8A", "9A", "7A", "8B", "2B"][index % 6],
+  bpm: 120 + (index % 8),
   rating: 0,
   source_path: path.join(temporaryDirectory, `track-${index}.mp3`),
   play_count: 0,
@@ -27,11 +29,26 @@ const fail = (message) => {
   app.exit(1);
 };
 
-const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 10_000);
+const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 20_000);
 
 app.whenReady().then(async () => {
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
-  ipcMain.handle("muro:invoke", (_event, command) => {
+  ipcMain.handle("muro:window-is-maximized", (event) =>
+    BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
+  );
+  ipcMain.handle("muro:window-control", (event, action) => {
+    const testWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!testWindow) return false;
+    if (action === "toggleMaximize") {
+      if (testWindow.isMaximized()) testWindow.unmaximize();
+      else testWindow.maximize();
+      return testWindow.isMaximized();
+    }
+    if (action === "minimize") testWindow.minimize();
+    if (action === "close") testWindow.close();
+    return false;
+  });
+  ipcMain.handle("muro:invoke", (_event, command, args = {}) => {
     if (command === "load_tracks") return { library: smokeTracks, inbox: [] };
     if (command === "load_playlists") return {
       playlists: [{
@@ -41,6 +58,26 @@ app.whenReady().then(async () => {
       }],
     };
     if (command === "load_recently_played") return [];
+    if (command === "playback_get_state") return {
+      is_playing: false,
+      current_position: 0,
+      duration: 0,
+      volume: 1,
+      current_track: null,
+    };
+    if (
+      command === "playback_play_file" ||
+      command === "playback_set_seek_mode" ||
+      command === "generate_track_waveform"
+    ) return command === "generate_track_waveform" ? [] : undefined;
+    if (command === "delete_tracks") return {
+      deletedTrackIds: [],
+      failures: (args.trackIds ?? []).map((trackId) => ({
+        trackId,
+        path: "smoke.mp3",
+        message: "Simulated locked file",
+      })),
+    };
     throw new Error(`Unexpected renderer smoke command: ${command}`);
   });
 
@@ -81,6 +118,11 @@ app.whenReady().then(async () => {
       const scroller = document.querySelector('[data-track-table-scroll]');
       const headerScroller = document.querySelector('[data-track-table-header-scroll]');
       const searchShortcutHint = document.querySelector('[data-search-shortcut-hint]');
+      const windowChrome = document.querySelector('[data-window-chrome]');
+      const windowBrand = document.querySelector('[data-window-brand]');
+      const windowControls = document.querySelector(
+        window.muro?.platform === "darwin" ? '[data-window-controls="mac"]' : '[data-window-controls="desktop"]'
+      );
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
         scroller.scrollHeight > scroller.clientHeight
@@ -98,6 +140,81 @@ app.whenReady().then(async () => {
         scroller.dispatchEvent(new Event("scroll"));
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const firstTrackRow = scroller.querySelector('[role="row"]');
+        firstTrackRow?.dispatchEvent(new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        firstTrackRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const tableFocusedAfterClick = document.activeElement === scroller;
+        scroller.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "ArrowDown",
+          code: "ArrowDown",
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const selectedAfterArrowDown = scroller.querySelector('[data-track-selected="true"]')
+          ?.getAttribute("data-track-index");
+        scroller.dispatchEvent(new KeyboardEvent("keydown", {
+          key: " ",
+          code: "Space",
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const playingAfterSpace = scroller.querySelector('[data-track-playing="true"]')
+          ?.getAttribute("data-track-index");
+        document.querySelector('[data-panel-view="mix"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const mixSuggestions = Array.from(document.querySelectorAll('[data-mix-suggestion]'));
+        const mixSuggestionCount = mixSuggestions.length;
+        const firstMixReason = mixSuggestions[0]?.getAttribute("data-mix-reason");
+        const camelotSegmentCount = document.querySelectorAll('[data-camelot-code]').length;
+        const compatibleCamelotCount = document.querySelectorAll('[data-camelot-compatible="true"]').length;
+        const currentCamelotCode = document.querySelector('[data-camelot-current="true"]')
+          ?.getAttribute("data-camelot-code");
+        document.querySelector('[data-camelot-code="9A"]')?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const selectedCamelotCode = document.querySelector('[data-camelot-selected="true"]')
+          ?.getAttribute("data-camelot-code");
+        const filteredMixSuggestions = Array.from(document.querySelectorAll('[data-mix-suggestion]'));
+        const wheelFilteredTo9A = filteredMixSuggestions.length > 0 && filteredMixSuggestions.every(
+          (suggestion) => suggestion.getAttribute("data-mix-code") === "9A"
+        );
+        filteredMixSuggestions[0]?.querySelector('[data-mix-play-next]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        document.querySelector('[data-panel-view="queue"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const queuedFromMix = document.querySelectorAll('[data-queue-track]').length === 1;
+        firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const contextMenuOpened = Boolean(document.querySelector('[data-popover]'));
+        document.querySelector('[data-popover]')?.dispatchEvent(new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const contextMenuStayedOpenInside = Boolean(document.querySelector('[data-popover]'));
+        headerScroller.dispatchEvent(new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        const contextMenuClosedOutside = !document.querySelector('[data-popover]');
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
@@ -112,10 +229,48 @@ app.whenReady().then(async () => {
           document.querySelector('[data-delete-library-only]') &&
           document.querySelector('[data-delete-from-disk]')
         );
+        const initialLibraryPreference = Boolean(
+          document.querySelector('[data-delete-library-only][data-delete-preferred="true"]')
+        );
+        document.querySelector('[data-delete-from-disk]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-testid="delete-track-menu-item"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const preferredDiskButton = document.querySelector(
+          '[data-delete-from-disk][data-delete-preferred="true"]'
+        );
+        const rememberedDiskPreference = Boolean(
+          preferredDiskButton && document.activeElement === preferredDiskButton
+        );
+        let persistedDeleteMode = null;
+        try {
+          persistedDeleteMode = JSON.parse(localStorage.getItem("muro-settings") ?? "null")
+            ?.state?.lastDeleteMode ?? null;
+        } catch {}
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
         window.location.hash = "#/playlists/smoke-playlist";
         await new Promise((resolve) => setTimeout(resolve, 60));
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
+        window.location.hash = "#/settings";
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        document.querySelector('[data-settings-tab="analysis"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const notationSelect = document.querySelector('[data-analysis-notation]');
+        const notationOptions = notationSelect instanceof HTMLSelectElement
+          ? Array.from(notationSelect.options, (option) => option.value)
+          : [];
+        const analysisNotationSettingsReady =
+          notationOptions.includes("standard") &&
+          notationOptions.includes("custom") &&
+          notationOptions.includes("combined") &&
+          notationOptions.includes("djCombined");
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -128,7 +283,29 @@ app.whenReady().then(async () => {
           platform: window.muro?.platform,
           searchShortcut: searchShortcutHint.textContent?.trim(),
           deleteModalReady,
+          initialLibraryPreference,
+          rememberedDiskPreference,
+          persistedDeleteMode,
           playlistRemoveReady,
+          windowChromeReady: Boolean(windowChrome && windowBrand && windowControls),
+          windowChromeDragRegion: windowChrome
+            ? getComputedStyle(windowChrome).getPropertyValue("-webkit-app-region")
+            : "",
+          tableFocusedAfterClick,
+          selectedAfterArrowDown,
+          playingAfterSpace,
+          mixSuggestionCount,
+          firstMixReason,
+          camelotSegmentCount,
+          compatibleCamelotCount,
+          currentCamelotCode,
+          selectedCamelotCode,
+          wheelFilteredTo9A,
+          queuedFromMix,
+          analysisNotationSettingsReady,
+          contextMenuOpened,
+          contextMenuStayedOpenInside,
+          contextMenuClosedOutside,
         };
       }
       return {
@@ -159,8 +336,71 @@ app.whenReady().then(async () => {
         fail("Track deletion did not present both library-only and disk choices");
         return;
       }
+      if (
+        !result.initialLibraryPreference ||
+        !result.rememberedDiskPreference ||
+        result.persistedDeleteMode !== "disk"
+      ) {
+        fail("Track deletion did not remember and focus the last selected choice");
+        return;
+      }
+      if (
+        result.mixSuggestionCount < 3 ||
+        result.firstMixReason !== "Same key" ||
+        !result.queuedFromMix
+      ) {
+        fail(
+          `Camelot suggestions failed: count=${result.mixSuggestionCount}, ` +
+          `reason=${result.firstMixReason}, queued=${result.queuedFromMix}`
+        );
+        return;
+      }
+      if (
+        result.camelotSegmentCount !== 24 ||
+        result.compatibleCamelotCount !== 4 ||
+        result.currentCamelotCode !== "8A" ||
+        result.selectedCamelotCode !== "9A" ||
+        !result.wheelFilteredTo9A
+      ) {
+        fail(
+          `Camelot wheel failed: segments=${result.camelotSegmentCount}, ` +
+          `compatible=${result.compatibleCamelotCount}, current=${result.currentCamelotCode}, ` +
+          `selected=${result.selectedCamelotCode}, filtered=${result.wheelFilteredTo9A}`
+        );
+        return;
+      }
+      if (!result.analysisNotationSettingsReady) {
+        fail("Key notation modes are not visible in the Key Analysis settings tab");
+        return;
+      }
+      if (
+        !result.contextMenuOpened ||
+        !result.contextMenuStayedOpenInside ||
+        !result.contextMenuClosedOutside
+      ) {
+        fail(
+          `Context-menu dismissal failed: opened=${result.contextMenuOpened}, ` +
+          `inside=${result.contextMenuStayedOpenInside}, outside=${result.contextMenuClosedOutside}`
+        );
+        return;
+      }
       if (!result.playlistRemoveReady) {
         fail("Playlist view did not show the remove-from-playlist button");
+        return;
+      }
+      if (!result.windowChromeReady || result.windowChromeDragRegion !== "drag") {
+        fail("Custom window chrome is missing or is not draggable");
+        return;
+      }
+      if (
+        !result.tableFocusedAfterClick ||
+        result.selectedAfterArrowDown !== "1" ||
+        result.playingAfterSpace !== "1"
+      ) {
+        fail(
+          `Table keyboard navigation failed: focus=${result.tableFocusedAfterClick}, ` +
+          `selected=${result.selectedAfterArrowDown}, playing=${result.playingAfterSpace}`
+        );
         return;
       }
       clearTimeout(timeout);

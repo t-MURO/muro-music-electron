@@ -4,6 +4,7 @@ export {
   type AnalysisOutputMode,
   type AnalysisNotationMode,
   type AnalysisOutputs,
+  type DeleteMode,
 } from "./settingsStore";
 export {
   useLibraryStore,

@@ -7,6 +7,7 @@ import {
   PlayerBar,
   SettingsPanel,
   Sidebar,
+  WindowChrome,
   ColumnsMenu,
   InboxBanner,
   PlaylistSelectionBar,
@@ -35,7 +36,6 @@ import {
   useAudioPlayback,
   useSidebarPanel,
   useSidebarData,
-  useHistoryNavigation,
   useTrackRatings,
   usePlaylistOperations,
   useInboxOperations,
@@ -67,7 +67,6 @@ function App() {
   const navigate = useNavigate();
   const playlistMatch = useMatch("/playlists/:playlistId");
   const collectionMatch = useMatch("/collection/:facet");
-  const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
 
   // Get state from stores
   const tracks = useLibraryStore((s) => s.tracks);
@@ -457,6 +456,7 @@ function App() {
   const {
     pendingTracks: pendingDeleteTracks,
     isDeleting: isDeletingTracks,
+    lastDeleteMode,
     requestTrackDeletion,
     closeTrackDeletion,
     removePendingFromLibrary,
@@ -493,10 +493,6 @@ function App() {
   const sidebarProps = useSidebarData({
     view,
     draggingPlaylistId,
-    canGoBack,
-    canGoForward,
-    onGoBack: goBack,
-    onGoForward: goForward,
     onViewChange: navigateToView,
     onPlaylistDrop: onPlaylistDropEvent,
     onPlaylistDragEnter,
@@ -651,7 +647,7 @@ function App() {
 
   return (
     <div
-      className="theme-transition h-screen overflow-hidden bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
+      className="theme-transition flex h-screen flex-col overflow-hidden bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
       onClick={() => {
         closeMenu();
         closeColumnsMenu();
@@ -694,6 +690,7 @@ function App() {
       <DeleteTracksModal
         tracks={pendingDeleteTracks}
         isDeleting={isDeletingTracks}
+        preferredMode={lastDeleteMode}
         onClose={closeTrackDeletion}
         onRemoveFromLibrary={removePendingFromLibrary}
         onDeleteFromDisk={deletePendingFromDisk}
@@ -716,8 +713,9 @@ function App() {
         onClose={closeEditModal}
         onSave={handleSaveMetadata}
       />
+      <WindowChrome />
       <div
-        className="grid h-screen grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
+        className="grid min-h-0 flex-1 grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
         style={
           {
             "--sidebar-width": `${sidebarWidth}px`,
@@ -743,6 +741,7 @@ function App() {
                 isOpen={Boolean(openMenuId)}
                 position={menuPosition}
                 selectionCount={menuSelection.length}
+                onClose={closeMenu}
                 onPlay={() => {
                   if (menuSelection.length > 0) {
                     const firstTrack = allTracks.find(
@@ -775,6 +774,7 @@ function App() {
                 isOpen={isPlaylistMenuOpen}
                 position={playlistMenuPosition}
                 playlistName={playlistMenuTarget?.name}
+                onClose={closePlaylistMenu}
                 onEdit={handlePlaylistMenuEdit}
                 onDelete={handlePlaylistMenuDelete}
               />
@@ -782,6 +782,7 @@ function App() {
                 isOpen={showColumns}
                 position={columnsMenuPosition}
                 columns={columns}
+                onClose={closeColumnsMenu}
                 onToggleColumn={toggleColumn}
               />
               <div className="flex min-h-0 flex-1 flex-col">
@@ -916,11 +917,14 @@ function App() {
               collapsed={queuePanelCollapsed}
               onToggleCollapsed={toggleQueuePanelCollapsed}
               queueTracks={queueTracks}
+              allTracks={allTracks}
               currentTrack={currentTrack}
               currentTrackDetails={currentTrack ? allTracks.find((track) => track.id === currentTrack.id) : null}
               onRemoveFromQueue={removeFromQueue}
               onReorderQueue={reorderQueue}
               onClearQueue={clearQueue}
+              onPlayTrack={handlePlayTrack}
+              onPlayNext={(trackId) => playNext([trackId])}
             />
           }
         />

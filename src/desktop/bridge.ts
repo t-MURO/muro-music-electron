@@ -1,10 +1,13 @@
 export type BridgeEvent = { payload: unknown };
+export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
 
 export type MuroBridge = {
   platform: string;
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
   on(event: string, listener: (payload: unknown) => void): () => void;
   appDataDir(): Promise<string>;
+  windowControl(action: WindowControlAction): Promise<boolean>;
+  isWindowMaximized(): Promise<boolean>;
   openDialog(options: Record<string, unknown>): Promise<string | string[] | null>;
   confirmDialog(message: string, options?: Record<string, unknown>): Promise<boolean>;
 };

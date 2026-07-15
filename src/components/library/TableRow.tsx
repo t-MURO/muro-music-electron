@@ -124,6 +124,9 @@ export const TableRow = memo(
         onContextMenu={(event) =>
           onRowContextMenu(event, track.id, index, isSelected)
         }
+        data-track-index={index}
+        data-track-selected={isSelected ? "true" : "false"}
+        data-track-playing={isPlayingTrack ? "true" : "false"}
         role="row"
       >
         <div

@@ -1,21 +1,20 @@
 import {
   Activity,
   Badge,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   Disc3,
   FileAudio,
   Inbox,
   ListMusic,
   Music2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Settings,
   Tag,
   UserRound,
   KeyRound,
 } from "lucide-react";
-import appLogo from "../../assets/app-logo.png";
 import { t } from "../../i18n";
 import { useLibraryStore } from "../../stores";
 import type { CollectionFacet, LibraryView } from "../../hooks";
@@ -24,10 +23,6 @@ type SidebarProps = {
   collapsed: boolean;
   currentView: LibraryView;
   draggingPlaylistId: string | null;
-  canGoBack: boolean;
-  canGoForward: boolean;
-  onGoBack: () => void;
-  onGoForward: () => void;
   onToggleCollapsed: () => void;
   onViewChange: (view: LibraryView) => void;
   onPlaylistDrop: (event: React.DragEvent<HTMLButtonElement>, id: string) => void;
@@ -42,10 +37,6 @@ export const Sidebar = ({
   collapsed,
   currentView,
   draggingPlaylistId,
-  canGoBack,
-  canGoForward,
-  onGoBack,
-  onGoForward,
   onToggleCollapsed,
   onViewChange,
   onPlaylistDrop,
@@ -55,10 +46,6 @@ export const Sidebar = ({
   onCreatePlaylist,
   onPlaylistContextMenu,
 }: SidebarProps) => {
-  void canGoBack;
-  void canGoForward;
-  void onGoBack;
-  void onGoForward;
   const tracks = useLibraryStore((state) => state.tracks);
   const inboxTracks = useLibraryStore((state) => state.inboxTracks);
   const playlists = useLibraryStore((state) => state.playlists);
@@ -83,13 +70,7 @@ export const Sidebar = ({
 
   return (
     <aside className="sidebar-shell flex h-full flex-col overflow-hidden border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div className={`sidebar-titlebar flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] ${collapsed ? "justify-center px-2" : "px-4"}`}>
-        {!collapsed && (
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <img className="h-6 w-6 shrink-0 rounded-[5px]" src={appLogo} alt="" />
-            <span className="truncate text-sm font-semibold tracking-tight">Muro Music</span>
-          </div>
-        )}
+      <div className={`sidebar-titlebar flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] ${collapsed ? "justify-center px-2" : "justify-end px-3"}`}>
         <button
           className="toolbar-icon-button sidebar-collapse-button shrink-0"
           onClick={onToggleCollapsed}
@@ -97,7 +78,7 @@ export const Sidebar = ({
           aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
           type="button"
         >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </button>
       </div>
 

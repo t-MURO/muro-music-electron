@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 type PopoverProps = {
@@ -6,6 +6,7 @@ type PopoverProps = {
   position: { x: number; y: number };
   children: ReactNode;
   className?: string;
+  onClose: () => void;
 };
 
 export const Popover = ({
@@ -13,9 +14,33 @@ export const Popover = ({
   position,
   children,
   className = "",
+  onClose,
 }: PopoverProps) => {
   const [shouldRender, setShouldRender] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && panelRef.current?.contains(target)) return;
+      onClose();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -44,11 +69,13 @@ export const Popover = ({
 
   return createPortal(
     <div
+      ref={panelRef}
       className={`fixed z-50 origin-top-left overflow-hidden rounded-[var(--radius-lg)] border border-[var(--panel-border)] bg-[var(--panel-bg)]/95 text-sm shadow-[var(--shadow-lg)] backdrop-blur-xl transition-all duration-150 ease-out ${
         isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
       } ${className}`}
       onClick={(event) => event.stopPropagation()}
       style={{ left: position.x, top: position.y }}
+      data-popover
     >
       {children}
     </div>,

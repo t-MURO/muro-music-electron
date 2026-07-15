@@ -4,6 +4,7 @@ import { isLocale, setLocale as setI18nLocale, type Locale } from "../i18n";
 
 export type AnalysisOutputMode = "none" | "prepend" | "append" | "overwrite";
 export type AnalysisNotationMode = "standard" | "custom" | "combined" | "djCombined";
+export type DeleteMode = "library" | "disk";
 export type AnalysisOutputs = {
   comment: AnalysisOutputMode;
   grouping: AnalysisOutputMode;
@@ -27,6 +28,7 @@ type SettingsState = {
   analysisCustomCodes: string[];
   analysisDelimiter: string;
   analysisOutputs: AnalysisOutputs;
+  lastDeleteMode: DeleteMode;
 };
 
 type SettingsActions = {
@@ -40,6 +42,7 @@ type SettingsActions = {
   setAnalysisCustomCode: (index: number, value: string) => void;
   setAnalysisDelimiter: (delimiter: string) => void;
   setAnalysisOutput: <K extends keyof AnalysisOutputs>(field: K, mode: AnalysisOutputs[K]) => void;
+  setLastDeleteMode: (mode: DeleteMode) => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -63,6 +66,7 @@ export const useSettingsStore = create<SettingsStore>()(
         initialKey: "none",
         bpm: "none",
       },
+      lastDeleteMode: "library",
 
       // Actions
       setTheme: (theme) => {
@@ -89,6 +93,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setAnalysisOutput: (field, mode) => set((state) => ({
         analysisOutputs: { ...state.analysisOutputs, [field]: mode },
       })),
+      setLastDeleteMode: (lastDeleteMode) => set({ lastDeleteMode }),
     }),
     {
       name: "muro-settings",
@@ -100,6 +105,7 @@ export const useSettingsStore = create<SettingsStore>()(
         analysisCustomCodes: state.analysisCustomCodes,
         analysisDelimiter: state.analysisDelimiter,
         analysisOutputs: state.analysisOutputs,
+        lastDeleteMode: state.lastDeleteMode,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

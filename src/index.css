@@ -619,6 +619,81 @@ body {
     transition: background-color var(--transition-theme), color var(--transition-theme);
   }
 
+.window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.window-no-drag,
+.window-no-drag * {
+  -webkit-app-region: no-drag;
+}
+
+.window-control-button {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  width: 46px;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.window-control-button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.window-control-button--close:hover {
+  color: #ffffff;
+  background: #c42b1c;
+}
+
+.window-restore-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+}
+
+.window-restore-icon::before,
+.window-restore-icon::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+}
+
+.window-restore-icon::before {
+  left: 0;
+  bottom: 0;
+  background: var(--color-bg-secondary);
+  z-index: 1;
+}
+
+.window-restore-icon::after {
+  top: 0;
+  right: 0;
+}
+
+.mac-window-control {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 9999px;
+  color: rgba(0, 0, 0, 0.72);
+}
+
+.camelot-segment:focus-visible path,
+.camelot-segment:focus-visible circle {
+  stroke: var(--color-accent);
+  stroke-width: 3;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .theme-transition :where(button) {
     transition: background-color var(--transition-theme), color var(--transition-theme),

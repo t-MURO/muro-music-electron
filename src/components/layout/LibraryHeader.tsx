@@ -68,11 +68,13 @@ export const LibraryHeader = ({
     <header className="library-command-bar shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
       <div className={`min-h-[68px] items-center px-4 ${isSettings ? "flex" : "library-command-bar-inner"}`}>
         <div className="library-command-title min-w-0 shrink-0">
-          <div className="flex items-baseline gap-2.5">
-            <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{title}</h2>
-            {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} tracks</span>}
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2.5">
+              <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{title}</h2>
+              {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} tracks</span>}
+            </div>
+            {isSettings && subtitle && <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
           </div>
-          {isSettings && subtitle && <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
         </div>
 
         {!isSettings && (

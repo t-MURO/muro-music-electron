@@ -32,7 +32,7 @@ type SettingsPanelProps = {
   onUseDefaultLocation: () => void;
 };
 
-type Tab = "dev" | "application" | "theme";
+type Tab = "dev" | "application" | "analysis" | "theme";
 
 const themeDescriptions: Record<string, { label: string; description: string }> = {
   "light": { label: "Light", description: "Polished, spacious design with light colors" },
@@ -128,6 +128,18 @@ export const SettingsPanel = ({
         </button>
         <button
           className={`px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium transition-all duration-[var(--transition-fast)] ${
+            activeTab === "analysis"
+              ? "border-b-2 border-[var(--color-accent)] text-[var(--color-text-primary)]"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+          onClick={() => setActiveTab("analysis")}
+          type="button"
+          data-settings-tab="analysis"
+        >
+          Key Analysis
+        </button>
+        <button
+          className={`px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium transition-all duration-[var(--transition-fast)] ${
             activeTab === "theme"
               ? "border-b-2 border-[var(--color-accent)] text-[var(--color-text-primary)]"
               : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
@@ -164,8 +176,10 @@ export const SettingsPanel = ({
           </div>
         )}
 
-        {activeTab === "application" && (
+        {(activeTab === "application" || activeTab === "analysis") && (
           <div className="space-y-8">
+            {activeTab === "application" && (
+              <>
             {/* Language Section */}
             <div>
               <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
@@ -221,8 +235,10 @@ export const SettingsPanel = ({
                 </p>
               </div>
             </div>
+              </>
+            )}
 
-            <div>
+            <div data-analysis-settings>
               <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                 Key and BPM Analysis
               </h3>
@@ -235,6 +251,7 @@ export const SettingsPanel = ({
                     <select
                       value={analysisNotation}
                       onChange={(event) => setAnalysisNotation(event.target.value as AnalysisNotationMode)}
+                      data-analysis-notation
                       className="h-[var(--input-height)] w-full appearance-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] pr-10 text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                     >
                       <option value="standard">Standard key (Am)</option>
@@ -311,6 +328,8 @@ export const SettingsPanel = ({
               </div>
             </div>
 
+            {activeTab === "application" && (
+              <>
             {/* Maintenance Section */}
             <div>
               <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
@@ -394,6 +413,8 @@ export const SettingsPanel = ({
                 </div>
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
 

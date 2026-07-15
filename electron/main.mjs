@@ -34,6 +34,7 @@ const createWindow = async () => {
     height: 900,
     minWidth: 960,
     minHeight: 640,
+    frame: false,
     title: "Muro Music",
     icon: app.isPackaged ? undefined : developmentAppIcon,
     backgroundColor: "#111111",
@@ -44,6 +45,16 @@ const createWindow = async () => {
       sandbox: true,
     },
   });
+
+  const emitWindowState = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("muro:event", "muro://window-maximized", {
+        maximized: mainWindow.isMaximized(),
+      });
+    }
+  };
+  mainWindow.on("maximize", emitWindowState);
+  mainWindow.on("unmaximize", emitWindowState);
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
@@ -88,6 +99,29 @@ const startApplication = async () => {
     backend.invoke(command, args ?? {}, event.sender)
   );
   ipcMain.handle("muro:app-data-dir", () => app.getPath("userData"));
+  ipcMain.handle("muro:window-is-maximized", (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window?.isMaximized() ?? false;
+  });
+  ipcMain.handle("muro:window-control", (event, action) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) return false;
+
+    switch (action) {
+      case "minimize":
+        window.minimize();
+        return false;
+      case "toggleMaximize":
+        if (window.isMaximized()) window.unmaximize();
+        else window.maximize();
+        return window.isMaximized();
+      case "close":
+        window.close();
+        return false;
+      default:
+        throw new Error(`Unsupported window control action: ${String(action)}`);
+    }
+  });
   ipcMain.handle("muro:open-dialog", async (_event, options) => {
     const properties = [];
     if (options.directory) properties.push("openDirectory");

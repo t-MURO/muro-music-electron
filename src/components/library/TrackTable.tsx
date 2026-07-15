@@ -138,8 +138,9 @@ export const TrackTable = memo(
         return;
       }
 
-      if (event.key === "Enter" && activeIndex !== null) {
+      if ((event.key === "Enter" || event.code === "Space") && activeIndex !== null) {
         event.preventDefault();
+        event.stopPropagation();
         const track = tracks[activeIndex];
         if (track) {
           onRowDoubleClick?.(track.id);
@@ -151,17 +152,17 @@ export const TrackTable = memo(
         return;
       }
 
-      const current = activeIndex ?? 0;
-      let nextIndex = current;
+      const current = activeIndex;
+      let nextIndex = current ?? 0;
 
       if (event.key === "ArrowDown") {
-        nextIndex = clampIndex(current + 1);
+        nextIndex = current === null ? 0 : clampIndex(current + 1);
       } else if (event.key === "ArrowUp") {
-        nextIndex = clampIndex(current - 1);
+        nextIndex = current === null ? tracks.length - 1 : clampIndex(current - 1);
       } else if (event.key === "PageDown") {
-        nextIndex = clampIndex(current + PAGE_STEP);
+        nextIndex = current === null ? 0 : clampIndex(current + PAGE_STEP);
       } else if (event.key === "PageUp") {
-        nextIndex = clampIndex(current - PAGE_STEP);
+        nextIndex = current === null ? tracks.length - 1 : clampIndex(current - PAGE_STEP);
       } else if (event.key === "Home") {
         nextIndex = 0;
       } else if (event.key === "End") {
@@ -252,6 +253,13 @@ export const TrackTable = memo(
             data-track-table-scroll
             tabIndex={0}
             onKeyDown={handleKeyDown}
+            onMouseDownCapture={(event) => {
+              const target = event.target as HTMLElement | null;
+              if (target?.closest("button, input, select, textarea, [contenteditable='true']")) {
+                return;
+              }
+              tableContainerRef.current?.focus({ preventScroll: true });
+            }}
             onScroll={(event) => {
               if (tableHeaderScrollRef.current) {
                 tableHeaderScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
@@ -304,7 +312,8 @@ export const TrackTable = memo(
         {tracks.length > 0 && (
           <div className="flex h-6 shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-[10px] tabular-nums text-[var(--color-text-muted)]">
             <span>{selectedIds.size} of {tracks.length.toLocaleString()} selected</span>
-            <span className="ml-auto">{tracks.length.toLocaleString()} tracks in view</span>
+            <span className="ml-auto" data-table-keyboard-hint>Up/Down select · Space plays</span>
+            <span className="ml-4">{tracks.length.toLocaleString()} tracks in view</span>
           </div>
         )}
       </div>

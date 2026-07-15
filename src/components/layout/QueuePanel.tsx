@@ -6,12 +6,14 @@ import {
   Music2,
   PanelRightClose,
   PanelRightOpen,
+  Sparkles,
   Speaker,
   X,
 } from "lucide-react";
 import { t } from "../../i18n";
 import { useDragSession } from "../../contexts/DragSessionContext";
 import { NowPlayingTrack } from "../queue/NowPlayingTrack";
+import { MixSuggestions } from "../queue/MixSuggestions";
 import type { Track } from "../../types";
 import type { CurrentTrack } from "../../hooks";
 
@@ -19,11 +21,14 @@ type QueuePanelProps = {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   queueTracks: Track[];
+  allTracks: Track[];
   currentTrack: CurrentTrack | null;
   currentTrackDetails?: Track | null;
   onRemoveFromQueue: (index: number) => void;
   onReorderQueue: (fromIndex: number, toIndex: number) => void;
   onClearQueue: () => void;
+  onPlayTrack: (trackId: string) => void;
+  onPlayNext: (trackId: string) => void;
 };
 
 const formatDuration = (seconds: number) => {
@@ -39,16 +44,20 @@ export const QueuePanel = ({
   collapsed,
   onToggleCollapsed,
   queueTracks,
+  allTracks,
   currentTrack,
   currentTrackDetails,
   onRemoveFromQueue,
   onReorderQueue,
   onClearQueue,
+  onPlayTrack,
+  onPlayNext,
 }: QueuePanelProps) => {
   const { startInternalDrag, endInternalDrag } = useDragSession();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragY, setDragY] = useState(0);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [panelView, setPanelView] = useState<"queue" | "mix">("queue");
   const dragStartRef = useRef<{ index: number; y: number; itemY: number } | null>(null);
   const itemRefsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,11 +133,36 @@ export const QueuePanel = ({
 
   return (
     <aside className="flex h-full flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div className="flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] px-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-primary)]">{t("panel.nowPlaying")}</h3>
+      <div className="flex h-[68px] shrink-0 items-center gap-2 border-b border-[var(--color-border)] px-3">
+        <div className="flex min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-0.5" role="tablist" aria-label="Right sidebar view">
+          <button
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[calc(var(--radius-md)-2px)] px-2 py-1.5 text-[10px] font-medium transition-colors ${panelView === "queue" ? "bg-[var(--color-bg-active)] text-[var(--color-text-primary)] shadow-sm" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"}`}
+            onClick={() => setPanelView("queue")}
+            role="tab"
+            aria-selected={panelView === "queue"}
+            data-panel-view="queue"
+            type="button"
+          >
+            <ListMusic className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Queue</span>
+          </button>
+          <button
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[calc(var(--radius-md)-2px)] px-2 py-1.5 text-[10px] font-medium transition-colors ${panelView === "mix" ? "bg-[var(--color-accent-light)] text-[var(--color-accent)] shadow-sm" : "text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"}`}
+            onClick={() => setPanelView("mix")}
+            role="tab"
+            aria-selected={panelView === "mix"}
+            data-panel-view="mix"
+            type="button"
+          >
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Mix Next</span>
+          </button>
+        </div>
         <button className="toolbar-icon-button ml-auto" onClick={onToggleCollapsed} title="Collapse queue" aria-label="Collapse queue" type="button"><PanelRightClose className="h-4 w-4" /></button>
       </div>
 
+      {panelView === "queue" ? (
+        <>
       <div className="min-h-[198px] border-b border-[var(--color-border)] pt-5">
         <NowPlayingTrack currentTrack={currentTrack} trackDetails={currentTrackDetails} />
       </div>
@@ -159,6 +193,7 @@ export const QueuePanel = ({
                       ref={(element) => { if (element) itemRefsRef.current.set(index, element); else itemRefsRef.current.delete(index); }}
                       onMouseDown={(event) => handleMouseDown(event, index)}
                       className={`group grid min-h-[49px] cursor-grab grid-cols-[16px_20px_minmax(0,1fr)_44px_38px_24px] items-center gap-1.5 border-b border-[var(--color-border-light)] px-3 text-[10px] active:cursor-grabbing ${isDragging ? "opacity-25" : "hover:bg-[var(--color-bg-hover)]"}`}
+                      data-queue-track
                     >
                       {isCurrentQueueTrack
                         ? <AudioLines className="h-3.5 w-3.5 text-[var(--color-accent)]" />
@@ -188,6 +223,16 @@ export const QueuePanel = ({
           <div className="truncate text-xs font-medium text-[var(--color-text-primary)]">{draggedTrack.title}</div>
           <div className="truncate text-[10px] text-[var(--color-text-muted)]">{draggedTrack.artist}</div>
         </div>
+      )}
+        </>
+      ) : (
+        <MixSuggestions
+          tracks={allTracks}
+          currentTrack={currentTrackDetails}
+          queuedTrackIds={queueTracks.map((track) => track.id)}
+          onPlayTrack={onPlayTrack}
+          onPlayNext={onPlayNext}
+        />
       )}
     </aside>
   );

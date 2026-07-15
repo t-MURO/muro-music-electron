@@ -5,6 +5,7 @@ export {
   QueuePanel,
   SettingsPanel,
   Sidebar,
+  WindowChrome,
 } from "./layout";
 export {
   ColumnsMenu,
@@ -32,4 +33,4 @@ export {
   PopoverHeader,
   ToastContainer,
 } from "./ui";
-export { NowPlayingTrack, QueueItem } from "./queue";
+export { CamelotWheel, MixSuggestions, NowPlayingTrack, QueueItem } from "./queue";

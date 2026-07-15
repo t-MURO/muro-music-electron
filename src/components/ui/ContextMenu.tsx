@@ -23,6 +23,7 @@ type ContextMenuProps = {
   onShowBpmKey?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onClose: () => void;
 };
 
 export const ContextMenu = ({
@@ -37,9 +38,10 @@ export const ContextMenu = ({
   onShowBpmKey,
   onEdit,
   onDelete,
+  onClose,
 }: ContextMenuProps) => {
   return (
-    <Popover isOpen={isOpen} position={position} className="w-52 py-1">
+    <Popover isOpen={isOpen} position={position} className="w-52 py-1" onClose={onClose}>
       {selectionCount > 1 && (
         <PopoverHeader>{selectionCount} selected</PopoverHeader>
       )}

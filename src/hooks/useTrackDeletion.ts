@@ -6,6 +6,7 @@ import {
   useLibraryStore,
   usePlaybackStore,
   useRecentlyPlayedStore,
+  useSettingsStore,
   useUIStore,
 } from "../stores";
 import { deleteTracks, playbackStop } from "../utils";
@@ -21,6 +22,8 @@ export const useTrackDeletion = () => {
   const currentTrack = usePlaybackStore((state) => state.currentTrack);
   const setQueue = usePlaybackStore((state) => state.setQueue);
   const clearSelection = useUIStore((state) => state.clearSelection);
+  const lastDeleteMode = useSettingsStore((state) => state.lastDeleteMode);
+  const setLastDeleteMode = useSettingsStore((state) => state.setLastDeleteMode);
   const resolveDbPath = useDbPath();
   const [pendingTrackIds, setPendingTrackIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -91,12 +94,23 @@ export const useTrackDeletion = () => {
     setTracks,
   ]);
 
+  const removePendingFromLibrary = useCallback(() => {
+    setLastDeleteMode("library");
+    void deletePendingTracks(false);
+  }, [deletePendingTracks, setLastDeleteMode]);
+
+  const deletePendingFromDisk = useCallback(() => {
+    setLastDeleteMode("disk");
+    void deletePendingTracks(true);
+  }, [deletePendingTracks, setLastDeleteMode]);
+
   return {
     pendingTracks,
     isDeleting,
+    lastDeleteMode,
     requestTrackDeletion,
     closeTrackDeletion,
-    removePendingFromLibrary: () => deletePendingTracks(false),
-    deletePendingFromDisk: () => deletePendingTracks(true),
+    removePendingFromLibrary,
+    deletePendingFromDisk,
   };
 };
