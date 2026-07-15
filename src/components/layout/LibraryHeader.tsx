@@ -20,6 +20,7 @@ type LibraryHeaderProps = {
   onAddMusic: () => void;
   onShowColumns: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onSort: () => void;
+  contentMode?: "tracks" | "albums";
 };
 
 export const LibraryHeader = ({
@@ -32,6 +33,7 @@ export const LibraryHeader = ({
   onAddMusic,
   onShowColumns,
   onSort,
+  contentMode = "tracks",
 }: LibraryHeaderProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const searchShortcut = window.muro?.platform === "darwin" ? "⌘F" : "Ctrl F";
@@ -66,12 +68,12 @@ export const LibraryHeader = ({
 
   return (
     <header className="library-command-bar shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div className={`min-h-[68px] items-center px-4 ${isSettings ? "flex" : "library-command-bar-inner"}`}>
+      <div className={`min-h-[68px] items-center px-4 ${isSettings ? "flex" : `library-command-bar-inner library-command-bar-inner--${contentMode}`}`}>
         <div className="library-command-title min-w-0 shrink-0">
           <div className="min-w-0">
             <div className="flex items-baseline gap-2.5">
               <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{title}</h2>
-              {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} tracks</span>}
+              {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} {contentMode}</span>}
             </div>
             {isSettings && subtitle && <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
           </div>
@@ -84,7 +86,7 @@ export const LibraryHeader = ({
               <input
                 ref={inputRef}
                 className="command-search h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] pl-9 pr-14 text-[13px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-light)]"
-                placeholder="Search library"
+                placeholder={contentMode === "albums" ? "Search albums" : "Search library"}
                 value={searchQuery}
                 onChange={(event) => onSearchChange(event.target.value)}
               />
@@ -99,13 +101,13 @@ export const LibraryHeader = ({
                 </kbd>
               )}
             </div>
-            <button className="toolbar-button toolbar-button--ghost" onClick={focusSearch} title="Filter the current library view" type="button"><Filter className="h-4 w-4" /><span>Filters</span></button>
-            <button className="toolbar-button toolbar-button--ghost" onClick={onSort} title="Cycle title sorting" type="button"><ArrowUpDown className="h-4 w-4" /><span>Sort</span></button>
+            {contentMode === "tracks" && <button className="toolbar-button toolbar-button--ghost" onClick={focusSearch} title="Filter the current library view" type="button"><Filter className="h-4 w-4" /><span>Filters</span></button>}
+            {contentMode === "tracks" && <button className="toolbar-button toolbar-button--ghost" onClick={onSort} title="Cycle title sorting" type="button"><ArrowUpDown className="h-4 w-4" /><span>Sort</span></button>}
             <button className="toolbar-button toolbar-button--primary" onClick={onAddMusic} type="button"><Plus className="h-4 w-4" /><span>Add Music</span></button>
-            <div className="library-view-toggle">
+            {contentMode === "tracks" && <div className="library-view-toggle">
               <button className="toolbar-icon-button toolbar-view-button" onClick={onShowColumns} title="Choose visible columns" aria-label="Choose visible columns" type="button"><LayoutGrid className="h-4 w-4" /></button>
               <button className={`toolbar-icon-button ${compactTable ? "toolbar-view-button" : ""}`} onClick={() => setCompactTable((value) => !value)} title="Toggle compact table" aria-label="Toggle compact table" aria-pressed={compactTable} type="button"><List className="h-4 w-4" /></button>
-            </div>
+            </div>}
           </>
         )}
       </div>

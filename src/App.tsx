@@ -11,6 +11,7 @@ import {
   ColumnsMenu,
   InboxBanner,
   PlaylistSelectionBar,
+  AlbumsView,
   TrackTable,
   ContextMenu,
   DeleteTracksModal,
@@ -58,7 +59,14 @@ import {
   selectAllTracks,
   notify,
 } from "./stores";
-import { getPathForView, compareSortValues, getSortableValue, filterTracksBySearch } from "./utils";
+import {
+  getPathForView,
+  compareSortValues,
+  getSortableValue,
+  filterTracksBySearch,
+  filterAlbumsBySearch,
+  groupTracksIntoAlbums,
+} from "./utils";
 import { open } from "@muro/desktop/dialogs";
 import type { ColumnConfig, Track } from "./types";
 
@@ -133,6 +141,24 @@ function App() {
     [navigate]
   );
 
+  const isAlbumsView = view === "collection:albums";
+  const selectedAlbumId = isAlbumsView
+    ? new URLSearchParams(location.search).get("album")
+    : null;
+
+  const handleSelectAlbum = useCallback(
+    (albumId: string | null) => {
+      if (!albumId) {
+        navigate("/collection/albums");
+        return;
+      }
+      const params = new URLSearchParams();
+      params.set("album", albumId);
+      navigate({ pathname: "/collection/albums", search: params.toString() });
+    },
+    [navigate]
+  );
+
   // Redirect unknown paths to library
   useEffect(() => {
     const { pathname } = location;
@@ -159,6 +185,11 @@ function App() {
 
   // Filtering and sorting
   const displayedTracks = viewConfig.trackTable?.tracks ?? [];
+  const albums = useMemo(() => groupTracksIntoAlbums(tracks), [tracks]);
+  const albumResults = useMemo(
+    () => filterAlbumsBySearch(albums, searchQuery),
+    [albums, searchQuery]
+  );
 
   // Apply search filter
   const filteredTracks = useMemo(() => {
@@ -277,6 +308,7 @@ function App() {
 
   // Audio playback
   const {
+    isPlaying,
     currentPosition,
     currentTrack,
     playTrack,
@@ -366,6 +398,15 @@ function App() {
       }
     },
     [allTracks, playTrack]
+  );
+
+  const handlePlayAlbum = useCallback(
+    (trackIds: string[]) => {
+      if (trackIds.length === 0) return;
+      setQueue(trackIds.slice(1));
+      handlePlayTrack(trackIds[0]);
+    },
+    [handlePlayTrack, setQueue]
   );
 
   // Track ratings
@@ -790,12 +831,13 @@ function App() {
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
                   isSettings={viewConfig.type === "settings"}
-                  resultCount={sortedTracks.length}
+                  resultCount={isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   onAddMusic={handleEmptyImport}
                   onShowColumns={openColumnsMenu}
                   onSort={() => handleSortChange("title")}
+                  contentMode={isAlbumsView ? "albums" : "tracks"}
                 />
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
@@ -837,6 +879,22 @@ function App() {
                       onBackfillCoverArt={handleBackfillCoverArt}
                       onClearSongs={handleClearSongs}
                       onUseDefaultLocation={() => setUseAutoDbPath(true)}
+                    />
+                  ) : isAlbumsView ? (
+                    <AlbumsView
+                      albums={albums}
+                      searchQuery={searchQuery}
+                      selectedAlbumId={selectedAlbumId}
+                      currentTrackId={currentTrack?.id ?? null}
+                      isPlaying={isPlaying}
+                      onSelectAlbum={handleSelectAlbum}
+                      onPlayTrack={handlePlayTrack}
+                      onPlayAlbum={handlePlayAlbum}
+                      onTogglePlay={togglePlay}
+                      onPlayNext={playNext}
+                      onAddToQueue={addToQueue}
+                      onImportFiles={handleEmptyImport}
+                      onImportFolder={handleEmptyImportFolder}
                     />
                   ) : (
                     viewConfig.trackTable && (

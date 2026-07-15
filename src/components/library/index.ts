@@ -6,3 +6,4 @@ export { TableEmptyState } from "./TableEmptyState";
 export { TableHeader } from "./TableHeader";
 export { TableRow } from "./TableRow";
 export { TrackTable } from "./TrackTable";
+export { AlbumsView } from "./AlbumsView";

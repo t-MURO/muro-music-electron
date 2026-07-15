@@ -11,7 +11,13 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   id: `smoke-track-${index}`,
   title: `Smoke Track ${String(index).padStart(3, "0")}`,
   artist: "Muro",
-  album: "Sticky Header Test",
+  artists: "Muro",
+  album: `Smoke Album ${String(Math.floor(index / 10)).padStart(2, "0")}`,
+  track_number: (index % 10) + 1,
+  track_total: 10,
+  year: 2000 + Math.floor(index / 10),
+  date_added: `2026-06-${String((index % 28) + 1).padStart(2, "0")}T12:00:00.000Z`,
+  genre: index % 2 === 0 ? "Electronic" : "House",
   duration: "3:00",
   duration_seconds: 180,
   bitrate: "320 kbps",
@@ -29,7 +35,7 @@ const fail = (message) => {
   app.exit(1);
 };
 
-const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 20_000);
+const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 25_000);
 
 app.whenReady().then(async () => {
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
@@ -271,6 +277,23 @@ app.whenReady().then(async () => {
           notationOptions.includes("custom") &&
           notationOptions.includes("combined") &&
           notationOptions.includes("djCombined");
+        window.location.hash = "#/collection/albums";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const albumsViewReady = Boolean(document.querySelector("[data-albums-view]"));
+        const albumCardCount = document.querySelectorAll("[data-album-card]").length;
+        const albumSort = document.querySelector("[data-album-sort]");
+        const albumSortOptions = albumSort instanceof HTMLSelectElement
+          ? Array.from(albumSort.options, (option) => option.value)
+          : [];
+        document.querySelector(".album-card-open")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const albumDetailReady = Boolean(document.querySelector("[data-album-detail]"));
+        const albumDetailTrackCount = document.querySelectorAll("[data-album-track]").length;
+        document.querySelector(".album-back-button")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        document.querySelector('[aria-label="List view"]')?.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const albumListReady = Boolean(document.querySelector(".album-collection--list"));
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -306,6 +329,12 @@ app.whenReady().then(async () => {
           contextMenuOpened,
           contextMenuStayedOpenInside,
           contextMenuClosedOutside,
+          albumsViewReady,
+          albumCardCount,
+          albumSortOptions,
+          albumDetailReady,
+          albumDetailTrackCount,
+          albumListReady,
         };
       }
       return {
@@ -371,6 +400,23 @@ app.whenReady().then(async () => {
       }
       if (!result.analysisNotationSettingsReady) {
         fail("Key notation modes are not visible in the Key Analysis settings tab");
+        return;
+      }
+      if (
+        !result.albumsViewReady ||
+        result.albumCardCount !== 25 ||
+        !result.albumSortOptions.includes("title") ||
+        !result.albumSortOptions.includes("artist") ||
+        !result.albumSortOptions.includes("year") ||
+        !result.albumSortOptions.includes("recent") ||
+        !result.albumDetailReady ||
+        result.albumDetailTrackCount !== 10 ||
+        !result.albumListReady
+      ) {
+        fail(
+          `Album view failed: view=${result.albumsViewReady}, cards=${result.albumCardCount}, ` +
+          `detail=${result.albumDetailReady}, tracks=${result.albumDetailTrackCount}, list=${result.albumListReady}`
+        );
         return;
       }
       if (

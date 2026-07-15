@@ -17,6 +17,11 @@ export {
 export { matchesSearchQuery, filterTracksBySearch } from "./search";
 export { getPathForView } from "./viewRouting";
 export {
+  filterAlbumsBySearch,
+  groupTracksIntoAlbums,
+  type Album,
+} from "./albums";
+export {
   loadTracks,
   clearTracks,
   acceptTracks,
