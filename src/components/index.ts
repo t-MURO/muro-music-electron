@@ -16,6 +16,7 @@ export {
   TableHeader,
   TableRow,
   TrackTable,
+  AlbumsView,
 } from "./library";
 export {
   AnalysisModal,

@@ -971,6 +971,721 @@ input:focus-visible,
   -webkit-app-region: no-drag;
 }
 
+/* Album collection */
+.library-command-bar-inner--albums {
+  grid-template-columns: minmax(160px, 1fr) minmax(210px, 320px) auto;
+  gap: 14px;
+  justify-content: stretch;
+}
+
+.library-command-bar-inner--albums .command-search-shell {
+  max-width: 320px;
+}
+
+.albums-view,
+.album-detail {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.albums-view {
+  padding: 0 24px 36px;
+}
+
+.albums-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  min-height: 70px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--color-border-light);
+  background: color-mix(in srgb, var(--color-bg-primary) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.albums-toolbar > div:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.albums-toolbar strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.albums-toolbar span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.albums-toolbar-actions,
+.album-layout-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.albums-toolbar-actions {
+  gap: 10px;
+}
+
+.albums-toolbar select {
+  height: 34px;
+  min-width: 142px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  padding: 0 30px 0 10px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  outline: none;
+}
+
+.albums-toolbar select:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-light);
+}
+
+.album-layout-toggle button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+}
+
+.album-layout-toggle button:first-child {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.album-layout-toggle button:last-child {
+  margin-left: -1px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.album-layout-toggle button:hover,
+.album-layout-toggle button.is-active {
+  position: relative;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.album-layout-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.album-collection--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 28px 20px;
+  padding-top: 24px;
+}
+
+.album-card {
+  min-width: 0;
+}
+
+.album-card-artwork-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-tertiary);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.album-card:hover .album-card-artwork-wrap,
+.album-card:focus-within .album-card-artwork-wrap {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.album-card--current .album-card-artwork-wrap {
+  box-shadow: 0 0 0 2px var(--color-accent), var(--shadow-md);
+}
+
+.album-card-open {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.album-artwork {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.album-artwork::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 58%, rgba(0, 0, 0, 0.18));
+  content: "";
+  pointer-events: none;
+}
+
+.album-artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.album-artwork > svg {
+  width: 32%;
+  height: 32%;
+  opacity: 0.6;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.32));
+}
+
+.album-card-play {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: white;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.38);
+  opacity: 0;
+  transform: translateY(7px) scale(0.92);
+  transition: opacity var(--transition-fast), transform var(--transition-fast), background var(--transition-fast);
+}
+
+.album-card:hover .album-card-play,
+.album-card:focus-within .album-card-play,
+.album-card--current .album-card-play {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.album-card-play:hover {
+  background: var(--color-accent-hover);
+  transform: scale(1.06);
+}
+
+.album-card-play svg {
+  width: 18px;
+  height: 18px;
+}
+
+.album-card-copy {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  padding: 10px 1px 0;
+  text-align: left;
+}
+
+.album-card-copy strong,
+.album-card-copy span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-card-copy strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.album-card-copy span {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.album-card-copy:hover strong,
+.album-card--current .album-card-copy strong {
+  color: var(--color-accent);
+}
+
+.album-collection--list {
+  display: flex;
+  flex-direction: column;
+  padding-top: 14px;
+}
+
+.album-card--list {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  border-bottom: 1px solid var(--color-border-light);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+}
+
+.album-card--list:hover {
+  background: var(--color-bg-hover);
+}
+
+.album-card--list .album-card-artwork-wrap {
+  border-radius: var(--radius-md);
+}
+
+.album-card--list .album-card-play {
+  right: 7px;
+  bottom: 7px;
+  width: 28px;
+  height: 28px;
+}
+
+.album-card--list .album-card-play svg {
+  width: 12px;
+  height: 12px;
+}
+
+.album-card--list .album-card-copy {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.2fr) minmax(120px, 1fr) minmax(145px, auto);
+  align-items: center;
+  gap: 16px;
+  padding: 0;
+}
+
+.album-card-stats {
+  text-align: right;
+}
+
+.album-detail {
+  padding-bottom: 36px;
+}
+
+.album-detail-hero {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-border-light);
+  background:
+    radial-gradient(circle at 18% 20%, var(--color-accent-light), transparent 32%),
+    linear-gradient(180deg, var(--color-bg-secondary), var(--color-bg-primary));
+  padding: 22px 28px 28px;
+}
+
+.album-back-button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.album-back-button:hover {
+  color: var(--color-text-primary);
+}
+
+.album-back-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.album-detail-hero-content {
+  display: flex;
+  align-items: flex-end;
+  gap: 26px;
+  margin-top: 18px;
+}
+
+.album-detail-artwork {
+  width: clamp(160px, 23vw, 228px);
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.album-detail-copy {
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.album-eyebrow {
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.album-detail-copy h1 {
+  max-width: 780px;
+  margin: 5px 0 5px;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: clamp(28px, 4.4vw, 50px);
+  font-weight: 750;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  text-overflow: ellipsis;
+}
+
+.album-detail-artist {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.album-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-top: 6px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.album-detail-meta span + span::before {
+  margin: 0 7px;
+  color: var(--color-text-muted);
+  content: "•";
+}
+
+.album-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.album-primary-action,
+.album-secondary-action {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 650;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.album-primary-action {
+  min-width: 82px;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+  color: white;
+}
+
+.album-primary-action:hover {
+  border-color: var(--color-accent-hover);
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.album-secondary-action {
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg-tertiary) 78%, transparent);
+  color: var(--color-text-primary);
+}
+
+.album-secondary-action:hover {
+  border-color: var(--color-text-muted);
+  background: var(--color-bg-hover);
+}
+
+.album-primary-action svg,
+.album-secondary-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+.album-track-list {
+  max-width: 1050px;
+  margin: 0 auto;
+  padding: 20px 28px 0;
+}
+
+.album-track-header,
+.album-track-row {
+  display: grid;
+  grid-template-columns: 42px minmax(180px, 1fr) 64px 64px 54px;
+  align-items: center;
+  gap: 8px;
+}
+
+.album-track-header {
+  height: 30px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.album-track-header span:first-child {
+  text-align: center;
+}
+
+.album-track-header svg {
+  width: 13px;
+  height: 13px;
+  justify-self: end;
+}
+
+.album-track-row {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-light);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 0;
+  text-align: left;
+}
+
+.album-track-row:hover,
+.album-track-row:focus-visible {
+  border-radius: var(--radius-md);
+  background: var(--color-bg-hover);
+  outline: none;
+}
+
+.album-track-row--current .album-track-title strong,
+.album-track-row--current .album-track-number {
+  color: var(--color-accent);
+}
+
+.album-track-number {
+  position: relative;
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.album-track-number svg {
+  width: 12px;
+  height: 12px;
+}
+
+.album-track-play {
+  position: absolute;
+  display: none;
+}
+
+.album-track-row:hover .album-track-number > span {
+  visibility: hidden;
+}
+
+.album-track-row:hover .album-track-play {
+  display: block;
+  color: var(--color-text-primary);
+}
+
+.album-track-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.album-track-title strong,
+.album-track-title small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-track-title strong {
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.album-track-title small {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.album-track-key,
+.album-track-bpm,
+.album-track-duration {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.album-track-key {
+  color: var(--color-accent);
+  font-weight: 650;
+}
+
+.album-track-duration {
+  justify-self: end;
+}
+
+.album-disc-divider {
+  border-bottom: 1px solid var(--color-border-light);
+  padding: 18px 0 7px 50px;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.album-empty-state,
+.album-search-empty {
+  display: flex;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.album-empty-state h2,
+.album-search-empty h2 {
+  margin-top: 16px;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.album-empty-state p,
+.album-search-empty p {
+  max-width: 430px;
+  margin-top: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.album-empty-state > div:last-child {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.album-empty-icon,
+.album-search-empty > svg {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-bg-secondary);
+  color: var(--color-accent);
+}
+
+.album-empty-icon svg {
+  width: 25px;
+  height: 25px;
+}
+
+.album-search-empty > svg {
+  padding: 19px;
+}
+
+@media (max-width: 800px) {
+  .library-command-bar-inner--albums {
+    grid-template-columns: minmax(112px, 1fr) minmax(170px, 240px) auto;
+    gap: 8px;
+  }
+
+  .albums-view {
+    padding-inline: 16px;
+  }
+
+  .album-collection--grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 22px 14px;
+  }
+
+  .album-detail-hero {
+    padding-inline: 20px;
+  }
+
+  .album-detail-hero-content {
+    align-items: center;
+  }
+
+  .album-detail-artwork {
+    width: 150px;
+  }
+
+  .album-detail-copy h1 {
+    font-size: 28px;
+  }
+
+  .album-track-list {
+    padding-inline: 20px;
+  }
+}
+
+@media (max-width: 620px) {
+  .albums-toolbar > div:first-child span,
+  .album-track-key,
+  .album-track-bpm,
+  .album-track-header span:nth-child(3),
+  .album-track-header span:nth-child(4) {
+    display: none;
+  }
+
+  .album-track-header,
+  .album-track-row {
+    grid-template-columns: 36px minmax(120px, 1fr) 48px;
+  }
+
+  .album-track-header svg,
+  .album-track-duration {
+    grid-column: 3;
+  }
+
+  .album-detail-hero-content {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .album-detail-artwork {
+    width: 132px;
+  }
+
+  .album-card--list .album-card-copy {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .album-card--list .album-card-stats {
+    display: none;
+  }
+}
+
 .sidebar-collapse-button {
   background: var(--color-bg-primary);
   border-color: var(--color-border);
