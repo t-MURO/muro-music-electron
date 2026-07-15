@@ -3,6 +3,8 @@ import {
   AudioLines,
   GripVertical,
   ListMusic,
+  Maximize2,
+  Minimize2,
   Music2,
   PanelRightClose,
   PanelRightOpen,
@@ -19,7 +21,9 @@ import type { CurrentTrack } from "../../hooks";
 
 type QueuePanelProps = {
   collapsed: boolean;
+  expanded: boolean;
   onToggleCollapsed: () => void;
+  onToggleExpanded: () => void;
   queueTracks: Track[];
   allTracks: Track[];
   currentTrack: CurrentTrack | null;
@@ -42,7 +46,9 @@ const formatDuration = (seconds: number) => {
 
 export const QueuePanel = ({
   collapsed,
+  expanded,
   onToggleCollapsed,
+  onToggleExpanded,
   queueTracks,
   allTracks,
   currentTrack,
@@ -158,7 +164,20 @@ export const QueuePanel = ({
             <span className="truncate">Mix Next</span>
           </button>
         </div>
-        <button className="toolbar-icon-button ml-auto" onClick={onToggleCollapsed} title="Collapse queue" aria-label="Collapse queue" type="button"><PanelRightClose className="h-4 w-4" /></button>
+        {panelView === "mix" && (
+          <button
+            className="toolbar-icon-button ml-auto"
+            onClick={onToggleExpanded}
+            title={expanded ? "Restore Mix Next panel" : "Expand Mix Next panel"}
+            aria-label={expanded ? "Restore Mix Next panel" : "Expand Mix Next panel"}
+            aria-pressed={expanded}
+            data-mix-expand
+            type="button"
+          >
+            {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+        )}
+        <button className={`toolbar-icon-button ${panelView === "mix" ? "" : "ml-auto"}`} onClick={onToggleCollapsed} title="Collapse queue" aria-label="Collapse queue" type="button"><PanelRightClose className="h-4 w-4" /></button>
       </div>
 
       {panelView === "queue" ? (

@@ -10,7 +10,13 @@ type UseSidebarDataArgs = {
   onPlaylistDragLeave: (id: string) => void;
   onPlaylistDragOver: (id: string) => void;
   onCreatePlaylist: () => void;
+  onCreatePlaylistFolder: () => void;
+  onImportPlaylist: () => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
+  onPlaylistFolderContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
+  onCreateSmartCrate: () => void;
+  onEditSmartCrate: (id: string) => void;
+  onDeleteSmartCrate: (id: string) => void;
 };
 
 export const useSidebarData = ({
@@ -22,7 +28,13 @@ export const useSidebarData = ({
   onPlaylistDragLeave,
   onPlaylistDragOver,
   onCreatePlaylist,
+  onCreatePlaylistFolder,
+  onImportPlaylist,
   onPlaylistContextMenu,
+  onPlaylistFolderContextMenu,
+  onCreateSmartCrate,
+  onEditSmartCrate,
+  onDeleteSmartCrate,
 }: UseSidebarDataArgs) => {
   return useMemo(
     () => ({
@@ -34,16 +46,28 @@ export const useSidebarData = ({
       onPlaylistDragLeave,
       onPlaylistDragOver,
       onCreatePlaylist,
+      onCreatePlaylistFolder,
+      onImportPlaylist,
       onPlaylistContextMenu,
+      onPlaylistFolderContextMenu,
+      onCreateSmartCrate,
+      onEditSmartCrate,
+      onDeleteSmartCrate,
     }),
     [
       draggingPlaylistId,
       onPlaylistContextMenu,
+      onPlaylistFolderContextMenu,
       onPlaylistDragEnter,
       onPlaylistDragLeave,
       onPlaylistDragOver,
       onPlaylistDrop,
       onCreatePlaylist,
+      onCreatePlaylistFolder,
+      onImportPlaylist,
+      onCreateSmartCrate,
+      onDeleteSmartCrate,
+      onEditSmartCrate,
       onViewChange,
       view,
     ]

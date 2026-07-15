@@ -1,5 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { LibrarySnapshot, PlaylistSnapshot } from "./importApi";
+import type { ArtistProfile } from "../types";
 
 // ============================================================================
 // Library Operations
@@ -42,6 +43,31 @@ export const deleteTracks = (
   });
 };
 
+export const loadCachedArtistProfiles = (dbPath: string) =>
+  invoke<ArtistProfile[]>("load_cached_artist_profiles", { dbPath });
+
+export const getArtistProfile = (
+  dbPath: string,
+  artistName: string,
+  force = false,
+  fanartApiKey = "",
+) => invoke<ArtistProfile>("get_artist_profile", { dbPath, artistName, force, fanartApiKey });
+
+export type ArtistProfileScanResult = {
+  checked: number;
+  updated: number;
+  failed: number;
+  queued: number;
+  remaining: number;
+  totalArtists: number;
+};
+
+export const scanArtistProfiles = (
+  dbPath: string,
+  fanartApiKey = "",
+  limit = 25,
+) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, fanartApiKey, limit });
+
 // ============================================================================
 // Playlist Operations
 // ============================================================================
@@ -50,13 +76,25 @@ export const loadPlaylists = (dbPath: string) => {
   return invoke<PlaylistSnapshot>("load_playlists", { dbPath });
 };
 
-export const createPlaylist = (dbPath: string, id: string, name: string) => {
+export const createPlaylist = (
+  dbPath: string,
+  id: string,
+  name: string,
+  folderId?: string,
+) => {
   return invoke<void>("create_playlist", {
     dbPath,
     id,
     name,
+    folderId,
   });
 };
+
+export const updatePlaylist = (
+  dbPath: string,
+  playlistId: string,
+  updates: { name?: string; folderId?: string | null },
+) => invoke<void>("update_playlist", { dbPath, playlistId, ...updates });
 
 export const deletePlaylist = (dbPath: string, playlistId: string) => {
   return invoke<void>("delete_playlist", {
@@ -100,6 +138,31 @@ export const removeLastTracksFromPlaylist = (
     count,
   });
 };
+
+export const createPlaylistFolder = (dbPath: string, id: string, name: string) =>
+  invoke<void>("create_playlist_folder", { dbPath, id, name });
+
+export const updatePlaylistFolder = (dbPath: string, folderId: string, name: string) =>
+  invoke<void>("update_playlist_folder", { dbPath, folderId, name });
+
+export const deletePlaylistFolder = (dbPath: string, folderId: string) =>
+  invoke<void>("delete_playlist_folder", { dbPath, folderId });
+
+export const importPlaylistFile = (dbPath: string, filePath: string) =>
+  invoke<import("./importApi").ImportedPlaylistFile>("import_playlist_file", {
+    dbPath,
+    filePath,
+  });
+
+export const exportPlaylistFile = (
+  dbPath: string,
+  playlistId: string,
+  filePath: string,
+) => invoke<{ exported: number; filePath: string }>("export_playlist_file", {
+  dbPath,
+  playlistId,
+  filePath,
+});
 
 // ============================================================================
 // Backfill Operations

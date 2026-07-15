@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("muro", {
   windowControl: (action) => ipcRenderer.invoke("muro:window-control", action),
   isWindowMaximized: () => ipcRenderer.invoke("muro:window-is-maximized"),
   openDialog: (options = {}) => ipcRenderer.invoke("muro:open-dialog", options),
+  saveDialog: (options = {}) => ipcRenderer.invoke("muro:save-dialog", options),
+  openExternal: (url) => ipcRenderer.invoke("muro:open-external", url),
   confirmDialog: (message, options = {}) =>
     ipcRenderer.invoke("muro:confirm-dialog", message, options),
 });

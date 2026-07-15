@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { getCompatibleCamelotCodes } from "../../utils/camelot";
+import { getCamelotColor, getCompatibleCamelotCodes } from "../../utils/camelot";
 
 type CamelotWheelProps = {
   currentCode: string;
@@ -37,7 +37,7 @@ const ringSegmentPath = (
 };
 
 const segments = Array.from({ length: 12 }, (_, index) => {
-  const number = index + 1;
+  const number = index === 0 ? 12 : index;
   const centerAngle = -90 + (index * 30);
   return [
     {
@@ -62,25 +62,18 @@ export const CamelotWheel = ({
     () => new Set(getCompatibleCamelotCodes(currentCode)),
     [currentCode],
   );
+  const currentColor = getCamelotColor(currentCode) ?? "var(--color-accent)";
 
   return (
-    <div className="mx-auto w-full max-w-[244px]" data-camelot-wheel>
+    <div className="mx-auto w-full max-w-[280px]" data-camelot-wheel>
       <svg viewBox="0 0 240 240" className="block h-auto w-full" aria-label={`Camelot wheel, current key ${currentCode}`}>
         <circle cx={CENTER} cy={CENTER} r="112" fill="var(--color-bg-primary)" stroke="var(--color-border)" />
         {segments.map(({ code, path, label }) => {
           const isCurrent = code === currentCode;
           const isCompatible = compatibleCodes.has(code);
           const isSelected = code === selectedCode;
-          const fill = isSelected || isCurrent
-            ? "var(--color-accent)"
-            : isCompatible
-              ? "var(--color-accent-light)"
-              : "var(--color-bg-tertiary)";
-          const textFill = isSelected || isCurrent
-            ? "#ffffff"
-            : isCompatible
-              ? "var(--color-accent)"
-              : "var(--color-text-muted)";
+          const fill = getCamelotColor(code) ?? "var(--color-bg-tertiary)";
+          const fillOpacity = isSelected || isCurrent ? 1 : isCompatible ? 0.9 : 0.68;
           const activate = () => onSelectCode(isSelected ? null : code);
           return (
             <g
@@ -94,6 +87,7 @@ export const CamelotWheel = ({
               data-camelot-current={isCurrent ? "true" : undefined}
               data-camelot-compatible={isCompatible ? "true" : undefined}
               data-camelot-selected={isSelected ? "true" : undefined}
+              data-camelot-fill={fill}
               onClick={activate}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -106,15 +100,16 @@ export const CamelotWheel = ({
               <path
                 d={path}
                 fill={fill}
-                stroke={isCurrent || isSelected ? "var(--color-accent)" : "var(--color-border)"}
-                strokeWidth={isCurrent || isSelected ? 2.2 : 0.8}
+                fillOpacity={fillOpacity}
+                stroke={isCurrent || isSelected ? "#ffffff" : isCompatible ? fill : "var(--color-border)"}
+                strokeWidth={isCurrent || isSelected ? 2.4 : isCompatible ? 1.4 : 0.8}
                 className="transition-opacity hover:opacity-80"
               />
               <text
                 x={label.x}
                 y={label.y}
-                fill={textFill}
-                fontSize="8.5"
+                fill="#172126"
+                fontSize="9.5"
                 fontWeight={isCurrent || isSelected || isCompatible ? 700 : 500}
                 textAnchor="middle"
                 dominantBaseline="central"
@@ -143,17 +138,18 @@ export const CamelotWheel = ({
             cx={CENTER}
             cy={CENTER}
             r="40"
-            fill={selectedCode === null ? "var(--color-accent-light)" : "var(--color-bg-primary)"}
-            stroke={selectedCode === null ? "var(--color-accent)" : "var(--color-border)"}
+            fill={currentColor}
+            fillOpacity={selectedCode === null ? 0.92 : 0.56}
+            stroke={selectedCode === null ? "#ffffff" : "var(--color-border)"}
             strokeWidth="1.5"
           />
-          <text x={CENTER} y="116" fill="var(--color-text-primary)" fontSize="15" fontWeight="800" textAnchor="middle">{currentCode}</text>
-          <text x={CENTER} y="131" fill="var(--color-text-muted)" fontSize="7.5" fontWeight="600" letterSpacing="1" textAnchor="middle">AUTO MIX</text>
+          <text x={CENTER} y="116" fill="#172126" fontSize="15" fontWeight="800" textAnchor="middle">{currentCode}</text>
+          <text x={CENTER} y="131" fill="#334047" fontSize="8.5" fontWeight="700" letterSpacing="1" textAnchor="middle">AUTO MIX</text>
         </g>
       </svg>
-      <div className="mt-1 flex items-center justify-center gap-3 text-[8px] text-[var(--color-text-muted)]">
-        <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" />Current</span>
-        <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]" />Compatible</span>
+      <div className="mt-1 flex items-center justify-center gap-3 text-[9px] text-[var(--color-text-muted)]">
+        <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full ring-1 ring-white" style={{ backgroundColor: currentColor }} />Current</span>
+        <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full border border-white/80" />Compatible outline</span>
         <span>Click to filter</span>
       </div>
     </div>

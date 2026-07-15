@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate, useMatch } from "react-router-dom";
 import {
   AppLayout,
@@ -10,8 +10,13 @@ import {
   WindowChrome,
   ColumnsMenu,
   InboxBanner,
-  PlaylistSelectionBar,
+  TrackSelectionBar,
   AlbumsView,
+  ArtistDetailPanel,
+  ArtistIndexView,
+  buildArtistIndexItems,
+  CollectionIndexView,
+  buildCollectionIndexItems,
   TrackTable,
   ContextMenu,
   DeleteTracksModal,
@@ -22,6 +27,7 @@ import {
   EditTrackModal,
   PlaylistCreateModal,
   PlaylistEditModal,
+  SmartCrateModal,
   ToastContainer,
 } from "./components";
 import {
@@ -39,6 +45,8 @@ import {
   useSidebarData,
   useTrackRatings,
   usePlaylistOperations,
+  usePlaylistFolders,
+  usePlaylistTransfer,
   useInboxOperations,
   useTrackAnalysis,
   useTrackEdit,
@@ -46,6 +54,8 @@ import {
   useLibraryInit,
   usePlayTracking,
   useKeyboardShortcuts,
+  useArtistProfiles,
+  normalizeArtistProfileKey,
   type LibraryView,
 } from "./hooks";
 import { themes } from "./data/library";
@@ -56,6 +66,7 @@ import {
   useSettingsStore,
   useUIStore,
   useRecentlyPlayedStore,
+  useSmartCrateStore,
   selectAllTracks,
   notify,
 } from "./stores";
@@ -67,22 +78,39 @@ import {
   filterAlbumsBySearch,
   groupTracksIntoAlbums,
 } from "./utils";
-import { open } from "@muro/desktop/dialogs";
-import type { ColumnConfig, Track } from "./types";
+import { confirm, open, save } from "@muro/desktop/dialogs";
+import { openExternal } from "./desktop/shell";
+import type { ColumnConfig, SmartCrate, Track } from "./types";
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const playlistMatch = useMatch("/playlists/:playlistId");
+  const smartCrateMatch = useMatch("/smart-crates/:smartCrateId");
   const collectionMatch = useMatch("/collection/:facet");
 
   // Get state from stores
   const tracks = useLibraryStore((s) => s.tracks);
   const inboxTracks = useLibraryStore((s) => s.inboxTracks);
   const playlists = useLibraryStore((s) => s.playlists);
+  const playlistFolders = useLibraryStore((s) => s.playlistFolders);
   const allTracks = useLibraryStore(selectAllTracks);
 
   const recentlyPlayedTracks = useRecentlyPlayedStore((s) => s.recentlyPlayedTracks);
+  const smartCrates = useSmartCrateStore((s) => s.smartCrates);
+  const createSmartCrate = useSmartCrateStore((s) => s.createSmartCrate);
+  const updateSmartCrate = useSmartCrateStore((s) => s.updateSmartCrate);
+  const deleteSmartCrate = useSmartCrateStore((s) => s.deleteSmartCrate);
+  const [isSmartCrateModalOpen, setIsSmartCrateModalOpen] = useState(false);
+  const [editingSmartCrateId, setEditingSmartCrateId] = useState<string | null>(null);
+  const [isFolderCreateOpen, setIsFolderCreateOpen] = useState(false);
+  const [folderCreateName, setFolderCreateName] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [folderEditName, setFolderEditName] = useState("");
+  const [folderMenu, setFolderMenu] = useState<{
+    folderId: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const theme = useSettingsStore((s) => s.theme);
   const locale = useSettingsStore((s) => s.locale);
@@ -120,11 +148,15 @@ function App() {
   const closePlaylistModal = useUIStore((s) => s.closePlaylistModal);
   const setPlaylistModalName = useUIStore((s) => s.setPlaylistModalName);
   const openAnalysisModal = useUIStore((s) => s.openAnalysisModal);
+  const clearSelection = useUIStore((s) => s.clearSelection);
 
   const view = useMemo((): LibraryView => {
     if (location.pathname === "/inbox") return "inbox";
     if (location.pathname === "/settings") return "settings";
     if (location.pathname === "/recently-played") return "recentlyPlayed";
+    if (smartCrateMatch?.params.smartCrateId) {
+      return `smartCrate:${smartCrateMatch.params.smartCrateId}` as LibraryView;
+    }
     if (collectionMatch?.params.facet) {
       return `collection:${collectionMatch.params.facet}` as LibraryView;
     }
@@ -132,7 +164,7 @@ function App() {
       return `playlist:${playlistMatch.params.playlistId}` as LibraryView;
     }
     return "library";
-  }, [collectionMatch, location.pathname, playlistMatch]);
+  }, [collectionMatch, location.pathname, playlistMatch, smartCrateMatch]);
 
   const navigateToView = useCallback(
     (newView: LibraryView) => {
@@ -142,6 +174,16 @@ function App() {
   );
 
   const isAlbumsView = view === "collection:albums";
+  const collectionFilterValue = collectionMatch?.params.facet
+    ? new URLSearchParams(location.search).get("value")
+    : null;
+  const isArtistIndex = view === "collection:artists" && !collectionFilterValue;
+  const isArtistDetail = view === "collection:artists" && Boolean(collectionFilterValue);
+  const collectionIndexFacet = !collectionFilterValue && view === "collection:genres"
+    ? "genres"
+    : !collectionFilterValue && view === "collection:keys"
+      ? "keys"
+      : null;
   const selectedAlbumId = isAlbumsView
     ? new URLSearchParams(location.search).get("album")
     : null;
@@ -159,6 +201,16 @@ function App() {
     [navigate]
   );
 
+  const handleOpenCollectionValue = useCallback((facet: "artists" | "genres" | "keys", value: string) => {
+    const params = new URLSearchParams();
+    params.set("value", value);
+    navigate({ pathname: `/collection/${facet}`, search: params.toString() });
+  }, [navigate]);
+
+  const handleOpenArtistSource = useCallback((url: string) => {
+    void openExternal(url).catch(() => notify.error("Could not open artist source"));
+  }, []);
+
   // Redirect unknown paths to library
   useEffect(() => {
     const { pathname } = location;
@@ -168,7 +220,8 @@ function App() {
       pathname === "/settings" ||
       pathname === "/recently-played" ||
       pathname.startsWith("/collection/") ||
-      pathname.startsWith("/playlists/");
+      pathname.startsWith("/playlists/") ||
+      pathname.startsWith("/smart-crates/");
     if (!isKnownPath) {
       navigate("/", { replace: true });
     }
@@ -181,15 +234,55 @@ function App() {
     libraryTracks: tracks,
     inboxTracks,
     recentlyPlayedTracks,
+    smartCrates,
+    collectionFilterValue,
   });
 
   // Filtering and sorting
   const displayedTracks = viewConfig.trackTable?.tracks ?? [];
+  const {
+    profiles: artistProfiles,
+    loadingKeys: artistProfileLoadingKeys,
+    errors: artistProfileErrors,
+    loadProfile: loadArtistProfile,
+  } = useArtistProfiles();
   const albums = useMemo(() => groupTracksIntoAlbums(tracks), [tracks]);
   const albumResults = useMemo(
     () => filterAlbumsBySearch(albums, searchQuery),
     [albums, searchQuery]
   );
+  const collectionIndexItems = useMemo(
+    () => collectionIndexFacet ? buildCollectionIndexItems(tracks, collectionIndexFacet) : [],
+    [collectionIndexFacet, tracks],
+  );
+  const collectionIndexResults = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return query
+      ? collectionIndexItems.filter((item) => item.value.toLocaleLowerCase().includes(query))
+      : collectionIndexItems;
+  }, [collectionIndexItems, searchQuery]);
+  const artistIndexItems = useMemo(() => buildArtistIndexItems(tracks), [tracks]);
+  const artistIndexResults = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return query
+      ? artistIndexItems.filter((item) => item.name.toLocaleLowerCase().includes(query))
+      : artistIndexItems;
+  }, [artistIndexItems, searchQuery]);
+  const selectedArtistName = isArtistDetail ? collectionFilterValue?.trim() ?? "" : "";
+  const selectedArtistKey = normalizeArtistProfileKey(selectedArtistName);
+  const selectedArtistProfile = artistProfiles[selectedArtistKey];
+  const selectedArtistProfileLoading = artistProfileLoadingKeys.has(selectedArtistKey);
+  const selectedArtistProfileError = artistProfileErrors[selectedArtistKey];
+  const selectedArtistAlbumCount = useMemo(() => new Set(
+    displayedTracks
+      .map((track) => track.album.trim().toLocaleLowerCase())
+      .filter(Boolean),
+  ).size, [displayedTracks]);
+
+  useEffect(() => {
+    if (!selectedArtistName) return;
+    void loadArtistProfile(selectedArtistName);
+  }, [loadArtistProfile, selectedArtistName]);
 
   // Apply search filter
   const filteredTracks = useMemo(() => {
@@ -221,11 +314,10 @@ function App() {
     return next;
   }, [filteredTracks, sortState]);
 
-  const selectedPlaylistTrackIds = useMemo(() => {
-    if (viewConfig.type !== "playlist" || !viewConfig.playlist) return [];
-    const playlistTrackIds = new Set(viewConfig.playlist.trackIds);
-    return Array.from(selectedIds).filter((trackId) => playlistTrackIds.has(trackId));
-  }, [selectedIds, viewConfig]);
+  const selectedVisibleTrackIds = useMemo(
+    () => sortedTracks.filter((track) => selectedIds.has(track.id)).map((track) => track.id),
+    [selectedIds, sortedTracks],
+  );
 
   const handleSortChange = useCallback(
     (key: ColumnConfig["key"]) => {
@@ -292,6 +384,11 @@ function App() {
   // Media control refs for skip handlers (needed before useAudioPlayback)
   const skipPreviousRef = useRef<() => void>(() => {});
   const skipNextRef = useRef<() => void>(() => {});
+  const mediaPlaybackRef = useRef<{
+    play: () => void | Promise<void>;
+    pause: () => void | Promise<void>;
+    toggle: () => void | Promise<void>;
+  }>({ play: () => {}, pause: () => {}, toggle: () => {} });
 
   // Media control handler
   const handleMediaControl = useCallback((action: string) => {
@@ -302,7 +399,15 @@ function App() {
       case "previous":
         skipPreviousRef.current();
         break;
-      // play, pause, and toggle are handled by the playback runtime.
+      case "play":
+        void mediaPlaybackRef.current.play();
+        break;
+      case "pause":
+        void mediaPlaybackRef.current.pause();
+        break;
+      case "toggle":
+        void mediaPlaybackRef.current.toggle();
+        break;
     }
   }, []);
 
@@ -313,6 +418,8 @@ function App() {
     currentTrack,
     playTrack,
     togglePlay,
+    play,
+    pause,
     seek,
     setVolume,
   } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
@@ -322,17 +429,18 @@ function App() {
 
   // Skip handlers
   const handleSkipPrevious = useCallback(() => {
-    if (currentPosition > 3) {
-      seek(0);
+    const playbackState = usePlaybackStore.getState();
+    if (playbackState.currentPosition > 3) {
+      void seek(0);
       return;
     }
-    const currentIndex = currentTrack
-      ? allTracks.findIndex((t) => t.id === currentTrack.id)
+    const currentIndex = playbackState.currentTrack
+      ? allTracks.findIndex((t) => t.id === playbackState.currentTrack?.id)
       : -1;
     if (currentIndex > 0) {
-      playTrack(allTracks[currentIndex - 1]);
+      void playTrack(allTracks[currentIndex - 1]);
     }
-  }, [currentPosition, currentTrack, allTracks, seek, playTrack]);
+  }, [allTracks, seek, playTrack]);
 
   const handleSkipNext = useCallback(() => {
     const currentQueue = usePlaybackStore.getState().queue;
@@ -343,34 +451,35 @@ function App() {
       const nextTrack = allTracks.find((t) => t.id === nextTrackId);
       if (nextTrack) {
         setQueue(currentQueue.slice(1));
-        playTrack(nextTrack);
+        void playTrack(nextTrack);
         return;
       }
     }
 
     // No queue - fall back to normal progression
-    const currentIndex = currentTrack
-      ? allTracks.findIndex((t) => t.id === currentTrack.id)
+    const activeTrack = usePlaybackStore.getState().currentTrack;
+    const currentIndex = activeTrack
+      ? allTracks.findIndex((t) => t.id === activeTrack.id)
       : -1;
 
     // Shuffle
     if (shuffleEnabled) {
       const randomIndex = Math.floor(Math.random() * allTracks.length);
-      playTrack(allTracks[randomIndex]);
+      void playTrack(allTracks[randomIndex]);
       return;
     }
 
     // Next track in list
     if (currentIndex < allTracks.length - 1) {
-      playTrack(allTracks[currentIndex + 1]);
+      void playTrack(allTracks[currentIndex + 1]);
       return;
     }
 
     // Repeat all - wrap to beginning
     if (repeatMode === "all" && allTracks.length > 0) {
-      playTrack(allTracks[0]);
+      void playTrack(allTracks[0]);
     }
-  }, [allTracks, currentTrack, shuffleEnabled, repeatMode, playTrack, setQueue]);
+  }, [allTracks, shuffleEnabled, repeatMode, playTrack, setQueue]);
 
   // Update refs for media control handler
   useEffect(() => {
@@ -380,6 +489,10 @@ function App() {
   useEffect(() => {
     skipNextRef.current = handleSkipNext;
   }, [handleSkipNext]);
+
+  useEffect(() => {
+    mediaPlaybackRef.current = { play, pause, toggle: togglePlay };
+  }, [pause, play, togglePlay]);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts({
@@ -448,6 +561,10 @@ function App() {
     () => playlists.find((playlist) => playlist.id === playlistMenuId) ?? null,
     [playlists, playlistMenuId]
   );
+  const folderMenuTarget = useMemo(
+    () => playlistFolders.find((folder) => folder.id === folderMenu?.folderId) ?? null,
+    [folderMenu?.folderId, playlistFolders],
+  );
 
   // Playlist operations
   const {
@@ -463,6 +580,8 @@ function App() {
     currentView: view,
     navigateToView,
   });
+  const { createFolder, renameFolder, removeFolder, movePlaylist } = usePlaylistFolders();
+  const { importPlaylist, exportPlaylist } = usePlaylistTransfer();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
@@ -513,9 +632,11 @@ function App() {
   } = useSidebarPanel();
   const {
     queuePanelCollapsed,
+    queuePanelExpanded,
     queuePanelWidth,
     startQueuePanelResize,
     toggleQueuePanelCollapsed,
+    toggleQueuePanelExpanded,
   } = useQueuePanel();
 
   // Library initialization and backfill
@@ -530,6 +651,96 @@ function App() {
     handleClearSongs,
   } = useLibraryInit();
 
+  const editingSmartCrate = useMemo(
+    () => smartCrates.find((crate) => crate.id === editingSmartCrateId) ?? null,
+    [editingSmartCrateId, smartCrates],
+  );
+
+  const handleCreateSmartCrate = useCallback(() => {
+    setEditingSmartCrateId(null);
+    setIsSmartCrateModalOpen(true);
+  }, []);
+
+  const handleEditSmartCrate = useCallback((id: string) => {
+    setEditingSmartCrateId(id);
+    setIsSmartCrateModalOpen(true);
+  }, []);
+
+  const handleCloseSmartCrateModal = useCallback(() => {
+    setIsSmartCrateModalOpen(false);
+    setEditingSmartCrateId(null);
+  }, []);
+
+  const handleSaveSmartCrate = useCallback((crate: Omit<SmartCrate, "id">) => {
+    if (editingSmartCrateId) {
+      updateSmartCrate(editingSmartCrateId, crate);
+      notify.success(`Updated ${crate.name}`);
+      navigateToView(`smartCrate:${editingSmartCrateId}` as LibraryView);
+    } else {
+      const id = createSmartCrate(crate);
+      notify.success(`Created ${crate.name}`);
+      navigateToView(`smartCrate:${id}` as LibraryView);
+    }
+    handleCloseSmartCrateModal();
+  }, [
+    createSmartCrate,
+    editingSmartCrateId,
+    handleCloseSmartCrateModal,
+    navigateToView,
+    updateSmartCrate,
+  ]);
+
+  const handleDeleteSmartCrate = useCallback(async (id: string) => {
+    const crate = smartCrates.find((item) => item.id === id);
+    if (!crate) return;
+    const shouldDelete = await confirm(
+      `Delete the Smart Crate “${crate.name}”? Your tracks will stay in the library.`,
+      { title: "Delete Smart Crate", kind: "warning" },
+    );
+    if (!shouldDelete) return;
+    deleteSmartCrate(id);
+    if (view === `smartCrate:${id}`) navigateToView("library");
+    notify.success(`Deleted ${crate.name}`);
+  }, [deleteSmartCrate, navigateToView, smartCrates, view]);
+
+  const handleOpenPlaylistMenu = useCallback((
+    event: React.MouseEvent<HTMLButtonElement>,
+    playlistId: string,
+  ) => {
+    setFolderMenu(null);
+    openPlaylistMenu(event, playlistId);
+  }, [openPlaylistMenu]);
+
+  const handleOpenFolderMenu = useCallback((
+    event: React.MouseEvent<HTMLButtonElement>,
+    folderId: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closePlaylistMenu();
+    setFolderMenu({ folderId, position: { x: event.clientX, y: event.clientY } });
+  }, [closePlaylistMenu]);
+
+  const handleImportPlaylistFile = useCallback(async () => {
+    try {
+      const result = await open({
+        multiple: false,
+        filters: [{ name: "Playlists", extensions: ["m3u", "m3u8", "pls"] }],
+      });
+      const filePath = Array.isArray(result) ? result[0] : result;
+      if (!filePath) return;
+      const playlistId = await importPlaylist(filePath);
+      if (playlistId) navigateToView(`playlist:${playlistId}` as LibraryView);
+    } catch {
+      notify.error("Playlist picker failed");
+    }
+  }, [importPlaylist, navigateToView]);
+
+  const handleOpenFolderCreate = useCallback(() => {
+    setFolderCreateName("");
+    setIsFolderCreateOpen(true);
+  }, []);
+
   // Sidebar props
   const sidebarProps = useSidebarData({
     view,
@@ -540,7 +751,13 @@ function App() {
     onPlaylistDragLeave,
     onPlaylistDragOver,
     onCreatePlaylist: openPlaylistModal,
-    onPlaylistContextMenu: openPlaylistMenu,
+    onPlaylistContextMenu: handleOpenPlaylistMenu,
+    onCreatePlaylistFolder: handleOpenFolderCreate,
+    onImportPlaylist: handleImportPlaylistFile,
+    onPlaylistFolderContextMenu: handleOpenFolderMenu,
+    onCreateSmartCrate: handleCreateSmartCrate,
+    onEditSmartCrate: handleEditSmartCrate,
+    onDeleteSmartCrate: (id) => { void handleDeleteSmartCrate(id); },
   });
 
   // Native drag
@@ -585,9 +802,28 @@ function App() {
   const handleRemoveSelectedFromPlaylist = useCallback(() => {
     const playlistId = viewConfig.playlist?.id;
     if (playlistId) {
-      void handleRemoveTracksFromPlaylist(playlistId, selectedPlaylistTrackIds);
+      void handleRemoveTracksFromPlaylist(playlistId, selectedVisibleTrackIds);
     }
-  }, [handleRemoveTracksFromPlaylist, selectedPlaylistTrackIds, viewConfig.playlist]);
+  }, [handleRemoveTracksFromPlaylist, selectedVisibleTrackIds, viewConfig.playlist]);
+
+  const handlePlaySelected = useCallback(() => {
+    const [firstTrackId, ...remainingTrackIds] = selectedVisibleTrackIds;
+    if (!firstTrackId) return;
+    setQueue(remainingTrackIds);
+    handlePlayTrack(firstTrackId);
+  }, [handlePlayTrack, selectedVisibleTrackIds, setQueue]);
+
+  const handleAnalyzeSelected = useCallback(() => {
+    if (selectedVisibleTrackIds.length > 0) openAnalysisModal(selectedVisibleTrackIds);
+  }, [openAnalysisModal, selectedVisibleTrackIds]);
+
+  const handleEditSelected = useCallback(() => {
+    if (selectedVisibleTrackIds.length > 0) openEditModal(selectedVisibleTrackIds);
+  }, [openEditModal, selectedVisibleTrackIds]);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedVisibleTrackIds.length > 0) requestTrackDeletion(selectedVisibleTrackIds);
+  }, [requestTrackDeletion, selectedVisibleTrackIds]);
 
   // Playlist menu handlers
   const handlePlaylistMenuEdit = useCallback(() => {
@@ -605,6 +841,60 @@ function App() {
     closePlaylistMenu();
     handleDeletePlaylist(playlistMenuId);
   }, [closePlaylistMenu, handleDeletePlaylist, playlistMenuId]);
+
+  const handlePlaylistMenuExport = useCallback(async () => {
+    if (!playlistMenuTarget) return;
+    closePlaylistMenu();
+    const safeName = playlistMenuTarget.name.replace(/[<>:"/\\|?*]+/g, "-").trim() || "playlist";
+    try {
+      const filePath = await save({
+        defaultPath: `${safeName}.m3u8`,
+        filters: [{ name: "M3U8 Playlist", extensions: ["m3u8"] }],
+      });
+      if (filePath) await exportPlaylist(playlistMenuTarget.id, filePath);
+    } catch {
+      notify.error("Playlist export dialog failed");
+    }
+  }, [closePlaylistMenu, exportPlaylist, playlistMenuTarget]);
+
+  const handleMovePlaylist = useCallback((folderId: string | null) => {
+    if (!playlistMenuTarget) return;
+    closePlaylistMenu();
+    void movePlaylist(playlistMenuTarget.id, folderId);
+  }, [closePlaylistMenu, movePlaylist, playlistMenuTarget]);
+
+  const handleFolderCreateSubmit = useCallback(async () => {
+    if (await createFolder(folderCreateName)) {
+      setIsFolderCreateOpen(false);
+      setFolderCreateName("");
+    }
+  }, [createFolder, folderCreateName]);
+
+  const handleFolderMenuEdit = useCallback(() => {
+    if (!folderMenuTarget) return;
+    setEditingFolderId(folderMenuTarget.id);
+    setFolderEditName(folderMenuTarget.name);
+    setFolderMenu(null);
+  }, [folderMenuTarget]);
+
+  const handleFolderEditSubmit = useCallback(async () => {
+    if (!editingFolderId) return;
+    if (await renameFolder(editingFolderId, folderEditName)) {
+      setEditingFolderId(null);
+      setFolderEditName("");
+    }
+  }, [editingFolderId, folderEditName, renameFolder]);
+
+  const handleFolderMenuDelete = useCallback(async () => {
+    if (!folderMenuTarget) return;
+    const target = folderMenuTarget;
+    setFolderMenu(null);
+    const shouldDelete = await confirm(
+      `Delete the playlist folder “${target.name}”? Its playlists will move back to the Playlists section.`,
+      { title: "Delete Playlist Folder", kind: "warning" },
+    );
+    if (shouldDelete) await removeFolder(target.id);
+  }, [folderMenuTarget, removeFolder]);
 
   // Disable user select during internal drag
   useEffect(() => {
@@ -693,6 +983,7 @@ function App() {
         closeMenu();
         closeColumnsMenu();
         closePlaylistMenu();
+        setFolderMenu(null);
       }}
     >
       <ToastContainer />
@@ -715,6 +1006,37 @@ function App() {
         onChange={setPlaylistEditName}
         onClose={handleClosePlaylistEdit}
         onSubmit={handlePlaylistEditSubmit}
+      />
+      <PlaylistCreateModal
+        isOpen={isFolderCreateOpen}
+        value={folderCreateName}
+        onChange={setFolderCreateName}
+        onClose={() => setIsFolderCreateOpen(false)}
+        onSubmit={() => { void handleFolderCreateSubmit(); }}
+        title="New playlist folder"
+        subtitle="Group related playlists without changing their tracks."
+        placeholder="Folder name"
+        submitLabel="Create folder"
+      />
+      <PlaylistEditModal
+        isOpen={Boolean(editingFolderId)}
+        value={folderEditName}
+        onChange={setFolderEditName}
+        onClose={() => {
+          setEditingFolderId(null);
+          setFolderEditName("");
+        }}
+        onSubmit={() => { void handleFolderEditSubmit(); }}
+        title="Rename playlist folder"
+        subtitle="Choose a name that makes this playlist group easy to find."
+        placeholder="Folder name"
+        submitLabel="Save"
+      />
+      <SmartCrateModal
+        isOpen={isSmartCrateModalOpen}
+        crate={editingSmartCrate}
+        onClose={handleCloseSmartCrateModal}
+        onSave={handleSaveSmartCrate}
       />
       <DuplicateTracksModal
         isOpen={pendingPlaylistDrop !== null}
@@ -817,7 +1139,19 @@ function App() {
                 playlistName={playlistMenuTarget?.name}
                 onClose={closePlaylistMenu}
                 onEdit={handlePlaylistMenuEdit}
+                onExport={() => { void handlePlaylistMenuExport(); }}
+                folders={playlistFolders}
+                currentFolderId={playlistMenuTarget?.folderId}
+                onMoveToFolder={handleMovePlaylist}
                 onDelete={handlePlaylistMenuDelete}
+              />
+              <PlaylistContextMenu
+                isOpen={Boolean(folderMenu)}
+                position={folderMenu?.position ?? { x: 0, y: 0 }}
+                playlistName={folderMenuTarget?.name}
+                onClose={() => setFolderMenu(null)}
+                onEdit={handleFolderMenuEdit}
+                onDelete={() => { void handleFolderMenuDelete(); }}
               />
               <ColumnsMenu
                 isOpen={showColumns}
@@ -831,13 +1165,14 @@ function App() {
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
                   isSettings={viewConfig.type === "settings"}
-                  resultCount={isAlbumsView ? albumResults.length : sortedTracks.length}
+                  resultCount={isArtistIndex ? artistIndexResults.length : collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   onAddMusic={handleEmptyImport}
                   onShowColumns={openColumnsMenu}
                   onSort={() => handleSortChange("title")}
-                  contentMode={isAlbumsView ? "albums" : "tracks"}
+                  contentMode={isArtistIndex || collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
+                  resultLabel={isArtistIndex ? "artists" : collectionIndexFacet ?? undefined}
                 />
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
@@ -880,6 +1215,18 @@ function App() {
                       onClearSongs={handleClearSongs}
                       onUseDefaultLocation={() => setUseAutoDbPath(true)}
                     />
+                  ) : isArtistIndex ? (
+                    <ArtistIndexView
+                      items={artistIndexResults}
+                      profiles={artistProfiles}
+                      onSelect={(artistName) => handleOpenCollectionValue("artists", artistName)}
+                    />
+                  ) : collectionIndexFacet ? (
+                    <CollectionIndexView
+                      facet={collectionIndexFacet}
+                      items={collectionIndexResults}
+                      onSelect={(value) => handleOpenCollectionValue(collectionIndexFacet, value)}
+                    />
                   ) : isAlbumsView ? (
                     <AlbumsView
                       albums={albums}
@@ -893,12 +1240,26 @@ function App() {
                       onTogglePlay={togglePlay}
                       onPlayNext={playNext}
                       onAddToQueue={addToQueue}
+                      onOpenArtist={(artist) => handleOpenCollectionValue("artists", artist)}
+                      onOpenGenre={(genre) => handleOpenCollectionValue("genres", genre)}
                       onImportFiles={handleEmptyImport}
                       onImportFolder={handleEmptyImportFolder}
                     />
                   ) : (
                     viewConfig.trackTable && (
                       <>
+                        {isArtistDetail && selectedArtistName && (
+                          <ArtistDetailPanel
+                            artistName={selectedArtistName}
+                            profile={selectedArtistProfile}
+                            isLoading={selectedArtistProfileLoading}
+                            error={selectedArtistProfileError}
+                            trackCount={displayedTracks.length}
+                            albumCount={selectedArtistAlbumCount}
+                            onRefresh={() => { void loadArtistProfile(selectedArtistName, true); }}
+                            onOpenSource={handleOpenArtistSource}
+                          />
+                        )}
                         <TrackTable
                           tracks={sortedTracks}
                           columns={columns}
@@ -942,6 +1303,7 @@ function App() {
                           onRowMouseDown={onRowMouseDown}
                           onRowContextMenu={handleRowContextMenu}
                           onRowDoubleClick={handlePlayTrack}
+                          onTogglePlay={togglePlay}
                           onColumnResize={handleColumnResize}
                           onColumnAutoFit={autoFitColumn}
                           onColumnReorder={reorderColumns}
@@ -949,18 +1311,26 @@ function App() {
                           onSortChange={handleSortChange}
                           onRatingChange={handleRatingChange}
                         />
+                        <TrackSelectionBar
+                          selectedCount={selectedVisibleTrackIds.length}
+                          onPlay={handlePlaySelected}
+                          onPlayNext={() => playNext(selectedVisibleTrackIds)}
+                          onAddToQueue={() => addToQueue(selectedVisibleTrackIds)}
+                          onAnalyze={handleAnalyzeSelected}
+                          onEdit={handleEditSelected}
+                          onDelete={handleDeleteSelected}
+                          onClear={clearSelection}
+                          onRemoveFromPlaylist={
+                            viewConfig.type === "playlist" && viewConfig.playlist
+                              ? handleRemoveSelectedFromPlaylist
+                              : undefined
+                          }
+                        />
                         {viewConfig.trackTable.banner === "inbox" && (
                           <InboxBanner
                             selectedCount={selectedIds.size}
                             onAccept={handleAcceptTracks}
                             onReject={handleRejectTracks}
-                          />
-                        )}
-                        {viewConfig.type === "playlist" && viewConfig.playlist && (
-                          <PlaylistSelectionBar
-                            playlistName={viewConfig.playlist.name}
-                            selectedCount={selectedPlaylistTrackIds.length}
-                            onRemove={handleRemoveSelectedFromPlaylist}
                           />
                         )}
                       </>
@@ -973,7 +1343,9 @@ function App() {
           detail={
             <QueuePanel
               collapsed={queuePanelCollapsed}
+              expanded={queuePanelExpanded}
               onToggleCollapsed={toggleQueuePanelCollapsed}
+              onToggleExpanded={toggleQueuePanelExpanded}
               queueTracks={queueTracks}
               allTracks={allTracks}
               currentTrack={currentTrack}

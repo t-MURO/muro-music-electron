@@ -29,6 +29,7 @@ type SettingsState = {
   analysisDelimiter: string;
   analysisOutputs: AnalysisOutputs;
   lastDeleteMode: DeleteMode;
+  fanartApiKey: string;
 };
 
 type SettingsActions = {
@@ -43,6 +44,7 @@ type SettingsActions = {
   setAnalysisDelimiter: (delimiter: string) => void;
   setAnalysisOutput: <K extends keyof AnalysisOutputs>(field: K, mode: AnalysisOutputs[K]) => void;
   setLastDeleteMode: (mode: DeleteMode) => void;
+  setFanartApiKey: (fanartApiKey: string) => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -67,6 +69,7 @@ export const useSettingsStore = create<SettingsStore>()(
         bpm: "none",
       },
       lastDeleteMode: "library",
+      fanartApiKey: "",
 
       // Actions
       setTheme: (theme) => {
@@ -94,6 +97,7 @@ export const useSettingsStore = create<SettingsStore>()(
         analysisOutputs: { ...state.analysisOutputs, [field]: mode },
       })),
       setLastDeleteMode: (lastDeleteMode) => set({ lastDeleteMode }),
+      setFanartApiKey: (fanartApiKey) => set({ fanartApiKey }),
     }),
     {
       name: "muro-settings",
@@ -106,6 +110,7 @@ export const useSettingsStore = create<SettingsStore>()(
         analysisDelimiter: state.analysisDelimiter,
         analysisOutputs: state.analysisOutputs,
         lastDeleteMode: state.lastDeleteMode,
+        fanartApiKey: state.fanartApiKey,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

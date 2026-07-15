@@ -58,9 +58,15 @@ const TRACK_SCHEMA = `
 `;
 
 const PLAYLIST_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS playlist_folders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS playlists (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    folder_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS playlist_tracks (
@@ -71,6 +77,17 @@ const PLAYLIST_SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS playlist_tracks_playlist_idx
     ON playlist_tracks(playlist_id, position);
+`;
+
+const ARTIST_PROFILE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS artist_profiles (
+    artist_key TEXT PRIMARY KEY,
+    requested_name TEXT NOT NULL,
+    profile_json TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS artist_profiles_fetched_at_idx
+    ON artist_profiles(fetched_at DESC);
 `;
 
 const REQUIRED_TRACK_COLUMNS = {
@@ -89,6 +106,7 @@ const REQUIRED_TRACK_COLUMNS = {
   bpm: "REAL",
   rating: "REAL",
   raw_tags_json: "TEXT",
+  musicbrainz_artistid: "TEXT",
   source_path: "TEXT",
   search_text: "TEXT",
   import_status: "TEXT DEFAULT 'staged'",
@@ -121,6 +139,13 @@ export const openDatabase = (dbPath) => {
     if (!existing.has(name)) db.exec(`ALTER TABLE tracks ADD COLUMN ${name} ${type}`);
   }
   db.exec(PLAYLIST_SCHEMA);
+  db.exec(ARTIST_PROFILE_SCHEMA);
+  const playlistColumns = new Set(
+    db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
+  );
+  if (!playlistColumns.has("folder_id")) {
+    db.exec("ALTER TABLE playlists ADD COLUMN folder_id TEXT");
+  }
   connections.set(resolved, db);
   return db;
 };
@@ -210,9 +235,10 @@ export const loadRecentlyPlayed = (dbPath, limit = 50) =>
     .map(rowToTrack);
 
 export const loadPlaylists = (dbPath) => {
-  const rows = openDatabase(dbPath)
+  const db = openDatabase(dbPath);
+  const rows = db
     .prepare(`
-      SELECT p.id, p.name, pt.track_id
+      SELECT p.id, p.name, p.folder_id, pt.track_id
       FROM playlists p
       LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
       ORDER BY p.created_at DESC, pt.position ASC
@@ -223,13 +249,23 @@ export const loadPlaylists = (dbPath) => {
   for (const row of rows) {
     let playlist = byId.get(String(row.id));
     if (!playlist) {
-      playlist = { id: String(row.id), name: row.name, track_ids: [] };
+      playlist = {
+        id: String(row.id),
+        name: row.name,
+        folder_id: row.folder_id == null ? null : String(row.folder_id),
+        track_ids: [],
+      };
       byId.set(String(row.id), playlist);
       playlists.push(playlist);
     }
     if (row.track_id != null) playlist.track_ids.push(String(row.track_id));
   }
-  return { playlists };
+  const folders = db.prepare(`
+    SELECT id, name
+    FROM playlist_folders
+    ORDER BY created_at ASC, name COLLATE NOCASE ASC
+  `).all().map((folder) => ({ id: String(folder.id), name: folder.name }));
+  return { playlists, folders };
 };
 
 export const normalizeSearchText = (...values) =>

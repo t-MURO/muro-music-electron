@@ -29,6 +29,7 @@ type TrackTableProps = {
     isSelected: boolean
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
+  onTogglePlay?: () => void;
   onColumnResize: (key: ColumnConfig["key"], width: number) => void;
   onColumnAutoFit: (key: ColumnConfig["key"]) => void;
   onColumnReorder?: (dragKey: ColumnConfig["key"], targetIndex: number) => void;
@@ -51,6 +52,7 @@ export const TrackTable = memo(
     onRowMouseDown,
     onRowContextMenu,
     onRowDoubleClick,
+    onTogglePlay,
     onColumnResize,
     onColumnAutoFit,
     onColumnReorder,
@@ -95,6 +97,10 @@ export const TrackTable = memo(
     const visibleColumns = useMemo(
       () => columns.filter((column) => column.visible),
       [columns]
+    );
+    const selectedVisibleCount = useMemo(
+      () => tracks.reduce((count, track) => count + (selectedIds.has(track.id) ? 1 : 0), 0),
+      [selectedIds, tracks],
     );
     const tableWidth = useMemo(() => {
       return (
@@ -143,7 +149,11 @@ export const TrackTable = memo(
         event.stopPropagation();
         const track = tracks[activeIndex];
         if (track) {
-          onRowDoubleClick?.(track.id);
+          if (event.code === "Space" && track.id === playingTrackId) {
+            onTogglePlay?.();
+          } else {
+            onRowDoubleClick?.(track.id);
+          }
         }
         return;
       }
@@ -240,9 +250,9 @@ export const TrackTable = memo(
               onHeaderContextMenu={onHeaderContextMenu}
               onSortChange={onSortChange}
               sortState={sortState}
-              allSelected={tracks.length > 0 && selectedIds.size === tracks.length}
+              allSelected={tracks.length > 0 && selectedVisibleCount === tracks.length}
               onToggleSelectAll={() => {
-                if (tracks.length > 0 && selectedIds.size === tracks.length) clearSelection();
+                if (tracks.length > 0 && selectedVisibleCount === tracks.length) clearSelection();
                 else selectAll(tracks.map((track) => track.id));
               }}
             />
@@ -311,7 +321,7 @@ export const TrackTable = memo(
         </div>
         {tracks.length > 0 && (
           <div className="flex h-6 shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-[10px] tabular-nums text-[var(--color-text-muted)]">
-            <span>{selectedIds.size} of {tracks.length.toLocaleString()} selected</span>
+            <span>{selectedVisibleCount} of {tracks.length.toLocaleString()} selected</span>
             <span className="ml-auto" data-table-keyboard-hint>Up/Down select · Space plays</span>
             <span className="ml-4">{tracks.length.toLocaleString()} tracks in view</span>
           </div>

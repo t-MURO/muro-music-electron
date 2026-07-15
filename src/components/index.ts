@@ -17,6 +17,12 @@ export {
   TableRow,
   TrackTable,
   AlbumsView,
+  ArtistIndexView,
+  ArtistDetailPanel,
+  buildArtistIndexItems,
+  TrackSelectionBar,
+  CollectionIndexView,
+  buildCollectionIndexItems,
 } from "./library";
 export {
   AnalysisModal,
@@ -28,6 +34,7 @@ export {
   PlaylistContextMenu,
   PlaylistCreateModal,
   PlaylistEditModal,
+  SmartCrateModal,
   Popover,
   PopoverItem,
   PopoverDivider,

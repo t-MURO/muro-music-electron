@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./backend.mjs";
 import { createLocalFileResponse } from "./fileProtocol.mjs";
 import { createKeyFinderService } from "./keyfinder.mjs";
+import { registerMediaShortcuts } from "./mediaShortcuts.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
@@ -27,6 +28,26 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow = null;
 let backend = null;
+let mediaShortcutRegistration = null;
+
+const unregisterApplicationMediaShortcuts = () => {
+  mediaShortcutRegistration?.unregister();
+  mediaShortcutRegistration = null;
+};
+
+const registerApplicationMediaShortcuts = () => {
+  if (mediaShortcutRegistration) return;
+  mediaShortcutRegistration = registerMediaShortcuts({
+    globalShortcut,
+    onAction: (action) => {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+      mainWindow.webContents.send("muro:event", "muro://media-control", {
+        action,
+        source: "global-shortcut",
+      });
+    },
+  });
+};
 
 const createWindow = async () => {
   mainWindow = new BrowserWindow({
@@ -44,6 +65,11 @@ const createWindow = async () => {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+  const createdWindow = mainWindow;
+  createdWindow.on("closed", () => {
+    if (mainWindow === createdWindow) mainWindow = null;
+    unregisterApplicationMediaShortcuts();
   });
 
   const emitWindowState = () => {
@@ -63,6 +89,7 @@ const createWindow = async () => {
   } else {
     await mainWindow.loadFile(path.join(appRoot, "dist", "index.html"));
   }
+  registerApplicationMediaShortcuts();
 };
 
 const startApplication = async () => {
@@ -91,6 +118,7 @@ const startApplication = async () => {
   });
   backend = createBackend({
     cacheDir: path.join(app.getPath("cache"), "covers"),
+    artistProfileCacheDir: path.join(app.getPath("userData"), "artists"),
     emit: (sender, name, payload) => sender.send("muro:event", name, payload),
     keyFinder,
   });
@@ -134,6 +162,23 @@ const startApplication = async () => {
     if (result.canceled || result.filePaths.length === 0) return null;
     return options.multiple ? result.filePaths : result.filePaths[0];
   });
+  ipcMain.handle("muro:save-dialog", async (_event, options) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: typeof options.title === "string" ? options.title : undefined,
+      defaultPath: typeof options.defaultPath === "string" ? options.defaultPath : undefined,
+      filters: Array.isArray(options.filters) ? options.filters : undefined,
+    });
+    return result.canceled || !result.filePath ? null : result.filePath;
+  });
+  ipcMain.handle("muro:open-external", async (_event, value) => {
+    const url = new URL(String(value));
+    const allowedHost = url.hostname === "musicbrainz.org"
+      || url.hostname.endsWith(".wikipedia.org")
+      || url.hostname === "fanart.tv"
+      || url.hostname.endsWith(".fanart.tv");
+    if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
+    await shell.openExternal(url.toString());
+  });
   ipcMain.handle("muro:confirm-dialog", async (_event, message, options) => {
     const result = await dialog.showMessageBox(mainWindow, {
       type: options.kind === "warning" ? "warning" : "question",
@@ -170,3 +215,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => backend?.close());
+app.on("will-quit", () => {
+  unregisterApplicationMediaShortcuts();
+});

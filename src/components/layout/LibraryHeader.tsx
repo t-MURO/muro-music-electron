@@ -20,7 +20,8 @@ type LibraryHeaderProps = {
   onAddMusic: () => void;
   onShowColumns: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onSort: () => void;
-  contentMode?: "tracks" | "albums";
+  contentMode?: "tracks" | "albums" | "collections";
+  resultLabel?: string;
 };
 
 export const LibraryHeader = ({
@@ -34,6 +35,7 @@ export const LibraryHeader = ({
   onShowColumns,
   onSort,
   contentMode = "tracks",
+  resultLabel,
 }: LibraryHeaderProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const searchShortcut = window.muro?.platform === "darwin" ? "⌘F" : "Ctrl F";
@@ -73,7 +75,7 @@ export const LibraryHeader = ({
           <div className="min-w-0">
             <div className="flex items-baseline gap-2.5">
               <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{title}</h2>
-              {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} {contentMode}</span>}
+              {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} {resultLabel ?? contentMode}</span>}
             </div>
             {isSettings && subtitle && <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
           </div>
@@ -86,7 +88,7 @@ export const LibraryHeader = ({
               <input
                 ref={inputRef}
                 className="command-search h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] pl-9 pr-14 text-[13px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-light)]"
-                placeholder={contentMode === "albums" ? "Search albums" : "Search library"}
+                placeholder={contentMode === "albums" ? "Search albums" : contentMode === "collections" ? "Search collection" : "Search library"}
                 value={searchQuery}
                 onChange={(event) => onSearchChange(event.target.value)}
               />

@@ -123,6 +123,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     bpm: common.bpm ?? null,
     rating: ratingFromMetadata(common),
     raw_tags_json: cleanRawTags(metadata.native),
+    musicbrainz_artistid: first(common.musicbrainz_artistid) ?? null,
     source_path: filePath,
     search_text: searchText,
     import_status: "staged",
@@ -138,13 +139,13 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     INSERT OR IGNORE INTO tracks (
       id, title, artist, album, album_artist, genre_json, comment_json, label,
       filename, year, date, track_number, track_total, disc_number, disc_total,
-      key, bpm, rating, raw_tags_json, source_path, search_text, import_status,
+      key, bpm, rating, raw_tags_json, musicbrainz_artistid, source_path, search_text, import_status,
       duration_seconds, bitrate_kbps, added_at, updated_at, is_missing,
       cover_art_path, cover_art_thumb_path
     ) VALUES (
       @id, @title, @artist, @album, @album_artist, @genre_json, @comment_json, @label,
       @filename, @year, @date, @track_number, @track_total, @disc_number, @disc_total,
-      @key, @bpm, @rating, @raw_tags_json, @source_path, @search_text, @import_status,
+      @key, @bpm, @rating, @raw_tags_json, @musicbrainz_artistid, @source_path, @search_text, @import_status,
       @duration_seconds, @bitrate_kbps, @added_at, @updated_at, 0,
       @cover_art_path, @cover_art_thumb_path
     )

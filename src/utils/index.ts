@@ -22,23 +22,37 @@ export {
   type Album,
 } from "./albums";
 export {
+  filterTracksBySmartCrate,
+  matchesSmartCrateRule,
+} from "./smartCrates";
+export {
   loadTracks,
   clearTracks,
   acceptTracks,
   unacceptTracks,
   rejectTracks,
   deleteTracks,
+  loadCachedArtistProfiles,
+  getArtistProfile,
+  scanArtistProfiles,
   loadPlaylists,
   createPlaylist,
+  updatePlaylist,
   deletePlaylist,
   addTracksToPlaylist,
   setPlaylistTracks,
   removeLastTracksFromPlaylist,
+  createPlaylistFolder,
+  updatePlaylistFolder,
+  deletePlaylistFolder,
+  importPlaylistFile,
+  exportPlaylistFile,
   backfillSearchText,
   backfillCoverArt,
   loadRecentlyPlayed,
   recordTrackPlay,
   type DeleteTracksResult,
+  type ArtistProfileScanResult,
 } from "./database";
 export {
   importFiles,

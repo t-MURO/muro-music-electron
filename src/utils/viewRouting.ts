@@ -11,5 +11,7 @@ export const getPathForView = (view: LibraryView): string => {
     return `/collection/${view.slice("collection:".length)}`;
   if (view.startsWith("playlist:"))
     return `/playlists/${view.slice("playlist:".length)}`;
+  if (view.startsWith("smartCrate:"))
+    return `/smart-crates/${view.slice("smartCrate:".length)}`;
   return "/";
 };

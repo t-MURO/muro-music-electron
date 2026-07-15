@@ -38,3 +38,7 @@ export {
   useRecentlyPlayedStore,
   type RecentlyPlayedStore,
 } from "./recentlyPlayedStore";
+export {
+  useSmartCrateStore,
+  type SmartCrateStore,
+} from "./smartCrateStore";

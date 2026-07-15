@@ -9,3 +9,4 @@ export { PlaylistCreateModal } from "./PlaylistCreateModal";
 export { PlaylistEditModal } from "./PlaylistEditModal";
 export { Popover, PopoverItem, PopoverDivider, PopoverHeader } from "./Popover";
 export { ToastContainer } from "./ToastContainer";
+export { SmartCrateModal } from "./SmartCrateModal";

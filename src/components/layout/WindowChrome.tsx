@@ -1,7 +1,8 @@
-import { Minus, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import appLogo from "../../assets/app-logo.png";
 import type { WindowControlAction } from "../../desktop/bridge";
+import { useHistoryNavigation } from "../../hooks";
 
 type WindowMaximizedPayload = {
   maximized?: unknown;
@@ -10,6 +11,7 @@ type WindowMaximizedPayload = {
 export const WindowChrome = () => {
   const isMac = window.muro?.platform === "darwin";
   const [isMaximized, setIsMaximized] = useState(false);
+  const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
 
   useEffect(() => {
     const desktop = window.muro;
@@ -29,6 +31,42 @@ export const WindowChrome = () => {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const backShortcut =
+        (event.altKey && event.key === "ArrowLeft") ||
+        (isMac && event.metaKey && event.key === "[");
+      const forwardShortcut =
+        (event.altKey && event.key === "ArrowRight") ||
+        (isMac && event.metaKey && event.key === "]");
+
+      if (backShortcut && canGoBack) {
+        event.preventDefault();
+        goBack();
+      } else if (forwardShortcut && canGoForward) {
+        event.preventDefault();
+        goForward();
+      }
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button === 3 && canGoBack) {
+        event.preventDefault();
+        goBack();
+      } else if (event.button === 4 && canGoForward) {
+        event.preventDefault();
+        goForward();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [canGoBack, canGoForward, goBack, goForward, isMac]);
 
   const controlWindow = async (action: WindowControlAction) => {
     const maximized = await window.muro?.windowControl(action);
@@ -83,6 +121,37 @@ export const WindowChrome = () => {
           </span>
         </div>
       )}
+
+      <nav
+        className={`window-history-controls window-no-drag ${isMac ? "ml-5" : "ml-1"}`}
+        aria-label="Navigation history"
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <button
+          className="window-history-button"
+          onClick={goBack}
+          disabled={!canGoBack}
+          aria-label="Go back"
+          aria-keyshortcuts={isMac ? "Alt+ArrowLeft Meta+[" : "Alt+ArrowLeft"}
+          title={isMac ? "Back (⌘[)" : "Back (Alt+Left)"}
+          data-history-back
+          type="button"
+        >
+          <ChevronLeft />
+        </button>
+        <button
+          className="window-history-button"
+          onClick={goForward}
+          disabled={!canGoForward}
+          aria-label="Go forward"
+          aria-keyshortcuts={isMac ? "Alt+ArrowRight Meta+]" : "Alt+ArrowRight"}
+          title={isMac ? "Forward (⌘])" : "Forward (Alt+Right)"}
+          data-history-forward
+          type="button"
+        >
+          <ChevronRight />
+        </button>
+      </nav>
 
       {isMac && (
         <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2" data-window-brand>
