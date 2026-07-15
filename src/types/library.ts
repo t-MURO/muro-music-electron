@@ -54,6 +54,12 @@ export type Playlist = {
   id: string;
   name: string;
   trackIds: string[];
+  folderId?: string;
+};
+
+export type PlaylistFolder = {
+  id: string;
+  name: string;
 };
 
 export type SmartCrateField =

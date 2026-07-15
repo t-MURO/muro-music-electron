@@ -9,6 +9,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-node-smoke-"));
 const dbPath = path.join(directory, "muro.db");
 let keyFinderClosed = false;
 let keyFinderStartArguments;
+let waveformGenerationCount = 0;
 const keyFinder = {
   health: async () => ({ service: "keyfinder-native", protocolVersion: 1 }),
   startAnalysis: async (tracks, _sender, settings, writeAuthorization) => {
@@ -17,7 +18,10 @@ const keyFinder = {
   },
   cancelAnalysis: async (jobId) => ({ cancelled: jobId === "job-1" }),
   recycle: () => ({ recycled: true }),
-  generateWaveform: async (_sourcePath, points) => ({ peaks: Array(points).fill(0.5) }),
+  generateWaveform: async (_sourcePath, points) => {
+    waveformGenerationCount += 1;
+    return { peaks: Array(points).fill(0.5) };
+  },
   close: () => { keyFinderClosed = true; },
 };
 const backend = createBackend({
@@ -66,6 +70,63 @@ try {
   playlists = await backend.invoke("load_playlists", { dbPath });
   assert.deepEqual(playlists.playlists[0].track_ids, ["track-2", "track-1"]);
 
+  await backend.invoke("create_playlist_folder", {
+    dbPath,
+    id: "folder-1",
+    name: "Sets",
+  });
+  await backend.invoke("update_playlist_folder", {
+    dbPath,
+    folderId: "folder-1",
+    name: "Weekend Sets",
+  });
+  await backend.invoke("update_playlist", {
+    dbPath,
+    playlistId: "playlist-1",
+    folderId: "folder-1",
+  });
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.deepEqual(playlists.folders, [{ id: "folder-1", name: "Weekend Sets" }]);
+  assert.equal(playlists.playlists[0].folder_id, "folder-1");
+
+  const importedPlaylistPath = path.join(directory, "smoke-import.m3u8");
+  fs.writeFileSync(
+    importedPlaylistPath,
+    ["#EXTM3U", firstSourcePath, path.basename(secondSourcePath), "missing.mp3"].join("\r\n"),
+    "utf8",
+  );
+  const importedPlaylist = await backend.invoke("import_playlist_file", {
+    dbPath,
+    filePath: importedPlaylistPath,
+  });
+  assert.equal(importedPlaylist.name, "smoke-import");
+  assert.deepEqual(
+    importedPlaylist.entries.map((entry) => ({ track_id: entry.track_id, exists: entry.exists })),
+    [
+      { track_id: "track-1", exists: true },
+      { track_id: "track-2", exists: true },
+      { track_id: null, exists: false },
+    ],
+  );
+
+  const exportedPlaylistPath = path.join(directory, "smoke-export.m3u8");
+  assert.deepEqual(
+    await backend.invoke("export_playlist_file", {
+      dbPath,
+      playlistId: "playlist-1",
+      filePath: exportedPlaylistPath,
+    }),
+    { exported: 2, filePath: exportedPlaylistPath },
+  );
+  const exportedPlaylist = fs.readFileSync(exportedPlaylistPath, "utf8");
+  assert.ok(exportedPlaylist.startsWith("#EXTM3U\r\n"));
+  assert.ok(exportedPlaylist.indexOf(secondSourcePath) < exportedPlaylist.indexOf(firstSourcePath));
+
+  await backend.invoke("delete_playlist_folder", { dbPath, folderId: "folder-1" });
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.deepEqual(playlists.folders, []);
+  assert.equal(playlists.playlists[0].folder_id, null);
+
   await backend.invoke("update_track_analysis", {
     dbPath,
     trackId: "track-1",
@@ -103,9 +164,22 @@ try {
   );
   assert.deepEqual(await backend.invoke("recycle_keyfinder", {}), { recycled: true });
   assert.equal(
-    (await backend.invoke("generate_track_waveform", { sourcePath: "smoke.mp3", points: 64 })).peaks.length,
+    (await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 })).peaks.length,
     64,
   );
+  await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 });
+  assert.equal(waveformGenerationCount, 1, "same waveform should be loaded from the disk cache");
+  assert.ok(
+    fs.readdirSync(path.join(directory, "waveforms")).some((entry) => entry.endsWith(".json")),
+    "waveform peaks should be persisted on disk",
+  );
+
+  await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 128 });
+  assert.equal(waveformGenerationCount, 2, "a different point count should generate a new waveform");
+
+  fs.appendFileSync(firstSourcePath, " updated");
+  await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 });
+  assert.equal(waveformGenerationCount, 3, "source metadata changes should invalidate cached peaks");
 
   const removeOnly = await backend.invoke("delete_tracks", {
     dbPath,
@@ -128,6 +202,8 @@ try {
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 0);
   assert.deepEqual((await backend.invoke("load_playlists", { dbPath })).playlists[0].track_ids, []);
+  await backend.invoke("clear_tracks", { dbPath });
+  assert.equal(fs.existsSync(path.join(directory, "waveforms")), false);
 } finally {
   backend.close();
   assert.equal(keyFinderClosed, true);

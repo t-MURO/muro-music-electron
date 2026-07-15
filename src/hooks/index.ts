@@ -23,6 +23,8 @@ export {
   type CurrentTrack,
 } from "./useAudioPlayback";
 export { usePlaylistOperations } from "./usePlaylistOperations";
+export { usePlaylistFolders } from "./usePlaylistFolders";
+export { usePlaylistTransfer } from "./usePlaylistTransfer";
 export { useInboxOperations } from "./useInboxOperations";
 export {
   useFileImport,

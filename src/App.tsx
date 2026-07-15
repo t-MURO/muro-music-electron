@@ -42,6 +42,8 @@ import {
   useSidebarData,
   useTrackRatings,
   usePlaylistOperations,
+  usePlaylistFolders,
+  usePlaylistTransfer,
   useInboxOperations,
   useTrackAnalysis,
   useTrackEdit,
@@ -71,7 +73,7 @@ import {
   filterAlbumsBySearch,
   groupTracksIntoAlbums,
 } from "./utils";
-import { confirm, open } from "@muro/desktop/dialogs";
+import { confirm, open, save } from "@muro/desktop/dialogs";
 import type { ColumnConfig, SmartCrate, Track } from "./types";
 
 function App() {
@@ -85,6 +87,7 @@ function App() {
   const tracks = useLibraryStore((s) => s.tracks);
   const inboxTracks = useLibraryStore((s) => s.inboxTracks);
   const playlists = useLibraryStore((s) => s.playlists);
+  const playlistFolders = useLibraryStore((s) => s.playlistFolders);
   const allTracks = useLibraryStore(selectAllTracks);
 
   const recentlyPlayedTracks = useRecentlyPlayedStore((s) => s.recentlyPlayedTracks);
@@ -94,6 +97,14 @@ function App() {
   const deleteSmartCrate = useSmartCrateStore((s) => s.deleteSmartCrate);
   const [isSmartCrateModalOpen, setIsSmartCrateModalOpen] = useState(false);
   const [editingSmartCrateId, setEditingSmartCrateId] = useState<string | null>(null);
+  const [isFolderCreateOpen, setIsFolderCreateOpen] = useState(false);
+  const [folderCreateName, setFolderCreateName] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [folderEditName, setFolderEditName] = useState("");
+  const [folderMenu, setFolderMenu] = useState<{
+    folderId: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const theme = useSettingsStore((s) => s.theme);
   const locale = useSettingsStore((s) => s.locale);
@@ -489,6 +500,10 @@ function App() {
     () => playlists.find((playlist) => playlist.id === playlistMenuId) ?? null,
     [playlists, playlistMenuId]
   );
+  const folderMenuTarget = useMemo(
+    () => playlistFolders.find((folder) => folder.id === folderMenu?.folderId) ?? null,
+    [folderMenu?.folderId, playlistFolders],
+  );
 
   // Playlist operations
   const {
@@ -504,6 +519,8 @@ function App() {
     currentView: view,
     navigateToView,
   });
+  const { createFolder, renameFolder, removeFolder, movePlaylist } = usePlaylistFolders();
+  const { importPlaylist, exportPlaylist } = usePlaylistTransfer();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
@@ -625,6 +642,44 @@ function App() {
     notify.success(`Deleted ${crate.name}`);
   }, [deleteSmartCrate, navigateToView, smartCrates, view]);
 
+  const handleOpenPlaylistMenu = useCallback((
+    event: React.MouseEvent<HTMLButtonElement>,
+    playlistId: string,
+  ) => {
+    setFolderMenu(null);
+    openPlaylistMenu(event, playlistId);
+  }, [openPlaylistMenu]);
+
+  const handleOpenFolderMenu = useCallback((
+    event: React.MouseEvent<HTMLButtonElement>,
+    folderId: string,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closePlaylistMenu();
+    setFolderMenu({ folderId, position: { x: event.clientX, y: event.clientY } });
+  }, [closePlaylistMenu]);
+
+  const handleImportPlaylistFile = useCallback(async () => {
+    try {
+      const result = await open({
+        multiple: false,
+        filters: [{ name: "Playlists", extensions: ["m3u", "m3u8", "pls"] }],
+      });
+      const filePath = Array.isArray(result) ? result[0] : result;
+      if (!filePath) return;
+      const playlistId = await importPlaylist(filePath);
+      if (playlistId) navigateToView(`playlist:${playlistId}` as LibraryView);
+    } catch {
+      notify.error("Playlist picker failed");
+    }
+  }, [importPlaylist, navigateToView]);
+
+  const handleOpenFolderCreate = useCallback(() => {
+    setFolderCreateName("");
+    setIsFolderCreateOpen(true);
+  }, []);
+
   // Sidebar props
   const sidebarProps = useSidebarData({
     view,
@@ -635,7 +690,10 @@ function App() {
     onPlaylistDragLeave,
     onPlaylistDragOver,
     onCreatePlaylist: openPlaylistModal,
-    onPlaylistContextMenu: openPlaylistMenu,
+    onPlaylistContextMenu: handleOpenPlaylistMenu,
+    onCreatePlaylistFolder: handleOpenFolderCreate,
+    onImportPlaylist: handleImportPlaylistFile,
+    onPlaylistFolderContextMenu: handleOpenFolderMenu,
     onCreateSmartCrate: handleCreateSmartCrate,
     onEditSmartCrate: handleEditSmartCrate,
     onDeleteSmartCrate: (id) => { void handleDeleteSmartCrate(id); },
@@ -722,6 +780,60 @@ function App() {
     closePlaylistMenu();
     handleDeletePlaylist(playlistMenuId);
   }, [closePlaylistMenu, handleDeletePlaylist, playlistMenuId]);
+
+  const handlePlaylistMenuExport = useCallback(async () => {
+    if (!playlistMenuTarget) return;
+    closePlaylistMenu();
+    const safeName = playlistMenuTarget.name.replace(/[<>:"/\\|?*]+/g, "-").trim() || "playlist";
+    try {
+      const filePath = await save({
+        defaultPath: `${safeName}.m3u8`,
+        filters: [{ name: "M3U8 Playlist", extensions: ["m3u8"] }],
+      });
+      if (filePath) await exportPlaylist(playlistMenuTarget.id, filePath);
+    } catch {
+      notify.error("Playlist export dialog failed");
+    }
+  }, [closePlaylistMenu, exportPlaylist, playlistMenuTarget]);
+
+  const handleMovePlaylist = useCallback((folderId: string | null) => {
+    if (!playlistMenuTarget) return;
+    closePlaylistMenu();
+    void movePlaylist(playlistMenuTarget.id, folderId);
+  }, [closePlaylistMenu, movePlaylist, playlistMenuTarget]);
+
+  const handleFolderCreateSubmit = useCallback(async () => {
+    if (await createFolder(folderCreateName)) {
+      setIsFolderCreateOpen(false);
+      setFolderCreateName("");
+    }
+  }, [createFolder, folderCreateName]);
+
+  const handleFolderMenuEdit = useCallback(() => {
+    if (!folderMenuTarget) return;
+    setEditingFolderId(folderMenuTarget.id);
+    setFolderEditName(folderMenuTarget.name);
+    setFolderMenu(null);
+  }, [folderMenuTarget]);
+
+  const handleFolderEditSubmit = useCallback(async () => {
+    if (!editingFolderId) return;
+    if (await renameFolder(editingFolderId, folderEditName)) {
+      setEditingFolderId(null);
+      setFolderEditName("");
+    }
+  }, [editingFolderId, folderEditName, renameFolder]);
+
+  const handleFolderMenuDelete = useCallback(async () => {
+    if (!folderMenuTarget) return;
+    const target = folderMenuTarget;
+    setFolderMenu(null);
+    const shouldDelete = await confirm(
+      `Delete the playlist folder “${target.name}”? Its playlists will move back to the Playlists section.`,
+      { title: "Delete Playlist Folder", kind: "warning" },
+    );
+    if (shouldDelete) await removeFolder(target.id);
+  }, [folderMenuTarget, removeFolder]);
 
   // Disable user select during internal drag
   useEffect(() => {
@@ -810,6 +922,7 @@ function App() {
         closeMenu();
         closeColumnsMenu();
         closePlaylistMenu();
+        setFolderMenu(null);
       }}
     >
       <ToastContainer />
@@ -832,6 +945,31 @@ function App() {
         onChange={setPlaylistEditName}
         onClose={handleClosePlaylistEdit}
         onSubmit={handlePlaylistEditSubmit}
+      />
+      <PlaylistCreateModal
+        isOpen={isFolderCreateOpen}
+        value={folderCreateName}
+        onChange={setFolderCreateName}
+        onClose={() => setIsFolderCreateOpen(false)}
+        onSubmit={() => { void handleFolderCreateSubmit(); }}
+        title="New playlist folder"
+        subtitle="Group related playlists without changing their tracks."
+        placeholder="Folder name"
+        submitLabel="Create folder"
+      />
+      <PlaylistEditModal
+        isOpen={Boolean(editingFolderId)}
+        value={folderEditName}
+        onChange={setFolderEditName}
+        onClose={() => {
+          setEditingFolderId(null);
+          setFolderEditName("");
+        }}
+        onSubmit={() => { void handleFolderEditSubmit(); }}
+        title="Rename playlist folder"
+        subtitle="Choose a name that makes this playlist group easy to find."
+        placeholder="Folder name"
+        submitLabel="Save"
       />
       <SmartCrateModal
         isOpen={isSmartCrateModalOpen}
@@ -940,7 +1078,19 @@ function App() {
                 playlistName={playlistMenuTarget?.name}
                 onClose={closePlaylistMenu}
                 onEdit={handlePlaylistMenuEdit}
+                onExport={() => { void handlePlaylistMenuExport(); }}
+                folders={playlistFolders}
+                currentFolderId={playlistMenuTarget?.folderId}
+                onMoveToFolder={handleMovePlaylist}
                 onDelete={handlePlaylistMenuDelete}
+              />
+              <PlaylistContextMenu
+                isOpen={Boolean(folderMenu)}
+                position={folderMenu?.position ?? { x: 0, y: 0 }}
+                playlistName={folderMenuTarget?.name}
+                onClose={() => setFolderMenu(null)}
+                onEdit={handleFolderMenuEdit}
+                onDelete={() => { void handleFolderMenuDelete(); }}
               />
               <ColumnsMenu
                 isOpen={showColumns}

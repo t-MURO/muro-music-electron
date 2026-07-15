@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   closeDatabases,
   loadPlaylists,
@@ -15,6 +16,7 @@ import {
   importAudioFile,
   writeMetadataToFile,
 } from "./metadata.mjs";
+import { createWaveformCache } from "./waveformCache.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -42,6 +44,80 @@ const listJson = (value) => JSON.stringify(
     .map((item) => item.trim())
     .filter(Boolean)
 );
+
+const normalizePlaylistPath = (value) => {
+  const resolved = path.resolve(String(value || ""));
+  const normalized = path.normalize(resolved);
+  return process.platform === "win32" ? normalized.toLocaleLowerCase() : normalized;
+};
+
+const resolvePlaylistEntry = (entry, playlistDirectory) => {
+  const trimmed = String(entry || "").trim().replace(/^"|"$/g, "");
+  if (!trimmed) return null;
+  try {
+    if (/^file:/i.test(trimmed)) return fileURLToPath(trimmed);
+  } catch {
+    return null;
+  }
+  return path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(playlistDirectory, trimmed);
+};
+
+const parsePlaylistFile = async (filePath) => {
+  const buffer = await fs.promises.readFile(filePath);
+  const text = buffer[0] === 0xff && buffer[1] === 0xfe
+    ? buffer.subarray(2).toString("utf16le")
+    : buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const extension = path.extname(filePath).toLocaleLowerCase();
+  const lines = text.split(/\r?\n/);
+  const rawEntries = extension === ".pls"
+    ? lines
+        .map((line) => /^File\d+=(.*)$/i.exec(line.trim())?.[1])
+        .filter(Boolean)
+    : lines
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#"));
+  const directory = path.dirname(filePath);
+  return rawEntries
+    .map((entry) => resolvePlaylistEntry(entry, directory))
+    .filter(Boolean);
+};
+
+const readPlaylistForImport = async (dbPath, filePath) => {
+  const entries = await parsePlaylistFile(filePath);
+  const rows = openDatabase(dbPath)
+    .prepare("SELECT id, source_path FROM tracks")
+    .all();
+  const trackIdByPath = new Map(
+    rows.map((row) => [normalizePlaylistPath(row.source_path), String(row.id)])
+  );
+  return {
+    name: path.basename(filePath, path.extname(filePath)),
+    entries: entries.map((entry) => ({
+      path: entry,
+      track_id: trackIdByPath.get(normalizePlaylistPath(entry)) ?? null,
+      exists: fs.existsSync(entry),
+    })),
+  };
+};
+
+const exportPlaylistFile = async (dbPath, playlistId, filePath) => {
+  const rows = openDatabase(dbPath).prepare(`
+    SELECT t.source_path, t.duration_seconds, t.artist, t.title
+    FROM playlist_tracks pt
+    JOIN tracks t ON t.id = pt.track_id
+    WHERE pt.playlist_id = ?
+    ORDER BY pt.position ASC
+  `).all(playlistId);
+  const lines = ["#EXTM3U"];
+  for (const row of rows) {
+    const duration = Math.max(-1, Math.round(Number(row.duration_seconds) || -1));
+    lines.push(`#EXTINF:${duration},${row.artist || "Unknown Artist"} - ${row.title || "Unknown Title"}`);
+    lines.push(row.source_path);
+  }
+  await fs.promises.mkdir(path.dirname(path.resolve(filePath)), { recursive: true });
+  await fs.promises.writeFile(filePath, `${lines.join("\r\n")}\r\n`, "utf8");
+  return { exported: rows.length, filePath };
+};
 
 const bulkTrackOperation = (dbPath, trackIds, sqlPrefix) => {
   if (!trackIds.length) return;
@@ -85,7 +161,10 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
   }
 };
 
-export const createBackend = ({ cacheDir, emit, keyFinder }) => {
+export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) => {
+  const waveformCache = createWaveformCache({
+    cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
+  });
   const commands = {
     async import_files({ paths, dbPath }, sender) {
       const audioPaths = await collectAudioPaths(Array.isArray(paths) ? paths : []);
@@ -110,7 +189,7 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
     load_playlists: ({ dbPath }) => loadPlaylists(dbPath),
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
 
-    clear_tracks: ({ dbPath }) => {
+    clear_tracks: async ({ dbPath }) => {
       openDatabase(dbPath).prepare("DELETE FROM tracks").run();
       if (fs.existsSync(cacheDir)) {
         for (const entry of fs.readdirSync(cacheDir)) {
@@ -118,6 +197,7 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
           if (fs.statSync(candidate).isFile()) fs.unlinkSync(candidate);
         }
       }
+      await waveformCache.clear();
     },
 
     accept_tracks: ({ dbPath, trackIds }) =>
@@ -145,9 +225,11 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
           if (!row) continue;
           try {
             await fs.promises.unlink(row.source_path);
+            await waveformCache.invalidateSource(row.source_path);
             deletedTrackIds.push(id);
           } catch (error) {
             if (error?.code === "ENOENT") {
+              await waveformCache.invalidateSource(row.source_path);
               deletedTrackIds.push(id);
               continue;
             }
@@ -164,14 +246,45 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
       return { deletedTrackIds, failures };
     },
 
-    create_playlist: ({ dbPath, id, name }) => {
+    create_playlist: ({ dbPath, id, name, folderId }) => {
       openDatabase(dbPath)
-        .prepare("INSERT INTO playlists(id, name, created_at) VALUES (?, ?, ?)")
-        .run(id, String(name).trim(), Math.floor(Date.now() / 1000));
+        .prepare("INSERT INTO playlists(id, name, folder_id, created_at) VALUES (?, ?, ?, ?)")
+        .run(id, String(name).trim(), folderId || null, Math.floor(Date.now() / 1000));
+    },
+    update_playlist: ({ dbPath, playlistId, name, folderId }) => {
+      const db = openDatabase(dbPath);
+      if (name !== undefined) {
+        db.prepare("UPDATE playlists SET name = ? WHERE id = ?")
+          .run(String(name).trim(), playlistId);
+      }
+      if (folderId !== undefined) {
+        db.prepare("UPDATE playlists SET folder_id = ? WHERE id = ?")
+          .run(folderId || null, playlistId);
+      }
     },
     delete_playlist: ({ dbPath, playlistId }) => {
       openDatabase(dbPath).prepare("DELETE FROM playlists WHERE id = ?").run(playlistId);
     },
+    create_playlist_folder: ({ dbPath, id, name }) => {
+      openDatabase(dbPath)
+        .prepare("INSERT INTO playlist_folders(id, name, created_at) VALUES (?, ?, ?)")
+        .run(id, String(name).trim(), Math.floor(Date.now() / 1000));
+    },
+    update_playlist_folder: ({ dbPath, folderId, name }) => {
+      openDatabase(dbPath)
+        .prepare("UPDATE playlist_folders SET name = ? WHERE id = ?")
+        .run(String(name).trim(), folderId);
+    },
+    delete_playlist_folder: ({ dbPath, folderId }) => {
+      const db = openDatabase(dbPath);
+      db.transaction(() => {
+        db.prepare("UPDATE playlists SET folder_id = NULL WHERE folder_id = ?").run(folderId);
+        db.prepare("DELETE FROM playlist_folders WHERE id = ?").run(folderId);
+      })();
+    },
+    import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
+    export_playlist_file: ({ dbPath, playlistId, filePath }) =>
+      exportPlaylistFile(dbPath, playlistId, filePath),
     add_tracks_to_playlist: ({ dbPath, playlistId, trackIds }) => {
       if (!trackIds.length) return;
       const db = openDatabase(dbPath);
@@ -235,7 +348,9 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
     cancel_track_analysis: ({ jobId }) => keyFinder.cancelAnalysis(jobId),
     recycle_keyfinder: () => keyFinder.recycle(),
     generate_track_waveform: ({ sourcePath, points }) =>
-      keyFinder.generateWaveform(sourcePath, points),
+      waveformCache.getOrCreate(sourcePath, points, (normalizedPoints) =>
+        keyFinder.generateWaveform(sourcePath, normalizedPoints)
+      ),
     get_track_source_path: ({ dbPath, trackId }) =>
       openDatabase(dbPath).prepare("SELECT source_path FROM tracks WHERE id = ?").get(trackId)?.source_path ?? null,
     record_track_play: ({ dbPath, trackId }) => {

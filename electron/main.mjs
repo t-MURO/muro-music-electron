@@ -134,6 +134,14 @@ const startApplication = async () => {
     if (result.canceled || result.filePaths.length === 0) return null;
     return options.multiple ? result.filePaths : result.filePaths[0];
   });
+  ipcMain.handle("muro:save-dialog", async (_event, options) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: typeof options.title === "string" ? options.title : undefined,
+      defaultPath: typeof options.defaultPath === "string" ? options.defaultPath : undefined,
+      filters: Array.isArray(options.filters) ? options.filters : undefined,
+    });
+    return result.canceled || !result.filePath ? null : result.filePath;
+  });
   ipcMain.handle("muro:confirm-dialog", async (_event, message, options) => {
     const result = await dialog.showMessageBox(mainWindow, {
       type: options.kind === "warning" ? "warning" : "question",

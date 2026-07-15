@@ -60,8 +60,10 @@ app.whenReady().then(async () => {
       playlists: [{
         id: "smoke-playlist",
         name: "Smoke Playlist",
+        folder_id: "smoke-folder",
         track_ids: smokeTracks.map((track) => track.id),
       }],
+      folders: [{ id: "smoke-folder", name: "Smoke Sets" }],
     };
     if (command === "load_recently_played") return [];
     if (command === "playback_get_state") return {
@@ -139,6 +141,10 @@ app.whenReady().then(async () => {
       );
       const historyForwardInitiallyDisabled = Boolean(
         document.querySelector("[data-history-forward]")?.disabled
+      );
+      const playlistTransferControlsReady = Boolean(
+        document.querySelector('[data-playlist-import]') &&
+        document.querySelector('[data-playlist-folder-create]')
       );
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
@@ -348,6 +354,29 @@ app.whenReady().then(async () => {
             ?.state?.lastDeleteMode ?? null;
         } catch {}
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        const playlistFolderReady = Boolean(
+          document.querySelector('[data-playlist-folder="smoke-folder"]') &&
+          document.querySelector('[data-playlist-folder-parent="smoke-folder"]')
+        );
+        const nestedPlaylist = document.querySelector('[data-playlist-folder-parent="smoke-folder"]');
+        nestedPlaylist?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 180,
+          clientY: 220,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const playlistMenuTexts = Array.from(
+          document.querySelectorAll('[data-popover]'),
+          (node) => node.textContent ?? "",
+        );
+        const playlistExportMoveMenuReady = playlistMenuTexts.some((text) =>
+          text.includes("Export playlist") &&
+          text.includes("Move to") &&
+          text.includes("Playlists")
+        );
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
         window.location.hash = "#/playlists/smoke-playlist";
         await new Promise((resolve) => setTimeout(resolve, 60));
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
@@ -510,6 +539,9 @@ app.whenReady().then(async () => {
           rememberedDiskPreference,
           persistedDeleteMode,
           playlistRemoveReady,
+          playlistFolderReady,
+          playlistTransferControlsReady,
+          playlistExportMoveMenuReady,
           windowChromeReady: Boolean(windowChrome && windowBrand && windowControls),
           windowChromeDragRegion: windowChrome
             ? getComputedStyle(windowChrome).getPropertyValue("-webkit-app-region")
@@ -715,6 +747,17 @@ app.whenReady().then(async () => {
       }
       if (!result.playlistRemoveReady) {
         fail("Playlist view did not show the remove-from-playlist button");
+        return;
+      }
+      if (
+        !result.playlistFolderReady ||
+        !result.playlistTransferControlsReady ||
+        !result.playlistExportMoveMenuReady
+      ) {
+        fail(
+          `Playlist organization failed: folder=${result.playlistFolderReady}, ` +
+          `controls=${result.playlistTransferControlsReady}, menu=${result.playlistExportMoveMenuReady}`
+        );
         return;
       }
       if (

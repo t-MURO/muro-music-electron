@@ -2,7 +2,13 @@ import { useCallback } from "react";
 import { commandManager } from "../command-manager/commandManager";
 import { useLibraryStore, useUIStore, notify } from "../stores";
 import { useDbPath } from "./useDbPath";
-import { addTracksToPlaylist, createPlaylist, deletePlaylist, setPlaylistTracks } from "../utils";
+import {
+  addTracksToPlaylist,
+  createPlaylist,
+  deletePlaylist,
+  setPlaylistTracks,
+  updatePlaylist,
+} from "../utils";
 import type { LibraryView } from "./useLibraryView";
 
 type UsePlaylistOperationsArgs = {
@@ -36,7 +42,8 @@ export const usePlaylistOperations = ({
   }, [closePlaylistEdit]);
 
   const handleRenamePlaylist = useCallback(
-    (playlistId: string, nextName: string) => {
+    async (playlistId: string, nextName: string) => {
+      const resolvedDbPath = await resolveDbPath();
       let previousName: string | null = null;
       const command = {
         label: `Rename playlist to ${nextName}`,
@@ -50,6 +57,9 @@ export const usePlaylistOperations = ({
               return { ...playlist, name: nextName };
             })
           );
+          updatePlaylist(resolvedDbPath, playlistId, { name: nextName }).catch(() => {
+            notify.error("Failed to rename playlist");
+          });
         },
         undo: () => {
           if (previousName === null) {
@@ -62,12 +72,15 @@ export const usePlaylistOperations = ({
                 : playlist
             )
           );
+          updatePlaylist(resolvedDbPath, playlistId, { name: previousName }).catch(() => {
+            notify.error("Failed to restore playlist name");
+          });
         },
       };
 
       commandManager.execute(command);
     },
-    [setPlaylists]
+    [resolveDbPath, setPlaylists]
   );
 
   const handleDeletePlaylist = useCallback(
@@ -109,7 +122,8 @@ export const usePlaylistOperations = ({
           createPlaylist(
             resolvedDbPath,
             removedPlaylist.id,
-            removedPlaylist.name
+            removedPlaylist.name,
+            removedPlaylist.folderId,
           )
             .then(() => {
               if (removedPlaylist.trackIds.length > 0) {
@@ -139,7 +153,7 @@ export const usePlaylistOperations = ({
     if (!trimmed) {
       return;
     }
-    handleRenamePlaylist(playlistEditState.id, trimmed);
+    void handleRenamePlaylist(playlistEditState.id, trimmed);
     handleClosePlaylistEdit();
   }, [handleRenamePlaylist, playlistEditState, handleClosePlaylistEdit]);
 

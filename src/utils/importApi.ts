@@ -44,8 +44,22 @@ export type PlaylistSnapshot = {
   playlists: {
     id: string;
     name: string;
+    folder_id: string | null;
     track_ids: string[];
   }[];
+  folders: {
+    id: string;
+    name: string;
+  }[];
+};
+
+export type ImportedPlaylistFile = {
+  name: string;
+  entries: Array<{
+    path: string;
+    track_id: string | null;
+    exists: boolean;
+  }>;
 };
 
 // ============================================================================

@@ -18,6 +18,7 @@ export const useLibraryInit = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
   const setPlaylists = useLibraryStore((s) => s.setPlaylists);
+  const setPlaylistFolders = useLibraryStore((s) => s.setPlaylistFolders);
   const setRecentlyPlayedTracks = useRecentlyPlayedStore((s) => s.setRecentlyPlayedTracks);
 
   const dbPath = useSettingsStore((s) => s.dbPath);
@@ -80,9 +81,11 @@ export const useLibraryInit = () => {
           playlistSnapshot.playlists.map((playlist) => ({
             id: playlist.id,
             name: playlist.name,
+            folderId: playlist.folder_id ?? undefined,
             trackIds: playlist.track_ids,
           }))
         );
+        setPlaylistFolders(playlistSnapshot.folders);
         setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
       } catch (error) {
         notify.error("Failed to load library");
@@ -93,7 +96,7 @@ export const useLibraryInit = () => {
     return () => {
       isMounted = false;
     };
-  }, [resolveDbPath, setTracks, setInboxTracks, setPlaylists, setRecentlyPlayedTracks]);
+  }, [resolveDbPath, setTracks, setInboxTracks, setPlaylists, setPlaylistFolders, setRecentlyPlayedTracks]);
 
   // Backfill handlers
   const handleBackfillSearchText = useCallback(async () => {
