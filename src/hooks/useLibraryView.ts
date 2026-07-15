@@ -1,11 +1,19 @@
 import { useMemo } from "react";
 import { t } from "../i18n";
-import type { Playlist, Track } from "../types";
+import { filterTracksBySmartCrate } from "../utils/smartCrates";
+import type { Playlist, SmartCrate, Track } from "../types";
 
 export type CollectionFacet = "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
-export type LibraryView = "library" | "inbox" | "settings" | "recentlyPlayed" | `playlist:${string}` | `collection:${CollectionFacet}`;
+export type LibraryView =
+  | "library"
+  | "inbox"
+  | "settings"
+  | "recentlyPlayed"
+  | `playlist:${string}`
+  | `smartCrate:${string}`
+  | `collection:${CollectionFacet}`;
 
-export type ViewType = "library" | "inbox" | "settings" | "playlist" | "recentlyPlayed" | "collection";
+export type ViewType = "library" | "inbox" | "settings" | "playlist" | "smartCrate" | "recentlyPlayed" | "collection";
 
 export type EmptyStateConfig = {
   title: string;
@@ -43,12 +51,17 @@ const parsePlaylistId = (view: LibraryView): string | null => {
 const parseCollectionFacet = (view: LibraryView): CollectionFacet | null =>
   view.startsWith("collection:") ? view.slice("collection:".length) as CollectionFacet : null;
 
+const parseSmartCrateId = (view: LibraryView): string | null =>
+  view.startsWith("smartCrate:") ? view.slice("smartCrate:".length) : null;
+
 type UseViewConfigArgs = {
   view: LibraryView;
   playlists: Playlist[];
   libraryTracks: Track[];
   inboxTracks: Track[];
   recentlyPlayedTracks: Track[];
+  smartCrates: SmartCrate[];
+  collectionFilterValue?: string | null;
 };
 
 export const useViewConfig = ({
@@ -57,9 +70,12 @@ export const useViewConfig = ({
   libraryTracks,
   inboxTracks,
   recentlyPlayedTracks,
+  smartCrates,
+  collectionFilterValue,
 }: UseViewConfigArgs): ViewConfig => {
   return useMemo(() => {
     const playlistId = parsePlaylistId(view);
+    const smartCrateId = parseSmartCrateId(view);
     const collectionFacet = parseCollectionFacet(view);
     const playlist = playlistId
       ? playlists.find((p) => p.id === playlistId) ?? null
@@ -135,6 +151,42 @@ export const useViewConfig = ({
       };
     }
 
+    if (smartCrateId) {
+      const smartCrate = smartCrates.find((crate) => crate.id === smartCrateId) ?? null;
+      if (!smartCrate) {
+        return {
+          type: "smartCrate",
+          title: "Smart Crate not found",
+          subtitle: "",
+          playlist: null,
+          trackTable: {
+            tracks: [],
+            emptyState: {
+              title: "Smart Crate not found",
+              description: "It may have been deleted.",
+            },
+            showImportActions: false,
+          },
+        };
+      }
+
+      const crateTracks = filterTracksBySmartCrate(libraryTracks, smartCrate);
+      return {
+        type: "smartCrate",
+        title: smartCrate.name,
+        subtitle: `${crateTracks.length.toLocaleString()} live matches · ${smartCrate.rules.length} ${smartCrate.rules.length === 1 ? "rule" : "rules"}`,
+        playlist: null,
+        trackTable: {
+          tracks: crateTracks,
+          emptyState: {
+            title: "No tracks match yet",
+            description: "Edit the crate rules or update track metadata to populate it.",
+          },
+          showImportActions: false,
+        },
+      };
+    }
+
     if (collectionFacet) {
       const labels: Record<CollectionFacet, string> = {
         genres: "Genres",
@@ -145,25 +197,36 @@ export const useViewConfig = ({
         bpm: "BPM",
         formats: "Formats",
       };
+      const normalizedFilter = collectionFilterValue?.trim().toLocaleLowerCase() ?? "";
       const collectionTracks = libraryTracks.filter((track) => {
-        if (collectionFacet === "genres") return Boolean(track.genre?.trim());
-        if (collectionFacet === "artists") return Boolean(track.artist.trim());
-        if (collectionFacet === "albums") return Boolean(track.album.trim());
-        if (collectionFacet === "labels") return Boolean(track.label?.trim());
-        if (collectionFacet === "keys") return Boolean(track.key?.trim());
-        if (collectionFacet === "bpm") return track.bpm !== undefined && track.bpm !== null;
-        return track.sourcePath.includes(".");
+        let value = "";
+        if (collectionFacet === "genres") value = track.genre ?? "";
+        else if (collectionFacet === "artists") value = track.artist;
+        else if (collectionFacet === "albums") value = track.album;
+        else if (collectionFacet === "labels") value = track.label ?? "";
+        else if (collectionFacet === "keys") value = track.key ?? "";
+        else if (collectionFacet === "bpm") value = track.bpm == null ? "" : String(Math.round(track.bpm));
+        else value = track.sourcePath.split(".").pop()?.toUpperCase() ?? "";
+
+        if (!value.trim()) return false;
+        if (!normalizedFilter) return true;
+        return collectionFacet === "genres"
+          ? value.toLocaleLowerCase().includes(normalizedFilter)
+          : value.toLocaleLowerCase() === normalizedFilter;
       });
-      const title = labels[collectionFacet];
+      const collectionTitle = labels[collectionFacet];
+      const title = collectionFilterValue?.trim() || collectionTitle;
       return {
         type: "collection",
         title,
-        subtitle: `${collectionTracks.length.toLocaleString()} tracks with ${title.toLowerCase()} metadata`,
+        subtitle: normalizedFilter
+          ? `${collectionTracks.length.toLocaleString()} tracks · ${collectionTitle}`
+          : `${collectionTracks.length.toLocaleString()} tracks with ${collectionTitle.toLowerCase()} metadata`,
         playlist: null,
         trackTable: {
           tracks: collectionTracks,
           emptyState: {
-            title: `No ${title.toLowerCase()} yet`,
+            title: normalizedFilter ? `No tracks match ${title}` : `No ${collectionTitle.toLowerCase()} yet`,
             description: `Add or edit track metadata to populate this collection.`,
           },
           showImportActions: false,
@@ -213,5 +276,13 @@ export const useViewConfig = ({
         showImportActions: false,
       },
     };
-  }, [view, playlists, libraryTracks, inboxTracks, recentlyPlayedTracks]);
+  }, [
+    collectionFilterValue,
+    inboxTracks,
+    libraryTracks,
+    playlists,
+    recentlyPlayedTracks,
+    smartCrates,
+    view,
+  ]);
 };

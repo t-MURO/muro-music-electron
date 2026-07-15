@@ -649,6 +649,52 @@ body {
   background: #c42b1c;
 }
 
+.window-history-controls {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-bg-primary) 78%, transparent);
+}
+
+.window-history-button {
+  display: inline-grid;
+  width: 31px;
+  height: 100%;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.window-history-button + .window-history-button {
+  border-left: 1px solid var(--color-border-light);
+}
+
+.window-history-button:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.window-history-button:active:not(:disabled) {
+  background: var(--color-bg-active);
+}
+
+.window-history-button:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+  opacity: 0.38;
+}
+
+.window-history-button svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
 .window-restore-icon {
   position: relative;
   width: 12px;
@@ -1354,6 +1400,20 @@ input:focus-visible,
   font-weight: 600;
 }
 
+.album-detail-link {
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.album-detail-link:hover,
+.album-detail-link:focus-visible {
+  color: var(--color-accent);
+  text-decoration: underline;
+  outline: none;
+}
+
 .album-detail-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1753,6 +1813,19 @@ input:focus-visible,
   color: var(--color-text-primary);
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.14);
+}
+
+.smart-crate-sidebar-actions {
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: width var(--transition-fast), opacity var(--transition-fast);
+}
+
+.smart-crate-sidebar-row:hover .smart-crate-sidebar-actions,
+.smart-crate-sidebar-row:focus-within .smart-crate-sidebar-actions {
+  width: 56px;
+  opacity: 1;
 }
 
 [data-theme="dark"] .drag-overlay-card {

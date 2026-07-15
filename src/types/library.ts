@@ -56,6 +56,41 @@ export type Playlist = {
   trackIds: string[];
 };
 
+export type SmartCrateField =
+  | "bpm"
+  | "key"
+  | "genre"
+  | "rating"
+  | "artist"
+  | "album"
+  | "year"
+  | "dateAdded"
+  | "playCount"
+  | "comment";
+
+export type SmartCrateOperator =
+  | "equals"
+  | "contains"
+  | "atLeast"
+  | "atMost"
+  | "between"
+  | "withinDays";
+
+export type SmartCrateRule = {
+  id: string;
+  field: SmartCrateField;
+  operator: SmartCrateOperator;
+  value: string;
+  secondaryValue?: string;
+};
+
+export type SmartCrate = {
+  id: string;
+  name: string;
+  match: "all" | "any";
+  rules: SmartCrateRule[];
+};
+
 export type ColumnKey =
   | "title"
   | "artist"

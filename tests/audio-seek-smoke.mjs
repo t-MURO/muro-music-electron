@@ -48,13 +48,8 @@ writeSilentWave(audioPath);
 fs.writeFileSync(htmlPath, "<!doctype html><html><body>Audio seek smoke test</body></html>");
 app.setPath("userData", temporaryDirectory);
 
-const cleanup = () => {
-  fs.rmSync(temporaryDirectory, { recursive: true, force: true });
-};
-
 const timeout = setTimeout(() => {
   console.error("Audio seek smoke test timed out");
-  cleanup();
   app.exit(1);
 }, 15_000);
 
@@ -92,12 +87,10 @@ app.whenReady().then(async () => {
 
   clearTimeout(timeout);
   window.destroy();
-  cleanup();
   console.log("Audio seek smoke test passed.");
   app.quit();
 }).catch((error) => {
   clearTimeout(timeout);
   console.error(error);
-  cleanup();
   app.exit(1);
 });

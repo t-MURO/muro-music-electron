@@ -22,7 +22,7 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   duration_seconds: 180,
   bitrate: "320 kbps",
   key: ["8A", "8A", "9A", "7A", "8B", "2B"][index % 6],
-  bpm: 120 + (index % 8),
+  bpm: index === 1 ? 0 : 120 + (index % 8),
   rating: 0,
   source_path: path.join(temporaryDirectory, `track-${index}.mp3`),
   play_count: 0,
@@ -129,6 +129,12 @@ app.whenReady().then(async () => {
       const windowControls = document.querySelector(
         window.muro?.platform === "darwin" ? '[data-window-controls="mac"]' : '[data-window-controls="desktop"]'
       );
+      const historyBackInitiallyDisabled = Boolean(
+        document.querySelector("[data-history-back]")?.disabled
+      );
+      const historyForwardInitiallyDisabled = Boolean(
+        document.querySelector("[data-history-forward]")?.disabled
+      );
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
         scroller.scrollHeight > scroller.clientHeight
@@ -167,6 +173,13 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const selectedAfterArrowDown = scroller.querySelector('[data-track-selected="true"]')
           ?.getAttribute("data-track-index");
+        const selectionBarReady = Boolean(
+          document.querySelector('[data-selection-bar]') &&
+          document.querySelector('[data-selection-play-next]') &&
+          document.querySelector('[data-selection-analyze]') &&
+          document.querySelector('[data-selection-edit]') &&
+          document.querySelector('[data-selection-delete]')
+        );
         scroller.dispatchEvent(new KeyboardEvent("keydown", {
           key: " ",
           code: "Space",
@@ -181,6 +194,30 @@ app.whenReady().then(async () => {
         const mixSuggestions = Array.from(document.querySelectorAll('[data-mix-suggestion]'));
         const mixSuggestionCount = mixSuggestions.length;
         const firstMixReason = mixSuggestions[0]?.getAttribute("data-mix-reason");
+        const mixFiltersReady = Boolean(
+          document.querySelector('[data-mix-filter-bpm]') &&
+          document.querySelector('[data-mix-filter-rating]') &&
+          document.querySelector('[data-mix-filter-genre]') &&
+          document.querySelector('[data-mix-sort]')
+        );
+        const bpmFilter = document.querySelector('[data-mix-filter-bpm]');
+        const unknownBpmFallbackReady =
+          bpmFilter instanceof HTMLSelectElement &&
+          bpmFilter.value === "any" &&
+          mixSuggestionCount > 0;
+        const mixScoresReady = mixSuggestions.length > 0 && mixSuggestions.every(
+          (suggestion) => Number(suggestion.getAttribute("data-mix-score")) > 0
+        );
+        const mixExpandButton = document.querySelector('[data-mix-expand]');
+        mixExpandButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const appGrid = document.querySelector('[style*="--queue-width"]');
+        const expandedQueueWidth = appGrid
+          ? parseFloat(getComputedStyle(appGrid).getPropertyValue("--queue-width"))
+          : 0;
+        const mixExpanded = expandedQueueWidth >= 480;
+        document.querySelector('[data-mix-expand]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
         const camelotSegmentCount = document.querySelectorAll('[data-camelot-code]').length;
         const compatibleCamelotCount = document.querySelectorAll('[data-camelot-compatible="true"]').length;
         const currentCamelotCode = document.querySelector('[data-camelot-current="true"]')
@@ -294,6 +331,80 @@ app.whenReady().then(async () => {
         document.querySelector('[aria-label="List view"]')?.click();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const albumListReady = Boolean(document.querySelector(".album-collection--list"));
+        const historyBackButton = document.querySelector("[data-history-back]");
+        const historyForwardButton = document.querySelector("[data-history-forward]");
+        const historyButtonsReady = Boolean(historyBackButton && historyForwardButton);
+        const historyBackEnabled = historyBackButton instanceof HTMLButtonElement && !historyBackButton.disabled;
+        historyBackButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const historyBackReachedAlbumDetail = Boolean(document.querySelector("[data-album-detail]"));
+        const historyForwardEnabledAfterBack =
+          historyForwardButton instanceof HTMLButtonElement && !historyForwardButton.disabled;
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "ArrowRight",
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const keyboardForwardReachedAlbumList = Boolean(document.querySelector(".album-collection--list"));
+        window.dispatchEvent(new MouseEvent("mouseup", {
+          button: 3,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const mouseBackReachedAlbumDetail = Boolean(document.querySelector("[data-album-detail]"));
+        window.dispatchEvent(new MouseEvent("mouseup", {
+          button: 4,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const mouseForwardReachedAlbumList = Boolean(document.querySelector(".album-collection--list"));
+        document.querySelector(".album-card-open")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const albumMetadataLinksReady = Boolean(
+          document.querySelector("[data-album-artist]") &&
+          document.querySelector("[data-album-genre]")
+        );
+        document.querySelector("[data-album-artist]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const albumArtistNavigationReady =
+          window.location.hash.includes("/collection/artists") &&
+          window.location.hash.includes("value=Muro") &&
+          document.querySelector("h2")?.textContent?.trim() === "Muro";
+
+        document.querySelector('[data-smart-crate-create]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const smartCrateModalReady = Boolean(
+          document.querySelector('[data-smart-crate-modal]') &&
+          document.querySelector('[data-smart-crate-rule]') &&
+          document.querySelector('[data-smart-crate-add-rule]')
+        );
+        const smartCrateName = document.querySelector('[data-smart-crate-name]');
+        if (smartCrateName instanceof HTMLInputElement) {
+          const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          valueSetter?.call(smartCrateName, "Warm-up House");
+          smartCrateName.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        document.querySelector('[data-smart-crate-save]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const smartCrateItem = document.querySelector('[data-smart-crate-id]');
+        const smartCrateCreated = Boolean(
+          smartCrateItem &&
+          window.location.hash.includes("/smart-crates/") &&
+          document.querySelector("h2")?.textContent?.trim() === "Warm-up House"
+        );
+        const smartCrateMatchedTracks = Number(
+          smartCrateItem?.querySelector(".sidebar-count")?.textContent?.replace(/[^0-9]/g, "") ?? 0
+        );
+        let persistedSmartCrateCount = 0;
+        try {
+          persistedSmartCrateCount = JSON.parse(localStorage.getItem("muro-smart-crates") ?? "null")
+            ?.state?.smartCrates?.length ?? 0;
+        } catch {}
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -314,11 +425,18 @@ app.whenReady().then(async () => {
           windowChromeDragRegion: windowChrome
             ? getComputedStyle(windowChrome).getPropertyValue("-webkit-app-region")
             : "",
+          historyBackInitiallyDisabled,
+          historyForwardInitiallyDisabled,
           tableFocusedAfterClick,
           selectedAfterArrowDown,
+          selectionBarReady,
           playingAfterSpace,
           mixSuggestionCount,
           firstMixReason,
+          mixFiltersReady,
+          unknownBpmFallbackReady,
+          mixScoresReady,
+          mixExpanded,
           camelotSegmentCount,
           compatibleCamelotCount,
           currentCamelotCode,
@@ -335,6 +453,19 @@ app.whenReady().then(async () => {
           albumDetailReady,
           albumDetailTrackCount,
           albumListReady,
+          historyButtonsReady,
+          historyBackEnabled,
+          historyBackReachedAlbumDetail,
+          historyForwardEnabledAfterBack,
+          keyboardForwardReachedAlbumList,
+          mouseBackReachedAlbumDetail,
+          mouseForwardReachedAlbumList,
+          albumMetadataLinksReady,
+          albumArtistNavigationReady,
+          smartCrateModalReady,
+          smartCrateCreated,
+          smartCrateMatchedTracks,
+          persistedSmartCrateCount,
         };
       }
       return {
@@ -376,11 +507,17 @@ app.whenReady().then(async () => {
       if (
         result.mixSuggestionCount < 3 ||
         result.firstMixReason !== "Same key" ||
+        !result.mixFiltersReady ||
+        !result.unknownBpmFallbackReady ||
+        !result.mixScoresReady ||
+        !result.mixExpanded ||
         !result.queuedFromMix
       ) {
         fail(
           `Camelot suggestions failed: count=${result.mixSuggestionCount}, ` +
-          `reason=${result.firstMixReason}, queued=${result.queuedFromMix}`
+          `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
+          `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
+          `scores=${result.mixScoresReady}, expanded=${result.mixExpanded}, queued=${result.queuedFromMix}`
         );
         return;
       }
@@ -438,14 +575,58 @@ app.whenReady().then(async () => {
         fail("Custom window chrome is missing or is not draggable");
         return;
       }
+      if (!result.historyBackInitiallyDisabled || !result.historyForwardInitiallyDisabled) {
+        fail("Navigation history controls were not disabled at the initial history boundary");
+        return;
+      }
+      if (
+        !result.historyButtonsReady ||
+        !result.historyBackEnabled ||
+        !result.historyBackReachedAlbumDetail ||
+        !result.historyForwardEnabledAfterBack ||
+        !result.keyboardForwardReachedAlbumList ||
+        !result.mouseBackReachedAlbumDetail ||
+        !result.mouseForwardReachedAlbumList
+      ) {
+        fail(
+          `Navigation history failed: buttons=${result.historyButtonsReady}, ` +
+          `backEnabled=${result.historyBackEnabled}, back=${result.historyBackReachedAlbumDetail}, ` +
+          `forwardEnabled=${result.historyForwardEnabledAfterBack}, ` +
+          `keyboardForward=${result.keyboardForwardReachedAlbumList}, ` +
+          `mouseBack=${result.mouseBackReachedAlbumDetail}, mouseForward=${result.mouseForwardReachedAlbumList}`
+        );
+        return;
+      }
       if (
         !result.tableFocusedAfterClick ||
         result.selectedAfterArrowDown !== "1" ||
+        !result.selectionBarReady ||
         result.playingAfterSpace !== "1"
       ) {
         fail(
           `Table keyboard navigation failed: focus=${result.tableFocusedAfterClick}, ` +
-          `selected=${result.selectedAfterArrowDown}, playing=${result.playingAfterSpace}`
+          `selected=${result.selectedAfterArrowDown}, selectionBar=${result.selectionBarReady}, ` +
+          `playing=${result.playingAfterSpace}`
+        );
+        return;
+      }
+      if (!result.albumMetadataLinksReady || !result.albumArtistNavigationReady) {
+        fail(
+          `Album metadata navigation failed: links=${result.albumMetadataLinksReady}, ` +
+          `artist=${result.albumArtistNavigationReady}`
+        );
+        return;
+      }
+      if (
+        !result.smartCrateModalReady ||
+        !result.smartCrateCreated ||
+        result.smartCrateMatchedTracks <= 0 ||
+        result.persistedSmartCrateCount !== 1
+      ) {
+        fail(
+          `Smart Crate failed: modal=${result.smartCrateModalReady}, ` +
+          `created=${result.smartCrateCreated}, matches=${result.smartCrateMatchedTracks}, ` +
+          `persisted=${result.persistedSmartCrateCount}`
         );
         return;
       }

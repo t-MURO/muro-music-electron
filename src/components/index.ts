@@ -17,6 +17,7 @@ export {
   TableRow,
   TrackTable,
   AlbumsView,
+  TrackSelectionBar,
 } from "./library";
 export {
   AnalysisModal,
@@ -28,6 +29,7 @@ export {
   PlaylistContextMenu,
   PlaylistCreateModal,
   PlaylistEditModal,
+  SmartCrateModal,
   Popover,
   PopoverItem,
   PopoverDivider,

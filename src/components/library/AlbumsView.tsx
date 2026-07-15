@@ -30,6 +30,8 @@ type AlbumsViewProps = {
   onTogglePlay: () => void;
   onPlayNext: (trackIds: string[]) => void;
   onAddToQueue: (trackIds: string[]) => void;
+  onOpenArtist: (artist: string) => void;
+  onOpenGenre: (genre: string) => void;
   onImportFiles: () => void;
   onImportFolder: () => void;
 };
@@ -128,6 +130,8 @@ const AlbumDetail = ({
   onTogglePlay,
   onPlayNext,
   onAddToQueue,
+  onOpenArtist,
+  onOpenGenre,
 }: {
   album: Album;
   currentTrackId: string | null;
@@ -138,6 +142,8 @@ const AlbumDetail = ({
   onTogglePlay: () => void;
   onPlayNext: (trackIds: string[]) => void;
   onAddToQueue: (trackIds: string[]) => void;
+  onOpenArtist: (artist: string) => void;
+  onOpenGenre: (genre: string) => void;
 }) => {
   const trackIds = album.tracks.map((track) => track.id);
   const currentAlbumIsActive = album.tracks.some((track) => track.id === currentTrackId);
@@ -156,12 +162,12 @@ const AlbumDetail = ({
           <div className="album-detail-copy">
             <span className="album-eyebrow">Album</span>
             <h1>{album.title}</h1>
-            <p className="album-detail-artist">{album.artist}</p>
+            <button className="album-detail-link album-detail-artist" onClick={() => onOpenArtist(album.artist)} data-album-artist type="button">{album.artist}</button>
             <p className="album-detail-meta">
               {album.year && <span>{album.year}</span>}
               <span>{album.tracks.length} {album.tracks.length === 1 ? "track" : "tracks"}</span>
               <span>{formatDuration(album.durationSeconds)}</span>
-              {album.genres[0] && <span>{album.genres[0]}</span>}
+              {album.genres[0] && <button className="album-detail-link" onClick={() => onOpenGenre(album.genres[0])} data-album-genre type="button">{album.genres[0]}</button>}
             </p>
             <div className="album-detail-actions">
               <button className="album-primary-action" onClick={() => currentAlbumIsActive ? onTogglePlay() : onPlayAlbum(trackIds)} type="button">
@@ -232,6 +238,8 @@ export const AlbumsView = ({
   onTogglePlay,
   onPlayNext,
   onAddToQueue,
+  onOpenArtist,
+  onOpenGenre,
   onImportFiles,
   onImportFolder,
 }: AlbumsViewProps) => {
@@ -278,6 +286,8 @@ export const AlbumsView = ({
         onTogglePlay={onTogglePlay}
         onPlayNext={onPlayNext}
         onAddToQueue={onAddToQueue}
+        onOpenArtist={onOpenArtist}
+        onOpenGenre={onOpenGenre}
       />
     );
   }

@@ -64,7 +64,7 @@ export const CamelotWheel = ({
   );
 
   return (
-    <div className="mx-auto w-full max-w-[244px]" data-camelot-wheel>
+    <div className="mx-auto w-full max-w-[280px]" data-camelot-wheel>
       <svg viewBox="0 0 240 240" className="block h-auto w-full" aria-label={`Camelot wheel, current key ${currentCode}`}>
         <circle cx={CENTER} cy={CENTER} r="112" fill="var(--color-bg-primary)" stroke="var(--color-border)" />
         {segments.map(({ code, path, label }) => {
@@ -114,7 +114,7 @@ export const CamelotWheel = ({
                 x={label.x}
                 y={label.y}
                 fill={textFill}
-                fontSize="8.5"
+                fontSize="9.5"
                 fontWeight={isCurrent || isSelected || isCompatible ? 700 : 500}
                 textAnchor="middle"
                 dominantBaseline="central"
@@ -148,10 +148,10 @@ export const CamelotWheel = ({
             strokeWidth="1.5"
           />
           <text x={CENTER} y="116" fill="var(--color-text-primary)" fontSize="15" fontWeight="800" textAnchor="middle">{currentCode}</text>
-          <text x={CENTER} y="131" fill="var(--color-text-muted)" fontSize="7.5" fontWeight="600" letterSpacing="1" textAnchor="middle">AUTO MIX</text>
+          <text x={CENTER} y="131" fill="var(--color-text-muted)" fontSize="8.5" fontWeight="600" letterSpacing="1" textAnchor="middle">AUTO MIX</text>
         </g>
       </svg>
-      <div className="mt-1 flex items-center justify-center gap-3 text-[8px] text-[var(--color-text-muted)]">
+      <div className="mt-1 flex items-center justify-center gap-3 text-[9px] text-[var(--color-text-muted)]">
         <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent)]" />Current</span>
         <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full bg-[var(--color-accent-light)] ring-1 ring-[var(--color-accent)]" />Compatible</span>
         <span>Click to filter</span>

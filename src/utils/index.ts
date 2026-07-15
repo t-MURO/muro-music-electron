@@ -22,6 +22,10 @@ export {
   type Album,
 } from "./albums";
 export {
+  filterTracksBySmartCrate,
+  matchesSmartCrateRule,
+} from "./smartCrates";
+export {
   loadTracks,
   clearTracks,
   acceptTracks,

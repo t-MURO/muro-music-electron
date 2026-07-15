@@ -13,9 +13,32 @@ const STANDARD_TO_CAMELOT: Record<string, string> = {
 export type CamelotMatch = {
   track: Track;
   code: string;
-  reason: "Same key" | "Relative key" | "One step clockwise" | "One step counter-clockwise";
+  reason: "Same key" | "Relative key" | "One step clockwise" | "One step counter-clockwise" | "Selected key";
   rank: number;
   bpmDifference: number;
+  genreMatch: boolean;
+  score: number;
+};
+
+export const calculateMixScore = (
+  currentTrack: Track,
+  candidate: Track,
+  harmonicRank: number,
+  bpmDifference: number,
+) => {
+  const harmonicBase = [100, 95, 90, 86][harmonicRank] ?? 82;
+  const bpmPenalty = Number.isFinite(bpmDifference) ? Math.min(24, bpmDifference * 2) : 10;
+  const genreMatch = Boolean(
+    currentTrack.genre?.trim() &&
+    candidate.genre?.trim() &&
+    currentTrack.genre.trim().toLocaleLowerCase() === candidate.genre.trim().toLocaleLowerCase()
+  );
+  const genreBonus = genreMatch ? 3 : 0;
+  const ratingBonus = Math.min(3, Math.max(0, candidate.rating) * 0.6);
+  return {
+    genreMatch,
+    score: Math.round(Math.max(55, Math.min(100, harmonicBase - bpmPenalty + genreBonus + ratingBonus))),
+  };
 };
 
 export const getCompatibleCamelotCodes = (code: string): string[] => {
@@ -91,19 +114,23 @@ export const getCamelotSuggestions = (
         return null;
       }
 
+      const bpmDifference = currentBpm > 0 && (track.bpm ?? 0) > 0
+        ? Math.abs((track.bpm ?? 0) - currentBpm)
+        : Number.POSITIVE_INFINITY;
+      const scoring = calculateMixScore(currentTrack, track, rank, bpmDifference);
       return {
         track,
         code,
         reason,
         rank,
-        bpmDifference: currentBpm > 0 && (track.bpm ?? 0) > 0
-          ? Math.abs((track.bpm ?? 0) - currentBpm)
-          : Number.POSITIVE_INFINITY,
+        bpmDifference,
+        ...scoring,
       };
     })
     .filter((suggestion): suggestion is CamelotMatch => suggestion !== null)
     .sort((left, right) =>
       left.rank - right.rank ||
+      right.score - left.score ||
       left.bpmDifference - right.bpmDifference ||
       left.track.title.localeCompare(right.track.title)
     );

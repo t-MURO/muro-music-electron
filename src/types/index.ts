@@ -1,1 +1,11 @@
-export type { Track, TrackMetadataUpdates, Playlist, ColumnKey, ColumnConfig } from "./library";
+export type {
+  Track,
+  TrackMetadataUpdates,
+  Playlist,
+  SmartCrate,
+  SmartCrateField,
+  SmartCrateOperator,
+  SmartCrateRule,
+  ColumnKey,
+  ColumnConfig,
+} from "./library";

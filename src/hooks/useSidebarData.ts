@@ -11,6 +11,9 @@ type UseSidebarDataArgs = {
   onPlaylistDragOver: (id: string) => void;
   onCreatePlaylist: () => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
+  onCreateSmartCrate: () => void;
+  onEditSmartCrate: (id: string) => void;
+  onDeleteSmartCrate: (id: string) => void;
 };
 
 export const useSidebarData = ({
@@ -23,6 +26,9 @@ export const useSidebarData = ({
   onPlaylistDragOver,
   onCreatePlaylist,
   onPlaylistContextMenu,
+  onCreateSmartCrate,
+  onEditSmartCrate,
+  onDeleteSmartCrate,
 }: UseSidebarDataArgs) => {
   return useMemo(
     () => ({
@@ -35,6 +41,9 @@ export const useSidebarData = ({
       onPlaylistDragOver,
       onCreatePlaylist,
       onPlaylistContextMenu,
+      onCreateSmartCrate,
+      onEditSmartCrate,
+      onDeleteSmartCrate,
     }),
     [
       draggingPlaylistId,
@@ -44,6 +53,9 @@ export const useSidebarData = ({
       onPlaylistDragOver,
       onPlaylistDrop,
       onCreatePlaylist,
+      onCreateSmartCrate,
+      onDeleteSmartCrate,
+      onEditSmartCrate,
       onViewChange,
       view,
     ]

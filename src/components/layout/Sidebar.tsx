@@ -9,14 +9,19 @@ import {
   Music2,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
   Settings,
+  Sparkles,
   Tag,
+  Trash2,
   UserRound,
   KeyRound,
 } from "lucide-react";
+import { useMemo } from "react";
 import { t } from "../../i18n";
-import { useLibraryStore } from "../../stores";
+import { useLibraryStore, useSmartCrateStore } from "../../stores";
+import { filterTracksBySmartCrate } from "../../utils";
 import type { CollectionFacet, LibraryView } from "../../hooks";
 
 type SidebarProps = {
@@ -31,6 +36,9 @@ type SidebarProps = {
   onPlaylistDragOver: (id: string) => void;
   onCreatePlaylist: () => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
+  onCreateSmartCrate: () => void;
+  onEditSmartCrate: (id: string) => void;
+  onDeleteSmartCrate: (id: string) => void;
 };
 
 export const Sidebar = ({
@@ -45,10 +53,18 @@ export const Sidebar = ({
   onPlaylistDragOver,
   onCreatePlaylist,
   onPlaylistContextMenu,
+  onCreateSmartCrate,
+  onEditSmartCrate,
+  onDeleteSmartCrate,
 }: SidebarProps) => {
   const tracks = useLibraryStore((state) => state.tracks);
   const inboxTracks = useLibraryStore((state) => state.inboxTracks);
   const playlists = useLibraryStore((state) => state.playlists);
+  const smartCrates = useSmartCrateStore((state) => state.smartCrates);
+  const smartCrateCounts = useMemo(
+    () => new Map(smartCrates.map((crate) => [crate.id, filterTracksBySmartCrate(tracks, crate).length])),
+    [smartCrates, tracks],
+  );
 
   const navigation = [
     { view: "library" as const, label: t("nav.library"), icon: Music2, count: tracks.length },
@@ -134,6 +150,57 @@ export const Sidebar = ({
                 </button>
               );
             })}
+          </div>
+          <div className="mt-4 border-t border-[var(--color-border-light)] pt-4">
+            <div className="sidebar-section-label">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="flex-1">Smart Crates</span>
+              <button
+                className="toolbar-icon-button h-6 w-6"
+                onClick={onCreateSmartCrate}
+                title="New Smart Crate"
+                aria-label="New Smart Crate"
+                data-smart-crate-create
+                type="button"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {smartCrates.length > 0 ? (
+              <div className="space-y-1">
+                {smartCrates.map((crate) => {
+                  const crateView = `smartCrate:${crate.id}` as LibraryView;
+                  const active = currentView === crateView;
+                  return (
+                    <div className="smart-crate-sidebar-row group flex min-w-0 items-center gap-1" key={crate.id}>
+                      <button
+                        className={`${itemClass(active)} min-w-0 flex-1`}
+                        onClick={() => onViewChange(crateView)}
+                        aria-current={active ? "page" : undefined}
+                        data-smart-crate-id={crate.id}
+                        type="button"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">{crate.name}</span>
+                        <span className="sidebar-count">{(smartCrateCounts.get(crate.id) ?? 0).toLocaleString()}</span>
+                      </button>
+                      <div className="smart-crate-sidebar-actions flex shrink-0 items-center">
+                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onEditSmartCrate(crate.id)} title={`Edit ${crate.name}`} aria-label={`Edit ${crate.name}`} data-smart-crate-edit={crate.id} type="button"><Pencil className="h-3 w-3" /></button>
+                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onDeleteSmartCrate(crate.id)} title={`Delete ${crate.name}`} aria-label={`Delete ${crate.name}`} data-smart-crate-delete={crate.id} type="button"><Trash2 className="h-3 w-3" /></button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <button
+                className="mx-2 mt-1 text-left text-[10px] leading-relaxed text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-secondary)]"
+                onClick={onCreateSmartCrate}
+                type="button"
+              >
+                Build a live playlist from BPM, key, genre, rating, and more.
+              </button>
+            )}
           </div>
           <div className="mt-4 border-t border-[var(--color-border-light)] pt-4">
             <div className="sidebar-section-label">Collection</div>
