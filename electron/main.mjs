@@ -118,6 +118,7 @@ const startApplication = async () => {
   });
   backend = createBackend({
     cacheDir: path.join(app.getPath("cache"), "covers"),
+    artistProfileCacheDir: path.join(app.getPath("userData"), "artists"),
     emit: (sender, name, payload) => sender.send("muro:event", name, payload),
     keyFinder,
   });

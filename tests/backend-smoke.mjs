@@ -279,6 +279,34 @@ try {
     artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
     ["fallback muro", "muro"],
   );
+  const periodicSourcePath = path.join(directory, "periodic.mp3");
+  insertTrack.run(
+    "track-periodic",
+    "Periodic Test",
+    "Periodic Muro",
+    "Background Checks",
+    "periodic.mp3",
+    periodicSourcePath,
+    90,
+    320,
+    now,
+    now,
+  );
+  const backgroundScan = await artistProfileService.scanProfiles(db, { limit: 1 });
+  assert.deepEqual(backgroundScan, {
+    checked: 1,
+    updated: 1,
+    failed: 0,
+    queued: 0,
+    remaining: 0,
+    totalArtists: 2,
+  });
+  assert.ok(
+    artistProfileService.loadCachedProfiles(db).some((profile) => profile.artistKey === "periodic muro"),
+    "background scans should persist newly discovered artists",
+  );
+  assert.equal((await artistProfileService.scanProfiles(db, { limit: 1 })).checked, 0);
+  db.prepare("DELETE FROM tracks WHERE id = ?").run("track-periodic");
 
   assert.equal((await backend.invoke("keyfinder_health", {})).service, "keyfinder-native");
   const analysisSettings = {

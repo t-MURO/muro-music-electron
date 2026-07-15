@@ -162,8 +162,14 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
   }
 };
 
-export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) => {
-  const artistCacheDir = path.join(path.dirname(cacheDir), "artists");
+export const createBackend = ({
+  cacheDir,
+  emit,
+  keyFinder,
+  waveformCacheDir,
+  artistProfileCacheDir,
+}) => {
+  const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
   const waveformCache = createWaveformCache({
     cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
@@ -198,6 +204,8 @@ export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) =
         force: Boolean(force),
         fanartApiKey,
       }),
+    scan_artist_profiles: ({ dbPath, fanartApiKey, limit }) =>
+      artistProfiles.scanProfiles(openDatabase(dbPath), { fanartApiKey, limit }),
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);

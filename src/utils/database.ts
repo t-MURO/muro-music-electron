@@ -53,6 +53,21 @@ export const getArtistProfile = (
   fanartApiKey = "",
 ) => invoke<ArtistProfile>("get_artist_profile", { dbPath, artistName, force, fanartApiKey });
 
+export type ArtistProfileScanResult = {
+  checked: number;
+  updated: number;
+  failed: number;
+  queued: number;
+  remaining: number;
+  totalArtists: number;
+};
+
+export const scanArtistProfiles = (
+  dbPath: string,
+  fanartApiKey = "",
+  limit = 25,
+) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, fanartApiKey, limit });
+
 // ============================================================================
 // Playlist Operations
 // ============================================================================

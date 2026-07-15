@@ -5,6 +5,7 @@ import path from "node:path";
 const DEFAULT_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const NOT_FOUND_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MUSICBRAINZ_INTERVAL_MS = 1_100;
+const SCAN_FAILURE_BACKOFF_MS = 30 * 60 * 1_000;
 const MAX_ARTIST_IMAGE_BYTES = 8 * 1024 * 1024;
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 const FANART_API_ROOT = "https://webservice.fanart.tv/v3.2/music/";
@@ -43,6 +44,21 @@ const writeCachedProfile = (db, artistKey, requestedName, profile, fetchedAtMs) 
       profile_json = excluded.profile_json,
       fetched_at = excluded.fetched_at
   `).run(artistKey, requestedName, JSON.stringify(profile), Math.floor(fetchedAtMs / 1_000));
+};
+
+const cachedProfileNeedsRefresh = (cached, nowMs, fanartApiKey = "") => {
+  if (!cached) return true;
+  const ttlMs = cached.profile?.status === "not-found"
+    ? NOT_FOUND_CACHE_TTL_MS
+    : DEFAULT_CACHE_TTL_MS;
+  const shouldTryConfiguredFanart = Boolean(
+    String(fanartApiKey).trim()
+    && cached.profile?.status === "ready"
+    && !cached.profile.imagePath
+    && !cached.profile.imageUrl
+    && !cached.profile.fanartAttempted,
+  );
+  return shouldTryConfiguredFanart || nowMs - cached.fetchedAtMs >= ttlMs;
 };
 
 const findStoredMusicBrainzId = (db, artistName) => {
@@ -151,6 +167,8 @@ export const createArtistProfileService = ({
   userAgent = "MuroMusicElectron/0.1.0 (https://github.com/t-MURO/muro-music-electron)",
 }) => {
   const inFlight = new Map();
+  const scanInFlight = new WeakMap();
+  const scanRetryAfter = new Map();
   let musicBrainzChain = Promise.resolve();
   let nextMusicBrainzRequestAt = 0;
 
@@ -353,57 +371,120 @@ export const createArtistProfileService = ({
     };
   };
 
-  return {
-    loadCachedProfiles(db) {
-      return db.prepare("SELECT profile_json FROM artist_profiles ORDER BY requested_name COLLATE NOCASE")
-        .all()
-        .flatMap((row) => {
-          try {
-            return [JSON.parse(row.profile_json)];
-          } catch {
-            return [];
-          }
-        });
-    },
-
-    async getProfile(db, artistName, { force = false, fanartApiKey = "" } = {}) {
-      const requestedName = String(artistName ?? "").trim();
-      const artistKey = normalizeArtistKey(requestedName);
-      if (!artistKey) throw new Error("Artist name is required");
-
-      const cached = readCachedProfile(db, artistKey);
-      const ttlMs = cached?.profile?.status === "not-found"
-        ? NOT_FOUND_CACHE_TTL_MS
-        : DEFAULT_CACHE_TTL_MS;
-      const shouldTryConfiguredFanart = Boolean(
-        String(fanartApiKey).trim()
-        && cached?.profile?.status === "ready"
-        && !cached.profile.imagePath
-        && !cached.profile.imageUrl
-        && !cached.profile.fanartAttempted,
-      );
-      if (!force && !shouldTryConfiguredFanart && cached && now() - cached.fetchedAtMs < ttlMs) {
-        return { ...cached.profile, cacheState: "fresh" };
-      }
-
-      const requestKey = `${artistKey}:${String(fanartApiKey).trim() ? "fanart" : "default"}`;
-      if (inFlight.has(requestKey)) return inFlight.get(requestKey);
-      const pending = (async () => {
-        try {
-          const profile = await fetchProfile(db, requestedName, artistKey, { fanartApiKey });
-          writeCachedProfile(db, artistKey, requestedName, profile, now());
-          return { ...profile, cacheState: "fresh" };
-        } catch (error) {
-          if (cached) return { ...cached.profile, cacheState: "stale" };
-          throw error;
-        }
-      })();
-      inFlight.set(requestKey, pending);
+  const loadCachedProfiles = (db) => db
+    .prepare("SELECT profile_json FROM artist_profiles ORDER BY requested_name COLLATE NOCASE")
+    .all()
+    .flatMap((row) => {
       try {
-        return await pending;
-      } finally {
-        inFlight.delete(requestKey);
+        return [JSON.parse(row.profile_json)];
+      } catch {
+        return [];
       }
-    },
+    });
+
+  const getProfile = async (db, artistName, { force = false, fanartApiKey = "" } = {}) => {
+    const requestedName = String(artistName ?? "").trim();
+    const artistKey = normalizeArtistKey(requestedName);
+    if (!artistKey) throw new Error("Artist name is required");
+
+    const cached = readCachedProfile(db, artistKey);
+    if (!force && !cachedProfileNeedsRefresh(cached, now(), fanartApiKey)) {
+      return { ...cached.profile, cacheState: "fresh" };
+    }
+
+    const requestKey = `${artistKey}:${String(fanartApiKey).trim() ? "fanart" : "default"}`;
+    if (inFlight.has(requestKey)) return inFlight.get(requestKey);
+    const pending = (async () => {
+      try {
+        const profile = await fetchProfile(db, requestedName, artistKey, { fanartApiKey });
+        writeCachedProfile(db, artistKey, requestedName, profile, now());
+        return { ...profile, cacheState: "fresh" };
+      } catch (error) {
+        if (cached) return { ...cached.profile, cacheState: "stale" };
+        throw error;
+      }
+    })();
+    inFlight.set(requestKey, pending);
+    try {
+      return await pending;
+    } finally {
+      inFlight.delete(requestKey);
+    }
   };
+
+  const scanProfiles = async (db, { fanartApiKey = "", limit = 25 } = {}) => {
+    if (scanInFlight.has(db)) return scanInFlight.get(db);
+    const pending = (async () => {
+      const artistRows = db.prepare(`
+        SELECT artist, MAX(COALESCE(added_at, 0)) AS newest_track
+        FROM tracks
+        WHERE artist IS NOT NULL AND TRIM(artist) != ''
+        GROUP BY LOWER(TRIM(artist))
+        ORDER BY newest_track DESC, artist COLLATE NOCASE
+      `).all();
+      const seen = new Set();
+      const artists = artistRows.flatMap((row) => {
+        const name = String(row.artist ?? "").trim();
+        const artistKey = normalizeArtistKey(name);
+        if (!artistKey || seen.has(artistKey)) return [];
+        seen.add(artistKey);
+        return [{ name, artistKey }];
+      });
+      const cachedRows = db.prepare("SELECT artist_key, profile_json, fetched_at FROM artist_profiles").all();
+      const cachedByArtist = new Map(cachedRows.flatMap((row) => {
+        try {
+          return [[row.artist_key, {
+            profile: JSON.parse(row.profile_json),
+            fetchedAtMs: Number(row.fetched_at) * 1_000,
+          }]];
+        } catch {
+          return [];
+        }
+      }));
+      const due = artists.filter(({ artistKey }) => cachedProfileNeedsRefresh(
+        cachedByArtist.get(artistKey) ?? null,
+        now(),
+        fanartApiKey,
+      ));
+      const scanStartedAt = now();
+      const eligible = due.filter(({ artistKey }) => (
+        scanRetryAfter.get(artistKey) ?? 0
+      ) <= scanStartedAt);
+      const batchLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 25)));
+      const batch = eligible.slice(0, batchLimit);
+      let updated = 0;
+      let failed = 0;
+      for (const artist of batch) {
+        try {
+          const profile = await getProfile(db, artist.name, { fanartApiKey });
+          if (profile.cacheState === "stale") {
+            failed += 1;
+            scanRetryAfter.set(artist.artistKey, now() + SCAN_FAILURE_BACKOFF_MS);
+          } else {
+            updated += 1;
+            scanRetryAfter.delete(artist.artistKey);
+          }
+        } catch {
+          failed += 1;
+          scanRetryAfter.set(artist.artistKey, now() + SCAN_FAILURE_BACKOFF_MS);
+        }
+      }
+      return {
+        checked: batch.length,
+        updated,
+        failed,
+        queued: Math.max(0, eligible.length - batch.length),
+        remaining: Math.max(0, due.length - updated),
+        totalArtists: artists.length,
+      };
+    })();
+    scanInFlight.set(db, pending);
+    try {
+      return await pending;
+    } finally {
+      scanInFlight.delete(db);
+    }
+  };
+
+  return { loadCachedProfiles, getProfile, scanProfiles };
 };

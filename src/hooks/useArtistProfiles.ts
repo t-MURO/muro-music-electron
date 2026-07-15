@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ArtistProfile } from "../types";
-import { getArtistProfile, loadCachedArtistProfiles } from "../utils";
+import { getArtistProfile, loadCachedArtistProfiles, scanArtistProfiles } from "../utils";
 import { useSettingsStore } from "../stores";
 import { useDbPath } from "./useDbPath";
+
+const INITIAL_SCAN_DELAY_MS = 5_000;
+const CONTINUE_SCAN_DELAY_MS = 60_000;
+const PERIODIC_SCAN_DELAY_MS = 30 * 60_000;
+const SCAN_BATCH_SIZE = 25;
 
 export const normalizeArtistProfileKey = (artistName: string) => artistName
   .normalize("NFKC")
@@ -32,6 +37,34 @@ export const useArtistProfiles = () => {
     void load();
     return () => { cancelled = true; };
   }, [resolveDbPath]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (delayMs: number) => {
+      if (!cancelled) timer = setTimeout(run, delayMs);
+    };
+    const run = async () => {
+      try {
+        const dbPath = await resolveDbPath();
+        const result = await scanArtistProfiles(dbPath, fanartApiKey, SCAN_BATCH_SIZE);
+        if (cancelled) return;
+        const cached = await loadCachedArtistProfiles(dbPath);
+        if (cancelled) return;
+        setProfiles(Object.fromEntries(cached.map((profile) => [profile.artistKey, profile])));
+        schedule(result.queued > 0
+          ? CONTINUE_SCAN_DELAY_MS
+          : PERIODIC_SCAN_DELAY_MS);
+      } catch {
+        schedule(PERIODIC_SCAN_DELAY_MS);
+      }
+    };
+    schedule(INITIAL_SCAN_DELAY_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [fanartApiKey, resolveDbPath]);
 
   const loadProfile = useCallback(async (artistName: string, force = false) => {
     const artistKey = normalizeArtistProfileKey(artistName);

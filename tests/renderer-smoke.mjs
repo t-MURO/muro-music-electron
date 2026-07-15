@@ -81,6 +81,7 @@ const smokeArtistProfile = {
   fetchedAt: "2026-07-15T12:00:00.000Z",
   cacheState: "fresh",
 };
+let artistProfileScanCount = 0;
 for (let index = 0; index < 5; index += 1) {
   writeSilentWave(smokeTracks[index].source_path);
 }
@@ -129,6 +130,10 @@ app.whenReady().then(async () => {
     if (command === "load_recently_played") return [];
     if (command === "load_cached_artist_profiles") return [smokeArtistProfile];
     if (command === "get_artist_profile") return smokeArtistProfile;
+    if (command === "scan_artist_profiles") {
+      artistProfileScanCount += 1;
+      return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalArtists: 1 };
+    }
     if (command === "playback_get_state") return {
       is_playing: false,
       current_position: 0,
@@ -1022,6 +1027,10 @@ app.whenReady().then(async () => {
           `created=${result.smartCrateCreated}, matches=${result.smartCrateMatchedTracks}, ` +
           `persisted=${result.persistedSmartCrateCount}`
         );
+        return;
+      }
+      if (artistProfileScanCount < 1) {
+        fail("Periodic artist profile scan did not start");
         return;
       }
       clearTimeout(timeout);
