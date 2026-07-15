@@ -1,4 +1,10 @@
-export { useSettingsStore, type SettingsStore } from "./settingsStore";
+export {
+  useSettingsStore,
+  type SettingsStore,
+  type AnalysisOutputMode,
+  type AnalysisNotationMode,
+  type AnalysisOutputs,
+} from "./settingsStore";
 export {
   useLibraryStore,
   selectAllTracks,

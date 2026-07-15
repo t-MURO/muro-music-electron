@@ -1,6 +1,7 @@
 import {
   AudioWaveform,
   ListChecks,
+  ListMinus,
   ListPlus,
   Pencil,
   Play,
@@ -18,6 +19,7 @@ type ContextMenuProps = {
   onPlayNext?: () => void;
   onAddToQueue?: () => void;
   onAddToPlaylist?: () => void;
+  onRemoveFromPlaylist?: () => void;
   onShowBpmKey?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -31,6 +33,7 @@ export const ContextMenu = ({
   onPlayNext,
   onAddToQueue,
   onAddToPlaylist,
+  onRemoveFromPlaylist,
   onShowBpmKey,
   onEdit,
   onDelete,
@@ -56,6 +59,12 @@ export const ContextMenu = ({
         <ListPlus className="h-4 w-4 opacity-60" />
         {t("menu.addPlaylist")}
       </PopoverItem>
+      {onRemoveFromPlaylist && (
+        <PopoverItem onClick={onRemoveFromPlaylist}>
+          <ListMinus className="h-4 w-4 opacity-60" />
+          {t("menu.removePlaylist")}
+        </PopoverItem>
+      )}
       <PopoverDivider />
       <PopoverItem onClick={onShowBpmKey}>
         <AudioWaveform className="h-4 w-4 opacity-60" />
@@ -65,7 +74,7 @@ export const ContextMenu = ({
         <Pencil className="h-4 w-4 opacity-60" />
         {t("menu.edit")}
       </PopoverItem>
-      <PopoverItem variant="danger" onClick={onDelete}>
+      <PopoverItem variant="danger" onClick={onDelete} dataTestId="delete-track-menu-item">
         <Trash2 className="h-4 w-4 opacity-70" />
         {t("menu.delete")}
       </PopoverItem>

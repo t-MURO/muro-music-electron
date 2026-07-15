@@ -67,6 +67,7 @@ export const TrackTable = memo(
     const isCurrentlyPlaying = usePlaybackStore((s) => s.isPlaying);
     const currentTrack = usePlaybackStore((s) => s.currentTrack);
     const playingTrackId = currentTrack?.id;
+    const tableHeaderScrollRef = useRef<HTMLDivElement | null>(null);
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
     const [rowHeight, setRowHeight] = useState(48);
 
@@ -217,72 +218,88 @@ export const TrackTable = memo(
     return (
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
-          ref={tableContainerRef}
-          className="relative min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           role="grid"
           aria-rowcount={tracks.length}
           aria-colcount={visibleColumns.length + 1}
-          tabIndex={0}
-          onKeyDown={handleKeyDown}
         >
-        <TableHeader
-          columns={visibleColumns}
-          tableWidth={tableWidth}
-          leadingColumnWidth={LEADING_COLUMN_WIDTH}
-          gridTemplateColumns={gridTemplateColumns}
-          onColumnResize={onColumnResize}
-          onColumnAutoFit={onColumnAutoFit}
-          onColumnReorder={onColumnReorder}
-          onHeaderContextMenu={onHeaderContextMenu}
-          onSortChange={onSortChange}
-          sortState={sortState}
-          allSelected={tracks.length > 0 && selectedIds.size === tracks.length}
-          onToggleSelectAll={() => {
-            if (tracks.length > 0 && selectedIds.size === tracks.length) clearSelection();
-            else selectAll(tracks.map((track) => track.id));
-          }}
-        />
-        {tracks.length === 0 ? (
-          <TableEmptyState
-            title={emptyTitle}
-            description={emptyDescription}
-            primaryActionLabel={emptyActionLabel}
-            onPrimaryAction={onEmptyAction}
-            secondaryActionLabel={emptySecondaryActionLabel}
-            onSecondaryAction={onEmptySecondaryAction}
-          />
-        ) : (
-        <div
-          className="relative"
-          style={{ height: rowVirtualizer.getTotalSize(), minWidth: tableWidth }}
-        >
-          {virtualRows.map((virtualRow: VirtualItem) => {
-            const track = tracks[virtualRow.index];
-            if (!track) {
-              return null;
-            }
-            return (
-              <TableRow
-                key={virtualRow.key}
-                track={track}
-                index={virtualRow.index}
-                isSelected={selectedIds.has(track.id)}
-                isPlayingTrack={track.id === playingTrackId}
-                isCurrentlyPlaying={isCurrentlyPlaying}
-                visibleColumns={visibleColumns}
-                gridTemplateColumns={gridTemplateColumns}
-                tableWidth={tableWidth}
-                virtualStart={virtualRow.start}
-                onRowSelect={handleRowSelectStable}
-                onRowMouseDown={handleRowMouseDownStable}
-                onRowContextMenu={handleRowContextMenuStable}
-                onRowDoubleClick={handleRowDoubleClickStable}
-                onRatingChange={handleRatingChangeStable}
-              />
-            );
-          })}
-        </div>
-        )}
+          <div
+            ref={tableHeaderScrollRef}
+            className="min-w-0 shrink-0 overflow-hidden"
+            data-track-table-header-scroll
+          >
+            <TableHeader
+              columns={visibleColumns}
+              tableWidth={tableWidth}
+              leadingColumnWidth={LEADING_COLUMN_WIDTH}
+              gridTemplateColumns={gridTemplateColumns}
+              onColumnResize={onColumnResize}
+              onColumnAutoFit={onColumnAutoFit}
+              onColumnReorder={onColumnReorder}
+              onHeaderContextMenu={onHeaderContextMenu}
+              onSortChange={onSortChange}
+              sortState={sortState}
+              allSelected={tracks.length > 0 && selectedIds.size === tracks.length}
+              onToggleSelectAll={() => {
+                if (tracks.length > 0 && selectedIds.size === tracks.length) clearSelection();
+                else selectAll(tracks.map((track) => track.id));
+              }}
+            />
+          </div>
+          <div
+            ref={tableContainerRef}
+            className="relative min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto"
+            data-track-table-scroll
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            onScroll={(event) => {
+              if (tableHeaderScrollRef.current) {
+                tableHeaderScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
+              }
+            }}
+          >
+          {tracks.length === 0 ? (
+            <TableEmptyState
+              title={emptyTitle}
+              description={emptyDescription}
+              primaryActionLabel={emptyActionLabel}
+              onPrimaryAction={onEmptyAction}
+              secondaryActionLabel={emptySecondaryActionLabel}
+              onSecondaryAction={onEmptySecondaryAction}
+            />
+          ) : (
+          <div
+            className="relative"
+            style={{ height: rowVirtualizer.getTotalSize(), minWidth: tableWidth }}
+          >
+            {virtualRows.map((virtualRow: VirtualItem) => {
+              const track = tracks[virtualRow.index];
+              if (!track) {
+                return null;
+              }
+              return (
+                <TableRow
+                  key={virtualRow.key}
+                  track={track}
+                  index={virtualRow.index}
+                  isSelected={selectedIds.has(track.id)}
+                  isPlayingTrack={track.id === playingTrackId}
+                  isCurrentlyPlaying={isCurrentlyPlaying}
+                  visibleColumns={visibleColumns}
+                  gridTemplateColumns={gridTemplateColumns}
+                  tableWidth={tableWidth}
+                  virtualStart={virtualRow.start}
+                  onRowSelect={handleRowSelectStable}
+                  onRowMouseDown={handleRowMouseDownStable}
+                  onRowContextMenu={handleRowContextMenuStable}
+                  onRowDoubleClick={handleRowDoubleClickStable}
+                  onRatingChange={handleRatingChangeStable}
+                />
+              );
+            })}
+          </div>
+          )}
+          </div>
         </div>
         {tracks.length > 0 && (
           <div className="flex h-6 shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-[10px] tabular-nums text-[var(--color-text-muted)]">

@@ -10,7 +10,7 @@ const appRoot = path.resolve(here, "..");
 const developmentAppIcon = path.join(appRoot, "build", "icons", "icon.png");
 const developmentKeyFinderBinaries = path.resolve(
   appRoot,
-  "../neo-key-finder/neo-keyfinder/src-tauri/binaries",
+  "../neo-keyfinder/src-tauri/binaries",
 );
 
 protocol.registerSchemesAsPrivileged([

@@ -15,6 +15,7 @@ const on = (name, listener) => {
 };
 
 contextBridge.exposeInMainWorld("muro", {
+  platform: process.platform,
   invoke: (command, args = {}) => ipcRenderer.invoke("muro:invoke", command, args),
   on,
   appDataDir: () => ipcRenderer.invoke("muro:app-data-dir"),

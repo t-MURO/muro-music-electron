@@ -8,11 +8,14 @@ const camelotCodes = [
   "5B", "2A", "12B", "9A", "7B", "4A", "2B", "11A", "9B", "6A", "4B", "1A", "",
 ];
 
-const analysisSettings = {
+const baseAnalysisSettings = {
   schemaVersion: 2,
-  parallel: true,
+  // Key + BPM analysis keeps sizeable decoded-audio buffers in memory. Running
+  // multiple native analyzers at once can exhaust memory on large selections,
+  // so Muro deliberately favors stable sequential processing here.
+  parallel: false,
   bpmAnalysisEnabled: true,
-  maxDurationMinutes: 60,
+  maxDurationMinutes: 3600,
   skipExisting: false,
   automaticWrites: false,
   extensionFilterEnabled: false,
@@ -31,6 +34,45 @@ const analysisSettings = {
   notation: "custom",
   customCodes: camelotCodes,
   libraryPaths: { itunes: "", traktor: "", serato: "" },
+};
+
+const outputModes = new Set(["none", "prepend", "append", "overwrite"]);
+const notationModes = new Set(["standard", "custom", "combined", "djCombined"]);
+
+const normalizeOutputMode = (value) => outputModes.has(value) ? value : "none";
+
+const createAnalysisSettings = (requestedSettings, writeAuthorization) => {
+  const requestedOutputs = requestedSettings?.outputs ?? {};
+  const outputs = {
+    title: "none",
+    artist: "none",
+    album: "none",
+    comment: normalizeOutputMode(requestedOutputs.comment),
+    grouping: normalizeOutputMode(requestedOutputs.grouping),
+    initialKey: normalizeOutputMode(requestedOutputs.initialKey),
+    bpm: requestedOutputs.bpm === "overwrite" ? "overwrite" : "none",
+    // Renaming source files would make Muro's stored source paths stale.
+    filename: "none",
+  };
+  const writesEnabled = Boolean(writeAuthorization) &&
+    Object.values(outputs).some((mode) => mode !== "none");
+  const customCodes = Array.from({ length: camelotCodes.length }, (_, index) => {
+    const value = requestedSettings?.customCodes?.[index];
+    return typeof value === "string" ? value.slice(0, 32) : camelotCodes[index];
+  });
+
+  return {
+    ...baseAnalysisSettings,
+    automaticWrites: writesEnabled,
+    outputs,
+    delimiter: typeof requestedSettings?.delimiter === "string"
+      ? requestedSettings.delimiter.slice(0, 32)
+      : baseAnalysisSettings.delimiter,
+    notation: notationModes.has(requestedSettings?.notation)
+      ? requestedSettings.notation
+      : baseAnalysisSettings.notation,
+    customCodes,
+  };
 };
 
 const toEngineTrack = (track) => ({
@@ -63,10 +105,48 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
       executablePath: resolveKeyFinderBinary({ directories: binaryDirectories }),
     });
     client.on("event", (event) => {
-      const sender = senders.get(event.owner);
-      if (!sender || sender.isDestroyed?.()) return;
-      emit(sender, "muro://keyfinder-analysis", event);
+      const active = senders.get(event.owner);
+      if (!active || active.sender.isDestroyed?.()) return;
+      emit(active.sender, "muro://keyfinder-analysis", event);
       if (event.event === "jobFinished") senders.delete(event.owner);
+    });
+    client.once("exit", () => {
+      const failedClient = client;
+      client = undefined;
+      for (const [owner, active] of senders) {
+        if (active.sender.isDestroyed?.()) continue;
+        const jobId = active.jobId || `failed-${owner}`;
+        for (const track of active.tracks) {
+          emit(active.sender, "muro://keyfinder-analysis", {
+            version: 1,
+            event: "trackUpdated",
+            jobId,
+            owner,
+            sequence: 0,
+            payload: {
+              track: {
+                ...toEngineTrack(track),
+                status: "failed",
+                error: {
+                  code: "ENGINE_EXITED",
+                  stage: "analysis",
+                  message: "The analysis engine stopped. This batch can be retried.",
+                },
+              },
+            },
+          });
+        }
+        emit(active.sender, "muro://keyfinder-analysis", {
+          version: 1,
+          event: "jobFinished",
+          jobId,
+          owner,
+          sequence: 0,
+          payload: { cancelled: false, completed: active.tracks.length, total: active.tracks.length },
+        });
+      }
+      senders.clear();
+      if (failedClient) failedClient.removeAllListeners();
     });
     client.on("stderr", (message) => console.warn(`KeyFinder engine: ${message.trimEnd()}`));
     client.on("protocolError", (error) => console.warn(error.message));
@@ -78,20 +158,24 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
       return getClient().health();
     },
 
-    async startAnalysis(tracks, sender) {
+    async startAnalysis(tracks, sender, requestedSettings, writeAuthorization = false) {
       const owner = `muro-analysis-${nextOwner++}`;
-      senders.set(owner, sender);
+      const active = { sender, tracks, jobId: null };
+      senders.set(owner, active);
+      const settings = createAnalysisSettings(requestedSettings, writeAuthorization);
       try {
-        return await getClient().request(
+        const result = await getClient().request(
           "startAnalysis",
           {
             owner,
             tracks: tracks.map(toEngineTrack),
-            settings: analysisSettings,
-            writeAuthorization: false,
+            settings,
+            writeAuthorization: settings.automaticWrites,
           },
-          { timeoutMs: 10_000 },
+          { timeoutMs: 60_000 },
         );
+        active.jobId = result.jobId;
+        return result;
       } catch (error) {
         senders.delete(owner);
         throw error;
@@ -100,6 +184,15 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
 
     cancelAnalysis(jobId) {
       return getClient().request("cancelJob", { jobId }, { timeoutMs: 5_000 });
+    },
+
+    recycle() {
+      if (senders.size > 0 || !client) return { recycled: false };
+      const previousClient = client;
+      client = undefined;
+      previousClient.removeAllListeners();
+      previousClient.close();
+      return { recycled: true };
     },
 
     generateWaveform(sourcePath, points = 512) {

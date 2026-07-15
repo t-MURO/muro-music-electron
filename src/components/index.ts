@@ -9,6 +9,7 @@ export {
 export {
   ColumnsMenu,
   InboxBanner,
+  PlaylistSelectionBar,
   RatingCell,
   TableEmptyState,
   TableHeader,
@@ -18,6 +19,7 @@ export {
 export {
   AnalysisModal,
   ContextMenu,
+  DeleteTracksModal,
   DragOverlay,
   DuplicateTracksModal,
   EditTrackModal,

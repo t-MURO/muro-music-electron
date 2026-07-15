@@ -14,6 +14,7 @@ export { useAppPreferences } from "./useAppPreferences";
 export { useTrackRatings } from "./useTrackRatings";
 export { useTrackAnalysis } from "./useTrackAnalysis";
 export { useTrackEdit } from "./useTrackEdit";
+export { useTrackDeletion } from "./useTrackDeletion";
 export { useSidebarData } from "./useSidebarData";
 export { useDbPath } from "./useDbPath";
 export {

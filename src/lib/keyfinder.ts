@@ -23,6 +23,18 @@ export interface BpmRange {
   label: string;
 }
 
+export interface TrackAnalysisSettings {
+  notation: "standard" | "custom" | "combined" | "djCombined";
+  customCodes: string[];
+  delimiter: string;
+  outputs: {
+    comment: "none" | "prepend" | "append" | "overwrite";
+    grouping: "none" | "prepend" | "append" | "overwrite";
+    initialKey: "none" | "prepend" | "append" | "overwrite";
+    bpm: "none" | "overwrite";
+  };
+}
+
 export interface EngineTrack {
   id: string;
   detectedKey: number | null;
@@ -39,6 +51,8 @@ export interface KeyFinderEvent {
   sequence: number;
   payload: {
     track?: EngineTrack;
+    trackId?: string;
+    fraction?: number;
     completed?: number;
     total?: number;
     cancelled?: boolean;
@@ -76,11 +90,20 @@ export const analysisResultFromTrack = (track: EngineTrack): AnalysisResult => {
   };
 };
 
-export const startTrackAnalysis = (tracks: Track[]): Promise<{ jobId: string }> =>
-  invoke("start_track_analysis", { tracks });
+export const startTrackAnalysis = (
+  tracks: Track[],
+  settings?: TrackAnalysisSettings,
+): Promise<{ jobId: string }> => {
+  const writeAuthorization = Boolean(settings &&
+    Object.values(settings.outputs).some((mode) => mode !== "none"));
+  return invoke("start_track_analysis", { tracks, settings, writeAuthorization });
+};
 
 export const cancelTrackAnalysis = (jobId: string): Promise<{ cancelled: boolean }> =>
   invoke("cancel_track_analysis", { jobId });
+
+export const recycleKeyFinder = (): Promise<{ recycled: boolean }> =>
+  invoke("recycle_keyfinder");
 
 export const getAudioWaveform = (
   sourcePath: string,

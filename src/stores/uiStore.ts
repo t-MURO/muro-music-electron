@@ -20,6 +20,7 @@ type UIState = {
 
   // Modals
   analysisTrackIds: string[];
+  isAnalysisModalMinimized: boolean;
   editTrackIds: string[];
   pendingPlaylistDrop: PlaylistDropOperation | null;
   isPlaylistModalOpen: boolean;
@@ -57,6 +58,8 @@ type UIActions = {
   // Analysis modal
   openAnalysisModal: (trackIds: string[]) => void;
   closeAnalysisModal: () => void;
+  minimizeAnalysisModal: () => void;
+  restoreAnalysisModal: () => void;
 
   // Edit modal
   openEditModal: (trackIds: string[]) => void;
@@ -88,6 +91,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   sortState: null,
   searchQuery: "",
   analysisTrackIds: [],
+  isAnalysisModalMinimized: false,
   editTrackIds: [],
   pendingPlaylistDrop: null,
   isPlaylistModalOpen: false,
@@ -154,8 +158,16 @@ export const useUIStore = create<UIStore>((set, get) => ({
   setSearchQuery: (searchQuery) => set({ searchQuery }),
 
   // Analysis Modal
-  openAnalysisModal: (trackIds) => set({ analysisTrackIds: trackIds }),
-  closeAnalysisModal: () => set({ analysisTrackIds: [] }),
+  openAnalysisModal: (trackIds) => set({
+    analysisTrackIds: trackIds,
+    isAnalysisModalMinimized: false,
+  }),
+  closeAnalysisModal: () => set({
+    analysisTrackIds: [],
+    isAnalysisModalMinimized: false,
+  }),
+  minimizeAnalysisModal: () => set({ isAnalysisModalMinimized: true }),
+  restoreAnalysisModal: () => set({ isAnalysisModalMinimized: false }),
 
   // Edit Modal
   openEditModal: (trackIds) => set({ editTrackIds: trackIds }),

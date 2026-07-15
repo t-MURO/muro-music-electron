@@ -126,6 +126,43 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
       bulkTrackOperation(dbPath, trackIds, "UPDATE tracks SET import_status = 'staged' WHERE id IN"),
     reject_tracks: ({ dbPath, trackIds }) =>
       bulkTrackOperation(dbPath, trackIds, "DELETE FROM tracks WHERE id IN"),
+    delete_tracks: async ({ dbPath, trackIds, deleteFromDisk }) => {
+      const ids = [...new Set(
+        (Array.isArray(trackIds) ? trackIds : [])
+          .map((id) => String(id))
+          .filter(Boolean),
+      )];
+      if (ids.length === 0) return { deletedTrackIds: [], failures: [] };
+
+      let deletedTrackIds = ids;
+      const failures = [];
+      if (deleteFromDisk) {
+        const db = openDatabase(dbPath);
+        const findTrack = db.prepare("SELECT id, source_path FROM tracks WHERE id = ?");
+        deletedTrackIds = [];
+        for (const id of ids) {
+          const row = findTrack.get(id);
+          if (!row) continue;
+          try {
+            await fs.promises.unlink(row.source_path);
+            deletedTrackIds.push(id);
+          } catch (error) {
+            if (error?.code === "ENOENT") {
+              deletedTrackIds.push(id);
+              continue;
+            }
+            failures.push({
+              trackId: id,
+              path: row.source_path,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+
+      bulkTrackOperation(dbPath, deletedTrackIds, "DELETE FROM tracks WHERE id IN");
+      return { deletedTrackIds, failures };
+    },
 
     create_playlist: ({ dbPath, id, name }) => {
       openDatabase(dbPath)
@@ -155,6 +192,22 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
       });
       add();
     },
+    set_playlist_tracks: ({ dbPath, playlistId, trackIds }) => {
+      const db = openDatabase(dbPath);
+      const ids = [...new Set(
+        (Array.isArray(trackIds) ? trackIds : [])
+          .map((id) => String(id))
+          .filter(Boolean),
+      )];
+      const replace = db.transaction(() => {
+        db.prepare("DELETE FROM playlist_tracks WHERE playlist_id = ?").run(playlistId);
+        const insert = db.prepare(
+          "INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)"
+        );
+        ids.forEach((trackId, position) => insert.run(playlistId, trackId, position));
+      });
+      replace();
+    },
     remove_last_tracks_from_playlist: ({ dbPath, playlistId, count }) => {
       openDatabase(dbPath).prepare(`
         DELETE FROM playlist_tracks WHERE rowid IN (
@@ -172,9 +225,15 @@ export const createBackend = ({ cacheDir, emit, keyFinder }) => {
         .run(bpm ?? null, key ?? null, Math.floor(Date.now() / 1000), trackId);
     },
     keyfinder_health: () => keyFinder.health(),
-    start_track_analysis: ({ tracks }, sender) =>
-      keyFinder.startAnalysis(Array.isArray(tracks) ? tracks : [], sender),
+    start_track_analysis: ({ tracks, settings, writeAuthorization }, sender) =>
+      keyFinder.startAnalysis(
+        Array.isArray(tracks) ? tracks : [],
+        sender,
+        settings,
+        Boolean(writeAuthorization),
+      ),
     cancel_track_analysis: ({ jobId }) => keyFinder.cancelAnalysis(jobId),
+    recycle_keyfinder: () => keyFinder.recycle(),
     generate_track_waveform: ({ sourcePath, points }) =>
       keyFinder.generateWaveform(sourcePath, points),
     get_track_source_path: ({ dbPath, trackId }) =>

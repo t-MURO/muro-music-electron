@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { t, type Locale } from "../../i18n";
+import {
+  useSettingsStore,
+  type AnalysisNotationMode,
+  type AnalysisOutputMode,
+  type AnalysisOutputs,
+} from "../../stores";
 
 type SettingsPanelProps = {
   theme: string;
@@ -39,6 +45,22 @@ const themeDescriptions: Record<string, { label: string; description: string }> 
   "compact-bw-terminal": { label: "Compact B&W Terminal", description: "Dense black and white terminal" },
 };
 
+const KEY_NAMES = [
+  "A", "Am", "Bb", "Bbm", "B", "Bm", "C", "Cm", "Db", "Dbm", "D", "Dm",
+  "Eb", "Ebm", "E", "Em", "F", "Fm", "Gb", "Gbm", "G", "Gm", "Ab", "Abm", "Unknown",
+];
+
+const ANALYSIS_OUTPUT_FIELDS: Array<{
+  field: keyof AnalysisOutputs;
+  label: string;
+  bpmOnly?: boolean;
+}> = [
+  { field: "comment", label: "Comment" },
+  { field: "grouping", label: "Grouping / custom field" },
+  { field: "initialKey", label: "Initial Key" },
+  { field: "bpm", label: "Detected BPM", bpmOnly: true },
+];
+
 export const SettingsPanel = ({
   theme,
   locale,
@@ -66,6 +88,15 @@ export const SettingsPanel = ({
   const [activeTab, setActiveTab] = useState<Tab>(
     isDevMode ? "dev" : "application"
   );
+  const analysisNotation = useSettingsStore((state) => state.analysisNotation);
+  const analysisCustomCodes = useSettingsStore((state) => state.analysisCustomCodes);
+  const analysisDelimiter = useSettingsStore((state) => state.analysisDelimiter);
+  const analysisOutputs = useSettingsStore((state) => state.analysisOutputs);
+  const setAnalysisNotation = useSettingsStore((state) => state.setAnalysisNotation);
+  const setAnalysisCustomCode = useSettingsStore((state) => state.setAnalysisCustomCode);
+  const setAnalysisDelimiter = useSettingsStore((state) => state.setAnalysisDelimiter);
+  const setAnalysisOutput = useSettingsStore((state) => state.setAnalysisOutput);
+  const writesAudioTags = Object.values(analysisOutputs).some((mode) => mode !== "none");
 
   return (
     <div className="flex h-full flex-col">
@@ -187,6 +218,95 @@ export const SettingsPanel = ({
                 </div>
                 <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
                   Fast seeking is snappier but can be slightly less precise on some formats.
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                Key and BPM Analysis
+              </h3>
+              <div className="max-w-3xl space-y-5 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-[var(--spacing-lg)]">
+                <div>
+                  <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                    Key notation
+                  </label>
+                  <div className="relative max-w-md">
+                    <select
+                      value={analysisNotation}
+                      onChange={(event) => setAnalysisNotation(event.target.value as AnalysisNotationMode)}
+                      className="h-[var(--input-height)] w-full appearance-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] pr-10 text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                    >
+                      <option value="standard">Standard key (Am)</option>
+                      <option value="custom">Custom / Camelot (8A)</option>
+                      <option value="combined">Custom + standard key (8A Am)</option>
+                      <option value="djCombined">DJ notation + key (8A - Am)</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                  </div>
+                </div>
+
+                {(analysisNotation === "custom" || analysisNotation === "combined") && (
+                  <details>
+                    <summary className="cursor-pointer text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                      Custom key codes
+                    </summary>
+                    <div className="mt-3 grid max-h-64 grid-cols-2 gap-2 overflow-auto pr-2 sm:grid-cols-3 md:grid-cols-4">
+                      {KEY_NAMES.map((name, index) => (
+                        <label key={name} className="flex items-center gap-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                          <span className="w-9 shrink-0">{name}</span>
+                          <input
+                            value={analysisCustomCodes[index] ?? ""}
+                            onChange={(event) => setAnalysisCustomCode(index, event.target.value)}
+                            className="h-8 min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-2 text-[var(--font-size-xs)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                <div>
+                  <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                    Separator
+                  </label>
+                  <input
+                    value={analysisDelimiter}
+                    onChange={(event) => setAnalysisDelimiter(event.target.value)}
+                    className="h-[var(--input-height)] w-32 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <div className="mb-2 text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                    Audio-file tag outputs
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {ANALYSIS_OUTPUT_FIELDS.map(({ field, label, bpmOnly }) => (
+                      <label key={field} className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                        <span className="mb-1 block">{label}</span>
+                        <select
+                          value={analysisOutputs[field]}
+                          onChange={(event) => setAnalysisOutput(
+                            field,
+                            event.target.value as AnalysisOutputMode,
+                          )}
+                          className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                        >
+                          <option value="none">Do not write</option>
+                          {!bpmOnly && <option value="prepend">Prepend</option>}
+                          {!bpmOnly && <option value="append">Append</option>}
+                          <option value="overwrite">Overwrite</option>
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <p className={`text-[var(--font-size-xs)] ${writesAudioTags ? "text-amber-500" : "text-[var(--color-text-muted)]"}`}>
+                  {writesAudioTags
+                    ? "Enabled outputs modify tags in the source audio files during analysis."
+                    : "Source audio files are not modified. Enable an output explicitly to write tags."}
                 </p>
               </div>
             </div>

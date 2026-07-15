@@ -159,7 +159,8 @@ export const TableHeader = ({
 
   return (
     <div
-      className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]"
+      className="relative z-30 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]"
+      data-track-table-header
       style={{ width: "100%", minWidth: tableWidth }}
       role="rowgroup"
       onContextMenu={onHeaderContextMenu}

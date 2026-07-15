@@ -25,6 +25,23 @@ export const rejectTracks = (dbPath: string, trackIds: string[]) => {
   return invoke<void>("reject_tracks", { dbPath, trackIds });
 };
 
+export type DeleteTracksResult = {
+  deletedTrackIds: string[];
+  failures: Array<{ trackId: string; path: string; message: string }>;
+};
+
+export const deleteTracks = (
+  dbPath: string,
+  trackIds: string[],
+  deleteFromDisk: boolean
+) => {
+  return invoke<DeleteTracksResult>("delete_tracks", {
+    dbPath,
+    trackIds,
+    deleteFromDisk,
+  });
+};
+
 // ============================================================================
 // Playlist Operations
 // ============================================================================
@@ -54,6 +71,18 @@ export const addTracksToPlaylist = (
   trackIds: string[]
 ) => {
   return invoke<void>("add_tracks_to_playlist", {
+    dbPath,
+    playlistId,
+    trackIds,
+  });
+};
+
+export const setPlaylistTracks = (
+  dbPath: string,
+  playlistId: string,
+  trackIds: string[]
+) => {
+  return invoke<void>("set_playlist_tracks", {
     dbPath,
     playlistId,
     trackIds,

@@ -9,8 +9,10 @@ import {
   Sidebar,
   ColumnsMenu,
   InboxBanner,
+  PlaylistSelectionBar,
   TrackTable,
   ContextMenu,
+  DeleteTracksModal,
   DragOverlay,
   PlaylistContextMenu,
   AnalysisModal,
@@ -39,6 +41,7 @@ import {
   useInboxOperations,
   useTrackAnalysis,
   useTrackEdit,
+  useTrackDeletion,
   useLibraryInit,
   usePlayTracking,
   useKeyboardShortcuts,
@@ -187,6 +190,12 @@ function App() {
     });
     return next;
   }, [filteredTracks, sortState]);
+
+  const selectedPlaylistTrackIds = useMemo(() => {
+    if (viewConfig.type !== "playlist" || !viewConfig.playlist) return [];
+    const playlistTrackIds = new Set(viewConfig.playlist.trackIds);
+    return Array.from(selectedIds).filter((trackId) => playlistTrackIds.has(trackId));
+  }, [selectedIds, viewConfig]);
 
   const handleSortChange = useCallback(
     (key: ColumnConfig["key"]) => {
@@ -408,6 +417,7 @@ function App() {
     handleOpenPlaylistEdit,
     handleClosePlaylistEdit,
     handleDeletePlaylist,
+    handleRemoveTracksFromPlaylist,
     handlePlaylistEditSubmit,
   } = usePlaylistOperations({
     currentView: view,
@@ -421,9 +431,19 @@ function App() {
   const {
     analysisTrackIds,
     isAnalysisModalOpen,
+    isAnalysisModalMinimized,
     closeAnalysisModal,
+    minimizeAnalysisModal,
+    restoreAnalysisModal,
     handleAnalysisComplete,
   } = useTrackAnalysis();
+
+  const analysisTracks = useMemo(
+    () => analysisTrackIds
+      .map((id) => allTracks.find((track) => track.id === id))
+      .filter((track): track is Track => track !== undefined),
+    [allTracks, analysisTrackIds]
+  );
 
   // Track editing
   const {
@@ -433,6 +453,15 @@ function App() {
     closeEditModal,
     handleSaveMetadata,
   } = useTrackEdit();
+
+  const {
+    pendingTracks: pendingDeleteTracks,
+    isDeleting: isDeletingTracks,
+    requestTrackDeletion,
+    closeTrackDeletion,
+    removePendingFromLibrary,
+    deletePendingFromDisk,
+  } = useTrackDeletion();
 
   // Panel state
   const {
@@ -502,6 +531,26 @@ function App() {
     openEditModal(menuSelection);
     closeMenu();
   }, [menuSelection, closeMenu, openEditModal]);
+
+  const handleDeleteTracks = useCallback(() => {
+    const trackIds = [...menuSelection];
+    closeMenu();
+    requestTrackDeletion(trackIds);
+  }, [closeMenu, menuSelection, requestTrackDeletion]);
+
+  const handleRemoveMenuTracksFromPlaylist = useCallback(() => {
+    const playlistId = viewConfig.playlist?.id;
+    const trackIds = [...menuSelection];
+    closeMenu();
+    if (playlistId) void handleRemoveTracksFromPlaylist(playlistId, trackIds);
+  }, [closeMenu, handleRemoveTracksFromPlaylist, menuSelection, viewConfig.playlist]);
+
+  const handleRemoveSelectedFromPlaylist = useCallback(() => {
+    const playlistId = viewConfig.playlist?.id;
+    if (playlistId) {
+      void handleRemoveTracksFromPlaylist(playlistId, selectedPlaylistTrackIds);
+    }
+  }, [handleRemoveTracksFromPlaylist, selectedPlaylistTrackIds, viewConfig.playlist]);
 
   // Playlist menu handlers
   const handlePlaylistMenuEdit = useCallback(() => {
@@ -642,13 +691,21 @@ function App() {
         onClose={cancelPlaylistDropOperation}
         onConfirm={confirmPlaylistDropOperation}
       />
+      <DeleteTracksModal
+        tracks={pendingDeleteTracks}
+        isDeleting={isDeletingTracks}
+        onClose={closeTrackDeletion}
+        onRemoveFromLibrary={removePendingFromLibrary}
+        onDeleteFromDisk={deletePendingFromDisk}
+      />
       <AnalysisModal
         isOpen={isAnalysisModalOpen}
-        tracks={analysisTrackIds
-          .map((id) => allTracks.find((t) => t.id === id))
-          .filter((t): t is Track => t !== undefined)}
+        isMinimized={isAnalysisModalMinimized}
+        tracks={analysisTracks}
         dbPath={dbPath}
         onClose={closeAnalysisModal}
+        onMinimize={minimizeAnalysisModal}
+        onRestore={restoreAnalysisModal}
         onAnalysisComplete={handleAnalysisComplete}
       />
       <EditTrackModal
@@ -705,8 +762,14 @@ function App() {
                   addToQueue(menuSelection);
                   closeMenu();
                 }}
+                onRemoveFromPlaylist={
+                  viewConfig.type === "playlist" && viewConfig.playlist
+                    ? handleRemoveMenuTracksFromPlaylist
+                    : undefined
+                }
                 onShowBpmKey={handleShowBpmKey}
                 onEdit={handleEdit}
+                onDelete={handleDeleteTracks}
               />
               <PlaylistContextMenu
                 isOpen={isPlaylistMenuOpen}
@@ -832,6 +895,13 @@ function App() {
                             selectedCount={selectedIds.size}
                             onAccept={handleAcceptTracks}
                             onReject={handleRejectTracks}
+                          />
+                        )}
+                        {viewConfig.type === "playlist" && viewConfig.playlist && (
+                          <PlaylistSelectionBar
+                            playlistName={viewConfig.playlist.name}
+                            selectedCount={selectedPlaylistTrackIds.length}
+                            onRemove={handleRemoveSelectedFromPlaylist}
                           />
                         )}
                       </>

@@ -22,15 +22,18 @@ export {
   acceptTracks,
   unacceptTracks,
   rejectTracks,
+  deleteTracks,
   loadPlaylists,
   createPlaylist,
   deletePlaylist,
   addTracksToPlaylist,
+  setPlaylistTracks,
   removeLastTracksFromPlaylist,
   backfillSearchText,
   backfillCoverArt,
   loadRecentlyPlayed,
   recordTrackPlay,
+  type DeleteTracksResult,
 } from "./database";
 export {
   importFiles,

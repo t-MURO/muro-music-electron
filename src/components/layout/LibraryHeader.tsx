@@ -34,6 +34,7 @@ export const LibraryHeader = ({
   onSort,
 }: LibraryHeaderProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchShortcut = window.muro?.platform === "darwin" ? "⌘F" : "Ctrl F";
   const [compactTable, setCompactTable] = useState(
     () => window.localStorage.getItem("muro-table-density") === "compact"
   );
@@ -88,7 +89,12 @@ export const LibraryHeader = ({
               {searchQuery ? (
                 <button className="toolbar-icon-button absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2" onClick={() => onSearchChange("")} aria-label={t("search.clear")} type="button"><X className="h-3.5 w-3.5" /></button>
               ) : (
-                <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]">⌘F</kbd>
+                <kbd
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]"
+                  data-search-shortcut-hint
+                >
+                  {searchShortcut}
+                </kbd>
               )}
             </div>
             <button className="toolbar-button toolbar-button--ghost" onClick={focusSearch} title="Filter the current library view" type="button"><Filter className="h-4 w-4" /><span>Filters</span></button>

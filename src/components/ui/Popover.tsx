@@ -60,12 +60,14 @@ type PopoverItemProps = {
   children: ReactNode;
   onClick?: () => void;
   variant?: "default" | "danger";
+  dataTestId?: string;
 };
 
 export const PopoverItem = ({
   children,
   onClick,
   variant = "default",
+  dataTestId,
 }: PopoverItemProps) => {
   const baseClass =
     "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-100";
@@ -75,7 +77,7 @@ export const PopoverItem = ({
       : "text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]";
 
   return (
-    <button className={`${baseClass} ${variantClass}`} onClick={onClick}>
+    <button className={`${baseClass} ${variantClass}`} data-testid={dataTestId} onClick={onClick}>
       {children}
     </button>
   );

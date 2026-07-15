@@ -1,5 +1,6 @@
 export { AnalysisModal } from "./AnalysisModal";
 export { ContextMenu } from "./ContextMenu";
+export { DeleteTracksModal } from "./DeleteTracksModal";
 export { DragOverlay } from "./DragOverlay";
 export { DuplicateTracksModal } from "./DuplicateTracksModal";
 export { EditTrackModal } from "./EditTrackModal";

@@ -1,0 +1,9 @@
+{
+  "name": "@neo-keyfinder/engine-client",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./index.mjs",
+  "engines": {
+    "node": ">=20"
+  }
+}
