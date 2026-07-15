@@ -193,8 +193,11 @@ export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) =
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
-    get_artist_profile: ({ dbPath, artistName, force }) =>
-      artistProfiles.getProfile(openDatabase(dbPath), artistName, { force: Boolean(force) }),
+    get_artist_profile: ({ dbPath, artistName, force, fanartApiKey }) =>
+      artistProfiles.getProfile(openDatabase(dbPath), artistName, {
+        force: Boolean(force),
+        fanartApiKey,
+      }),
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);

@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 import { t, type Locale } from "../../i18n";
+import { openExternal } from "../../desktop/shell";
 import {
   useSettingsStore,
   type AnalysisNotationMode,
@@ -96,6 +97,8 @@ export const SettingsPanel = ({
   const setAnalysisCustomCode = useSettingsStore((state) => state.setAnalysisCustomCode);
   const setAnalysisDelimiter = useSettingsStore((state) => state.setAnalysisDelimiter);
   const setAnalysisOutput = useSettingsStore((state) => state.setAnalysisOutput);
+  const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
+  const setFanartApiKey = useSettingsStore((state) => state.setFanartApiKey);
   const writesAudioTags = Object.values(analysisOutputs).some((mode) => mode !== "none");
 
   return (
@@ -233,6 +236,39 @@ export const SettingsPanel = ({
                 <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
                   Fast seeking is snappier but can be slightly less precise on some formats.
                 </p>
+              </div>
+            </div>
+
+            <div data-artist-information-settings>
+              <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                Artist information
+              </h3>
+              <div className="max-w-xl space-y-3">
+                <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="fanart-api-key">
+                  Fanart.tv project API key
+                </label>
+                <input
+                  autoComplete="off"
+                  className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                  data-fanart-api-key
+                  id="fanart-api-key"
+                  onChange={(event) => setFanartApiKey(event.target.value.trim())}
+                  placeholder="Optional"
+                  spellCheck={false}
+                  type="password"
+                  value={fanartApiKey}
+                />
+                <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                  MusicBrainz and Wikipedia are used first. When Wikipedia has no artist image,
+                  Muro can use Fanart.tv and cache the result locally.
+                </p>
+                <button
+                  className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                  onClick={() => { void openExternal("https://fanart.tv/get-an-api-key/"); }}
+                  type="button"
+                >
+                  Get a Fanart.tv API key <ExternalLink className="h-3 w-3" />
+                </button>
               </div>
             </div>
               </>

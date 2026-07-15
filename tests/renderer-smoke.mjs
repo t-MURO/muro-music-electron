@@ -77,6 +77,7 @@ const smokeArtistProfile = {
   musicBrainzId: "11111111-1111-4111-8111-111111111111",
   musicBrainzUrl: "https://musicbrainz.org/artist/11111111-1111-4111-8111-111111111111",
   wikipediaUrl: "https://en.wikipedia.org/wiki/Muro_(musician)",
+  fanartUrl: "https://fanart.tv/artist/11111111-1111-4111-8111-111111111111/",
   fetchedAt: "2026-07-15T12:00:00.000Z",
   cacheState: "fresh",
 };
@@ -504,6 +505,12 @@ app.whenReady().then(async () => {
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 60));
+        const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
+        const artistInformationSettingsReady = Boolean(
+          document.querySelector("[data-artist-information-settings]") &&
+          fanartApiKeyInput instanceof HTMLInputElement &&
+          fanartApiKeyInput.type === "password"
+        );
         document.querySelector('[data-settings-tab="analysis"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const notationSelect = document.querySelector('[data-analysis-notation]');
@@ -577,7 +584,8 @@ app.whenReady().then(async () => {
           document.querySelector("h2")?.textContent?.trim() === "Muro";
         const albumArtistProfileReady = Boolean(
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
-          document.querySelector(".artist-detail-biography")?.textContent?.includes("renderer smoke test")
+          document.querySelector(".artist-detail-biography")?.textContent?.includes("renderer smoke test") &&
+          document.querySelector(".artist-detail-sources")?.textContent?.includes("Fanart.tv")
         );
 
         window.location.hash = "#/collection/artists";
@@ -726,6 +734,7 @@ app.whenReady().then(async () => {
           selectedCamelotCode,
           wheelFilteredTo9A,
           queuedFromMix,
+          artistInformationSettingsReady,
           analysisNotationSettingsReady,
           contextMenuOpened,
           contextMenuStayedOpenInside,
@@ -884,6 +893,10 @@ app.whenReady().then(async () => {
       }
       if (!result.analysisNotationSettingsReady) {
         fail("Key notation modes are not visible in the Key Analysis settings tab");
+        return;
+      }
+      if (!result.artistInformationSettingsReady) {
+        fail("Fanart.tv fallback settings are not visible in the Application settings tab");
         return;
       }
       if (

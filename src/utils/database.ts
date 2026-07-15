@@ -50,7 +50,8 @@ export const getArtistProfile = (
   dbPath: string,
   artistName: string,
   force = false,
-) => invoke<ArtistProfile>("get_artist_profile", { dbPath, artistName, force });
+  fanartApiKey = "",
+) => invoke<ArtistProfile>("get_artist_profile", { dbPath, artistName, force, fanartApiKey });
 
 // ============================================================================
 // Playlist Operations

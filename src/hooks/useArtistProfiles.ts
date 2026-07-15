@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ArtistProfile } from "../types";
 import { getArtistProfile, loadCachedArtistProfiles } from "../utils";
+import { useSettingsStore } from "../stores";
 import { useDbPath } from "./useDbPath";
 
 export const normalizeArtistProfileKey = (artistName: string) => artistName
@@ -11,6 +12,7 @@ export const normalizeArtistProfileKey = (artistName: string) => artistName
 
 export const useArtistProfiles = () => {
   const resolveDbPath = useDbPath();
+  const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const [profiles, setProfiles] = useState<Record<string, ArtistProfile>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -42,7 +44,7 @@ export const useArtistProfiles = () => {
     });
     try {
       const dbPath = await resolveDbPath();
-      const profile = await getArtistProfile(dbPath, artistName, force);
+      const profile = await getArtistProfile(dbPath, artistName, force, fanartApiKey);
       setProfiles((current) => ({ ...current, [artistKey]: profile }));
       return profile;
     } catch (error) {
@@ -58,7 +60,7 @@ export const useArtistProfiles = () => {
         return next;
       });
     }
-  }, [resolveDbPath]);
+  }, [fanartApiKey, resolveDbPath]);
 
   return { profiles, loadingKeys, errors, loadProfile };
 };

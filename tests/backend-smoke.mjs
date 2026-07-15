@@ -171,20 +171,32 @@ try {
 
   const artistFetchCalls = [];
   const artistId = "11111111-1111-4111-8111-111111111111";
+  const fallbackArtistId = "22222222-2222-4222-8222-222222222222";
+  let fanartAuthorization = null;
   const artistProfileService = createArtistProfileService({
     cacheDir: path.join(directory, "artist-profile-cache"),
     musicBrainzIntervalMs: 0,
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, options = {}) => {
       artistFetchCalls.push(String(url));
       if (String(url).startsWith("https://musicbrainz.org/ws/2/artist/?")) {
+        const requestedArtist = new URL(String(url)).searchParams.get("query");
+        const isFallbackArtist = requestedArtist === "Fallback Muro";
         return new Response(JSON.stringify({
-          artists: [{ id: artistId, name: "Muro", score: 100 }],
+          artists: [{
+            id: isFallbackArtist ? fallbackArtistId : artistId,
+            name: requestedArtist,
+            score: 100,
+          }],
         }), { headers: { "content-type": "application/json" } });
       }
-      if (String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`)) {
+      if (
+        String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`)
+        || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${fallbackArtistId}?`)
+      ) {
+        const isFallbackArtist = String(url).includes(fallbackArtistId);
         return new Response(JSON.stringify({
-          id: artistId,
-          name: "Muro",
+          id: isFallbackArtist ? fallbackArtistId : artistId,
+          name: isFallbackArtist ? "Fallback Muro" : "Muro",
           type: "Person",
           country: "DE",
           area: { name: "Berlin" },
@@ -192,20 +204,39 @@ try {
           genres: [{ name: "electronic" }, { name: "house" }],
           relations: [{
             type: "wikipedia",
-            url: { resource: "https://en.wikipedia.org/wiki/Muro_(musician)" },
+            url: { resource: isFallbackArtist
+              ? "https://en.wikipedia.org/wiki/Fallback_Muro"
+              : "https://en.wikipedia.org/wiki/Muro_(musician)" },
           }],
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url).includes("/api/rest_v1/page/summary/")) {
+        const isFallbackArtist = String(url).includes("Fallback_Muro");
         return new Response(JSON.stringify({
-          extract: "Muro is an electronic musician used by the smoke test.",
+          extract: `${isFallbackArtist ? "Fallback Muro" : "Muro"} is an electronic musician used by the smoke test.`,
           description: "Electronic musician",
-          thumbnail: { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
-          content_urls: { desktop: { page: "https://en.wikipedia.org/wiki/Muro_(musician)" } },
+          thumbnail: isFallbackArtist ? undefined : { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
+          content_urls: { desktop: { page: isFallbackArtist
+            ? "https://en.wikipedia.org/wiki/Fallback_Muro"
+            : "https://en.wikipedia.org/wiki/Muro_(musician)" } },
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url) === `https://webservice.fanart.tv/v3.2/music/${fallbackArtistId}`) {
+        fanartAuthorization = options.headers?.["api-key"] ?? null;
+        return new Response(JSON.stringify({
+          artistthumb: [
+            { url: "https://assets.fanart.tv/fallback-low.jpg", likes: "2", width: "1000", height: "1000" },
+            { url: "https://assets.fanart.tv/fallback-best.jpg", likes: "12", width: "1000", height: "1000" },
+          ],
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url) === "https://upload.wikimedia.org/muro-smoke.jpg") {
         return new Response(Buffer.from("smoke image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      if (String(url) === "https://assets.fanart.tv/fallback-best.jpg") {
+        return new Response(Buffer.from("fanart smoke image"), {
           headers: { "content-type": "image/jpeg" },
         });
       }
@@ -221,7 +252,33 @@ try {
   const cachedArtistProfile = await artistProfileService.getProfile(db, "Muro");
   assert.equal(cachedArtistProfile.cacheState, "fresh");
   assert.equal(artistFetchCalls.length, artistFetchCount, "fresh artist profiles should not be fetched again");
-  assert.equal(artistProfileService.loadCachedProfiles(db)[0].artistKey, "muro");
+  const fallbackWithoutKey = await artistProfileService.getProfile(db, "Fallback Muro");
+  assert.equal(fallbackWithoutKey.imageUrl, null);
+  assert.equal(fallbackWithoutKey.fanartAttempted, false);
+  const fetchCountBeforeAddingFanartKey = artistFetchCalls.length;
+  const fallbackProfile = await artistProfileService.getProfile(db, "Fallback Muro", {
+    fanartApiKey: "smoke-fanart-key",
+  });
+  assert.ok(
+    artistFetchCalls.length > fetchCountBeforeAddingFanartKey,
+    "adding a Fanart.tv key should retry a fresh cached profile that has no image",
+  );
+  assert.equal(fallbackProfile.imageProvider, "fanart.tv");
+  assert.equal(fallbackProfile.fanartAttempted, true);
+  assert.equal(fallbackProfile.fanartUrl, `https://fanart.tv/artist/${fallbackArtistId}/`);
+  assert.equal(fanartAuthorization, "smoke-fanart-key");
+  assert.ok(fs.existsSync(fallbackProfile.imagePath), "Fanart.tv fallback should be cached on disk");
+  assert.ok(
+    artistFetchCalls.includes("https://assets.fanart.tv/fallback-best.jpg"),
+    "the most-liked Fanart.tv artist thumbnail should be selected",
+  );
+  const fallbackFetchCount = artistFetchCalls.length;
+  await artistProfileService.getProfile(db, "Fallback Muro", { fanartApiKey: "smoke-fanart-key" });
+  assert.equal(artistFetchCalls.length, fallbackFetchCount, "cached Fanart.tv images should not be fetched again");
+  assert.deepEqual(
+    artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
+    ["fallback muro", "muro"],
+  );
 
   assert.equal((await backend.invoke("keyfinder_health", {})).service, "keyfinder-native");
   const analysisSettings = {

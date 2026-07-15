@@ -80,9 +80,12 @@ export type ArtistProfile = {
   biography?: string | null;
   imagePath?: string | null;
   imageUrl?: string | null;
+  imageProvider?: "wikipedia" | "fanart.tv" | null;
+  fanartAttempted?: boolean;
   musicBrainzId?: string | null;
   musicBrainzUrl?: string | null;
   wikipediaUrl?: string | null;
+  fanartUrl?: string | null;
   fetchedAt: string;
   cacheState?: "fresh" | "stale";
 };

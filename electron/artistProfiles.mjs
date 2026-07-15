@@ -7,6 +7,7 @@ const NOT_FOUND_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MUSICBRAINZ_INTERVAL_MS = 1_100;
 const MAX_ARTIST_IMAGE_BYTES = 8 * 1024 * 1024;
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+const FANART_API_ROOT = "https://webservice.fanart.tv/v3.2/music/";
 
 export const normalizeArtistKey = (artistName) => String(artistName ?? "")
   .normalize("NFKC")
@@ -121,6 +122,27 @@ const imageExtension = (contentType, imageUrl) => {
   }
 };
 
+const secureImageUrl = (value) => {
+  try {
+    const url = new URL(String(value ?? ""));
+    if (url.protocol === "http:") url.protocol = "https:";
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+};
+
+const pickFanartArtistImage = (payload) => (Array.isArray(payload?.artistthumb)
+  ? payload.artistthumb
+  : [])
+  .map((image) => ({
+    url: secureImageUrl(image?.url),
+    likes: Number(image?.likes ?? 0),
+    pixels: Number(image?.width ?? 0) * Number(image?.height ?? 0),
+  }))
+  .filter((candidate) => Boolean(candidate.url))
+  .sort((left, right) => right.likes - left.likes || right.pixels - left.pixels)[0] ?? null;
+
 export const createArtistProfileService = ({
   cacheDir,
   fetchImpl = globalThis.fetch,
@@ -186,6 +208,26 @@ export const createArtistProfileService = ({
     };
   };
 
+  const fetchFanartArtistImage = async (musicBrainzId, apiKey) => {
+    const normalizedApiKey = String(apiKey ?? "").trim();
+    if (!normalizedApiKey) return null;
+    const response = await fetchImpl(`${FANART_API_ROOT}${musicBrainzId}`, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": userAgent,
+        "api-key": normalizedApiKey,
+      },
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Fanart.tv request failed (${response.status})`);
+    const selected = pickFanartArtistImage(await response.json());
+    if (!selected?.url) return null;
+    return {
+      imageUrl: selected.url,
+      fanartUrl: `https://fanart.tv/artist/${musicBrainzId}/`,
+    };
+  };
+
   const cacheArtistImage = async (artistKey, imageUrl) => {
     if (!imageUrl) return null;
     const url = new URL(imageUrl);
@@ -213,7 +255,7 @@ export const createArtistProfileService = ({
     }
   };
 
-  const fetchProfile = async (db, requestedName, artistKey) => {
+  const fetchProfile = async (db, requestedName, artistKey, { fanartApiKey = "" } = {}) => {
     let musicBrainzId = findStoredMusicBrainzId(db, requestedName);
     if (!musicBrainzId) {
       const searchUrl = new URL("https://musicbrainz.org/ws/2/artist/");
@@ -253,10 +295,28 @@ export const createArtistProfileService = ({
       console.warn(`Could not load Wikipedia profile for ${requestedName}:`, error);
     }
 
-    let imagePath = null;
-    if (wikipedia?.imageUrl) {
+    let imageUrl = wikipedia?.imageUrl || null;
+    let imageProvider = imageUrl ? "wikipedia" : null;
+    let fanartUrl = null;
+    let fanartAttempted = false;
+    if (!imageUrl && String(fanartApiKey).trim()) {
+      fanartAttempted = true;
       try {
-        imagePath = await cacheArtistImage(artistKey, wikipedia.imageUrl);
+        const fanart = await fetchFanartArtistImage(musicBrainzId, fanartApiKey);
+        if (fanart) {
+          imageUrl = fanart.imageUrl;
+          imageProvider = "fanart.tv";
+          fanartUrl = fanart.fanartUrl;
+        }
+      } catch (error) {
+        console.warn(`Could not load Fanart.tv image for ${requestedName}:`, error);
+      }
+    }
+
+    let imagePath = null;
+    if (imageUrl) {
+      try {
+        imagePath = await cacheArtistImage(artistKey, imageUrl);
       } catch (error) {
         console.warn(`Could not cache artist image for ${requestedName}:`, error);
       }
@@ -282,10 +342,13 @@ export const createArtistProfileService = ({
       description: wikipedia?.description || null,
       biography: wikipedia?.biography || null,
       imagePath,
-      imageUrl: wikipedia?.imageUrl || null,
+      imageUrl,
+      imageProvider,
+      fanartAttempted,
       musicBrainzId,
       musicBrainzUrl: `https://musicbrainz.org/artist/${musicBrainzId}`,
       wikipediaUrl: wikipedia?.wikipediaUrl || wikipediaTarget?.url || null,
+      fanartUrl,
       fetchedAt: new Date(now()).toISOString(),
     };
   };
@@ -303,7 +366,7 @@ export const createArtistProfileService = ({
         });
     },
 
-    async getProfile(db, artistName, { force = false } = {}) {
+    async getProfile(db, artistName, { force = false, fanartApiKey = "" } = {}) {
       const requestedName = String(artistName ?? "").trim();
       const artistKey = normalizeArtistKey(requestedName);
       if (!artistKey) throw new Error("Artist name is required");
@@ -312,14 +375,22 @@ export const createArtistProfileService = ({
       const ttlMs = cached?.profile?.status === "not-found"
         ? NOT_FOUND_CACHE_TTL_MS
         : DEFAULT_CACHE_TTL_MS;
-      if (!force && cached && now() - cached.fetchedAtMs < ttlMs) {
+      const shouldTryConfiguredFanart = Boolean(
+        String(fanartApiKey).trim()
+        && cached?.profile?.status === "ready"
+        && !cached.profile.imagePath
+        && !cached.profile.imageUrl
+        && !cached.profile.fanartAttempted,
+      );
+      if (!force && !shouldTryConfiguredFanart && cached && now() - cached.fetchedAtMs < ttlMs) {
         return { ...cached.profile, cacheState: "fresh" };
       }
 
-      if (inFlight.has(artistKey)) return inFlight.get(artistKey);
+      const requestKey = `${artistKey}:${String(fanartApiKey).trim() ? "fanart" : "default"}`;
+      if (inFlight.has(requestKey)) return inFlight.get(requestKey);
       const pending = (async () => {
         try {
-          const profile = await fetchProfile(db, requestedName, artistKey);
+          const profile = await fetchProfile(db, requestedName, artistKey, { fanartApiKey });
           writeCachedProfile(db, artistKey, requestedName, profile, now());
           return { ...profile, cacheState: "fresh" };
         } catch (error) {
@@ -327,11 +398,11 @@ export const createArtistProfileService = ({
           throw error;
         }
       })();
-      inFlight.set(artistKey, pending);
+      inFlight.set(requestKey, pending);
       try {
         return await pending;
       } finally {
-        inFlight.delete(artistKey);
+        inFlight.delete(requestKey);
       }
     },
   };

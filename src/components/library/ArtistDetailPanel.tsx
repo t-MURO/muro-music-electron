@@ -71,7 +71,7 @@ export const ArtistDetailPanel = ({
           {profile?.type && <span><UserRound />{profile.type}</span>}
         </div>
 
-        {isLoading && !profile && <p className="artist-detail-message">Looking up MusicBrainz and Wikipedia…</p>}
+        {isLoading && !profile && <p className="artist-detail-message">Looking up artist information…</p>}
         {error && !profile && <p className="artist-detail-message artist-detail-message--error">Artist information could not be loaded. Check your connection and try again.</p>}
         {profile?.status === "not-found" && <p className="artist-detail-message">No reliable online artist match was found. Your local tracks are still shown below.</p>}
         {profile?.biography && <p className="artist-detail-biography">{profile.biography}</p>}
@@ -80,11 +80,12 @@ export const ArtistDetailPanel = ({
             {profile.genres.map((genre) => <span key={genre}>{genre}</span>)}
           </div>
         )}
-        {(profile?.wikipediaUrl || profile?.musicBrainzUrl) && (
+        {(profile?.wikipediaUrl || profile?.musicBrainzUrl || profile?.fanartUrl) && (
           <div className="artist-detail-sources">
             <span>Information from</span>
             {profile.wikipediaUrl && <button onClick={() => onOpenSource(profile.wikipediaUrl!)} type="button">Wikipedia <ExternalLink /></button>}
             {profile.musicBrainzUrl && <button onClick={() => onOpenSource(profile.musicBrainzUrl!)} type="button">MusicBrainz <ExternalLink /></button>}
+            {profile.fanartUrl && <button onClick={() => onOpenSource(profile.fanartUrl!)} type="button">Fanart.tv <ExternalLink /></button>}
             {profile.cacheState === "stale" && <em>cached copy</em>}
           </div>
         )}

@@ -171,7 +171,10 @@ const startApplication = async () => {
   });
   ipcMain.handle("muro:open-external", async (_event, value) => {
     const url = new URL(String(value));
-    const allowedHost = url.hostname === "musicbrainz.org" || url.hostname.endsWith(".wikipedia.org");
+    const allowedHost = url.hostname === "musicbrainz.org"
+      || url.hostname.endsWith(".wikipedia.org")
+      || url.hostname === "fanart.tv"
+      || url.hostname.endsWith(".fanart.tv");
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
     await shell.openExternal(url.toString());
   });
