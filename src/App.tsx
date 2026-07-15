@@ -344,6 +344,11 @@ function App() {
   // Media control refs for skip handlers (needed before useAudioPlayback)
   const skipPreviousRef = useRef<() => void>(() => {});
   const skipNextRef = useRef<() => void>(() => {});
+  const mediaPlaybackRef = useRef<{
+    play: () => void | Promise<void>;
+    pause: () => void | Promise<void>;
+    toggle: () => void | Promise<void>;
+  }>({ play: () => {}, pause: () => {}, toggle: () => {} });
 
   // Media control handler
   const handleMediaControl = useCallback((action: string) => {
@@ -354,7 +359,15 @@ function App() {
       case "previous":
         skipPreviousRef.current();
         break;
-      // play, pause, and toggle are handled by the playback runtime.
+      case "play":
+        void mediaPlaybackRef.current.play();
+        break;
+      case "pause":
+        void mediaPlaybackRef.current.pause();
+        break;
+      case "toggle":
+        void mediaPlaybackRef.current.toggle();
+        break;
     }
   }, []);
 
@@ -365,6 +378,8 @@ function App() {
     currentTrack,
     playTrack,
     togglePlay,
+    play,
+    pause,
     seek,
     setVolume,
   } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
@@ -374,17 +389,18 @@ function App() {
 
   // Skip handlers
   const handleSkipPrevious = useCallback(() => {
-    if (currentPosition > 3) {
-      seek(0);
+    const playbackState = usePlaybackStore.getState();
+    if (playbackState.currentPosition > 3) {
+      void seek(0);
       return;
     }
-    const currentIndex = currentTrack
-      ? allTracks.findIndex((t) => t.id === currentTrack.id)
+    const currentIndex = playbackState.currentTrack
+      ? allTracks.findIndex((t) => t.id === playbackState.currentTrack?.id)
       : -1;
     if (currentIndex > 0) {
-      playTrack(allTracks[currentIndex - 1]);
+      void playTrack(allTracks[currentIndex - 1]);
     }
-  }, [currentPosition, currentTrack, allTracks, seek, playTrack]);
+  }, [allTracks, seek, playTrack]);
 
   const handleSkipNext = useCallback(() => {
     const currentQueue = usePlaybackStore.getState().queue;
@@ -395,34 +411,35 @@ function App() {
       const nextTrack = allTracks.find((t) => t.id === nextTrackId);
       if (nextTrack) {
         setQueue(currentQueue.slice(1));
-        playTrack(nextTrack);
+        void playTrack(nextTrack);
         return;
       }
     }
 
     // No queue - fall back to normal progression
-    const currentIndex = currentTrack
-      ? allTracks.findIndex((t) => t.id === currentTrack.id)
+    const activeTrack = usePlaybackStore.getState().currentTrack;
+    const currentIndex = activeTrack
+      ? allTracks.findIndex((t) => t.id === activeTrack.id)
       : -1;
 
     // Shuffle
     if (shuffleEnabled) {
       const randomIndex = Math.floor(Math.random() * allTracks.length);
-      playTrack(allTracks[randomIndex]);
+      void playTrack(allTracks[randomIndex]);
       return;
     }
 
     // Next track in list
     if (currentIndex < allTracks.length - 1) {
-      playTrack(allTracks[currentIndex + 1]);
+      void playTrack(allTracks[currentIndex + 1]);
       return;
     }
 
     // Repeat all - wrap to beginning
     if (repeatMode === "all" && allTracks.length > 0) {
-      playTrack(allTracks[0]);
+      void playTrack(allTracks[0]);
     }
-  }, [allTracks, currentTrack, shuffleEnabled, repeatMode, playTrack, setQueue]);
+  }, [allTracks, shuffleEnabled, repeatMode, playTrack, setQueue]);
 
   // Update refs for media control handler
   useEffect(() => {
@@ -432,6 +449,10 @@ function App() {
   useEffect(() => {
     skipNextRef.current = handleSkipNext;
   }, [handleSkipNext]);
+
+  useEffect(() => {
+    mediaPlaybackRef.current = { play, pause, toggle: togglePlay };
+  }, [pause, play, togglePlay]);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts({

@@ -1,12 +1,44 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, protocol } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLocalFileResponse } from "../electron/fileProtocol.mjs";
+
+protocol.registerSchemesAsPrivileged([{
+  scheme: "muro-file",
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    stream: true,
+  },
+}]);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-renderer-smoke-"));
+const writeSilentWave = (filePath, durationSeconds = 5) => {
+  const sampleRate = 8_000;
+  const channelCount = 1;
+  const bytesPerSample = 2;
+  const dataSize = sampleRate * durationSeconds * channelCount * bytesPerSample;
+  const buffer = Buffer.alloc(44 + dataSize);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(channelCount, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channelCount * bytesPerSample, 28);
+  buffer.writeUInt16LE(channelCount * bytesPerSample, 32);
+  buffer.writeUInt16LE(bytesPerSample * 8, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+  fs.writeFileSync(filePath, buffer);
+};
 const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   id: `smoke-track-${index}`,
   title: `Smoke Track ${String(index).padStart(3, "0")}`,
@@ -24,9 +56,12 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   key: ["8A", "8A", "9A", "7A", "8B", "2B"][index % 6],
   bpm: index === 1 ? 0 : 120 + (index % 8),
   rating: 0,
-  source_path: path.join(temporaryDirectory, `track-${index}.mp3`),
+  source_path: path.join(temporaryDirectory, `track-${index}.wav`),
   play_count: 0,
 }));
+for (let index = 0; index < 5; index += 1) {
+  writeSilentWave(smokeTracks[index].source_path);
+}
 
 app.setPath("userData", temporaryDirectory);
 
@@ -38,6 +73,10 @@ const fail = (message) => {
 const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 25_000);
 
 app.whenReady().then(async () => {
+  protocol.handle("muro-file", (request) => {
+    const url = new URL(request.url);
+    return createLocalFileResponse(request, decodeURIComponent(url.pathname.slice(1)));
+  });
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
   ipcMain.handle("muro:window-is-maximized", (event) =>
     BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
@@ -80,7 +119,7 @@ app.whenReady().then(async () => {
     ) return command === "generate_track_waveform" ? [] : undefined;
     if (command === "playback_toggle") return false;
     if (command === "test_emit_media_control") {
-      event.sender.send("muro:event", "muro://media-control", args.action);
+      event.sender.send("muro:event", "muro://media-control", args.payload ?? args.action);
       return undefined;
     }
     if (command === "delete_tracks") return {
@@ -241,6 +280,66 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", { action: "previous" });
         await new Promise((resolve) => setTimeout(resolve, 100));
         const mediaPreviousTrackIndex = scroller.querySelector('[data-track-playing="true"]')
+          ?.getAttribute("data-track-index");
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "next", source: "global-shortcut" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "toggle", source: "global-shortcut" },
+        });
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "pause", source: "media-session" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const mediaPausedAfterSkip = Boolean(
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play"
+        );
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "next", source: "global-shortcut" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const mediaNextAfterPauseIndex = scroller.querySelector('[data-track-playing="true"]')
+          ?.getAttribute("data-track-index");
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "toggle", source: "global-shortcut" },
+        });
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "pause", source: "media-session" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "toggle", source: "global-shortcut" },
+        });
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "play", source: "media-session" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        const mediaResumeTrackIndex = scroller.querySelector('[data-track-playing="true"]')
+          ?.getAttribute("data-track-index");
+        const mediaResumeButtonTitle = document.querySelector(".player-bar-play-button")
+          ?.getAttribute("title");
+        const mediaResumePlaybackState = navigator.mediaSession?.playbackState;
+        const mediaResumeNotifications = Array.from(
+          document.querySelectorAll(".fixed.bottom-4.right-4 p"),
+          (node) => node.textContent?.trim(),
+        );
+        const mediaResumedAfterPause = Boolean(
+          mediaResumeTrackIndex === "3" &&
+          mediaResumeButtonTitle === "Pause" &&
+          mediaResumePlaybackState === "playing"
+        );
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "previous", source: "global-shortcut" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        await window.muro.invoke("test_emit_media_control", {
+          payload: { action: "previous", source: "global-shortcut" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const mediaPreviousAfterResumeIndex = scroller
+          .querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         document.querySelector('[data-panel-view="mix"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
@@ -562,6 +661,14 @@ app.whenReady().then(async () => {
           mediaSessionPausedReady,
           mediaNextTrackIndex,
           mediaPreviousTrackIndex,
+          mediaPausedAfterSkip,
+          mediaNextAfterPauseIndex,
+          mediaResumedAfterPause,
+          mediaResumeTrackIndex,
+          mediaResumeButtonTitle,
+          mediaResumePlaybackState,
+          mediaResumeNotifications,
+          mediaPreviousAfterResumeIndex,
           mixSuggestionCount,
           firstMixReason,
           mixFiltersReady,
@@ -689,6 +796,21 @@ app.whenReady().then(async () => {
         fail(
           `Media next/previous failed: next=${result.mediaNextTrackIndex}, ` +
           `previous=${result.mediaPreviousTrackIndex}`
+        );
+        return;
+      }
+      if (
+        !result.mediaPausedAfterSkip ||
+        result.mediaNextAfterPauseIndex !== "3" ||
+        !result.mediaResumedAfterPause ||
+        result.mediaPreviousAfterResumeIndex !== "1"
+      ) {
+        fail(
+          `Media controls failed after skip/pause: paused=${result.mediaPausedAfterSkip}, ` +
+          `next=${result.mediaNextAfterPauseIndex}, resumed=${result.mediaResumedAfterPause}, ` +
+          `track=${result.mediaResumeTrackIndex}, button=${result.mediaResumeButtonTitle}, ` +
+          `state=${result.mediaResumePlaybackState}, previous=${result.mediaPreviousAfterResumeIndex}, ` +
+          `notifications=${result.mediaResumeNotifications}`
         );
         return;
       }

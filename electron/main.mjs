@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./backend.mjs";
 import { createLocalFileResponse } from "./fileProtocol.mjs";
 import { createKeyFinderService } from "./keyfinder.mjs";
+import { registerMediaShortcuts } from "./mediaShortcuts.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
@@ -27,6 +28,26 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow = null;
 let backend = null;
+let mediaShortcutRegistration = null;
+
+const unregisterApplicationMediaShortcuts = () => {
+  mediaShortcutRegistration?.unregister();
+  mediaShortcutRegistration = null;
+};
+
+const registerApplicationMediaShortcuts = () => {
+  if (mediaShortcutRegistration) return;
+  mediaShortcutRegistration = registerMediaShortcuts({
+    globalShortcut,
+    onAction: (action) => {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+      mainWindow.webContents.send("muro:event", "muro://media-control", {
+        action,
+        source: "global-shortcut",
+      });
+    },
+  });
+};
 
 const createWindow = async () => {
   mainWindow = new BrowserWindow({
@@ -44,6 +65,11 @@ const createWindow = async () => {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+  const createdWindow = mainWindow;
+  createdWindow.on("closed", () => {
+    if (mainWindow === createdWindow) mainWindow = null;
+    unregisterApplicationMediaShortcuts();
   });
 
   const emitWindowState = () => {
@@ -63,6 +89,7 @@ const createWindow = async () => {
   } else {
     await mainWindow.loadFile(path.join(appRoot, "dist", "index.html"));
   }
+  registerApplicationMediaShortcuts();
 };
 
 const startApplication = async () => {
@@ -178,3 +205,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => backend?.close());
+app.on("will-quit", () => {
+  unregisterApplicationMediaShortcuts();
+});

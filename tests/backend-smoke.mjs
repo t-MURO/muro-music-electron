@@ -4,6 +4,36 @@ import os from "node:os";
 import path from "node:path";
 import { createBackend } from "../electron/backend.mjs";
 import { openDatabase } from "../electron/database.mjs";
+import { registerMediaShortcuts } from "../electron/mediaShortcuts.mjs";
+
+const mediaShortcutCallbacks = new Map();
+const unregisteredMediaShortcuts = [];
+const mediaShortcutActions = [];
+const mediaShortcutRegistration = registerMediaShortcuts({
+  globalShortcut: {
+    register: (accelerator, callback) => {
+      mediaShortcutCallbacks.set(accelerator, callback);
+      return true;
+    },
+    unregister: (accelerator) => unregisteredMediaShortcuts.push(accelerator),
+  },
+  onAction: (action) => mediaShortcutActions.push(action),
+});
+assert.deepEqual(mediaShortcutRegistration.registeredAccelerators, [
+  "MediaPlayPause",
+  "MediaNextTrack",
+  "MediaPreviousTrack",
+]);
+mediaShortcutCallbacks.get("MediaPlayPause")();
+mediaShortcutCallbacks.get("MediaNextTrack")();
+mediaShortcutCallbacks.get("MediaPreviousTrack")();
+assert.deepEqual(mediaShortcutActions, ["toggle", "next", "previous"]);
+mediaShortcutRegistration.unregister();
+assert.deepEqual(unregisteredMediaShortcuts, [
+  "MediaPlayPause",
+  "MediaNextTrack",
+  "MediaPreviousTrack",
+]);
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-node-smoke-"));
 const dbPath = path.join(directory, "muro.db");

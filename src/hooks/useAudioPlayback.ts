@@ -31,6 +31,11 @@ type UseAudioPlaybackOptions = {
   seekMode?: "fast" | "accurate";
 };
 
+type MediaControlEvent = string | {
+  action?: string;
+  source?: string;
+};
+
 export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   const { onTrackEnd, onMediaControl, seekMode } = options;
 
@@ -50,6 +55,12 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   // Use refs for callbacks to avoid effect re-runs
   const onTrackEndRef = useRef(onTrackEnd);
   const onMediaControlRef = useRef(onMediaControl);
+  const latestGlobalMediaControlRef = useRef<Map<string, number>>(new Map());
+  const pendingMediaSessionControlsRef = useRef<Set<{
+    group: string;
+    receivedAt: number;
+    timeoutId: number;
+  }>>(new Set());
 
   useEffect(() => {
     onTrackEndRef.current = onTrackEnd;
@@ -98,8 +109,51 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         listen<number>("muro://playback-position", (event) => {
           setCurrentPosition(event.payload);
         }),
-        listen<string>("muro://media-control", (event) => {
-          onMediaControlRef.current?.(event.payload);
+        listen<MediaControlEvent>("muro://media-control", (event) => {
+          const action = typeof event.payload === "string"
+            ? event.payload
+            : event.payload?.action;
+          if (!action) return;
+
+          const source = typeof event.payload === "string"
+            ? "legacy"
+            : event.payload.source ?? "unknown";
+          const group = action === "play" || action === "pause" || action === "toggle"
+            ? "playback"
+            : action;
+          const receivedAt = performance.now();
+
+          if (source === "global-shortcut") {
+            latestGlobalMediaControlRef.current.set(group, receivedAt);
+            for (const pending of pendingMediaSessionControlsRef.current) {
+              if (pending.group !== group) continue;
+              window.clearTimeout(pending.timeoutId);
+              pendingMediaSessionControlsRef.current.delete(pending);
+            }
+            onMediaControlRef.current?.(action);
+            return;
+          }
+
+          if (source === "media-session") {
+            const latestGlobal = latestGlobalMediaControlRef.current.get(group) ?? -Infinity;
+            if (receivedAt - latestGlobal < 250) return;
+
+            const pending = {
+              group,
+              receivedAt,
+              timeoutId: 0,
+            };
+            pending.timeoutId = window.setTimeout(() => {
+              pendingMediaSessionControlsRef.current.delete(pending);
+              const globalAfterEvent = latestGlobalMediaControlRef.current.get(group) ?? -Infinity;
+              if (globalAfterEvent >= receivedAt && globalAfterEvent - receivedAt < 250) return;
+              onMediaControlRef.current?.(action);
+            }, 60);
+            pendingMediaSessionControlsRef.current.add(pending);
+            return;
+          }
+
+          onMediaControlRef.current?.(action);
         }),
         listen("muro://track-ended", () => {
           onTrackEndRef.current?.();
@@ -127,6 +181,10 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
     return () => {
       cancelled = true;
       removeListeners?.();
+      for (const pending of pendingMediaSessionControlsRef.current) {
+        window.clearTimeout(pending.timeoutId);
+      }
+      pendingMediaSessionControlsRef.current.clear();
     };
   }, [setCurrentPosition, updateFromPlaybackState]);
 

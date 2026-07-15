@@ -19,6 +19,11 @@ type PlaybackState = {
   current_track: CurrentTrack | null;
 };
 
+export type MediaControlPayload = {
+  action: "play" | "pause" | "toggle" | "next" | "previous";
+  source: "media-session" | "global-shortcut" | string;
+};
+
 let audio: HTMLAudioElement | null = null;
 let currentTrack: CurrentTrack | null = null;
 let durationHint = 0;
@@ -154,6 +159,10 @@ const setMediaSessionMetadata = (track: CurrentTrack | null) => {
   });
 };
 
+const emitMediaSessionControl = (action: MediaControlPayload["action"]) => {
+  emitLocal("muro://media-control", { action, source: "media-session" } satisfies MediaControlPayload);
+};
+
 const configureMediaSession = (player: HTMLAudioElement) => {
   if (!("mediaSession" in navigator) || mediaSessionConfigured) return;
   mediaSessionConfigured = true;
@@ -169,32 +178,32 @@ const configureMediaSession = (player: HTMLAudioElement) => {
     }
   };
 
-  setHandler("play", () => {
-    void player.play().catch(() => {
-      emitLocal("muro://playback-error", "Failed to resume playback");
+  setHandler("play", () => emitMediaSessionControl("play"));
+  setHandler("pause", () => emitMediaSessionControl("pause"));
+  setHandler("stop", () => {
+    void queuePlaybackInvoke("playback_stop", {}).catch(() => {
+      emitLocal("muro://playback-error", "Failed to stop playback");
     });
   });
-  setHandler("pause", () => player.pause());
-  setHandler("stop", () => {
-    player.pause();
-    player.currentTime = 0;
-    emitState();
-  });
-  setHandler("nexttrack", () => emitLocal("muro://media-control", "next"));
-  setHandler("previoustrack", () => emitLocal("muro://media-control", "previous"));
+  setHandler("nexttrack", () => emitMediaSessionControl("next"));
+  setHandler("previoustrack", () => emitMediaSessionControl("previous"));
   setHandler("seekbackward", (details) => {
-    void seekPlayer(player, player.currentTime - (details.seekOffset ?? 10)).catch(() => {
+    void queuePlaybackInvoke("playback_seek", {
+      positionSecs: player.currentTime - (details.seekOffset ?? 10),
+    }).catch(() => {
       emitLocal("muro://playback-error", "Failed to seek backward");
     });
   });
   setHandler("seekforward", (details) => {
-    void seekPlayer(player, player.currentTime + (details.seekOffset ?? 10)).catch(() => {
+    void queuePlaybackInvoke("playback_seek", {
+      positionSecs: player.currentTime + (details.seekOffset ?? 10),
+    }).catch(() => {
       emitLocal("muro://playback-error", "Failed to seek forward");
     });
   });
   setHandler("seekto", (details) => {
     if (typeof details.seekTime === "number") {
-      void seekPlayer(player, details.seekTime).catch(() => {
+      void queuePlaybackInvoke("playback_seek", { positionSecs: details.seekTime }).catch(() => {
         emitLocal("muro://playback-error", "Failed to seek");
       });
     }
