@@ -59,6 +59,27 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   source_path: path.join(temporaryDirectory, `track-${index}.wav`),
   play_count: 0,
 }));
+const smokeArtistProfile = {
+  artistKey: "muro",
+  requestedName: "Muro",
+  name: "Muro",
+  status: "ready",
+  type: "Person",
+  country: "DE",
+  area: "Berlin",
+  begin: "1990",
+  ended: false,
+  genres: ["electronic", "house"],
+  description: "Electronic musician",
+  biography: "Muro is an electronic musician used by the renderer smoke test.",
+  imagePath: null,
+  imageUrl: null,
+  musicBrainzId: "11111111-1111-4111-8111-111111111111",
+  musicBrainzUrl: "https://musicbrainz.org/artist/11111111-1111-4111-8111-111111111111",
+  wikipediaUrl: "https://en.wikipedia.org/wiki/Muro_(musician)",
+  fetchedAt: "2026-07-15T12:00:00.000Z",
+  cacheState: "fresh",
+};
 for (let index = 0; index < 5; index += 1) {
   writeSilentWave(smokeTracks[index].source_path);
 }
@@ -105,6 +126,8 @@ app.whenReady().then(async () => {
       folders: [{ id: "smoke-folder", name: "Smoke Sets" }],
     };
     if (command === "load_recently_played") return [];
+    if (command === "load_cached_artist_profiles") return [smokeArtistProfile];
+    if (command === "get_artist_profile") return smokeArtistProfile;
     if (command === "playback_get_state") return {
       is_playing: false,
       current_position: 0,
@@ -552,6 +575,27 @@ app.whenReady().then(async () => {
           window.location.hash.includes("/collection/artists") &&
           window.location.hash.includes("value=Muro") &&
           document.querySelector("h2")?.textContent?.trim() === "Muro";
+        const albumArtistProfileReady = Boolean(
+          document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
+          document.querySelector(".artist-detail-biography")?.textContent?.includes("renderer smoke test")
+        );
+
+        window.location.hash = "#/collection/artists";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const artistCards = document.querySelectorAll("[data-artist-card]");
+        const artistCard = document.querySelector('[data-artist-card="Muro"]');
+        const artistIndexReady =
+          Boolean(document.querySelector("[data-artist-index]")) &&
+          artistCards.length === 1 &&
+          artistCard?.getAttribute("data-artist-profile-cached") === "true" &&
+          artistCard?.textContent?.includes("250 tracks") &&
+          artistCard?.textContent?.includes("25 albums");
+        artistCard?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const artistDetailReady = Boolean(
+          document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "250"
+        );
 
         window.location.hash = "#/collection/genres";
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -701,6 +745,9 @@ app.whenReady().then(async () => {
           mouseForwardReachedAlbumList,
           albumMetadataLinksReady,
           albumArtistNavigationReady,
+          albumArtistProfileReady,
+          artistIndexReady,
+          artistDetailReady,
           genreIndexReady,
           genreDrilldownReady,
           genreHistoryReady,
@@ -941,6 +988,13 @@ app.whenReady().then(async () => {
         fail(
           `Album metadata navigation failed: links=${result.albumMetadataLinksReady}, ` +
           `artist=${result.albumArtistNavigationReady}`
+        );
+        return;
+      }
+      if (!result.albumArtistProfileReady || !result.artistIndexReady || !result.artistDetailReady) {
+        fail(
+          `Artist profiles failed: albumLink=${result.albumArtistProfileReady}, ` +
+          `index=${result.artistIndexReady}, detail=${result.artistDetailReady}`
         );
         return;
       }

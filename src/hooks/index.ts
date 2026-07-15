@@ -25,6 +25,7 @@ export {
 export { usePlaylistOperations } from "./usePlaylistOperations";
 export { usePlaylistFolders } from "./usePlaylistFolders";
 export { usePlaylistTransfer } from "./usePlaylistTransfer";
+export { useArtistProfiles, normalizeArtistProfileKey } from "./useArtistProfiles";
 export { useInboxOperations } from "./useInboxOperations";
 export {
   useFileImport,

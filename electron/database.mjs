@@ -79,6 +79,17 @@ const PLAYLIST_SCHEMA = `
     ON playlist_tracks(playlist_id, position);
 `;
 
+const ARTIST_PROFILE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS artist_profiles (
+    artist_key TEXT PRIMARY KEY,
+    requested_name TEXT NOT NULL,
+    profile_json TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS artist_profiles_fetched_at_idx
+    ON artist_profiles(fetched_at DESC);
+`;
+
 const REQUIRED_TRACK_COLUMNS = {
   album_artist: "TEXT",
   genre_json: "TEXT",
@@ -95,6 +106,7 @@ const REQUIRED_TRACK_COLUMNS = {
   bpm: "REAL",
   rating: "REAL",
   raw_tags_json: "TEXT",
+  musicbrainz_artistid: "TEXT",
   source_path: "TEXT",
   search_text: "TEXT",
   import_status: "TEXT DEFAULT 'staged'",
@@ -127,6 +139,7 @@ export const openDatabase = (dbPath) => {
     if (!existing.has(name)) db.exec(`ALTER TABLE tracks ADD COLUMN ${name} ${type}`);
   }
   db.exec(PLAYLIST_SCHEMA);
+  db.exec(ARTIST_PROFILE_SCHEMA);
   const playlistColumns = new Set(
     db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
   );

@@ -7,6 +7,8 @@ export { TableHeader } from "./TableHeader";
 export { TableRow } from "./TableRow";
 export { TrackTable } from "./TrackTable";
 export { AlbumsView } from "./AlbumsView";
+export { ArtistIndexView, buildArtistIndexItems, type ArtistIndexItem } from "./ArtistIndexView";
+export { ArtistDetailPanel } from "./ArtistDetailPanel";
 export { TrackSelectionBar } from "./TrackSelectionBar";
 export {
   CollectionIndexView,

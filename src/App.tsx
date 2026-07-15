@@ -12,6 +12,9 @@ import {
   InboxBanner,
   TrackSelectionBar,
   AlbumsView,
+  ArtistDetailPanel,
+  ArtistIndexView,
+  buildArtistIndexItems,
   CollectionIndexView,
   buildCollectionIndexItems,
   TrackTable,
@@ -51,6 +54,8 @@ import {
   useLibraryInit,
   usePlayTracking,
   useKeyboardShortcuts,
+  useArtistProfiles,
+  normalizeArtistProfileKey,
   type LibraryView,
 } from "./hooks";
 import { themes } from "./data/library";
@@ -74,6 +79,7 @@ import {
   groupTracksIntoAlbums,
 } from "./utils";
 import { confirm, open, save } from "@muro/desktop/dialogs";
+import { openExternal } from "./desktop/shell";
 import type { ColumnConfig, SmartCrate, Track } from "./types";
 
 function App() {
@@ -171,6 +177,8 @@ function App() {
   const collectionFilterValue = collectionMatch?.params.facet
     ? new URLSearchParams(location.search).get("value")
     : null;
+  const isArtistIndex = view === "collection:artists" && !collectionFilterValue;
+  const isArtistDetail = view === "collection:artists" && Boolean(collectionFilterValue);
   const collectionIndexFacet = !collectionFilterValue && view === "collection:genres"
     ? "genres"
     : !collectionFilterValue && view === "collection:keys"
@@ -198,6 +206,10 @@ function App() {
     params.set("value", value);
     navigate({ pathname: `/collection/${facet}`, search: params.toString() });
   }, [navigate]);
+
+  const handleOpenArtistSource = useCallback((url: string) => {
+    void openExternal(url).catch(() => notify.error("Could not open artist source"));
+  }, []);
 
   // Redirect unknown paths to library
   useEffect(() => {
@@ -228,6 +240,12 @@ function App() {
 
   // Filtering and sorting
   const displayedTracks = viewConfig.trackTable?.tracks ?? [];
+  const {
+    profiles: artistProfiles,
+    loadingKeys: artistProfileLoadingKeys,
+    errors: artistProfileErrors,
+    loadProfile: loadArtistProfile,
+  } = useArtistProfiles();
   const albums = useMemo(() => groupTracksIntoAlbums(tracks), [tracks]);
   const albumResults = useMemo(
     () => filterAlbumsBySearch(albums, searchQuery),
@@ -243,6 +261,28 @@ function App() {
       ? collectionIndexItems.filter((item) => item.value.toLocaleLowerCase().includes(query))
       : collectionIndexItems;
   }, [collectionIndexItems, searchQuery]);
+  const artistIndexItems = useMemo(() => buildArtistIndexItems(tracks), [tracks]);
+  const artistIndexResults = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return query
+      ? artistIndexItems.filter((item) => item.name.toLocaleLowerCase().includes(query))
+      : artistIndexItems;
+  }, [artistIndexItems, searchQuery]);
+  const selectedArtistName = isArtistDetail ? collectionFilterValue?.trim() ?? "" : "";
+  const selectedArtistKey = normalizeArtistProfileKey(selectedArtistName);
+  const selectedArtistProfile = artistProfiles[selectedArtistKey];
+  const selectedArtistProfileLoading = artistProfileLoadingKeys.has(selectedArtistKey);
+  const selectedArtistProfileError = artistProfileErrors[selectedArtistKey];
+  const selectedArtistAlbumCount = useMemo(() => new Set(
+    displayedTracks
+      .map((track) => track.album.trim().toLocaleLowerCase())
+      .filter(Boolean),
+  ).size, [displayedTracks]);
+
+  useEffect(() => {
+    if (!selectedArtistName) return;
+    void loadArtistProfile(selectedArtistName);
+  }, [loadArtistProfile, selectedArtistName]);
 
   // Apply search filter
   const filteredTracks = useMemo(() => {
@@ -1125,14 +1165,14 @@ function App() {
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
                   isSettings={viewConfig.type === "settings"}
-                  resultCount={collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
+                  resultCount={isArtistIndex ? artistIndexResults.length : collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   onAddMusic={handleEmptyImport}
                   onShowColumns={openColumnsMenu}
                   onSort={() => handleSortChange("title")}
-                  contentMode={collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
-                  resultLabel={collectionIndexFacet ?? undefined}
+                  contentMode={isArtistIndex || collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
+                  resultLabel={isArtistIndex ? "artists" : collectionIndexFacet ?? undefined}
                 />
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
@@ -1175,6 +1215,12 @@ function App() {
                       onClearSongs={handleClearSongs}
                       onUseDefaultLocation={() => setUseAutoDbPath(true)}
                     />
+                  ) : isArtistIndex ? (
+                    <ArtistIndexView
+                      items={artistIndexResults}
+                      profiles={artistProfiles}
+                      onSelect={(artistName) => handleOpenCollectionValue("artists", artistName)}
+                    />
                   ) : collectionIndexFacet ? (
                     <CollectionIndexView
                       facet={collectionIndexFacet}
@@ -1202,6 +1248,18 @@ function App() {
                   ) : (
                     viewConfig.trackTable && (
                       <>
+                        {isArtistDetail && selectedArtistName && (
+                          <ArtistDetailPanel
+                            artistName={selectedArtistName}
+                            profile={selectedArtistProfile}
+                            isLoading={selectedArtistProfileLoading}
+                            error={selectedArtistProfileError}
+                            trackCount={displayedTracks.length}
+                            albumCount={selectedArtistAlbumCount}
+                            onRefresh={() => { void loadArtistProfile(selectedArtistName, true); }}
+                            onOpenSource={handleOpenArtistSource}
+                          />
+                        )}
                         <TrackTable
                           tracks={sortedTracks}
                           columns={columns}

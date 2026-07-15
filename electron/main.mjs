@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./backend.mjs";
@@ -168,6 +168,12 @@ const startApplication = async () => {
       filters: Array.isArray(options.filters) ? options.filters : undefined,
     });
     return result.canceled || !result.filePath ? null : result.filePath;
+  });
+  ipcMain.handle("muro:open-external", async (_event, value) => {
+    const url = new URL(String(value));
+    const allowedHost = url.hostname === "musicbrainz.org" || url.hostname.endsWith(".wikipedia.org");
+    if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
+    await shell.openExternal(url.toString());
   });
   ipcMain.handle("muro:confirm-dialog", async (_event, message, options) => {
     const result = await dialog.showMessageBox(mainWindow, {

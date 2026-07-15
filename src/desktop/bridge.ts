@@ -10,6 +10,7 @@ export type MuroBridge = {
   isWindowMaximized(): Promise<boolean>;
   openDialog(options: Record<string, unknown>): Promise<string | string[] | null>;
   saveDialog(options: Record<string, unknown>): Promise<string | null>;
+  openExternal(url: string): Promise<void>;
   confirmDialog(message: string, options?: Record<string, unknown>): Promise<boolean>;
 };
 

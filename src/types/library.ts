@@ -62,6 +62,31 @@ export type PlaylistFolder = {
   name: string;
 };
 
+export type ArtistProfile = {
+  artistKey: string;
+  requestedName: string;
+  name: string;
+  status: "ready" | "not-found";
+  sortName?: string | null;
+  disambiguation?: string | null;
+  type?: string | null;
+  country?: string | null;
+  area?: string | null;
+  begin?: string | null;
+  end?: string | null;
+  ended?: boolean;
+  genres?: string[];
+  description?: string | null;
+  biography?: string | null;
+  imagePath?: string | null;
+  imageUrl?: string | null;
+  musicBrainzId?: string | null;
+  musicBrainzUrl?: string | null;
+  wikipediaUrl?: string | null;
+  fetchedAt: string;
+  cacheState?: "fresh" | "stale";
+};
+
 export type SmartCrateField =
   | "bpm"
   | "key"

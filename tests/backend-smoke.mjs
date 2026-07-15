@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createArtistProfileService } from "../electron/artistProfiles.mjs";
 import { createBackend } from "../electron/backend.mjs";
 import { openDatabase } from "../electron/database.mjs";
 import { registerMediaShortcuts } from "../electron/mediaShortcuts.mjs";
@@ -167,6 +168,60 @@ try {
   const recent = await backend.invoke("load_recently_played", { dbPath, limit: 10 });
   assert.equal(recent[0].play_count, 1);
   assert.equal(recent[0].bpm, 128);
+
+  const artistFetchCalls = [];
+  const artistId = "11111111-1111-4111-8111-111111111111";
+  const artistProfileService = createArtistProfileService({
+    cacheDir: path.join(directory, "artist-profile-cache"),
+    musicBrainzIntervalMs: 0,
+    fetchImpl: async (url) => {
+      artistFetchCalls.push(String(url));
+      if (String(url).startsWith("https://musicbrainz.org/ws/2/artist/?")) {
+        return new Response(JSON.stringify({
+          artists: [{ id: artistId, name: "Muro", score: 100 }],
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`)) {
+        return new Response(JSON.stringify({
+          id: artistId,
+          name: "Muro",
+          type: "Person",
+          country: "DE",
+          area: { name: "Berlin" },
+          "life-span": { begin: "1990" },
+          genres: [{ name: "electronic" }, { name: "house" }],
+          relations: [{
+            type: "wikipedia",
+            url: { resource: "https://en.wikipedia.org/wiki/Muro_(musician)" },
+          }],
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url).includes("/api/rest_v1/page/summary/")) {
+        return new Response(JSON.stringify({
+          extract: "Muro is an electronic musician used by the smoke test.",
+          description: "Electronic musician",
+          thumbnail: { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
+          content_urls: { desktop: { page: "https://en.wikipedia.org/wiki/Muro_(musician)" } },
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url) === "https://upload.wikimedia.org/muro-smoke.jpg") {
+        return new Response(Buffer.from("smoke image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      throw new Error(`Unexpected artist profile URL: ${url}`);
+    },
+  });
+  const artistProfile = await artistProfileService.getProfile(db, "Muro");
+  assert.equal(artistProfile.status, "ready");
+  assert.equal(artistProfile.description, "Electronic musician");
+  assert.deepEqual(artistProfile.genres, ["electronic", "house"]);
+  assert.ok(fs.existsSync(artistProfile.imagePath), "artist image should be cached on disk");
+  const artistFetchCount = artistFetchCalls.length;
+  const cachedArtistProfile = await artistProfileService.getProfile(db, "Muro");
+  assert.equal(cachedArtistProfile.cacheState, "fresh");
+  assert.equal(artistFetchCalls.length, artistFetchCount, "fresh artist profiles should not be fetched again");
+  assert.equal(artistProfileService.loadCachedProfiles(db)[0].artistKey, "muro");
 
   assert.equal((await backend.invoke("keyfinder_health", {})).service, "keyfinder-native");
   const analysisSettings = {

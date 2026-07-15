@@ -17,6 +17,7 @@ import {
   writeMetadataToFile,
 } from "./metadata.mjs";
 import { createWaveformCache } from "./waveformCache.mjs";
+import { createArtistProfileService } from "./artistProfiles.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -162,6 +163,8 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
 };
 
 export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) => {
+  const artistCacheDir = path.join(path.dirname(cacheDir), "artists");
+  const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
   const waveformCache = createWaveformCache({
     cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
   });
@@ -188,9 +191,15 @@ export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) =
     load_tracks: ({ dbPath }) => loadTracks(dbPath),
     load_playlists: ({ dbPath }) => loadPlaylists(dbPath),
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
+    load_cached_artist_profiles: ({ dbPath }) =>
+      artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
+    get_artist_profile: ({ dbPath, artistName, force }) =>
+      artistProfiles.getProfile(openDatabase(dbPath), artistName, { force: Boolean(force) }),
 
     clear_tracks: async ({ dbPath }) => {
-      openDatabase(dbPath).prepare("DELETE FROM tracks").run();
+      const db = openDatabase(dbPath);
+      db.prepare("DELETE FROM tracks").run();
+      db.prepare("DELETE FROM artist_profiles").run();
       if (fs.existsSync(cacheDir)) {
         for (const entry of fs.readdirSync(cacheDir)) {
           const candidate = path.join(cacheDir, entry);
@@ -198,6 +207,7 @@ export const createBackend = ({ cacheDir, emit, keyFinder, waveformCacheDir }) =
         }
       }
       await waveformCache.clear();
+      await fs.promises.rm(artistCacheDir, { recursive: true, force: true });
     },
 
     accept_tracks: ({ dbPath, trackIds }) =>

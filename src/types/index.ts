@@ -3,6 +3,7 @@ export type {
   TrackMetadataUpdates,
   Playlist,
   PlaylistFolder,
+  ArtistProfile,
   SmartCrate,
   SmartCrateField,
   SmartCrateOperator,

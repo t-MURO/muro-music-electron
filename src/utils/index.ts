@@ -32,6 +32,8 @@ export {
   unacceptTracks,
   rejectTracks,
   deleteTracks,
+  loadCachedArtistProfiles,
+  getArtistProfile,
   loadPlaylists,
   createPlaylist,
   updatePlaylist,

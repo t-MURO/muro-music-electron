@@ -1,5 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { LibrarySnapshot, PlaylistSnapshot } from "./importApi";
+import type { ArtistProfile } from "../types";
 
 // ============================================================================
 // Library Operations
@@ -41,6 +42,15 @@ export const deleteTracks = (
     deleteFromDisk,
   });
 };
+
+export const loadCachedArtistProfiles = (dbPath: string) =>
+  invoke<ArtistProfile[]>("load_cached_artist_profiles", { dbPath });
+
+export const getArtistProfile = (
+  dbPath: string,
+  artistName: string,
+  force = false,
+) => invoke<ArtistProfile>("get_artist_profile", { dbPath, artistName, force });
 
 // ============================================================================
 // Playlist Operations
