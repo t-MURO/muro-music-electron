@@ -279,6 +279,23 @@ try {
     artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
     ["fallback muro", "muro"],
   );
+  db.prepare("UPDATE artist_profiles SET fetched_at = 0 WHERE artist_key = ?").run("muro");
+  const fetchCountBeforeStaleBackgroundScan = artistFetchCalls.length;
+  assert.equal(
+    (await artistProfileService.scanProfiles(db, { limit: 1 })).checked,
+    0,
+    "background scans should not refresh an existing stale profile",
+  );
+  assert.equal(
+    artistFetchCalls.length,
+    fetchCountBeforeStaleBackgroundScan,
+    "stale profiles should remain local until their artist page requests them",
+  );
+  await artistProfileService.getProfile(db, "Muro");
+  assert.ok(
+    artistFetchCalls.length > fetchCountBeforeStaleBackgroundScan,
+    "opening an artist should refresh its stale profile",
+  );
   const periodicSourcePath = path.join(directory, "periodic.mp3");
   insertTrack.run(
     "track-periodic",

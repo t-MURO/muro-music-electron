@@ -441,11 +441,9 @@ export const createArtistProfileService = ({
           return [];
         }
       }));
-      const due = artists.filter(({ artistKey }) => cachedProfileNeedsRefresh(
-        cachedByArtist.get(artistKey) ?? null,
-        now(),
-        fanartApiKey,
-      ));
+      // Background scans only discover artists that have never been cached.
+      // Existing profiles are refreshed on demand when their artist page opens.
+      const due = artists.filter(({ artistKey }) => !cachedByArtist.has(artistKey));
       const scanStartedAt = now();
       const eligible = due.filter(({ artistKey }) => (
         scanRetryAfter.get(artistKey) ?? 0
