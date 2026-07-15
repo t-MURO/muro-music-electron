@@ -1,9 +1,7 @@
 import {
-  Activity,
   Badge,
   Clock3,
   Disc3,
-  FileAudio,
   Inbox,
   ListMusic,
   Music2,
@@ -77,8 +75,6 @@ export const Sidebar = ({
     { facet: "albums", label: "Albums", icon: Disc3 },
     { facet: "labels", label: "Labels", icon: Badge },
     { facet: "keys", label: "Keys", icon: KeyRound },
-    { facet: "bpm", label: "BPM", icon: Activity },
-    { facet: "formats", label: "Formats", icon: FileAudio },
   ];
 
   const itemClass = (active: boolean) =>
@@ -212,6 +208,7 @@ export const Sidebar = ({
                     key={facet}
                     className={itemClass(currentView === collectionView)}
                     onClick={() => onViewChange(collectionView)}
+                    data-collection-facet={facet}
                     type="button"
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />

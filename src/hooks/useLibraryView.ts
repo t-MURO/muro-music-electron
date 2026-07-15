@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { t } from "../i18n";
 import { filterTracksBySmartCrate } from "../utils/smartCrates";
+import { toCamelotCode } from "../utils/camelot";
 import type { Playlist, SmartCrate, Track } from "../types";
 
 export type CollectionFacet = "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
@@ -210,9 +211,14 @@ export const useViewConfig = ({
 
         if (!value.trim()) return false;
         if (!normalizedFilter) return true;
-        return collectionFacet === "genres"
-          ? value.toLocaleLowerCase().includes(normalizedFilter)
-          : value.toLocaleLowerCase() === normalizedFilter;
+        if (collectionFacet === "keys") {
+          const filterCode = toCamelotCode(collectionFilterValue ?? "");
+          const trackCode = toCamelotCode(value);
+          return filterCode && trackCode
+            ? filterCode === trackCode
+            : value.toLocaleLowerCase() === normalizedFilter;
+        }
+        return value.toLocaleLowerCase() === normalizedFilter;
       });
       const collectionTitle = labels[collectionFacet];
       const title = collectionFilterValue?.trim() || collectionTitle;

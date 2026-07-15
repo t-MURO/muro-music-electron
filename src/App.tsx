@@ -12,6 +12,8 @@ import {
   InboxBanner,
   TrackSelectionBar,
   AlbumsView,
+  CollectionIndexView,
+  buildCollectionIndexItems,
   TrackTable,
   ContextMenu,
   DeleteTracksModal,
@@ -155,6 +157,14 @@ function App() {
   );
 
   const isAlbumsView = view === "collection:albums";
+  const collectionFilterValue = collectionMatch?.params.facet
+    ? new URLSearchParams(location.search).get("value")
+    : null;
+  const collectionIndexFacet = !collectionFilterValue && view === "collection:genres"
+    ? "genres"
+    : !collectionFilterValue && view === "collection:keys"
+      ? "keys"
+      : null;
   const selectedAlbumId = isAlbumsView
     ? new URLSearchParams(location.search).get("album")
     : null;
@@ -172,7 +182,7 @@ function App() {
     [navigate]
   );
 
-  const handleOpenCollectionValue = useCallback((facet: "artists" | "genres", value: string) => {
+  const handleOpenCollectionValue = useCallback((facet: "artists" | "genres" | "keys", value: string) => {
     const params = new URLSearchParams();
     params.set("value", value);
     navigate({ pathname: `/collection/${facet}`, search: params.toString() });
@@ -202,9 +212,7 @@ function App() {
     inboxTracks,
     recentlyPlayedTracks,
     smartCrates,
-    collectionFilterValue: collectionMatch?.params.facet
-      ? new URLSearchParams(location.search).get("value")
-      : null,
+    collectionFilterValue,
   });
 
   // Filtering and sorting
@@ -214,6 +222,16 @@ function App() {
     () => filterAlbumsBySearch(albums, searchQuery),
     [albums, searchQuery]
   );
+  const collectionIndexItems = useMemo(
+    () => collectionIndexFacet ? buildCollectionIndexItems(tracks, collectionIndexFacet) : [],
+    [collectionIndexFacet, tracks],
+  );
+  const collectionIndexResults = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return query
+      ? collectionIndexItems.filter((item) => item.value.toLocaleLowerCase().includes(query))
+      : collectionIndexItems;
+  }, [collectionIndexItems, searchQuery]);
 
   // Apply search filter
   const filteredTracks = useMemo(() => {
@@ -936,13 +954,14 @@ function App() {
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
                   isSettings={viewConfig.type === "settings"}
-                  resultCount={isAlbumsView ? albumResults.length : sortedTracks.length}
+                  resultCount={collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   onAddMusic={handleEmptyImport}
                   onShowColumns={openColumnsMenu}
                   onSort={() => handleSortChange("title")}
-                  contentMode={isAlbumsView ? "albums" : "tracks"}
+                  contentMode={collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
+                  resultLabel={collectionIndexFacet ?? undefined}
                 />
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
@@ -984,6 +1003,12 @@ function App() {
                       onBackfillCoverArt={handleBackfillCoverArt}
                       onClearSongs={handleClearSongs}
                       onUseDefaultLocation={() => setUseAutoDbPath(true)}
+                    />
+                  ) : collectionIndexFacet ? (
+                    <CollectionIndexView
+                      facet={collectionIndexFacet}
+                      items={collectionIndexResults}
+                      onSelect={(value) => handleOpenCollectionValue(collectionIndexFacet, value)}
                     />
                   ) : isAlbumsView ? (
                     <AlbumsView

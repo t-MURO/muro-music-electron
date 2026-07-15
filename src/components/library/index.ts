@@ -8,3 +8,9 @@ export { TableRow } from "./TableRow";
 export { TrackTable } from "./TrackTable";
 export { AlbumsView } from "./AlbumsView";
 export { TrackSelectionBar } from "./TrackSelectionBar";
+export {
+  CollectionIndexView,
+  buildCollectionIndexItems,
+  type CollectionIndexFacet,
+  type CollectionIndexItem,
+} from "./CollectionIndexView";

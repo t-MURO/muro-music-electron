@@ -425,6 +425,45 @@ app.whenReady().then(async () => {
           window.location.hash.includes("value=Muro") &&
           document.querySelector("h2")?.textContent?.trim() === "Muro";
 
+        window.location.hash = "#/collection/genres";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const genreItems = document.querySelectorAll('[data-collection-index="genres"] [data-collection-value]');
+        const electronicGenre = document.querySelector('[data-collection-value="Electronic"]');
+        const houseGenre = document.querySelector('[data-collection-value="House"]');
+        const genreIndexReady =
+          genreItems.length === 2 &&
+          electronicGenre?.getAttribute("data-collection-count") === "125" &&
+          houseGenre?.getAttribute("data-collection-count") === "125";
+        electronicGenre?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const genreDrilldownReady =
+          window.location.hash.includes("/collection/genres") &&
+          window.location.hash.includes("value=Electronic") &&
+          document.querySelector("h2")?.textContent?.trim() === "Electronic" &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "125";
+        window.history.back();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const genreHistoryReady = Boolean(document.querySelector('[data-collection-index="genres"]'));
+
+        window.location.hash = "#/collection/keys";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const keyItems = document.querySelectorAll('[data-collection-index="keys"] [data-collection-value]');
+        const camelot8A = document.querySelector('[data-collection-index="keys"] [data-collection-value="8A"]');
+        const keyIndexReady =
+          keyItems.length === 5 &&
+          camelot8A?.getAttribute("data-collection-count") === "84" &&
+          camelot8A?.getAttribute("data-collection-color") === "#E9AEE1";
+        camelot8A?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const keyDrilldownReady =
+          window.location.hash.includes("/collection/keys") &&
+          window.location.hash.includes("value=8A") &&
+          document.querySelector("h2")?.textContent?.trim() === "8A" &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "84";
+        const removedCollectionLinksReady =
+          !document.querySelector('[data-collection-facet="bpm"]') &&
+          !document.querySelector('[data-collection-facet="formats"]');
+
         document.querySelector('[data-smart-crate-create]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const smartCrateModalReady = Boolean(
@@ -523,6 +562,12 @@ app.whenReady().then(async () => {
           mouseForwardReachedAlbumList,
           albumMetadataLinksReady,
           albumArtistNavigationReady,
+          genreIndexReady,
+          genreDrilldownReady,
+          genreHistoryReady,
+          keyIndexReady,
+          keyDrilldownReady,
+          removedCollectionLinksReady,
           smartCrateModalReady,
           smartCrateCreated,
           smartCrateMatchedTracks,
@@ -670,6 +715,22 @@ app.whenReady().then(async () => {
       }
       if (!result.playlistRemoveReady) {
         fail("Playlist view did not show the remove-from-playlist button");
+        return;
+      }
+      if (
+        !result.genreIndexReady ||
+        !result.genreDrilldownReady ||
+        !result.genreHistoryReady ||
+        !result.keyIndexReady ||
+        !result.keyDrilldownReady ||
+        !result.removedCollectionLinksReady
+      ) {
+        fail(
+          `Collection indexes failed: genres=${result.genreIndexReady}, ` +
+          `genreDrilldown=${result.genreDrilldownReady}, genreHistory=${result.genreHistoryReady}, ` +
+          `keys=${result.keyIndexReady}, keyDrilldown=${result.keyDrilldownReady}, ` +
+          `removedLinks=${result.removedCollectionLinksReady}`
+        );
         return;
       }
       if (!result.windowChromeReady || result.windowChromeDragRegion !== "drag") {

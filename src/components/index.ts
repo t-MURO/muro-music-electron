@@ -18,6 +18,8 @@ export {
   TrackTable,
   AlbumsView,
   TrackSelectionBar,
+  CollectionIndexView,
+  buildCollectionIndexItems,
 } from "./library";
 export {
   AnalysisModal,
