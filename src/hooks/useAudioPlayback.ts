@@ -86,61 +86,49 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   );
 
   // Listen for playback state updates from the desktop runtime.
-  const listenersSetupRef = useRef(false);
-
   useEffect(() => {
-    if (listenersSetupRef.current) {
-      return;
-    }
-    listenersSetupRef.current = true;
-
-    let unlistenState: (() => void) | null = null;
-    let unlistenPosition: (() => void) | null = null;
-    let unlistenControl: (() => void) | null = null;
-    let unlistenTrackEnded: (() => void) | null = null;
+    let cancelled = false;
+    let removeListeners: (() => void) | null = null;
 
     const setup = async () => {
-      unlistenState = await listen<PlaybackState>(
-        "muro://playback-state",
-        (event) => {
+      const listeners = await Promise.all([
+        listen<PlaybackState>("muro://playback-state", (event) => {
           updateFromPlaybackState(event.payload);
-        }
-      );
-
-      unlistenPosition = await listen<number>(
-        "muro://playback-position",
-        (event) => {
+        }),
+        listen<number>("muro://playback-position", (event) => {
           setCurrentPosition(event.payload);
-        }
-      );
+        }),
+        listen<string>("muro://media-control", (event) => {
+          onMediaControlRef.current?.(event.payload);
+        }),
+        listen("muro://track-ended", () => {
+          onTrackEndRef.current?.();
+        }),
+      ]);
 
-      unlistenControl = await listen<string>("muro://media-control", (event) => {
-        onMediaControlRef.current?.(event.payload);
-      });
-
-      unlistenTrackEnded = await listen("muro://track-ended", () => {
-        onTrackEndRef.current?.();
-      });
+      const cleanup = () => listeners.forEach((removeListener) => removeListener());
+      if (cancelled) {
+        cleanup();
+        return;
+      }
+      removeListeners = cleanup;
 
       // Get initial state
       try {
         const initialState = await playbackGetState();
-        updateFromPlaybackState(initialState);
+        if (!cancelled) updateFromPlaybackState(initialState);
       } catch (error) {
-        notify.error("Failed to get initial playback state");
+        if (!cancelled) notify.error("Failed to get initial playback state");
       }
     };
 
     void setup();
 
     return () => {
-      unlistenState?.();
-      unlistenPosition?.();
-      unlistenControl?.();
-      unlistenTrackEnded?.();
+      cancelled = true;
+      removeListeners?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run once, callbacks use refs
-  }, []);
+  }, [setCurrentPosition, updateFromPlaybackState]);
 
   useEffect(() => {
     if (!seekMode) {

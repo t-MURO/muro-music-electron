@@ -54,7 +54,7 @@ app.whenReady().then(async () => {
     if (action === "close") testWindow.close();
     return false;
   });
-  ipcMain.handle("muro:invoke", (_event, command, args = {}) => {
+  ipcMain.handle("muro:invoke", (event, command, args = {}) => {
     if (command === "load_tracks") return { library: smokeTracks, inbox: [] };
     if (command === "load_playlists") return {
       playlists: [{
@@ -76,6 +76,11 @@ app.whenReady().then(async () => {
       command === "playback_set_seek_mode" ||
       command === "generate_track_waveform"
     ) return command === "generate_track_waveform" ? [] : undefined;
+    if (command === "playback_toggle") return false;
+    if (command === "test_emit_media_control") {
+      event.sender.send("muro:event", "muro://media-control", args.action);
+      return undefined;
+    }
     if (command === "delete_tracks") return {
       deletedTrackIds: [],
       failures: (args.trackIds ?? []).map((trackId) => ({
@@ -180,6 +185,18 @@ app.whenReady().then(async () => {
           document.querySelector('[data-selection-edit]') &&
           document.querySelector('[data-selection-delete]')
         );
+        const rowThumbnailReady = Boolean(
+          firstTrackRow?.querySelector('[data-track-thumbnail]') &&
+          document.querySelector('[aria-label="Select all tracks"]')
+        );
+        const selectedTrackRow = scroller.querySelector('[data-track-selected="true"]');
+        const selectedRowColor = selectedTrackRow
+          ? getComputedStyle(selectedTrackRow).backgroundColor
+          : "";
+        const selectedRowUsesGreyHighlight = selectedRowColor.startsWith("rgba(148, 163, 184,");
+        const keyColumnColorReady = selectedTrackRow
+          ?.querySelector('[data-track-key-color]')
+          ?.getAttribute('data-track-key-color') === "#E9AEE1";
         scroller.dispatchEvent(new KeyboardEvent("keydown", {
           key: " ",
           code: "Space",
@@ -187,7 +204,37 @@ app.whenReady().then(async () => {
           cancelable: true,
         }));
         await new Promise((resolve) => setTimeout(resolve, 60));
-        const playingAfterSpace = scroller.querySelector('[data-track-playing="true"]')
+        const playingTrackRow = scroller.querySelector('[data-track-playing="true"]');
+        const playingAfterSpace = playingTrackRow?.getAttribute("data-track-index");
+        const playingRowColor = playingTrackRow
+          ? getComputedStyle(playingTrackRow).backgroundColor
+          : "";
+        const playingRowUsesRedHighlight = playingRowColor.startsWith("rgba(239, 51, 64,");
+        const mediaSessionPlayingReady = Boolean(
+          navigator.mediaSession?.metadata?.title === "Smoke Track 001" &&
+          navigator.mediaSession.playbackState === "playing"
+        );
+        scroller.dispatchEvent(new KeyboardEvent("keydown", {
+          key: " ",
+          code: "Space",
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const pausedAfterSecondSpace = document.querySelector(".player-bar-play-button")
+          ?.getAttribute("title") === "Play";
+        const pausedRowColor = playingTrackRow
+          ? getComputedStyle(playingTrackRow).backgroundColor
+          : "";
+        const pausedRowUsesGreyHighlight = pausedRowColor.startsWith("rgba(148, 163, 184,");
+        const mediaSessionPausedReady = navigator.mediaSession?.playbackState === "paused";
+        await window.muro.invoke("test_emit_media_control", { action: "next" });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const mediaNextTrackIndex = scroller.querySelector('[data-track-playing="true"]')
+          ?.getAttribute("data-track-index");
+        await window.muro.invoke("test_emit_media_control", { action: "previous" });
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const mediaPreviousTrackIndex = scroller.querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         document.querySelector('[data-panel-view="mix"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
@@ -220,6 +267,9 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 60));
         const camelotSegmentCount = document.querySelectorAll('[data-camelot-code]').length;
         const compatibleCamelotCount = document.querySelectorAll('[data-camelot-compatible="true"]').length;
+        const camelotColorsReady =
+          document.querySelector('[data-camelot-code="10A"]')?.getAttribute('data-camelot-fill') === "#BFCDFF" &&
+          document.querySelector('[data-camelot-code="10B"]')?.getAttribute('data-camelot-fill') === "#9AADFF";
         const currentCamelotCode = document.querySelector('[data-camelot-current="true"]')
           ?.getAttribute("data-camelot-code");
         document.querySelector('[data-camelot-code="9A"]')?.dispatchEvent(new MouseEvent("click", {
@@ -430,7 +480,17 @@ app.whenReady().then(async () => {
           tableFocusedAfterClick,
           selectedAfterArrowDown,
           selectionBarReady,
+          rowThumbnailReady,
+          selectedRowUsesGreyHighlight,
+          keyColumnColorReady,
+          playingRowUsesRedHighlight,
           playingAfterSpace,
+          pausedAfterSecondSpace,
+          pausedRowUsesGreyHighlight,
+          mediaSessionPlayingReady,
+          mediaSessionPausedReady,
+          mediaNextTrackIndex,
+          mediaPreviousTrackIndex,
           mixSuggestionCount,
           firstMixReason,
           mixFiltersReady,
@@ -439,6 +499,7 @@ app.whenReady().then(async () => {
           mixExpanded,
           camelotSegmentCount,
           compatibleCamelotCount,
+          camelotColorsReady,
           currentCamelotCode,
           selectedCamelotCode,
           wheelFilteredTo9A,
@@ -518,6 +579,46 @@ app.whenReady().then(async () => {
           `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
           `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
           `scores=${result.mixScoresReady}, expanded=${result.mixExpanded}, queued=${result.queuedFromMix}`
+        );
+        return;
+      }
+      if (
+        !result.rowThumbnailReady ||
+        !result.selectedRowUsesGreyHighlight ||
+        !result.playingRowUsesRedHighlight
+      ) {
+        fail(
+          `Track row selection UI failed: thumbnail=${result.rowThumbnailReady}, ` +
+          `selectedGrey=${result.selectedRowUsesGreyHighlight}, ` +
+          `playingRed=${result.playingRowUsesRedHighlight}`
+        );
+        return;
+      }
+      if (!result.pausedAfterSecondSpace || !result.pausedRowUsesGreyHighlight) {
+        fail(
+          `Pressing Space again did not pause cleanly: ` +
+          `paused=${result.pausedAfterSecondSpace}, greyRow=${result.pausedRowUsesGreyHighlight}`
+        );
+        return;
+      }
+      if (!result.mediaSessionPlayingReady || !result.mediaSessionPausedReady) {
+        fail(
+          `Media Session integration failed: ` +
+          `playing=${result.mediaSessionPlayingReady}, paused=${result.mediaSessionPausedReady}`
+        );
+        return;
+      }
+      if (result.mediaNextTrackIndex !== "2" || result.mediaPreviousTrackIndex !== "1") {
+        fail(
+          `Media next/previous failed: next=${result.mediaNextTrackIndex}, ` +
+          `previous=${result.mediaPreviousTrackIndex}`
+        );
+        return;
+      }
+      if (!result.keyColumnColorReady || !result.camelotColorsReady) {
+        fail(
+          `Camelot colors failed: column=${result.keyColumnColorReady}, ` +
+          `wheel=${result.camelotColorsReady}`
         );
         return;
       }

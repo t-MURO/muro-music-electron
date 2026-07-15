@@ -1,6 +1,8 @@
 import { memo } from "react";
-import { Check, Circle, Play } from "lucide-react";
+import { Circle, Music2, Play } from "lucide-react";
+import { convertFileSrc } from "@muro/desktop/runtime";
 import type { ColumnConfig, Track } from "../../types";
+import { getCamelotColor } from "../../utils/camelot";
 import { RatingCell } from "./RatingCell";
 
 type TableRowProps = {
@@ -88,13 +90,22 @@ export const TableRow = memo(
     onRowDoubleClick,
     onRatingChange,
   }: TableRowProps) => {
-    const rowBaseClass = isSelected
-      ? "bg-[var(--color-bg-active)]"
-      : "bg-[var(--color-bg-primary)]";
+    const coverPath = track.coverArtThumbPath || track.coverArtPath;
+    const isActivelyPlaying = isPlayingTrack && isCurrentlyPlaying;
+    const rowBaseClass = isActivelyPlaying
+      ? "bg-[var(--color-row-playing)] hover:bg-[var(--color-row-playing-hover)]"
+      : isSelected
+        ? "bg-[var(--color-row-selected)] hover:bg-[var(--color-row-selected-hover)]"
+        : "bg-[var(--color-bg-primary)] hover:bg-[var(--color-bg-hover)]";
+    const stickyCellClass = isActivelyPlaying
+      ? "bg-[var(--color-row-playing)] group-hover:bg-[var(--color-row-playing-hover)]"
+      : isSelected
+        ? "bg-[var(--color-row-selected)] group-hover:bg-[var(--color-row-selected-hover)]"
+        : "bg-[var(--color-bg-primary)] group-hover:bg-[var(--color-bg-hover)]";
 
     return (
       <div
-        className={`group grid select-none items-center border-b border-[var(--color-border-light)] text-[12px] text-[var(--color-text-secondary)] ${rowBaseClass} hover:bg-[var(--color-bg-hover)]`}
+        className={`group grid select-none items-center border-b border-[var(--color-border-light)] text-[12px] text-[var(--color-text-secondary)] ${rowBaseClass}`}
         style={{
           gridTemplateColumns,
           height: "var(--table-row-height)",
@@ -130,17 +141,24 @@ export const TableRow = memo(
         role="row"
       >
         <div
-          className="sticky left-0 z-30 flex h-[var(--table-row-height)] items-center justify-center border-r border-[var(--color-border-light)] bg-[var(--color-bg-primary)] group-hover:bg-[var(--color-bg-hover)] relative"
+          className={`sticky left-0 z-30 flex h-[var(--table-row-height)] items-center justify-center border-r border-[var(--color-border-light)] ${stickyCellClass}`}
           role="cell"
         >
-          {isSelected && (
-            <span
-              className="pointer-events-none absolute inset-0 bg-[var(--color-bg-active)]"
-              aria-hidden="true"
-            />
-          )}
-          <span className={`relative z-10 flex h-3.5 w-3.5 items-center justify-center rounded-[2px] border ${isSelected ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white" : "border-[var(--color-border)] text-transparent group-hover:border-[var(--color-text-muted)]"}`}>
-            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+          <span
+            className={`flex h-[calc(var(--table-row-height)-8px)] w-[calc(var(--table-row-height)-8px)] max-h-10 max-w-10 items-center justify-center overflow-hidden rounded-[var(--radius-sm)] border bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] ${isActivelyPlaying ? "border-[var(--color-danger)]" : isSelected ? "border-[var(--color-text-muted)]" : "border-[var(--color-border-light)]"}`}
+            data-track-thumbnail
+          >
+            {coverPath ? (
+              <img
+                src={convertFileSrc(coverPath)}
+                alt=""
+                className="h-full w-full object-cover"
+                draggable={false}
+                data-track-thumbnail-image
+              />
+            ) : (
+              <Music2 className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
           </span>
         </div>
         {visibleColumns.map((column) => {
@@ -160,7 +178,8 @@ export const TableRow = memo(
           const isTitleColumn = column.key === "title";
           const textColorClass = isTitleColumn && isPlayingTrack ? "text-[var(--color-accent)]" : "";
           const numericClass = column.key === "bpm" || column.key === "duration" || column.key === "bitrate" ? "tabular-nums" : "";
-          const keyClass = column.key === "key" && value ? "font-semibold text-[var(--color-accent)]" : "";
+          const camelotColor = column.key === "key" ? getCamelotColor(value) : null;
+          const keyClass = column.key === "key" && value && !camelotColor ? "font-semibold text-[var(--color-accent)]" : "";
           return (
             <div
               key={column.key}
@@ -172,7 +191,17 @@ export const TableRow = memo(
                   ? <Play className={`mr-2 h-3 w-3 shrink-0 text-[var(--color-accent)] ${isCurrentlyPlaying ? "opacity-100" : "opacity-70"}`} fill="currentColor" />
                   : <Circle className="mr-2 h-2 w-2 shrink-0 text-[var(--color-text-muted)]" fill="currentColor" strokeWidth={0} />
               )}
-              <span className="block truncate">{value}</span>
+              {camelotColor ? (
+                <span
+                  className="block min-w-[34px] truncate rounded-[var(--radius-sm)] px-2 py-0.5 text-center text-[10px] font-bold text-[#172126] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
+                  style={{ backgroundColor: camelotColor }}
+                  data-track-key-color={camelotColor}
+                >
+                  {value.trim()}
+                </span>
+              ) : (
+                <span className="block truncate">{value}</span>
+              )}
             </div>
           );
         })}

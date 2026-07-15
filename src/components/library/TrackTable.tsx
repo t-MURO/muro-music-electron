@@ -29,6 +29,7 @@ type TrackTableProps = {
     isSelected: boolean
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
+  onTogglePlay?: () => void;
   onColumnResize: (key: ColumnConfig["key"], width: number) => void;
   onColumnAutoFit: (key: ColumnConfig["key"]) => void;
   onColumnReorder?: (dragKey: ColumnConfig["key"], targetIndex: number) => void;
@@ -51,6 +52,7 @@ export const TrackTable = memo(
     onRowMouseDown,
     onRowContextMenu,
     onRowDoubleClick,
+    onTogglePlay,
     onColumnResize,
     onColumnAutoFit,
     onColumnReorder,
@@ -147,7 +149,11 @@ export const TrackTable = memo(
         event.stopPropagation();
         const track = tracks[activeIndex];
         if (track) {
-          onRowDoubleClick?.(track.id);
+          if (event.code === "Space" && track.id === playingTrackId) {
+            onTogglePlay?.();
+          } else {
+            onRowDoubleClick?.(track.id);
+          }
         }
         return;
       }

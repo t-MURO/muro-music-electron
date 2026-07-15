@@ -26,6 +26,12 @@
   --transition-normal: 250ms ease;
   --transition-theme: 150ms ease;
 
+  /* Track state colors stay consistent across themes. */
+  --color-row-selected: rgba(148, 163, 184, 0.14);
+  --color-row-selected-hover: rgba(148, 163, 184, 0.2);
+  --color-row-playing: rgba(239, 51, 64, 0.14);
+  --color-row-playing-hover: rgba(239, 51, 64, 0.2);
+
   /* Grid layout */
   --sidebar-width: 200px;
   --queue-width: 320px;

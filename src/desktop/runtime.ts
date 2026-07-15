@@ -23,6 +23,19 @@ let audio: HTMLAudioElement | null = null;
 let currentTrack: CurrentTrack | null = null;
 let durationHint = 0;
 let seekMode = "accurate";
+let mediaSessionConfigured = false;
+let playbackOperationChain: Promise<unknown> = Promise.resolve();
+
+const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
+  "play",
+  "pause",
+  "stop",
+  "nexttrack",
+  "previoustrack",
+  "seekbackward",
+  "seekforward",
+  "seekto",
+];
 
 const state = (): PlaybackState => ({
   is_playing: Boolean(audio && !audio.paused && !audio.ended),
@@ -32,7 +45,35 @@ const state = (): PlaybackState => ({
   current_track: currentTrack,
 });
 
-const emitState = () => emitLocal("muro://playback-state", state());
+const syncMediaSessionState = () => {
+  if (!("mediaSession" in navigator)) return;
+
+  try {
+    navigator.mediaSession.playbackState = audio && !audio.paused && !audio.ended
+      ? "playing"
+      : "paused";
+  } catch {
+    // Media-session state can be unavailable during device hand-off.
+  }
+
+  const duration = Number.isFinite(audio?.duration) ? audio!.duration : durationHint;
+  if (!audio || !Number.isFinite(duration) || duration <= 0) return;
+
+  try {
+    navigator.mediaSession.setPositionState({
+      duration,
+      playbackRate: audio.playbackRate || 1,
+      position: Math.max(0, Math.min(audio.currentTime || 0, duration)),
+    });
+  } catch {
+    // Some platforms expose Media Session without position-state support.
+  }
+};
+
+const emitState = () => {
+  syncMediaSessionState();
+  emitLocal("muro://playback-state", state());
+};
 
 const waitForMediaEvent = (
   player: HTMLAudioElement,
@@ -97,12 +138,76 @@ const seekPlayer = async (player: HTMLAudioElement, requestedPosition: number) =
   emitState();
 };
 
+const setMediaSessionMetadata = (track: CurrentTrack | null) => {
+  if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+  if (!track) {
+    navigator.mediaSession.metadata = null;
+    return;
+  }
+
+  const coverPath = track.cover_art_thumb_path || track.cover_art_path;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    artwork: coverPath ? [{ src: convertFileSrc(coverPath) }] : undefined,
+  });
+};
+
+const configureMediaSession = (player: HTMLAudioElement) => {
+  if (!("mediaSession" in navigator) || mediaSessionConfigured) return;
+  mediaSessionConfigured = true;
+
+  const setHandler = (
+    action: MediaSessionAction,
+    handler: MediaSessionActionHandler,
+  ) => {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch {
+      // Action support varies by operating system and Electron version.
+    }
+  };
+
+  setHandler("play", () => {
+    void player.play().catch(() => {
+      emitLocal("muro://playback-error", "Failed to resume playback");
+    });
+  });
+  setHandler("pause", () => player.pause());
+  setHandler("stop", () => {
+    player.pause();
+    player.currentTime = 0;
+    emitState();
+  });
+  setHandler("nexttrack", () => emitLocal("muro://media-control", "next"));
+  setHandler("previoustrack", () => emitLocal("muro://media-control", "previous"));
+  setHandler("seekbackward", (details) => {
+    void seekPlayer(player, player.currentTime - (details.seekOffset ?? 10)).catch(() => {
+      emitLocal("muro://playback-error", "Failed to seek backward");
+    });
+  });
+  setHandler("seekforward", (details) => {
+    void seekPlayer(player, player.currentTime + (details.seekOffset ?? 10)).catch(() => {
+      emitLocal("muro://playback-error", "Failed to seek forward");
+    });
+  });
+  setHandler("seekto", (details) => {
+    if (typeof details.seekTime === "number") {
+      void seekPlayer(player, details.seekTime).catch(() => {
+        emitLocal("muro://playback-error", "Failed to seek");
+      });
+    }
+  });
+};
+
 const ensureAudio = (): HTMLAudioElement => {
   if (audio) return audio;
   audio = new Audio();
   audio.preload = "metadata";
   audio.addEventListener("timeupdate", () => {
     emitLocal("muro://playback-position", audio?.currentTime ?? 0);
+    syncMediaSessionState();
   });
   audio.addEventListener("play", emitState);
   audio.addEventListener("pause", emitState);
@@ -114,6 +219,7 @@ const ensureAudio = (): HTMLAudioElement => {
   audio.addEventListener("error", () => {
     emitLocal("muro://playback-error", audio?.error?.message ?? "Playback failed");
   });
+  configureMediaSession(audio);
   return audio;
 };
 
@@ -124,6 +230,9 @@ const playbackInvoke = async <T>(
   const player = ensureAudio();
   switch (command) {
     case "playback_play_file": {
+      // Stop the previous source before changing tracks. This also makes
+      // repeated/rapid play requests deterministic on Windows.
+      player.pause();
       currentTrack = {
         id: String(args.id),
         title: String(args.title),
@@ -134,8 +243,10 @@ const playbackInvoke = async <T>(
         cover_art_thumb_path: args.coverArtThumbPath as string | undefined,
       };
       durationHint = Number(args.durationHint) || 0;
+      setMediaSessionMetadata(currentTrack);
       player.src = convertFileSrc(currentTrack.source_path);
       player.currentTime = 0;
+      emitState();
       await player.play();
       return undefined as T;
     }
@@ -147,12 +258,14 @@ const playbackInvoke = async <T>(
       await player.play();
       return undefined as T;
     case "playback_pause":
-      player.pause();
+      if (!player.paused) player.pause();
+      emitState();
       return undefined as T;
     case "playback_stop":
       player.pause();
       player.currentTime = 0;
       currentTrack = null;
+      setMediaSessionMetadata(null);
       emitState();
       return undefined as T;
     case "playback_seek":
@@ -174,13 +287,52 @@ const playbackInvoke = async <T>(
   }
 };
 
+const queuePlaybackInvoke = <T>(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<T> => {
+  const operation = playbackOperationChain.then(
+    () => playbackInvoke<T>(command, args),
+    () => playbackInvoke<T>(command, args),
+  );
+  playbackOperationChain = operation.catch(() => undefined);
+  return operation;
+};
+
 export const invoke = <T>(
   command: string,
   args: Record<string, unknown> = {}
 ): Promise<T> => {
-  if (command.startsWith("playback_")) return playbackInvoke<T>(command, args);
+  if (command.startsWith("playback_")) return queuePlaybackInvoke<T>(command, args);
   return bridge().invoke<T>(command, args);
 };
 
 export const convertFileSrc = (filePath: string): string =>
   `muro-file://local/${encodeURIComponent(filePath)}`;
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    // A Vite hot reload must never leave the previous module's Audio element
+    // playing invisibly alongside the replacement runtime.
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
+    if ("mediaSession" in navigator) {
+      for (const action of MEDIA_SESSION_ACTIONS) {
+        try {
+          navigator.mediaSession.setActionHandler(action, null);
+        } catch {
+          // Ignore actions unsupported by the host OS.
+        }
+      }
+      navigator.mediaSession.metadata = null;
+    }
+    audio = null;
+    currentTrack = null;
+    durationHint = 0;
+    mediaSessionConfigured = false;
+    playbackOperationChain = Promise.resolve();
+  });
+}

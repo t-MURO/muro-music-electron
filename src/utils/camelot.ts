@@ -10,6 +10,22 @@ const STANDARD_TO_CAMELOT: Record<string, string> = {
   "G#": "4B", "G#m": "1A",
 };
 
+// Colors sampled from Mixed In Key's official Camelot Wheel artwork.
+export const CAMELOT_COLORS: Record<string, string> = {
+  "1A": "#B3FFED", "1B": "#90FFC7",
+  "2A": "#C0FFC8", "2B": "#99FFAC",
+  "3A": "#CEFBAB", "3B": "#AFFA7C",
+  "4A": "#DFE8A7", "4B": "#D9C873",
+  "5A": "#F0CEA7", "5B": "#E8B173",
+  "6A": "#FEB1B4", "6B": "#FE8688",
+  "7A": "#F1AED5", "7B": "#F87EA3",
+  "8A": "#E9AEE1", "8B": "#DA7ED2",
+  "9A": "#D4AEFB", "9B": "#B97EFA",
+  "10A": "#BFCDFF", "10B": "#9AADFF",
+  "11A": "#B3F0FE", "11B": "#87E5FE",
+  "12A": "#B0FFF6", "12B": "#81FFF3",
+};
+
 export type CamelotMatch = {
   track: Track;
   code: string;
@@ -63,6 +79,11 @@ export const toCamelotCode = (value?: string): string | null => {
   const raw = standard[1];
   const key = `${raw[0].toUpperCase()}${raw.slice(1).replace("M", "m")}`;
   return STANDARD_TO_CAMELOT[key] ?? null;
+};
+
+export const getCamelotColor = (value?: string): string | null => {
+  const code = toCamelotCode(value);
+  return code ? CAMELOT_COLORS[code] ?? null : null;
 };
 
 const wheelDistance = (from: number, to: number) => {

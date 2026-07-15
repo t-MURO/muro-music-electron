@@ -1049,6 +1049,7 @@ function App() {
                           onRowMouseDown={onRowMouseDown}
                           onRowContextMenu={handleRowContextMenu}
                           onRowDoubleClick={handlePlayTrack}
+                          onTogglePlay={togglePlay}
                           onColumnResize={handleColumnResize}
                           onColumnAutoFit={autoFitColumn}
                           onColumnReorder={reorderColumns}
