@@ -6,10 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createKeyFinderService } from "../electron/keyfinder.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const binaryDirectory = path.resolve(
-  here,
-  "../../neo-keyfinder/src-tauri/binaries",
-);
+const binaryDirectory = path.resolve(here, "../build/keyfinder");
 const events = [];
 const finishedJobs = new Map();
 const finishWaiters = new Map();

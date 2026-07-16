@@ -63,6 +63,7 @@ export {
   importFiles,
   importedTrackToTrack,
   type ImportedTrack,
+  type ImportFilesResult,
   type LibrarySnapshot,
   type PlaylistSnapshot,
 } from "./importApi";

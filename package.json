@@ -72,7 +72,7 @@
     ],
     "extraResources": [
       {
-        "from": "../neo-keyfinder/src-tauri/binaries",
+        "from": "build/keyfinder",
         "to": "keyfinder",
         "filter": [
           "keyfinder-native-*"

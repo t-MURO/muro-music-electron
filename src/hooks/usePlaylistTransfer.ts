@@ -35,7 +35,10 @@ export const usePlaylistTransfer = () => {
         .filter((entry) => !entry.track_id && entry.exists)
         .map((entry) => entry.path)
     )];
-    const imported = missingPaths.length > 0 ? await importFiles(dbPath, missingPaths) : [];
+    const importResult = missingPaths.length > 0
+      ? await importFiles(dbPath, missingPaths)
+      : { imported: [], scanned: 0, failures: [] };
+    const imported = importResult.imported;
     const converted = imported.map(importedTrackToTrack);
     if (converted.length > 0) {
       setInboxTracks((current) => {

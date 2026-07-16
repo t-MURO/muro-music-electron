@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+build/keyfinder/
 *.log
 .idea/
 .DS_Store

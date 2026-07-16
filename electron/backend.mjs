@@ -208,12 +208,17 @@ export const createBackend = ({
     async import_files({ paths, dbPath }, sender) {
       const audioPaths = await collectAudioPaths(Array.isArray(paths) ? paths : []);
       const imported = [];
+      const failures = [];
       for (let index = 0; index < audioPaths.length; index += 1) {
         try {
           const track = await importAudioFile(dbPath, audioPaths[index], cacheDir);
           if (track) imported.push(track);
         } catch (error) {
           console.warn(`Failed to import ${audioPaths[index]}:`, error);
+          failures.push({
+            path: audioPaths[index],
+            message: error instanceof Error ? error.message : String(error),
+          });
         }
         emit(sender, "muro://import-progress", {
           imported: index + 1,
@@ -221,7 +226,11 @@ export const createBackend = ({
           phase: "importing",
         });
       }
-      return imported;
+      return {
+        imported,
+        scanned: audioPaths.length,
+        failures,
+      };
     },
 
     load_tracks: ({ dbPath }) => loadTracks(dbPath),

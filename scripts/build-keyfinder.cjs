@@ -1,16 +1,78 @@
-const { existsSync, readFileSync, readdirSync, rmSync } = require("node:fs");
+const {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+} = require("node:fs");
+const { homedir } = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const projectRoot = path.resolve(__dirname, "..");
-const keyfinderRoot = path.resolve(projectRoot, "../neo-keyfinder");
+const keyfinderCandidates = [
+  process.env.NEO_KEYFINDER_ROOT,
+  path.resolve(projectRoot, "../neo-keyfinder"),
+  path.resolve(projectRoot, "../neo-key-finder/neo-keyfinder"),
+].filter(Boolean).map((candidate) => path.resolve(candidate));
+const keyfinderRoot = keyfinderCandidates.find((candidate) =>
+  existsSync(path.join(candidate, "package.json")) &&
+  existsSync(path.join(candidate, "scripts", "build-native.mjs"))
+);
 const release = process.argv.includes("--release");
 const commandShell = process.env.ComSpec || "C:\\Windows\\System32\\cmd.exe";
 
-if (!existsSync(path.join(keyfinderRoot, "package.json"))) {
-  console.error(`Neo KeyFinder was not found at ${keyfinderRoot}`);
+if (!keyfinderRoot) {
+  console.error([
+    "Neo KeyFinder was not found.",
+    "Set NEO_KEYFINDER_ROOT to its checkout, or place it in one of:",
+    ...keyfinderCandidates.map((candidate) => `  - ${candidate}`),
+  ].join("\n"));
   process.exit(1);
 }
+
+const platformTriple = () => {
+  if (process.platform === "win32") {
+    return process.arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc";
+  }
+  if (process.platform === "darwin") {
+    return process.arch === "arm64" ? "aarch64-apple-darwin" : "x86_64-apple-darwin";
+  }
+  return process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu";
+};
+
+const stageNativeBinary = () => {
+  const extension = process.platform === "win32" ? ".exe" : "";
+  const filename = `keyfinder-native-${platformTriple()}${extension}`;
+  const source = path.join(keyfinderRoot, "src-tauri", "binaries", filename);
+  if (!existsSync(source)) {
+    console.error(`The KeyFinder build did not produce ${source}`);
+    process.exit(1);
+  }
+
+  const stagingRoot = path.join(projectRoot, "build", "keyfinder");
+  rmSync(stagingRoot, { recursive: true, force: true });
+  mkdirSync(stagingRoot, { recursive: true });
+  const destination = path.join(stagingRoot, filename);
+  copyFileSync(source, destination);
+  if (process.platform !== "win32") chmodSync(destination, 0o755);
+  console.log(`Staged KeyFinder engine: ${destination}`);
+};
+
+const findVcpkgRoot = () => {
+  const candidates = [
+    process.env.VCPKG_ROOT,
+    path.join(homedir(), ".local", "share", "vcpkg-neo-keyfinder"),
+    path.join(homedir(), ".local", "share", "vcpkg"),
+    path.join(homedir(), "vcpkg"),
+    path.join(keyfinderRoot, "native", ".dependencies", "vcpkg"),
+  ].filter(Boolean);
+  return candidates.find((candidate) =>
+    existsSync(path.join(candidate, "scripts", "buildsystems", "vcpkg.cmake"))
+  );
+};
 
 const runNativeBuild = (env = process.env) => {
   const command = `npm run native:build${release ? " -- --release" : ""}`;
@@ -27,10 +89,19 @@ const runNativeBuild = (env = process.env) => {
         stdio: "inherit",
       });
   if (result.error) console.error(`Could not start KeyFinder build: ${result.error.message}`);
-  process.exit(result.status ?? 1);
+  if (result.status !== 0) process.exit(result.status ?? 1);
+  stageNativeBinary();
 };
 
-if (process.platform !== "win32") runNativeBuild();
+if (process.platform !== "win32") {
+  const env = { ...process.env };
+  if (release && !env.VCPKG_ROOT) {
+    const vcpkgRoot = findVcpkgRoot();
+    if (vcpkgRoot) env.VCPKG_ROOT = vcpkgRoot;
+  }
+  runNativeBuild(env);
+  process.exit(0);
+}
 
 const programFiles = process.env.ProgramFiles || "C:\\Program Files";
 const vcvars = ["Community", "BuildTools", "Professional", "Enterprise"]

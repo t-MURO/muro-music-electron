@@ -9,10 +9,14 @@ import { registerMediaShortcuts } from "./mediaShortcuts.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
 const developmentAppIcon = path.join(appRoot, "build", "icons", "icon.png");
-const developmentKeyFinderBinaries = path.resolve(
-  appRoot,
-  "../neo-keyfinder/src-tauri/binaries",
-);
+const developmentKeyFinderBinaries = [
+  path.join(appRoot, "build", "keyfinder"),
+  process.env.NEO_KEYFINDER_ROOT
+    ? path.resolve(process.env.NEO_KEYFINDER_ROOT, "src-tauri", "binaries")
+    : undefined,
+  path.resolve(appRoot, "../neo-keyfinder/src-tauri/binaries"),
+  path.resolve(appRoot, "../neo-key-finder/neo-keyfinder/src-tauri/binaries"),
+].filter(Boolean);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -114,7 +118,7 @@ const startApplication = async () => {
   const keyFinder = createKeyFinderService({
     binaryDirectories: app.isPackaged
       ? [path.join(process.resourcesPath, "keyfinder")]
-      : [developmentKeyFinderBinaries],
+      : developmentKeyFinderBinaries,
     emit: (sender, name, payload) => sender.send("muro:event", name, payload),
   });
   backend = createBackend({

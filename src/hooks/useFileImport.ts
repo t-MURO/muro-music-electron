@@ -137,8 +137,20 @@ export const useFileImport = ({ onImportComplete }: UseFileImportArgs = {}) => {
         }
         setImportProgress({ imported: 0, total: 0, phase: "scanning" });
         const resolvedDbPath = await resolveDbPath();
-        const imported = await importFiles(resolvedDbPath, paths);
+        const result = await importFiles(resolvedDbPath, paths);
+        const imported = result.imported;
         if (imported.length === 0) {
+          if (result.scanned === 0) {
+            notify.error("No supported audio files were found");
+          } else if (result.failures.length > 0) {
+            notify.error(
+              result.failures.length === 1
+                ? `Could not import ${result.failures[0].path.split(/[\\/]/).slice(-1)[0] || "audio file"}`
+                : `${result.failures.length} audio files could not be imported`
+            );
+          } else {
+            notify.success("All selected songs are already in Muro");
+          }
           if (typeof window !== "undefined") {
             clearProgressTimerRef.current = window.setTimeout(() => {
               setImportProgress(null);
@@ -164,6 +176,11 @@ export const useFileImport = ({ onImportComplete }: UseFileImportArgs = {}) => {
           },
         };
         commandManager.execute(command);
+        if (result.failures.length > 0) {
+          notify.error(`${result.failures.length} audio files could not be imported`);
+        } else {
+          notify.success(`Imported ${imported.length} ${imported.length === 1 ? "song" : "songs"}`);
+        }
         onImportComplete?.();
         if (typeof window !== "undefined") {
           clearProgressTimerRef.current = window.setTimeout(() => {

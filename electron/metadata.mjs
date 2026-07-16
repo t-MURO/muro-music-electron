@@ -64,6 +64,19 @@ export const cacheCoverBytes = async (bytes, cacheDir) => {
 export const cacheCoverFile = async (filePath, cacheDir) =>
   cacheCoverBytes(await fs.promises.readFile(filePath), cacheDir);
 
+export const cacheEmbeddedCover = async (picture, cacheDir, filePath) => {
+  if (!picture?.data) return undefined;
+  try {
+    return await cacheCoverBytes(picture.data, cacheDir);
+  } catch (error) {
+    // Malformed and uncommon embedded artwork should not make an otherwise
+    // playable audio file impossible to import. The cover can be replaced or
+    // backfilled later.
+    console.warn(`Skipping unsupported embedded artwork in ${filePath}:`, error);
+    return undefined;
+  }
+};
+
 const ratingFromMetadata = (common) => {
   const rating = first(common.rating);
   if (typeof rating === "number") return Math.max(0, Math.min(5, rating <= 1 ? rating * 5 : rating));
@@ -89,7 +102,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
   const albumArtist = common.albumartist || undefined;
   const label = first(common.label) || undefined;
   const picture = first(common.picture);
-  const cached = picture?.data ? await cacheCoverBytes(picture.data, cacheDir) : undefined;
+  const cached = await cacheEmbeddedCover(picture, cacheDir, filePath);
   const now = Math.floor(Date.now() / 1000);
   const stat = await fs.promises.stat(filePath);
   const id = randomUUID();

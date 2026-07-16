@@ -64,12 +64,18 @@ export type ImportedPlaylistFile = {
   }>;
 };
 
+export type ImportFilesResult = {
+  imported: ImportedTrack[];
+  scanned: number;
+  failures: Array<{ path: string; message: string }>;
+};
+
 // ============================================================================
 // Import Operations
 // ============================================================================
 
 export const importFiles = (dbPath: string, paths: string[]) => {
-  return invoke<ImportedTrack[]>("import_files", {
+  return invoke<ImportFilesResult>("import_files", {
     paths,
     dbPath,
   });

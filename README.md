@@ -21,6 +21,11 @@ with Electron, Node.js, React, and SQLite.
 
 - Node.js 22.6 or newer
 - npm 10 or newer
+- A Neo KeyFinder checkout, either at `../neo-keyfinder`, at
+  `../neo-key-finder/neo-keyfinder`, or selected with `NEO_KEYFINDER_ROOT`
+- The native build prerequisites documented by Neo KeyFinder; distributable
+  builds also require vcpkg (the build discovers its standard local locations,
+  or you can set `VCPKG_ROOT`)
 
 ## Install and verify
 
@@ -40,6 +45,14 @@ npm run package
 npm run dist
 ```
 
+The package commands build the KeyFinder engine and stage the platform binary
+under `build/keyfinder` before Electron Builder runs. To use a checkout in a
+different location:
+
+```sh
+NEO_KEYFINDER_ROOT=/absolute/path/to/neo-keyfinder npm run dist -- --mac
+```
+
 For development, run `npm run dev:electron`. It starts the Vite renderer, waits
 for it to become reachable, launches Electron, and shuts both processes down
 together. `npm run dev:renderer` remains available when only the browser-based
@@ -51,6 +64,7 @@ renderer is needed.
 - Full-library search and configurable table columns
 - Inbox acceptance, move-back, and rejection workflows
 - Playlist creation, deletion, multiselect drag-and-drop, and duplicate guards
+- Recursive playlist-folder import that groups discovered playlists under one parent folder
 - Persistent metadata and rating edits in SQLite and source audio files
 - Cover extraction, artwork caching, manual cover replacement, and BPM/key analysis
 - Queue management, playback, seeking, volume, and recently-played history

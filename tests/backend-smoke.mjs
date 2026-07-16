@@ -6,6 +6,7 @@ import { createArtistProfileService } from "../electron/artistProfiles.mjs";
 import { createBackend } from "../electron/backend.mjs";
 import { openDatabase } from "../electron/database.mjs";
 import { registerMediaShortcuts } from "../electron/mediaShortcuts.mjs";
+import { cacheEmbeddedCover } from "../electron/metadata.mjs";
 
 const mediaShortcutCallbacks = new Map();
 const unregisteredMediaShortcuts = [];
@@ -38,6 +39,25 @@ assert.deepEqual(unregisteredMediaShortcuts, [
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-node-smoke-"));
 const dbPath = path.join(directory, "muro.db");
+const writeSilentWav = (filePath) => {
+  const sampleRate = 8_000;
+  const sampleCount = sampleRate / 10;
+  const dataSize = sampleCount * 2;
+  const buffer = Buffer.alloc(44 + dataSize);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVEfmt ", 8);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+  fs.writeFileSync(filePath, buffer);
+};
 let keyFinderClosed = false;
 let keyFinderStartArguments;
 let waveformGenerationCount = 0;
@@ -64,6 +84,28 @@ const backend = createBackend({
 try {
   const db = openDatabase(dbPath);
   const now = Math.floor(Date.now() / 1000);
+  assert.equal(
+    await cacheEmbeddedCover(
+      { data: Buffer.from("not an image") },
+      path.join(directory, "invalid-cover-cache"),
+      "invalid-cover.mp3",
+    ),
+    undefined,
+    "unsupported embedded artwork should not abort an audio import",
+  );
+  const validImportPath = path.join(directory, "valid-import.wav");
+  writeSilentWav(validImportPath);
+  const validImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [validImportPath],
+  });
+  assert.equal(validImport.imported.length, 1, "a valid audio file should import through the real metadata path");
+  assert.equal(validImport.imported[0].source_path, validImportPath);
+  assert.equal(validImport.scanned, 1);
+  assert.deepEqual(validImport.failures, []);
+  await backend.invoke("reject_tracks", { dbPath, trackIds: [validImport.imported[0].id] });
+  fs.unlinkSync(validImportPath);
+
   const firstSourcePath = path.join(directory, "smoke.mp3");
   const secondSourcePath = path.join(directory, "smoke-2.mp3");
   fs.writeFileSync(firstSourcePath, "first smoke file");
