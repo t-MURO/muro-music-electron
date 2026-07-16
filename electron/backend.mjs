@@ -12,12 +12,13 @@ import {
 import {
   cacheCoverFile,
   collectAudioPaths,
-  extractAndCacheCover,
+  extractCoverMetadata,
   importAudioFile,
   writeMetadataToFile,
 } from "./metadata.mjs";
 import { createWaveformCache } from "./waveformCache.mjs";
 import { createArtistProfileService } from "./artistProfiles.mjs";
+import { createAlbumCoverService } from "./albumCovers.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -201,6 +202,7 @@ export const createBackend = ({
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
+  const albumCovers = createAlbumCoverService({ cacheDir });
   const waveformCache = createWaveformCache({
     cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
   });
@@ -238,23 +240,28 @@ export const createBackend = ({
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
-    get_artist_profile: ({ dbPath, artistName, force, fanartApiKey, theAudioDbApiKey }) =>
+    get_artist_profile: ({ dbPath, artistName, force, fanartApiKey, lastFmApiKey, theAudioDbApiKey }) =>
       artistProfiles.getProfile(openDatabase(dbPath), artistName, {
         force: Boolean(force),
         fanartApiKey,
+        lastFmApiKey,
         theAudioDbApiKey,
       }),
-    scan_artist_profiles: ({ dbPath, fanartApiKey, theAudioDbApiKey, limit }) =>
+    scan_artist_profiles: ({ dbPath, fanartApiKey, lastFmApiKey, theAudioDbApiKey, limit }) =>
       artistProfiles.scanProfiles(openDatabase(dbPath), {
         fanartApiKey,
+        lastFmApiKey,
         theAudioDbApiKey,
         limit,
       }),
+    scan_album_covers: ({ dbPath, limit }) =>
+      albumCovers.scanCovers(openDatabase(dbPath), { limit }),
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
       db.prepare("DELETE FROM tracks").run();
       db.prepare("DELETE FROM artist_profiles").run();
+      db.prepare("DELETE FROM album_cover_cache").run();
       if (fs.existsSync(cacheDir)) {
         for (const entry of fs.readdirSync(cacheDir)) {
           const candidate = path.join(cacheDir, entry);
@@ -456,23 +463,38 @@ export const createBackend = ({
     backfill_cover_art: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
       const rows = db.prepare(`
-        SELECT id, source_path FROM tracks
+        SELECT id, source_path, musicbrainz_albumid, musicbrainz_releasegroupid FROM tracks
         WHERE cover_art_path IS NULL OR cover_art_path = ''
       `).all();
       const update = db.prepare(
-        "UPDATE tracks SET cover_art_path = ?, cover_art_thumb_path = ? WHERE id = ?"
+        `UPDATE tracks SET
+          cover_art_path = ?,
+          cover_art_thumb_path = ?,
+          musicbrainz_albumid = COALESCE(NULLIF(musicbrainz_albumid, ''), ?),
+          musicbrainz_releasegroupid = COALESCE(NULLIF(musicbrainz_releasegroupid, ''), ?)
+        WHERE id = ?`
       );
       let count = 0;
       for (const row of rows) {
         try {
-          const cached = await extractAndCacheCover(row.source_path, cacheDir);
-          if (!cached) continue;
-          update.run(cached.fullPath, cached.thumbPath, row.id);
-          count += 1;
+          const metadata = await extractCoverMetadata(row.source_path, cacheDir);
+          update.run(
+            metadata.cached?.fullPath ?? null,
+            metadata.cached?.thumbPath ?? null,
+            metadata.musicbrainz_albumid,
+            metadata.musicbrainz_releasegroupid,
+            row.id,
+          );
+          if (metadata.cached) count += 1;
         } catch (error) {
           console.warn(`Failed to extract cover from ${row.source_path}:`, error);
         }
       }
+      let scanResult;
+      do {
+        scanResult = await albumCovers.scanCovers(db, { limit: 50 });
+        count += scanResult.updated;
+      } while (scanResult.queued > 0);
       return count;
     },
     cache_cover_art_from_file: ({ filePath }) => cacheCoverFile(filePath, cacheDir),

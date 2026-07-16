@@ -91,6 +91,21 @@ const ARTIST_PROFILE_SCHEMA = `
     ON artist_profiles(fetched_at DESC);
 `;
 
+const ALBUM_COVER_CACHE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS album_cover_cache (
+    cover_key TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    musicbrainz_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    full_path TEXT,
+    thumb_path TEXT,
+    source_url TEXT,
+    fetched_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS album_cover_cache_fetched_at_idx
+    ON album_cover_cache(fetched_at DESC);
+`;
+
 const REQUIRED_TRACK_COLUMNS = {
   album_artist: "TEXT",
   genre_json: "TEXT",
@@ -107,7 +122,14 @@ const REQUIRED_TRACK_COLUMNS = {
   bpm: "REAL",
   rating: "REAL",
   raw_tags_json: "TEXT",
+  musicbrainz_albumid: "TEXT",
   musicbrainz_artistid: "TEXT",
+  musicbrainz_albumartistid: "TEXT",
+  musicbrainz_releasegroupid: "TEXT",
+  musicbrainz_trackid: "TEXT",
+  musicbrainz_releasetrackid: "TEXT",
+  musicbrainz_albumstatus: "TEXT",
+  musicbrainz_albumtype: "TEXT",
   source_path: "TEXT",
   search_text: "TEXT",
   import_status: "TEXT DEFAULT 'staged'",
@@ -142,6 +164,7 @@ export const openDatabase = (dbPath) => {
   }
   db.exec(PLAYLIST_SCHEMA);
   db.exec(ARTIST_PROFILE_SCHEMA);
+  db.exec(ALBUM_COVER_CACHE_SCHEMA);
   const playlistColumns = new Set(
     db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
   );

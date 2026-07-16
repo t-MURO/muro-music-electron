@@ -136,7 +136,14 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     bpm: common.bpm ?? null,
     rating: ratingFromMetadata(common),
     raw_tags_json: cleanRawTags(metadata.native),
+    musicbrainz_albumid: first(common.musicbrainz_albumid) ?? null,
     musicbrainz_artistid: first(common.musicbrainz_artistid) ?? null,
+    musicbrainz_albumartistid: first(common.musicbrainz_albumartistid) ?? null,
+    musicbrainz_releasegroupid: first(common.musicbrainz_releasegroupid) ?? null,
+    musicbrainz_trackid: first(common.musicbrainz_trackid) ?? null,
+    musicbrainz_releasetrackid: first(common.musicbrainz_releasetrackid) ?? null,
+    musicbrainz_albumstatus: first(common.musicbrainz_albumstatus) ?? null,
+    musicbrainz_albumtype: first(common.musicbrainz_albumtype) ?? null,
     source_path: filePath,
     search_text: searchText,
     import_status: "staged",
@@ -152,13 +159,19 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     INSERT OR IGNORE INTO tracks (
       id, title, artist, album, album_artist, genre_json, comment_json, label,
       filename, year, date, track_number, track_total, disc_number, disc_total,
-      key, bpm, rating, raw_tags_json, musicbrainz_artistid, source_path, search_text, import_status,
+      key, bpm, rating, raw_tags_json, musicbrainz_albumid, musicbrainz_artistid,
+      musicbrainz_albumartistid, musicbrainz_releasegroupid, musicbrainz_trackid,
+      musicbrainz_releasetrackid, musicbrainz_albumstatus, musicbrainz_albumtype,
+      source_path, search_text, import_status,
       duration_seconds, bitrate_kbps, added_at, updated_at, is_missing,
       cover_art_path, cover_art_thumb_path
     ) VALUES (
       @id, @title, @artist, @album, @album_artist, @genre_json, @comment_json, @label,
       @filename, @year, @date, @track_number, @track_total, @disc_number, @disc_total,
-      @key, @bpm, @rating, @raw_tags_json, @musicbrainz_artistid, @source_path, @search_text, @import_status,
+      @key, @bpm, @rating, @raw_tags_json, @musicbrainz_albumid, @musicbrainz_artistid,
+      @musicbrainz_albumartistid, @musicbrainz_releasegroupid, @musicbrainz_trackid,
+      @musicbrainz_releasetrackid, @musicbrainz_albumstatus, @musicbrainz_albumtype,
+      @source_path, @search_text, @import_status,
       @duration_seconds, @bitrate_kbps, @added_at, @updated_at, 0,
       @cover_art_path, @cover_art_thumb_path
     )
@@ -199,8 +212,16 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
   });
 };
 
-export const extractAndCacheCover = async (sourcePath, cacheDir) => {
+export const extractCoverMetadata = async (sourcePath, cacheDir) => {
   const metadata = await parseFile(sourcePath, { skipCovers: false });
   const picture = first(metadata.common.picture);
-  return picture?.data ? cacheCoverBytes(picture.data, cacheDir) : null;
+  return {
+    cached: picture?.data ? await cacheCoverBytes(picture.data, cacheDir) : null,
+    musicbrainz_albumid: first(metadata.common.musicbrainz_albumid) ?? null,
+    musicbrainz_releasegroupid: first(metadata.common.musicbrainz_releasegroupid) ?? null,
+  };
 };
+
+export const extractAndCacheCover = async (sourcePath, cacheDir) => (
+  await extractCoverMetadata(sourcePath, cacheDir)
+).cached;

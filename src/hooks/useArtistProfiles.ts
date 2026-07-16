@@ -17,6 +17,7 @@ export const normalizeArtistProfileKey = (artistName: string) => artistName
 
 export const useArtistProfiles = () => {
   const resolveDbPath = useDbPath();
+  const lastFmApiKey = useSettingsStore((state) => state.lastFmApiKey);
   const theAudioDbApiKey = useSettingsStore((state) => state.theAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const [profiles, setProfiles] = useState<Record<string, ArtistProfile>>({});
@@ -50,7 +51,7 @@ export const useArtistProfiles = () => {
         const dbPath = await resolveDbPath();
         const result = await scanArtistProfiles(
           dbPath,
-          { fanartApiKey, theAudioDbApiKey },
+          { fanartApiKey, lastFmApiKey, theAudioDbApiKey },
           SCAN_BATCH_SIZE,
         );
         if (cancelled) return;
@@ -69,7 +70,7 @@ export const useArtistProfiles = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [fanartApiKey, resolveDbPath, theAudioDbApiKey]);
+  }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
   const loadProfile = useCallback(async (artistName: string, force = false) => {
     const artistKey = normalizeArtistProfileKey(artistName);
@@ -84,6 +85,7 @@ export const useArtistProfiles = () => {
       const dbPath = await resolveDbPath();
       const profile = await getArtistProfile(dbPath, artistName, force, {
         fanartApiKey,
+        lastFmApiKey,
         theAudioDbApiKey,
       });
       setProfiles((current) => ({ ...current, [artistKey]: profile }));
@@ -101,7 +103,7 @@ export const useArtistProfiles = () => {
         return next;
       });
     }
-  }, [fanartApiKey, resolveDbPath, theAudioDbApiKey]);
+  }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
   return { profiles, loadingKeys, errors, loadProfile };
 };

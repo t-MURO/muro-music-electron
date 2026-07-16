@@ -63,6 +63,7 @@ export const getArtistProfile = (
 
 export type ArtistProfileProviderKeys = {
   fanartApiKey?: string;
+  lastFmApiKey?: string;
   theAudioDbApiKey?: string;
 };
 
@@ -80,6 +81,18 @@ export const scanArtistProfiles = (
   providerKeys: ArtistProfileProviderKeys = {},
   limit = 25,
 ) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, ...providerKeys, limit });
+
+export type AlbumCoverScanResult = {
+  checked: number;
+  updated: number;
+  failed: number;
+  queued: number;
+  remaining: number;
+  totalAlbums: number;
+};
+
+export const scanAlbumCovers = (dbPath: string, limit = 25) =>
+  invoke<AlbumCoverScanResult>("scan_album_covers", { dbPath, limit });
 
 // ============================================================================
 // Playlist Operations

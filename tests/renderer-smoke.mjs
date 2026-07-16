@@ -63,6 +63,7 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   play_count: 0,
 }));
 const smokeArtistProfile = {
+  profileVersion: 2,
   artistKey: "muro",
   requestedName: "Muro",
   name: "Muro",
@@ -77,9 +78,20 @@ const smokeArtistProfile = {
   biography: "Muro is an electronic musician used by the renderer smoke test.",
   imagePath: null,
   imageUrl: null,
+  imageProvider: "wikimedia-commons",
+  imageAttribution: "Smoke Photographer",
+  imageLicense: "CC BY-SA 4.0",
+  wikimediaCommonsUrl: "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
   musicBrainzId: "11111111-1111-4111-8111-111111111111",
   musicBrainzUrl: "https://musicbrainz.org/artist/11111111-1111-4111-8111-111111111111",
   wikipediaUrl: "https://en.wikipedia.org/wiki/Muro_(musician)",
+  lastFmAttempted: true,
+  lastFmUrl: "https://www.last.fm/music/Muro",
+  similarArtists: [{
+    name: "Similar Muro",
+    musicBrainzId: "55555555-5555-4555-8555-555555555555",
+    url: "https://www.last.fm/music/Similar+Muro",
+  }],
   theAudioDbId: "654321",
   theAudioDbUrl: "https://www.theaudiodb.com/artist/654321",
   fanartUrl: "https://fanart.tv/artist/11111111-1111-4111-8111-111111111111/",
@@ -152,6 +164,9 @@ app.whenReady().then(async () => {
     if (command === "scan_artist_profiles") {
       artistProfileScanCount += 1;
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalArtists: 1 };
+    }
+    if (command === "scan_album_covers") {
+      return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalAlbums: 0 };
     }
     if (command === "playback_get_state") return {
       is_playing: false,
@@ -599,10 +614,13 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[data-settings-tab="application"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
+        const lastFmApiKeyInput = document.querySelector("[data-lastfm-api-key]");
         const theAudioDbApiKeyInput = document.querySelector("[data-theaudiodb-api-key]");
         const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
         const artistInformationSettingsReady = Boolean(
           document.querySelector("[data-artist-information-settings]") &&
+          lastFmApiKeyInput instanceof HTMLInputElement &&
+          lastFmApiKeyInput.type === "password" &&
           theAudioDbApiKeyInput instanceof HTMLInputElement &&
           theAudioDbApiKeyInput.type === "password" &&
           fanartApiKeyInput instanceof HTMLInputElement &&
@@ -755,6 +773,10 @@ app.whenReady().then(async () => {
         const albumArtistProfileReady = Boolean(
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
           document.querySelector(".artist-detail-biography")?.textContent?.includes("renderer smoke test") &&
+          document.querySelector(".artist-detail-photo-credit")?.textContent?.includes("Smoke Photographer") &&
+          document.querySelector(".artist-detail-similar")?.textContent?.includes("Similar Muro") &&
+          document.querySelector(".artist-detail-sources")?.textContent?.includes("Wikimedia Commons") &&
+          document.querySelector(".artist-detail-sources")?.textContent?.includes("Last.fm") &&
           document.querySelector(".artist-detail-sources")?.textContent?.includes("TheAudioDB") &&
           document.querySelector(".artist-detail-sources")?.textContent?.includes("Fanart.tv")
         );
