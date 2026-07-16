@@ -41,6 +41,7 @@ import {
   usePlaylistMenu,
   usePlaylistDrag,
   useAudioPlayback,
+  useMixTransition,
   useSidebarPanel,
   useSidebarData,
   useTrackRatings,
@@ -80,6 +81,7 @@ import {
 } from "./utils";
 import { confirm, open, save } from "@muro/desktop/dialogs";
 import { openExternal } from "./desktop/shell";
+import { isDjMixFeatureAvailable } from "./lib/mix/config";
 import type { ColumnConfig, SmartCrate, Track } from "./types";
 
 function App() {
@@ -115,6 +117,8 @@ function App() {
   const theme = useSettingsStore((s) => s.theme);
   const locale = useSettingsStore((s) => s.locale);
   const seekMode = useSettingsStore((s) => s.seekMode);
+  const djMixFeatureEnabled = useSettingsStore((s) => s.djMixEnabled);
+  const djMixEnabled = isDjMixFeatureAvailable(import.meta.env.DEV, djMixFeatureEnabled);
   const dbPath = useSettingsStore((s) => s.dbPath);
   const dbFileName = useSettingsStore((s) => s.dbFileName);
   const setTheme = useSettingsStore((s) => s.setTheme);
@@ -367,19 +371,17 @@ function App() {
       .filter((t): t is Track => t !== undefined);
   }, [queue, allTracks]);
 
-  // Track end handler for auto-advance
+  // Track end handler for auto-advance. advanceToNext depends on playTrack
+  // (defined below by useAudioPlayback), so it is routed through a ref.
+  const advanceToNextRef = useRef<() => void>(() => {});
   const handleTrackEnd = useCallback(() => {
-    const currentQueue = usePlaybackStore.getState().queue;
-
-    if (currentQueue.length > 0) {
-      const nextTrackId = currentQueue[0];
-      const nextTrack = allTracks.find((t) => t.id === nextTrackId);
-      if (nextTrack) {
-        setQueue(currentQueue.slice(1));
-        // playTrack will be called by useAudioPlayback
-      }
+    const transition = usePlaybackStore.getState().transition;
+    if (transition && (transition.status === "armed" || transition.status === "active")) {
+      // The mix engine owns this track boundary and hands off playback itself.
+      return;
     }
-  }, [allTracks, setQueue]);
+    advanceToNextRef.current();
+  }, []);
 
   // Media control refs for skip handlers (needed before useAudioPlayback)
   const skipPreviousRef = useRef<() => void>(() => {});
@@ -424,6 +426,14 @@ function App() {
     setVolume,
   } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
 
+  // DJ-style transitions (manual pair mix + auto-mix into the queue)
+  const { mixSelectedPair, transition } = useMixTransition({
+    enabled: djMixEnabled,
+    allTracks,
+    playTrack,
+    seek,
+  });
+
   // Play tracking (30-second threshold)
   usePlayTracking({ currentPosition, allTracks });
 
@@ -442,7 +452,8 @@ function App() {
     }
   }, [allTracks, seek, playTrack]);
 
-  const handleSkipNext = useCallback(() => {
+  // Shared advance logic for skip-next and natural track end.
+  const advanceToNext = useCallback(() => {
     const currentQueue = usePlaybackStore.getState().queue;
 
     // If there's a track in the queue, use it
@@ -481,7 +492,13 @@ function App() {
     }
   }, [allTracks, shuffleEnabled, repeatMode, playTrack, setQueue]);
 
-  // Update refs for media control handler
+  const handleSkipNext = advanceToNext;
+
+  // Update refs for media control and track-end handlers
+  useEffect(() => {
+    advanceToNextRef.current = advanceToNext;
+  }, [advanceToNext]);
+
   useEffect(() => {
     skipPreviousRef.current = handleSkipPrevious;
   }, [handleSkipPrevious]);
@@ -1314,6 +1331,9 @@ function App() {
                         <TrackSelectionBar
                           selectedCount={selectedVisibleTrackIds.length}
                           onPlay={handlePlaySelected}
+                          onMix={djMixEnabled
+                            ? () => { void mixSelectedPair(selectedVisibleTrackIds); }
+                            : undefined}
                           onPlayNext={() => playNext(selectedVisibleTrackIds)}
                           onAddToQueue={() => addToQueue(selectedVisibleTrackIds)}
                           onAnalyze={handleAnalyzeSelected}
@@ -1364,6 +1384,7 @@ function App() {
           onVolumeChange={setVolume}
           onSkipPrevious={handleSkipPrevious}
           onSkipNext={handleSkipNext}
+          transition={djMixEnabled ? transition : null}
         />
       </div>
     </div>

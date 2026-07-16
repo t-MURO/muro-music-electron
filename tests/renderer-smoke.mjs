@@ -17,6 +17,8 @@ protocol.registerSchemesAsPrivileged([{
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
+const rendererSmokeUrl = process.env.MURO_RENDERER_SMOKE_URL?.trim() || null;
+const expectDevSettings = process.env.MURO_RENDERER_SMOKE_EXPECT_DEV === "1";
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-renderer-smoke-"));
 const writeSilentWave = (filePath, durationSeconds = 5) => {
   const sampleRate = 8_000;
@@ -190,10 +192,12 @@ app.whenReady().then(async () => {
     fail(`Renderer process exited: ${details.reason}`);
   });
 
-  await window.loadFile(path.join(appRoot, "dist", "index.html"));
+  if (rendererSmokeUrl) await window.loadURL(rendererSmokeUrl);
+  else await window.loadFile(path.join(appRoot, "dist", "index.html"));
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const result = await window.webContents.executeJavaScript(`(async () => {
+      const expectDevSettings = ${JSON.stringify(expectDevSettings)};
       const root = document.getElementById("root");
       const selectAll = document.querySelector('[aria-label="Select all tracks"]');
       const scroller = document.querySelector('[data-track-table-scroll]');
@@ -510,12 +514,55 @@ app.whenReady().then(async () => {
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 60));
+        document.querySelector('[data-settings-tab="application"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
         const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
         const artistInformationSettingsReady = Boolean(
           document.querySelector("[data-artist-information-settings]") &&
           fanartApiKeyInput instanceof HTMLInputElement &&
           fanartApiKeyInput.type === "password"
         );
+        let djMixFeatureGateReady = false;
+        if (expectDevSettings) {
+          document.querySelector('[data-settings-tab="dev"]')?.click();
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
+          const defaultOff = featureToggle instanceof HTMLInputElement && !featureToggle.checked;
+          featureToggle?.click();
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          const mixBars = document.querySelector("[data-mix-bars]");
+          const mixBarOptions = mixBars instanceof HTMLSelectElement
+            ? Array.from(mixBars.options, (option) => Number(option.value))
+            : [];
+          djMixFeatureGateReady =
+            defaultOff &&
+            Boolean(document.querySelector("[data-dj-mix-settings]")) &&
+            mixBarOptions.join(",") === "4,8,16,32";
+        } else {
+          djMixFeatureGateReady =
+            !document.querySelector("[data-dj-mix-feature-toggle]") &&
+            !document.querySelector("[data-dj-mix-settings]");
+        }
+        window.location.hash = "#/";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const mixRows = document.querySelectorAll('[data-track-index]');
+        mixRows[0]?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        mixRows[1]?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const djMixManualSurfaceReady = expectDevSettings
+          ? Boolean(document.querySelector("[data-selection-mix]"))
+          : !document.querySelector("[data-selection-mix]");
+        window.location.hash = "#/settings";
+        await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[data-settings-tab="analysis"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const notationSelect = document.querySelector('[data-analysis-notation]');
@@ -664,7 +711,7 @@ app.whenReady().then(async () => {
         }
         await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[data-smart-crate-save]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, expectDevSettings ? 300 : 100));
         const smartCrateItem = document.querySelector('[data-smart-crate-id]');
         const smartCrateCreated = Boolean(
           smartCrateItem &&
@@ -740,6 +787,8 @@ app.whenReady().then(async () => {
           wheelFilteredTo9A,
           queuedFromMix,
           artistInformationSettingsReady,
+          djMixFeatureGateReady,
+          djMixManualSurfaceReady,
           analysisNotationSettingsReady,
           contextMenuOpened,
           contextMenuStayedOpenInside,
@@ -902,6 +951,14 @@ app.whenReady().then(async () => {
       }
       if (!result.artistInformationSettingsReady) {
         fail("Fanart.tv fallback settings are not visible in the Application settings tab");
+        return;
+      }
+      if (!result.djMixFeatureGateReady) {
+        fail("Experimental DJ mix feature-gate settings failed");
+        return;
+      }
+      if (!result.djMixManualSurfaceReady) {
+        fail("Experimental DJ mix selection controls ignored the feature gate");
         return;
       }
       if (

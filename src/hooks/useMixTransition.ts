@@ -1,0 +1,219 @@
+import { useCallback, useEffect, useRef } from "react";
+import type { Track } from "../types";
+import {
+  useLibraryStore,
+  usePlaybackStore,
+  useSettingsStore,
+  notify,
+  type TransitionUiState,
+} from "../stores";
+import { getOrComputeBeatGrid, type BeatGrid } from "../lib/beatgrid";
+import { planTransition } from "../lib/mix/plan";
+import { playbackCancelTransition, playbackTransitionTo } from "../utils/playbackApi";
+import { useDbPath } from "./useDbPath";
+
+type UseMixTransitionArgs = {
+  enabled: boolean;
+  allTracks: Track[];
+  playTrack: (track: Track) => Promise<void>;
+  seek: (positionSecs: number) => Promise<void>;
+};
+
+const toTransitionTarget = (track: Track) => ({
+  id: track.id,
+  title: track.title,
+  artist: track.artist,
+  album: track.album,
+  sourcePath: track.sourcePath,
+  durationHint: track.durationSeconds,
+  coverArtPath: track.coverArtPath,
+  coverArtThumbPath: track.coverArtThumbPath,
+});
+
+export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMixTransitionArgs) => {
+  const transition: TransitionUiState | null = usePlaybackStore((s) => s.transition);
+  const setTransition = usePlaybackStore((s) => s.setTransition);
+  const setQueue = usePlaybackStore((s) => s.setQueue);
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
+  const currentTrackId = usePlaybackStore((s) => s.currentTrack?.id ?? null);
+  const nextQueuedId = usePlaybackStore((s) => (s.queue.length > 0 ? s.queue[0] : null));
+  const autoMix = useSettingsStore((s) => s.autoMix);
+  const mixBars = useSettingsStore((s) => s.mixBars);
+  const mixPreservePitch = useSettingsStore((s) => s.mixPreservePitch);
+  const getDbPath = useDbPath();
+
+  // Guards shared between the manual and auto-mix paths.
+  const manualMixInFlightRef = useRef(false);
+  const autoMixGenRef = useRef(0);
+  const autoMixKeyRef = useRef<string | null>(null);
+  const autoArmedRef = useRef(false);
+  const autoArmPendingRef = useRef(false);
+
+  // Computes (or reuses) a beat grid and mirrors it into the library store.
+  // Returns null when analysis fails so the transition degrades to a fade.
+  const resolveGrid = useCallback(
+    async (track: Track): Promise<BeatGrid | null> => {
+      try {
+        const dbPath = await getDbPath();
+        const grid = await getOrComputeBeatGrid(track, dbPath);
+        useLibraryStore.getState().updateTrack(track.id, { beatGrid: grid });
+        return grid;
+      } catch {
+        return null;
+      }
+    },
+    [getDbPath]
+  );
+
+  const mixSelectedPair = useCallback(
+    async (trackIds: string[]) => {
+      if (!enabled) return;
+      if (trackIds.length !== 2) {
+        notify.error("Select exactly two tracks to mix");
+        return;
+      }
+      const a = allTracks.find((track) => track.id === trackIds[0]);
+      const b = allTracks.find((track) => track.id === trackIds[1]);
+      if (!a || !b) {
+        notify.error("Could not find the selected tracks in the library");
+        return;
+      }
+
+      manualMixInFlightRef.current = true;
+      autoMixGenRef.current += 1;
+      if (autoArmedRef.current || autoArmPendingRef.current) {
+        autoArmedRef.current = false;
+        autoArmPendingRef.current = false;
+        await playbackCancelTransition().catch(() => undefined);
+      }
+      try {
+        notify.info("Analyzing beats…");
+        const gridA = await resolveGrid(a);
+        const gridB = await resolveGrid(b);
+        const failedTitles = [gridA ? null : a.title, gridB ? null : b.title].filter(
+          (title): title is string => title !== null
+        );
+        if (failedTitles.length > 0) {
+          notify.error(`Beat analysis failed for ${failedTitles.join(" and ")}`);
+        }
+
+        const plan = planTransition({
+          gridA,
+          gridB,
+          durationASec: a.durationSeconds,
+          durationBSec: b.durationSeconds,
+          bars: mixBars,
+        });
+
+        await playTrack(a);
+        await seek(Math.max(0, plan.startAtSec - 10));
+        await playbackTransitionTo(toTransitionTarget(b), plan, mixPreservePitch);
+
+        if (plan.mode === "fade") {
+          notify.info(
+            gridA && gridB
+              ? "Tempos too far apart — using a simple blend"
+              : "Beat analysis unavailable — using a simple blend"
+          );
+        }
+      } catch {
+        notify.error("Could not start the mix transition");
+      } finally {
+        manualMixInFlightRef.current = false;
+      }
+    },
+    [allTracks, enabled, mixBars, mixPreservePitch, playTrack, resolveGrid, seek]
+  );
+
+  // Clear finished transitions and advance the queue when the mix engine
+  // handed playback to the queued track.
+  useEffect(() => {
+    if (transition?.status !== "completed") return;
+    const currentQueue = usePlaybackStore.getState().queue;
+    if (currentQueue.length > 0 && currentQueue[0] === transition.toId) {
+      setQueue((queue) => queue.slice(1));
+    }
+    autoArmedRef.current = false;
+    setTransition(null);
+  }, [transition, setQueue, setTransition]);
+
+  // Auto-mix: arm a transition into queue[0] whenever a track is playing.
+  useEffect(() => {
+    if (!enabled || !autoMix) {
+      autoMixKeyRef.current = null;
+      autoMixGenRef.current += 1;
+      if (autoArmedRef.current || autoArmPendingRef.current) {
+        autoArmedRef.current = false;
+        autoArmPendingRef.current = false;
+        void playbackCancelTransition().catch(() => {});
+      }
+      return;
+    }
+
+    const key = `${currentTrackId ?? ""}→${nextQueuedId ?? ""}`;
+    if (key !== autoMixKeyRef.current) {
+      // The playing track or the next queued track changed: drop any
+      // previously auto-armed transition before re-arming below.
+      autoMixKeyRef.current = key;
+      autoMixGenRef.current += 1;
+      if (autoArmedRef.current || autoArmPendingRef.current) {
+        autoArmedRef.current = false;
+        autoArmPendingRef.current = false;
+        void playbackCancelTransition().catch(() => {});
+      }
+    }
+
+    // Only auto-arm when nothing (manual or auto) is armed or active.
+    if (transition !== null) return;
+    if (manualMixInFlightRef.current) return;
+    if (!isPlaying || !currentTrackId || !nextQueuedId) return;
+
+    const current = allTracks.find((track) => track.id === currentTrackId);
+    const next = allTracks.find((track) => track.id === nextQueuedId);
+    if (!current || !next) return;
+
+    const generation = autoMixGenRef.current;
+    void (async () => {
+      const gridA = await resolveGrid(current);
+      if (generation !== autoMixGenRef.current) return;
+      const gridB = await resolveGrid(next);
+      if (generation !== autoMixGenRef.current) return;
+      if (manualMixInFlightRef.current) return;
+      if (usePlaybackStore.getState().transition !== null) return;
+
+      const plan = planTransition({
+        gridA,
+        gridB,
+        durationASec: current.durationSeconds,
+        durationBSec: next.durationSeconds,
+        bars: mixBars,
+      });
+      autoArmPendingRef.current = true;
+      try {
+        await playbackTransitionTo(toTransitionTarget(next), plan, mixPreservePitch);
+      } finally {
+        autoArmPendingRef.current = false;
+      }
+      if (generation !== autoMixGenRef.current || !enabled || !autoMix) {
+        await playbackCancelTransition().catch(() => undefined);
+        return;
+      }
+      autoArmedRef.current = true;
+    })().catch(() => {
+      // Auto-mix arming is best effort; the natural track end still advances.
+    });
+  }, [
+    allTracks,
+    autoMix,
+    currentTrackId,
+    enabled,
+    isPlaying,
+    mixBars,
+    mixPreservePitch,
+    nextQueuedId,
+    resolveGrid,
+    transition,
+  ]);
+
+  return { mixSelectedPair, transition: enabled ? transition : null };
+};

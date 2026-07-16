@@ -50,7 +50,7 @@ export const getSortableValue = (
     }
     default: {
       const value = track[key as keyof Track];
-      return value === undefined || value === null ? null : value;
+      return typeof value === "string" || typeof value === "number" ? value : null;
     }
   }
 };

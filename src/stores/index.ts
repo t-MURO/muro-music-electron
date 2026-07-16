@@ -5,6 +5,7 @@ export {
   type AnalysisNotationMode,
   type AnalysisOutputs,
   type DeleteMode,
+  type MixBars,
 } from "./settingsStore";
 export {
   useLibraryStore,
@@ -20,6 +21,7 @@ export {
   type PlaybackStore,
   type CurrentTrack,
   type RepeatMode,
+  type TransitionUiState,
 } from "./playbackStore";
 export {
   useUIStore,

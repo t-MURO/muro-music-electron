@@ -1,4 +1,5 @@
 import type { MessageKey } from "../i18n";
+import type { BeatGrid } from "../lib/beatgrid/types";
 
 export type Track = {
   id: string;
@@ -28,6 +29,7 @@ export type Track = {
   discTotal?: number;
   lastPlayedAt?: string;
   playCount: number;
+  beatGrid?: BeatGrid;
 };
 
 export type TrackMetadataUpdates = {

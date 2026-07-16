@@ -2,11 +2,13 @@ import { useState } from "react";
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { t, type Locale } from "../../i18n";
 import { openExternal } from "../../desktop/shell";
+import { MIX_BAR_OPTIONS } from "../../lib/mix/config";
 import {
   useSettingsStore,
   type AnalysisNotationMode,
   type AnalysisOutputMode,
   type AnalysisOutputs,
+  type MixBars,
 } from "../../stores";
 
 type SettingsPanelProps = {
@@ -97,6 +99,14 @@ export const SettingsPanel = ({
   const setAnalysisCustomCode = useSettingsStore((state) => state.setAnalysisCustomCode);
   const setAnalysisDelimiter = useSettingsStore((state) => state.setAnalysisDelimiter);
   const setAnalysisOutput = useSettingsStore((state) => state.setAnalysisOutput);
+  const djMixEnabled = useSettingsStore((state) => state.djMixEnabled);
+  const autoMix = useSettingsStore((state) => state.autoMix);
+  const mixBars = useSettingsStore((state) => state.mixBars);
+  const mixPreservePitch = useSettingsStore((state) => state.mixPreservePitch);
+  const setDjMixEnabled = useSettingsStore((state) => state.setDjMixEnabled);
+  const setAutoMix = useSettingsStore((state) => state.setAutoMix);
+  const setMixBars = useSettingsStore((state) => state.setMixBars);
+  const setMixPreservePitch = useSettingsStore((state) => state.setMixPreservePitch);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const setFanartApiKey = useSettingsStore((state) => state.setFanartApiKey);
   const writesAudioTags = Object.values(analysisOutputs).some((mode) => mode !== "none");
@@ -114,6 +124,7 @@ export const SettingsPanel = ({
             }`}
             onClick={() => setActiveTab("dev")}
             type="button"
+            data-settings-tab="dev"
           >
             Dev
           </button>
@@ -126,6 +137,7 @@ export const SettingsPanel = ({
           }`}
           onClick={() => setActiveTab("application")}
           type="button"
+          data-settings-tab="application"
         >
           Application
         </button>
@@ -174,6 +186,73 @@ export const SettingsPanel = ({
                 >
                   {clearSongsPending ? "Clearing..." : "Empty song database"}
                 </button>
+              </div>
+            </div>
+
+            <div data-developer-features>
+              <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                Experimental features
+              </h3>
+              <div className="max-w-xl space-y-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-[var(--spacing-lg)]">
+                <label className="flex items-center gap-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                  <input
+                    type="checkbox"
+                    checked={djMixEnabled}
+                    onChange={(event) => setDjMixEnabled(event.target.checked)}
+                    data-dj-mix-feature-toggle
+                  />
+                  Enable experimental DJ mixing
+                </label>
+                <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                  Adds beat-grid analysis, manual two-track mixes, and optional automatic transitions.
+                  This feature is available only in development builds while it is being tested.
+                </p>
+
+                {djMixEnabled && (
+                  <div className="space-y-4 border-t border-[var(--color-border)] pt-4" data-dj-mix-settings>
+                    <label className="flex items-center gap-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                      <input
+                        type="checkbox"
+                        checked={autoMix}
+                        onChange={(event) => setAutoMix(event.target.checked)}
+                        data-mix-auto
+                      />
+                      Auto-mix into next track
+                    </label>
+                    <p className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                      Blends the end of the playing track into the next queued track.
+                    </p>
+
+                    <div>
+                      <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                        Transition length
+                      </label>
+                      <div className="relative w-64">
+                        <select
+                          className="h-[var(--input-height)] w-full appearance-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] pr-10 text-[var(--font-size-sm)] text-[var(--color-text-primary)] transition-all duration-[var(--transition-fast)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                          onChange={(event) => setMixBars(Number(event.target.value) as MixBars)}
+                          value={mixBars}
+                          data-mix-bars
+                        >
+                          {MIX_BAR_OPTIONS.map((bars) => (
+                            <option key={bars} value={bars}>{bars} bars</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                      </div>
+                    </div>
+
+                    <label className="flex items-center gap-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                      <input
+                        type="checkbox"
+                        checked={mixPreservePitch}
+                        onChange={(event) => setMixPreservePitch(event.target.checked)}
+                        data-mix-preserve-pitch
+                      />
+                      Keep pitch constant
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
           </div>

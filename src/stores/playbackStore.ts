@@ -15,6 +15,14 @@ export type CurrentTrack = {
   coverArtThumbPath?: string;
 };
 
+export type TransitionUiState = {
+  status: "armed" | "active" | "completed" | "cancelled";
+  fromId: string;
+  toId: string;
+  toTitle: string;
+  progress: number;
+};
+
 type PlaybackState = {
   isPlaying: boolean;
   currentTrack: CurrentTrack | null;
@@ -24,6 +32,7 @@ type PlaybackState = {
   shuffleEnabled: boolean;
   repeatMode: RepeatMode;
   queue: string[];
+  transition: TransitionUiState | null;
 };
 
 type PlaybackActions = {
@@ -33,6 +42,7 @@ type PlaybackActions = {
   setCurrentPosition: (position: number) => void;
   setDuration: (duration: number) => void;
   setVolume: (volume: number) => void;
+  setTransition: (transition: TransitionUiState | null) => void;
 
   // Mode toggles
   toggleShuffle: () => void;
@@ -63,6 +73,7 @@ const initialState: PlaybackState = {
   shuffleEnabled: false,
   repeatMode: "off",
   queue: [],
+  transition: null,
 };
 
 export const usePlaybackStore = create<PlaybackStore>()(
@@ -75,6 +86,7 @@ export const usePlaybackStore = create<PlaybackStore>()(
     setCurrentPosition: (currentPosition) => set({ currentPosition }),
     setDuration: (duration) => set({ duration }),
     setVolume: (volume) => set({ volume }),
+    setTransition: (transition) => set({ transition }),
 
     // Mode toggles
     toggleShuffle: () => set((state) => ({ shuffleEnabled: !state.shuffleEnabled })),

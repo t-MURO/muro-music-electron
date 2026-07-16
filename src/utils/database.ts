@@ -43,6 +43,9 @@ export const deleteTracks = (
   });
 };
 
+export const updateTrackBeatGrid = (dbPath: string, trackId: string, beatGridJson: string) =>
+  invoke<{ updated: boolean }>("update_track_beat_grid", { dbPath, trackId, beatGridJson });
+
 export const loadCachedArtistProfiles = (dbPath: string) =>
   invoke<ArtistProfile[]>("load_cached_artist_profiles", { dbPath });
 

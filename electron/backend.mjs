@@ -358,6 +358,24 @@ export const createBackend = ({
         .prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?")
         .run(bpm ?? null, key ?? null, Math.floor(Date.now() / 1000), trackId);
     },
+    update_track_beat_grid: ({ dbPath, trackId, beatGridJson }) => {
+      const invalid = () => new Error("Invalid beat grid payload");
+      if (typeof trackId !== "string" || trackId.length === 0) throw invalid();
+      if (typeof beatGridJson !== "string" || beatGridJson.length > 4096) throw invalid();
+      let parsed;
+      try {
+        parsed = JSON.parse(beatGridJson);
+      } catch {
+        throw invalid();
+      }
+      if (parsed == null || typeof parsed !== "object" || typeof parsed.bpm !== "number") {
+        throw invalid();
+      }
+      const result = openDatabase(dbPath)
+        .prepare("UPDATE tracks SET beat_grid_json = ?, updated_at = ? WHERE id = ?")
+        .run(beatGridJson, Math.floor(Date.now() / 1000), trackId);
+      return { updated: result.changes > 0 };
+    },
     keyfinder_health: () => keyFinder.health(),
     start_track_analysis: ({ tracks, settings, writeAuthorization }, sender) =>
       keyFinder.startAnalysis(

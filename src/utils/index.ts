@@ -12,7 +12,10 @@ export {
   playbackSetSeekMode,
   playbackGetState,
   playbackIsFinished,
+  playbackTransitionTo,
+  playbackCancelTransition,
   type PlaybackState,
+  type TransitionStatePayload,
 } from "./playbackApi";
 export { matchesSearchQuery, filterTracksBySearch } from "./search";
 export { getPathForView } from "./viewRouting";
@@ -32,6 +35,7 @@ export {
   unacceptTracks,
   rejectTracks,
   deleteTracks,
+  updateTrackBeatGrid,
   loadCachedArtistProfiles,
   getArtistProfile,
   scanArtistProfiles,

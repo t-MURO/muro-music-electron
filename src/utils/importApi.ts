@@ -1,5 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { Track } from "../types";
+import type { BeatGrid } from "../lib/beatgrid/types";
 
 // ============================================================================
 // Types
@@ -33,6 +34,7 @@ export type ImportedTrack = {
   disc_total?: number;
   last_played_at?: string;
   play_count: number;
+  beat_grid_json?: string | null;
 };
 
 export type LibrarySnapshot = {
@@ -77,6 +79,30 @@ export const importFiles = (dbPath: string, paths: string[]) => {
 // Type Conversion
 // ============================================================================
 
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+const parseBeatGrid = (raw?: string | null): BeatGrid | undefined => {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const candidate = parsed as Partial<BeatGrid>;
+    if (
+      candidate.version === 1 &&
+      isFiniteNumber(candidate.bpm) &&
+      isFiniteNumber(candidate.firstBeatSec) &&
+      isFiniteNumber(candidate.firstDownbeatSec) &&
+      isFiniteNumber(candidate.confidence)
+    ) {
+      return candidate as BeatGrid;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 /**
  * Converts the database transfer object to the renderer's Track shape.
  */
@@ -108,4 +134,5 @@ export const importedTrackToTrack = (imported: ImportedTrack): Track => ({
   discTotal: imported.disc_total,
   lastPlayedAt: imported.last_played_at,
   playCount: imported.play_count,
+  beatGrid: parseBeatGrid(imported.beat_grid_json),
 });
