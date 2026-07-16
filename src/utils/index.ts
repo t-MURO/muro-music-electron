@@ -43,6 +43,7 @@ export {
   loadPlaylists,
   createPlaylist,
   updatePlaylist,
+  reorderPlaylists,
   deletePlaylist,
   addTracksToPlaylist,
   setPlaylistTracks,

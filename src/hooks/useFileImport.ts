@@ -240,6 +240,9 @@ export const useFileImport = ({
         id: `playlist-${Date.now()}-${playlistSequenceRef.current}`,
         name: trimmed,
         trackIds: [],
+        sortOrder: playlists
+          .filter((item) => !item.folderId)
+          .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1,
       };
 
       const command: Command = {
@@ -258,12 +261,18 @@ export const useFileImport = ({
 
       try {
         const resolvedDbPath = await resolveDbPath();
-        await createPlaylist(resolvedDbPath, playlist.id, playlist.name);
+        await createPlaylist(
+          resolvedDbPath,
+          playlist.id,
+          playlist.name,
+          playlist.folderId,
+          playlist.sortOrder,
+        );
       } catch (error) {
         notify.error("Failed to create playlist");
       }
     },
-    [resolveDbPath, setPlaylists]
+    [playlists, resolveDbPath, setPlaylists]
   );
 
   // Undo/Redo keyboard handler

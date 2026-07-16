@@ -109,6 +109,7 @@ function App() {
   const [folderCreateName, setFolderCreateName] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [folderEditName, setFolderEditName] = useState("");
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(() => new Set());
   const [folderMenu, setFolderMenu] = useState<{
     folderId: string;
     position: { x: number; y: number };
@@ -585,19 +586,40 @@ function App() {
     () => playlists.find((playlist) => playlist.id === playlistMenuId) ?? null,
     [playlists, playlistMenuId]
   );
+  const playlistMenuSelection = useMemo(() => {
+    if (!playlistMenuId) return [];
+    if (!selectedPlaylistIds.has(playlistMenuId)) {
+      return playlistMenuTarget ? [playlistMenuTarget] : [];
+    }
+    return playlists.filter((playlist) => selectedPlaylistIds.has(playlist.id));
+  }, [playlistMenuId, playlistMenuTarget, playlists, selectedPlaylistIds]);
   const folderMenuTarget = useMemo(
     () => playlistFolders.find((folder) => folder.id === folderMenu?.folderId) ?? null,
     [folderMenu?.folderId, playlistFolders],
   );
+  const playlistFolderOptions = useMemo(() => {
+    const byId = new Map(playlistFolders.map((folder) => [folder.id, folder]));
+    const pathFor = (folderId: string, visited = new Set<string>()): string => {
+      const folder = byId.get(folderId);
+      if (!folder || visited.has(folderId)) return "";
+      visited.add(folderId);
+      const parentPath = folder.parentId ? pathFor(folder.parentId, visited) : "";
+      return parentPath ? `${parentPath} / ${folder.name}` : folder.name;
+    };
+    return playlistFolders.map((folder) => ({
+      ...folder,
+      name: pathFor(folder.id) || folder.name,
+    }));
+  }, [playlistFolders]);
   const playlistAddOptions = useMemo(() => {
-    const folderNames = new Map(playlistFolders.map((folder) => [folder.id, folder.name]));
+    const folderNames = new Map(playlistFolderOptions.map((folder) => [folder.id, folder.name]));
     return playlists.map((playlist) => ({
       id: playlist.id,
       name: playlist.name,
       trackCount: playlist.trackIds.length,
       folderName: playlist.folderId ? folderNames.get(playlist.folderId) : undefined,
     }));
-  }, [playlistFolders, playlists]);
+  }, [playlistFolderOptions, playlists]);
 
   // Playlist operations
   const {
@@ -606,14 +628,14 @@ function App() {
     setPlaylistEditName,
     handleOpenPlaylistEdit,
     handleClosePlaylistEdit,
-    handleDeletePlaylist,
+    handleDeletePlaylists,
     handleRemoveTracksFromPlaylist,
     handlePlaylistEditSubmit,
   } = usePlaylistOperations({
     currentView: view,
     navigateToView,
   });
-  const { createFolder, renameFolder, removeFolder, movePlaylist } = usePlaylistFolders();
+  const { createFolder, renameFolder, removeFolder, movePlaylist, reorderPlaylist } = usePlaylistFolders();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
@@ -735,11 +757,27 @@ function App() {
     notify.success(`Deleted ${crate.name}`);
   }, [deleteSmartCrate, navigateToView, smartCrates, view]);
 
+  useEffect(() => {
+    const available = new Set(playlists.map((playlist) => playlist.id));
+    setSelectedPlaylistIds((current) => {
+      const next = new Set([...current].filter((id) => available.has(id)));
+      if (next.size === current.size) return current;
+      return next;
+    });
+  }, [playlists]);
+
+  const handlePlaylistSelectionChange = useCallback((ids: string[]) => {
+    setSelectedPlaylistIds(new Set(ids));
+  }, []);
+
   const handleOpenPlaylistMenu = useCallback((
     event: React.MouseEvent<HTMLButtonElement>,
     playlistId: string,
   ) => {
     setFolderMenu(null);
+    setSelectedPlaylistIds((current) => current.has(playlistId)
+      ? current
+      : new Set([playlistId]));
     openPlaylistMenu(event, playlistId);
   }, [openPlaylistMenu]);
 
@@ -786,6 +824,14 @@ function App() {
     setIsFolderCreateOpen(true);
   }, []);
 
+  const handlePlaylistReorder = useCallback((
+    sourceId: string,
+    targetId: string,
+    placement: "before" | "after",
+  ) => {
+    void reorderPlaylist(sourceId, targetId, placement);
+  }, [reorderPlaylist]);
+
   // Sidebar props
   const sidebarProps = useSidebarData({
     view,
@@ -800,6 +846,9 @@ function App() {
     onCreatePlaylistFolder: handleOpenFolderCreate,
     onImportPlaylist: handleImportPlaylistFile,
     onImportPlaylistFolder: handleImportPlaylistFolder,
+    selectedPlaylistIds,
+    onPlaylistSelectionChange: handlePlaylistSelectionChange,
+    onPlaylistReorder: handlePlaylistReorder,
     onPlaylistFolderContextMenu: handleOpenFolderMenu,
     onCreateSmartCrate: handleCreateSmartCrate,
     onEditSmartCrate: handleEditSmartCrate,
@@ -873,20 +922,20 @@ function App() {
 
   // Playlist menu handlers
   const handlePlaylistMenuEdit = useCallback(() => {
-    if (!playlistMenuTarget) {
+    if (!playlistMenuTarget || playlistMenuSelection.length !== 1) {
       return;
     }
     handleOpenPlaylistEdit(playlistMenuTarget);
     closePlaylistMenu();
-  }, [closePlaylistMenu, handleOpenPlaylistEdit, playlistMenuTarget]);
+  }, [closePlaylistMenu, handleOpenPlaylistEdit, playlistMenuSelection.length, playlistMenuTarget]);
 
   const handlePlaylistMenuDelete = useCallback(() => {
-    if (!playlistMenuId) {
-      return;
-    }
+    const ids = playlistMenuSelection.map((playlist) => playlist.id);
+    if (ids.length === 0) return;
     closePlaylistMenu();
-    handleDeletePlaylist(playlistMenuId);
-  }, [closePlaylistMenu, handleDeletePlaylist, playlistMenuId]);
+    setSelectedPlaylistIds(new Set());
+    void handleDeletePlaylists(ids);
+  }, [closePlaylistMenu, handleDeletePlaylists, playlistMenuSelection]);
 
   const handlePlaylistMenuExport = useCallback(async () => {
     if (!playlistMenuTarget) return;
@@ -904,10 +953,10 @@ function App() {
   }, [closePlaylistMenu, exportPlaylist, playlistMenuTarget]);
 
   const handleMovePlaylist = useCallback((folderId: string | null) => {
-    if (!playlistMenuTarget) return;
+    if (!playlistMenuTarget || playlistMenuSelection.length !== 1) return;
     closePlaylistMenu();
     void movePlaylist(playlistMenuTarget.id, folderId);
-  }, [closePlaylistMenu, movePlaylist, playlistMenuTarget]);
+  }, [closePlaylistMenu, movePlaylist, playlistMenuSelection.length, playlistMenuTarget]);
 
   const handleFolderCreateSubmit = useCallback(async () => {
     if (await createFolder(folderCreateName)) {
@@ -935,8 +984,9 @@ function App() {
     if (!folderMenuTarget) return;
     const target = folderMenuTarget;
     setFolderMenu(null);
+    const destination = target.parentId ? "its parent folder" : "the Playlists section";
     const shouldDelete = await confirm(
-      `Delete the playlist folder “${target.name}”? Its playlists will move back to the Playlists section.`,
+      `Delete the playlist folder “${target.name}”? Its playlists and subfolders will move to ${destination}.`,
       { title: "Delete Playlist Folder", kind: "warning" },
     );
     if (shouldDelete) await removeFolder(target.id);
@@ -1188,13 +1238,18 @@ function App() {
               <PlaylistContextMenu
                 isOpen={isPlaylistMenuOpen}
                 position={playlistMenuPosition}
-                playlistName={playlistMenuTarget?.name}
+                playlistName={playlistMenuSelection.length > 1
+                  ? `${playlistMenuSelection.length} playlists selected`
+                  : playlistMenuTarget?.name}
+                selectionCount={playlistMenuSelection.length}
                 onClose={closePlaylistMenu}
-                onEdit={handlePlaylistMenuEdit}
-                onExport={() => { void handlePlaylistMenuExport(); }}
-                folders={playlistFolders}
+                onEdit={playlistMenuSelection.length === 1 ? handlePlaylistMenuEdit : undefined}
+                onExport={playlistMenuSelection.length === 1
+                  ? () => { void handlePlaylistMenuExport(); }
+                  : undefined}
+                folders={playlistMenuSelection.length === 1 ? playlistFolderOptions : []}
                 currentFolderId={playlistMenuTarget?.folderId}
-                onMoveToFolder={handleMovePlaylist}
+                onMoveToFolder={playlistMenuSelection.length === 1 ? handleMovePlaylist : undefined}
                 onDelete={handlePlaylistMenuDelete}
               />
               <PlaylistContextMenu

@@ -7,6 +7,7 @@ import {
   Folder,
   FolderInput,
   FolderPlus,
+  GripVertical,
   Import,
   Inbox,
   ListMusic,
@@ -42,6 +43,13 @@ type SidebarProps = {
   onCreatePlaylistFolder: () => void;
   onImportPlaylist: () => void;
   onImportPlaylistFolder: () => void;
+  selectedPlaylistIds: ReadonlySet<string>;
+  onPlaylistSelectionChange: (ids: string[]) => void;
+  onPlaylistReorder: (
+    sourceId: string,
+    targetId: string,
+    placement: "before" | "after",
+  ) => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onPlaylistFolderContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onCreateSmartCrate: () => void;
@@ -63,6 +71,9 @@ export const Sidebar = ({
   onCreatePlaylistFolder,
   onImportPlaylist,
   onImportPlaylistFolder,
+  selectedPlaylistIds,
+  onPlaylistSelectionChange,
+  onPlaylistReorder,
   onPlaylistContextMenu,
   onPlaylistFolderContextMenu,
   onCreateSmartCrate,
@@ -74,6 +85,12 @@ export const Sidebar = ({
   const playlists = useLibraryStore((state) => state.playlists);
   const playlistFolders = useLibraryStore((state) => state.playlistFolders);
   const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(() => new Set());
+  const [playlistSelectionAnchorId, setPlaylistSelectionAnchorId] = useState<string | null>(null);
+  const [reorderingPlaylistId, setReorderingPlaylistId] = useState<string | null>(null);
+  const [reorderTarget, setReorderTarget] = useState<{
+    id: string;
+    placement: "before" | "after";
+  } | null>(null);
   const smartCrates = useSmartCrateStore((state) => state.smartCrates);
   const smartCrateCounts = useMemo(
     () => new Map(smartCrates.map((crate) => [crate.id, filterTracksBySmartCrate(tracks, crate).length])),
@@ -100,7 +117,50 @@ export const Sidebar = ({
     () => new Set(playlistFolders.map((folder) => folder.id)),
     [playlistFolders],
   );
-  const rootPlaylists = playlists.filter((playlist) => !playlist.folderId || !folderIds.has(playlist.folderId));
+  const orderedPlaylists = useMemo(
+    () => [...playlists].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    [playlists],
+  );
+  const orderedFolders = useMemo(
+    () => [...playlistFolders].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    [playlistFolders],
+  );
+  const rootPlaylists = orderedPlaylists.filter(
+    (playlist) => !playlist.folderId || !folderIds.has(playlist.folderId),
+  );
+  const childFoldersByParent = useMemo(() => {
+    const children = new Map<string, typeof playlistFolders>();
+    for (const folder of orderedFolders) {
+      const parentId = folder.parentId && folderIds.has(folder.parentId) ? folder.parentId : "";
+      const current = children.get(parentId) ?? [];
+      current.push(folder);
+      children.set(parentId, current);
+    }
+    return children;
+  }, [folderIds, orderedFolders, playlistFolders]);
+  const playlistsByFolder = useMemo(() => {
+    const grouped = new Map<string, typeof playlists>();
+    for (const playlist of orderedPlaylists) {
+      if (!playlist.folderId || !folderIds.has(playlist.folderId)) continue;
+      const current = grouped.get(playlist.folderId) ?? [];
+      current.push(playlist);
+      grouped.set(playlist.folderId, current);
+    }
+    return grouped;
+  }, [folderIds, orderedPlaylists, playlists]);
+  const orderedPlaylistIds = useMemo(() => {
+    const ids = rootPlaylists.map((playlist) => playlist.id);
+    const visited = new Set<string>();
+    const collectFolder = (folderId: string) => {
+      if (visited.has(folderId)) return;
+      visited.add(folderId);
+      if (collapsedFolderIds.has(folderId)) return;
+      ids.push(...(playlistsByFolder.get(folderId) ?? []).map((playlist) => playlist.id));
+      for (const folder of childFoldersByParent.get(folderId) ?? []) collectFolder(folder.id);
+    };
+    for (const folder of childFoldersByParent.get("") ?? []) collectFolder(folder.id);
+    return ids;
+  }, [childFoldersByParent, collapsedFolderIds, playlistsByFolder, rootPlaylists]);
   const toggleFolder = (folderId: string) => {
     setCollapsedFolderIds((current) => {
       const next = new Set(current);
@@ -109,28 +169,153 @@ export const Sidebar = ({
       return next;
     });
   };
-  const renderPlaylist = (playlist: (typeof playlists)[number], folderId?: string) => {
+  const selectPlaylist = (event: React.MouseEvent<HTMLButtonElement>, playlistId: string) => {
+    let nextSelection: string[];
+    if (event.shiftKey && playlistSelectionAnchorId) {
+      const anchorIndex = orderedPlaylistIds.indexOf(playlistSelectionAnchorId);
+      const targetIndex = orderedPlaylistIds.indexOf(playlistId);
+      if (anchorIndex >= 0 && targetIndex >= 0) {
+        const range = orderedPlaylistIds.slice(
+          Math.min(anchorIndex, targetIndex),
+          Math.max(anchorIndex, targetIndex) + 1,
+        );
+        nextSelection = event.metaKey || event.ctrlKey
+          ? [...new Set([...selectedPlaylistIds, ...range])]
+          : range;
+      } else {
+        nextSelection = [playlistId];
+      }
+    } else if (event.metaKey || event.ctrlKey) {
+      const next = new Set(selectedPlaylistIds);
+      if (next.has(playlistId)) next.delete(playlistId);
+      else next.add(playlistId);
+      nextSelection = [...next];
+      setPlaylistSelectionAnchorId(playlistId);
+    } else {
+      nextSelection = [playlistId];
+      setPlaylistSelectionAnchorId(playlistId);
+    }
+    onPlaylistSelectionChange(nextSelection);
+    onViewChange(`playlist:${playlistId}`);
+  };
+  const openPlaylistContextMenu = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    playlistId: string,
+  ) => {
+    if (!selectedPlaylistIds.has(playlistId)) {
+      onPlaylistSelectionChange([playlistId]);
+      setPlaylistSelectionAnchorId(playlistId);
+    }
+    onPlaylistContextMenu(event, playlistId);
+  };
+  const renderPlaylist = (playlist: (typeof playlists)[number], depth = 0) => {
     const active = currentView === `playlist:${playlist.id}`;
+    const selected = selectedPlaylistIds.has(playlist.id);
     const dropTarget = draggingPlaylistId === playlist.id;
+    const reorderPosition = reorderTarget?.id === playlist.id ? reorderTarget.placement : null;
     return (
       <button
         key={playlist.id}
-        className={`${itemClass(active)} ${dropTarget ? "sidebar-item--drop" : ""} ${folderId ? "pl-7" : ""}`}
-        onClick={() => onViewChange(`playlist:${playlist.id}`)}
-        onContextMenu={(event) => onPlaylistContextMenu(event, playlist.id)}
-        onDragEnter={(event) => { event.preventDefault(); onPlaylistDragEnter(playlist.id); }}
-        onDragLeave={(event) => { event.preventDefault(); onPlaylistDragLeave(playlist.id); }}
-        onDragOver={(event) => { event.preventDefault(); onPlaylistDragOver(playlist.id); }}
-        onDrop={(event) => { event.preventDefault(); event.stopPropagation(); onPlaylistDrop(event, playlist.id); }}
+        className={`${itemClass(active)} ${selected ? "sidebar-item--selected" : ""} ${dropTarget ? "sidebar-item--drop" : ""} ${reorderPosition ? `sidebar-item--reorder-${reorderPosition}` : ""}`}
+        style={{ paddingLeft: `${9 + depth * 16}px` }}
+        onClick={(event) => selectPlaylist(event, playlist.id)}
+        onContextMenu={(event) => openPlaylistContextMenu(event, playlist.id)}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("application/x-muro-playlist-id", playlist.id);
+          setReorderingPlaylistId(playlist.id);
+        }}
+        onDragEnd={() => {
+          setReorderingPlaylistId(null);
+          setReorderTarget(null);
+        }}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          if (reorderingPlaylistId) return;
+          onPlaylistDragEnter(playlist.id);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          if (reorderingPlaylistId) {
+            if (reorderTarget?.id === playlist.id) setReorderTarget(null);
+            return;
+          }
+          onPlaylistDragLeave(playlist.id);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (reorderingPlaylistId) {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const placement = event.clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+            setReorderTarget({ id: playlist.id, placement });
+            event.dataTransfer.dropEffect = "move";
+            return;
+          }
+          onPlaylistDragOver(playlist.id);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const sourceId = reorderingPlaylistId
+            ?? event.dataTransfer.getData("application/x-muro-playlist-id");
+          if (sourceId) {
+            const placement = reorderTarget?.id === playlist.id
+              ? reorderTarget.placement
+              : "before";
+            onPlaylistReorder(sourceId, playlist.id, placement);
+            setReorderingPlaylistId(null);
+            setReorderTarget(null);
+            return;
+          }
+          onPlaylistDrop(event, playlist.id);
+        }}
         data-playlist-id={playlist.id}
         data-playlist-target={playlist.id}
-        data-playlist-folder-parent={folderId}
+        data-playlist-folder-parent={playlist.folderId}
+        aria-selected={selected}
         type="button"
       >
+        <GripVertical className="sidebar-playlist-grip h-3 w-3 shrink-0" />
         <ListMusic className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{playlist.name}</span>
         <span className="sidebar-count">{playlist.trackIds.length}</span>
       </button>
+    );
+  };
+  const countFolderPlaylists = (folderId: string, visited = new Set<string>()): number => {
+    if (visited.has(folderId)) return 0;
+    visited.add(folderId);
+    return (playlistsByFolder.get(folderId)?.length ?? 0)
+      + (childFoldersByParent.get(folderId) ?? [])
+        .reduce((total, child) => total + countFolderPlaylists(child.id, visited), 0);
+  };
+  const renderFolder = (folder: (typeof playlistFolders)[number], depth = 0) => {
+    const folderPlaylists = playlistsByFolder.get(folder.id) ?? [];
+    const childFolders = childFoldersByParent.get(folder.id) ?? [];
+    const isCollapsed = collapsedFolderIds.has(folder.id);
+    return (
+      <div key={folder.id} data-playlist-folder={folder.id}>
+        <button
+          className="sidebar-item"
+          style={{ paddingLeft: `${9 + depth * 16}px` }}
+          onClick={() => toggleFolder(folder.id)}
+          onContextMenu={(event) => onPlaylistFolderContextMenu(event, folder.id)}
+          aria-expanded={!isCollapsed}
+          type="button"
+        >
+          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+          <Folder className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+          <span className="sidebar-count">{countFolderPlaylists(folder.id)}</span>
+        </button>
+        {!isCollapsed && (
+          <>
+            {folderPlaylists.map((playlist) => renderPlaylist(playlist, depth + 1))}
+            {childFolders.map((child) => renderFolder(child, depth + 1))}
+          </>
+        )}
+      </div>
     );
   };
 
@@ -183,27 +368,7 @@ export const Sidebar = ({
           </div>
           <div className="space-y-1">
             {rootPlaylists.map((playlist) => renderPlaylist(playlist))}
-            {playlistFolders.map((folder) => {
-              const folderPlaylists = playlists.filter((playlist) => playlist.folderId === folder.id);
-              const isCollapsed = collapsedFolderIds.has(folder.id);
-              return (
-                <div key={folder.id} data-playlist-folder={folder.id}>
-                <button
-                  className="sidebar-item"
-                  onClick={() => toggleFolder(folder.id)}
-                  onContextMenu={(event) => onPlaylistFolderContextMenu(event, folder.id)}
-                  aria-expanded={!isCollapsed}
-                  type="button"
-                >
-                  {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
-                  <Folder className="h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-                  <span className="sidebar-count">{folderPlaylists.length}</span>
-                </button>
-                {!isCollapsed && folderPlaylists.map((playlist) => renderPlaylist(playlist, folder.id))}
-                </div>
-              );
-            })}
+            {(childFoldersByParent.get("") ?? []).map((folder) => renderFolder(folder))}
           </div>
           <div className="mt-4 border-t border-[var(--color-border-light)] pt-4">
             <div className="sidebar-section-label">

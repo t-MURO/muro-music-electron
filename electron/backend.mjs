@@ -77,9 +77,39 @@ const listPlaylistFilesForImport = async (directoryPath) => {
 
   await visit(root);
   files.sort((a, b) => path.relative(root, a).localeCompare(path.relative(root, b)));
+  const entries = files.map((filePath) => {
+    const relativePath = path.relative(root, filePath).split(path.sep).join("/");
+    const directory = path.posix.dirname(relativePath);
+    return {
+      path: filePath,
+      relativePath,
+      folderPath: directory === "." ? null : directory,
+    };
+  });
+  const folderPaths = new Set();
+  for (const entry of entries) {
+    if (!entry.folderPath) continue;
+    const segments = entry.folderPath.split("/");
+    for (let index = 1; index <= segments.length; index += 1) {
+      folderPaths.add(segments.slice(0, index).join("/"));
+    }
+  }
   return {
     name: path.basename(root) || root,
     files,
+    entries,
+    folders: [...folderPaths]
+      .sort((a, b) => (
+        a.split("/").length - b.split("/").length || a.localeCompare(b)
+      ))
+      .map((folderPath) => {
+        const segments = folderPath.split("/");
+        return {
+          path: folderPath,
+          name: segments.at(-1),
+          parentPath: segments.length > 1 ? segments.slice(0, -1).join("/") : null,
+        };
+      }),
   };
 };
 
@@ -318,39 +348,118 @@ export const createBackend = ({
       return { deletedTrackIds, failures };
     },
 
-    create_playlist: ({ dbPath, id, name, folderId }) => {
-      openDatabase(dbPath)
-        .prepare("INSERT INTO playlists(id, name, folder_id, created_at) VALUES (?, ?, ?, ?)")
-        .run(id, String(name).trim(), folderId || null, Math.floor(Date.now() / 1000));
+    create_playlist: ({ dbPath, id, name, folderId, sortOrder }) => {
+      const db = openDatabase(dbPath);
+      const targetFolderId = folderId || null;
+      const nextSortOrder = Number.isInteger(sortOrder)
+        ? sortOrder
+        : db.prepare(`
+            SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+            FROM playlists
+            WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
+          `).get(targetFolderId, targetFolderId).next;
+      db.prepare("INSERT INTO playlists(id, name, folder_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?)")
+        .run(id, String(name).trim(), targetFolderId, nextSortOrder, Math.floor(Date.now() / 1000));
     },
-    update_playlist: ({ dbPath, playlistId, name, folderId }) => {
+    update_playlist: ({ dbPath, playlistId, name, folderId, sortOrder }) => {
       const db = openDatabase(dbPath);
       if (name !== undefined) {
         db.prepare("UPDATE playlists SET name = ? WHERE id = ?")
           .run(String(name).trim(), playlistId);
       }
       if (folderId !== undefined) {
-        db.prepare("UPDATE playlists SET folder_id = ? WHERE id = ?")
-          .run(folderId || null, playlistId);
+        const targetFolderId = folderId || null;
+        const nextSortOrder = Number.isInteger(sortOrder)
+          ? sortOrder
+          : db.prepare(`
+              SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+              FROM playlists
+              WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
+            `).get(targetFolderId, targetFolderId).next;
+        db.prepare("UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?")
+          .run(targetFolderId, nextSortOrder, playlistId);
+      } else if (Number.isInteger(sortOrder)) {
+        db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?")
+          .run(sortOrder, playlistId);
       }
+    },
+    reorder_playlists: ({ dbPath, items }) => {
+      const db = openDatabase(dbPath);
+      const update = db.prepare(
+        "UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?"
+      );
+      db.transaction(() => {
+        for (const item of Array.isArray(items) ? items : []) {
+          update.run(item.folderId || null, Number(item.sortOrder) || 0, item.id);
+        }
+      })();
     },
     delete_playlist: ({ dbPath, playlistId }) => {
       openDatabase(dbPath).prepare("DELETE FROM playlists WHERE id = ?").run(playlistId);
     },
-    create_playlist_folder: ({ dbPath, id, name }) => {
-      openDatabase(dbPath)
-        .prepare("INSERT INTO playlist_folders(id, name, created_at) VALUES (?, ?, ?)")
-        .run(id, String(name).trim(), Math.floor(Date.now() / 1000));
+    create_playlist_folder: ({ dbPath, id, name, parentId, sortOrder }) => {
+      const db = openDatabase(dbPath);
+      const targetParentId = parentId || null;
+      const nextSortOrder = Number.isInteger(sortOrder)
+        ? sortOrder
+        : db.prepare(`
+            SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+            FROM playlist_folders
+            WHERE parent_id = ? OR (parent_id IS NULL AND ? IS NULL)
+          `).get(targetParentId, targetParentId).next;
+      db.prepare(`
+        INSERT INTO playlist_folders(id, name, parent_id, sort_order, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(id, String(name).trim(), targetParentId, nextSortOrder, Math.floor(Date.now() / 1000));
     },
-    update_playlist_folder: ({ dbPath, folderId, name }) => {
-      openDatabase(dbPath)
-        .prepare("UPDATE playlist_folders SET name = ? WHERE id = ?")
-        .run(String(name).trim(), folderId);
+    update_playlist_folder: ({ dbPath, folderId, name, parentId, sortOrder }) => {
+      const db = openDatabase(dbPath);
+      if (name !== undefined) {
+        db.prepare("UPDATE playlist_folders SET name = ? WHERE id = ?")
+          .run(String(name).trim(), folderId);
+      }
+      if (parentId !== undefined) {
+        db.prepare("UPDATE playlist_folders SET parent_id = ? WHERE id = ?")
+          .run(parentId || null, folderId);
+      }
+      if (Number.isInteger(sortOrder)) {
+        db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?")
+          .run(sortOrder, folderId);
+      }
     },
     delete_playlist_folder: ({ dbPath, folderId }) => {
       const db = openDatabase(dbPath);
       db.transaction(() => {
-        db.prepare("UPDATE playlists SET folder_id = NULL WHERE folder_id = ?").run(folderId);
+        const parentId = db.prepare("SELECT parent_id FROM playlist_folders WHERE id = ?")
+          .get(folderId)?.parent_id ?? null;
+        let playlistSortOrder = db.prepare(`
+          SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+          FROM playlists
+          WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
+        `).get(parentId, parentId).next;
+        const movePlaylist = db.prepare(
+          "UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?"
+        );
+        for (const playlist of db.prepare(`
+          SELECT id FROM playlists WHERE folder_id = ? ORDER BY sort_order, id
+        `).all(folderId)) {
+          movePlaylist.run(parentId, playlistSortOrder, playlist.id);
+          playlistSortOrder += 1;
+        }
+        let folderSortOrder = db.prepare(`
+          SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+          FROM playlist_folders
+          WHERE id <> ? AND (parent_id = ? OR (parent_id IS NULL AND ? IS NULL))
+        `).get(folderId, parentId, parentId).next;
+        const moveFolder = db.prepare(
+          "UPDATE playlist_folders SET parent_id = ?, sort_order = ? WHERE id = ?"
+        );
+        for (const folder of db.prepare(`
+          SELECT id FROM playlist_folders WHERE parent_id = ? ORDER BY sort_order, id
+        `).all(folderId)) {
+          moveFolder.run(parentId, folderSortOrder, folder.id);
+          folderSortOrder += 1;
+        }
         db.prepare("DELETE FROM playlist_folders WHERE id = ?").run(folderId);
       })();
     },

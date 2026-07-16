@@ -83,60 +83,55 @@ export const usePlaylistOperations = ({
     [resolveDbPath, setPlaylists]
   );
 
-  const handleDeletePlaylist = useCallback(
-    async (playlistId: string) => {
-      const playlist = playlists.find((p) => p.id === playlistId);
-      if (!playlist) {
-        return;
-      }
-
+  const handleDeletePlaylists = useCallback(
+    async (playlistIds: string[]) => {
+      const ids = new Set(playlistIds);
+      const removed = playlists
+        .map((playlist, index) => ({ playlist, index }))
+        .filter(({ playlist }) => ids.has(playlist.id));
+      if (removed.length === 0) return;
       const resolvedDbPath = await resolveDbPath();
-      const removedPlaylist = { ...playlist };
-      const removedIndex = playlists.findIndex((p) => p.id === playlistId);
-      const wasOnDeletedPlaylist = currentView === `playlist:${playlistId}`;
+      const activePlaylistId = currentView.startsWith("playlist:")
+        ? currentView.slice("playlist:".length)
+        : null;
+      const wasOnDeletedPlaylist = activePlaylistId ? ids.has(activePlaylistId) : false;
 
       const command = {
-        label: "Delete playlist",
+        label: removed.length === 1 ? "Delete playlist" : `Delete ${removed.length} playlists`,
         do: () => {
           setPlaylists((current) =>
-            current.filter((p) => p.id !== playlistId)
+            current.filter((playlist) => !ids.has(playlist.id))
           );
           if (wasOnDeletedPlaylist) {
             navigateToView("library");
           }
-          deletePlaylist(resolvedDbPath, playlistId).catch(() => {
-            notify.error("Failed to delete playlist");
-          });
+          Promise.all(removed.map(({ playlist }) =>
+            deletePlaylist(resolvedDbPath, playlist.id)
+          )).catch(() => notify.error("Failed to delete playlists"));
         },
         undo: () => {
           setPlaylists((current) => {
             const next = [...current];
-            const insertIndex = Math.min(removedIndex, next.length);
-            next.splice(insertIndex, 0, removedPlaylist);
+            for (const { playlist, index } of removed) {
+              next.splice(Math.min(index, next.length), 0, playlist);
+            }
             return next;
           });
-          if (wasOnDeletedPlaylist) {
-            navigateToView(`playlist:${playlistId}` as LibraryView);
+          if (wasOnDeletedPlaylist && activePlaylistId) {
+            navigateToView(`playlist:${activePlaylistId}` as LibraryView);
           }
-          // Recreate playlist and restore tracks
-          createPlaylist(
-            resolvedDbPath,
-            removedPlaylist.id,
-            removedPlaylist.name,
-            removedPlaylist.folderId,
-          )
-            .then(() => {
-              if (removedPlaylist.trackIds.length > 0) {
-                return addTracksToPlaylist(
-                  resolvedDbPath,
-                  removedPlaylist.id,
-                  removedPlaylist.trackIds
-                );
-              }
-            })
-            .catch(() => {
-              notify.error("Failed to restore playlist");
-            });
+          Promise.all(removed.map(async ({ playlist }) => {
+            await createPlaylist(
+              resolvedDbPath,
+              playlist.id,
+              playlist.name,
+              playlist.folderId,
+              playlist.sortOrder,
+            );
+            if (playlist.trackIds.length > 0) {
+              await addTracksToPlaylist(resolvedDbPath, playlist.id, playlist.trackIds);
+            }
+          })).catch(() => notify.error("Failed to restore playlists"));
         },
       };
 
@@ -201,7 +196,7 @@ export const usePlaylistOperations = ({
     handleOpenPlaylistEdit,
     handleClosePlaylistEdit,
     handleRenamePlaylist,
-    handleDeletePlaylist,
+    handleDeletePlaylists,
     handleRemoveTracksFromPlaylist,
     handlePlaylistEditSubmit,
   };

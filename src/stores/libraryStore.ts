@@ -162,12 +162,17 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
     })),
 
   deletePlaylistFolder: (id) =>
-    set((state) => ({
-      playlistFolders: state.playlistFolders.filter((folder) => folder.id !== id),
-      playlists: state.playlists.map((playlist) =>
-        playlist.folderId === id ? { ...playlist, folderId: undefined } : playlist
-      ),
-    })),
+    set((state) => {
+      const parentId = state.playlistFolders.find((folder) => folder.id === id)?.parentId;
+      return {
+        playlistFolders: state.playlistFolders
+          .filter((folder) => folder.id !== id)
+          .map((folder) => folder.parentId === id ? { ...folder, parentId } : folder),
+        playlists: state.playlists.map((playlist) =>
+          playlist.folderId === id ? { ...playlist, folderId: parentId } : playlist
+        ),
+      };
+    }),
 }));
 
 // Selectors

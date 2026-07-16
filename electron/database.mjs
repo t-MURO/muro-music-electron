@@ -62,12 +62,15 @@ const PLAYLIST_SCHEMA = `
   CREATE TABLE IF NOT EXISTS playlist_folders (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    parent_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS playlists (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     folder_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS playlist_tracks (
@@ -171,6 +174,54 @@ export const openDatabase = (dbPath) => {
   if (!playlistColumns.has("folder_id")) {
     db.exec("ALTER TABLE playlists ADD COLUMN folder_id TEXT");
   }
+  const addedPlaylistSortOrder = !playlistColumns.has("sort_order");
+  if (addedPlaylistSortOrder) {
+    db.exec("ALTER TABLE playlists ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
+  }
+  const playlistFolderColumns = new Set(
+    db.prepare("PRAGMA table_info(playlist_folders)").all().map((column) => column.name)
+  );
+  if (!playlistFolderColumns.has("parent_id")) {
+    db.exec("ALTER TABLE playlist_folders ADD COLUMN parent_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL");
+  }
+  const addedFolderSortOrder = !playlistFolderColumns.has("sort_order");
+  if (addedFolderSortOrder) {
+    db.exec("ALTER TABLE playlist_folders ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
+  }
+  if (addedPlaylistSortOrder) {
+    const rows = db.prepare(`
+      SELECT id, folder_id
+      FROM playlists
+      ORDER BY folder_id, created_at DESC, id
+    `).all();
+    const nextByFolder = new Map();
+    const update = db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?");
+    db.transaction(() => {
+      for (const row of rows) {
+        const key = row.folder_id == null ? "" : String(row.folder_id);
+        const position = nextByFolder.get(key) ?? 0;
+        update.run(position, row.id);
+        nextByFolder.set(key, position + 1);
+      }
+    })();
+  }
+  if (addedFolderSortOrder) {
+    const rows = db.prepare(`
+      SELECT id, parent_id
+      FROM playlist_folders
+      ORDER BY parent_id, created_at ASC, name COLLATE NOCASE ASC, id
+    `).all();
+    const nextByParent = new Map();
+    const update = db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?");
+    db.transaction(() => {
+      for (const row of rows) {
+        const key = row.parent_id == null ? "" : String(row.parent_id);
+        const position = nextByParent.get(key) ?? 0;
+        update.run(position, row.id);
+        nextByParent.set(key, position + 1);
+      }
+    })();
+  }
   connections.set(resolved, db);
   return db;
 };
@@ -262,35 +313,38 @@ export const loadRecentlyPlayed = (dbPath, limit = 50) =>
 
 export const loadPlaylists = (dbPath) => {
   const db = openDatabase(dbPath);
-  const rows = db
-    .prepare(`
-      SELECT p.id, p.name, p.folder_id, pt.track_id
-      FROM playlists p
-      LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
-      ORDER BY p.created_at DESC, pt.position ASC
-    `)
-    .all();
-  const playlists = [];
-  const byId = new Map();
-  for (const row of rows) {
-    let playlist = byId.get(String(row.id));
-    if (!playlist) {
-      playlist = {
-        id: String(row.id),
-        name: row.name,
-        folder_id: row.folder_id == null ? null : String(row.folder_id),
-        track_ids: [],
-      };
-      byId.set(String(row.id), playlist);
-      playlists.push(playlist);
-    }
-    if (row.track_id != null) playlist.track_ids.push(String(row.track_id));
+  const trackIdsByPlaylist = new Map();
+  for (const row of db.prepare(`
+    SELECT playlist_id, track_id
+    FROM playlist_tracks
+    ORDER BY playlist_id, position ASC
+  `).all()) {
+    const playlistId = String(row.playlist_id);
+    const ids = trackIdsByPlaylist.get(playlistId) ?? [];
+    ids.push(String(row.track_id));
+    trackIdsByPlaylist.set(playlistId, ids);
   }
+  const playlists = db.prepare(`
+    SELECT id, name, folder_id, sort_order
+    FROM playlists
+    ORDER BY folder_id, sort_order ASC, created_at DESC, id
+  `).all().map((playlist) => ({
+    id: String(playlist.id),
+    name: playlist.name,
+    folder_id: playlist.folder_id == null ? null : String(playlist.folder_id),
+    sort_order: Number(playlist.sort_order) || 0,
+    track_ids: trackIdsByPlaylist.get(String(playlist.id)) ?? [],
+  }));
   const folders = db.prepare(`
-    SELECT id, name
+    SELECT id, name, parent_id, sort_order
     FROM playlist_folders
-    ORDER BY created_at ASC, name COLLATE NOCASE ASC
-  `).all().map((folder) => ({ id: String(folder.id), name: folder.name }));
+    ORDER BY parent_id, sort_order ASC, created_at ASC, name COLLATE NOCASE ASC
+  `).all().map((folder) => ({
+    id: String(folder.id),
+    name: folder.name,
+    parent_id: folder.parent_id == null ? null : String(folder.parent_id),
+    sort_order: Number(folder.sort_order) || 0,
+  }));
   return { playlists, folders };
 };
 

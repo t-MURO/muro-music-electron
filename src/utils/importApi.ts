@@ -47,11 +47,14 @@ export type PlaylistSnapshot = {
     id: string;
     name: string;
     folder_id: string | null;
+    sort_order: number;
     track_ids: string[];
   }[];
   folders: {
     id: string;
     name: string;
+    parent_id: string | null;
+    sort_order: number;
   }[];
 };
 

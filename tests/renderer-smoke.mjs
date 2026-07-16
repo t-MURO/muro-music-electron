@@ -141,22 +141,45 @@ app.whenReady().then(async () => {
           id: "smoke-playlist",
           name: "Smoke Playlist",
           folder_id: "smoke-folder",
+          sort_order: 0,
           track_ids: smokeTracks.map((track) => track.id),
         },
         {
           id: "smoke-empty-playlist",
           name: "Empty Mix",
           folder_id: null,
+          sort_order: 0,
           track_ids: [],
         },
         {
           id: "smoke-drag-playlist",
           name: "Drag Target",
           folder_id: null,
+          sort_order: 1,
+          track_ids: [],
+        },
+        {
+          id: "smoke-nested-playlist",
+          name: "Nested Playlist",
+          folder_id: "smoke-nested-folder",
+          sort_order: 0,
           track_ids: [],
         },
       ],
-      folders: [{ id: "smoke-folder", name: "Smoke Sets" }],
+      folders: [
+        {
+          id: "smoke-folder",
+          name: "Smoke Sets",
+          parent_id: null,
+          sort_order: 0,
+        },
+        {
+          id: "smoke-nested-folder",
+          name: "Nested Sets",
+          parent_id: "smoke-folder",
+          sort_order: 0,
+        },
+      ],
     };
     if (command === "load_recently_played") return [];
     if (command === "load_cached_artist_profiles") return [smokeArtistProfile];
@@ -168,6 +191,7 @@ app.whenReady().then(async () => {
     if (command === "scan_album_covers") {
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalAlbums: 0 };
     }
+    if (command === "reorder_playlists" || command === "delete_playlist") return undefined;
     if (command === "playback_get_state") return {
       is_playing: false,
       current_position: 0,
@@ -588,6 +612,10 @@ app.whenReady().then(async () => {
           document.querySelector('[data-playlist-folder="smoke-folder"]') &&
           document.querySelector('[data-playlist-folder-parent="smoke-folder"]')
         );
+        const nestedPlaylistFolderReady = Boolean(
+          document.querySelector('[data-playlist-folder="smoke-nested-folder"]') &&
+          document.querySelector('[data-playlist-folder-parent="smoke-nested-folder"]')
+        );
         const nestedPlaylist = document.querySelector('[data-playlist-folder-parent="smoke-folder"]');
         nestedPlaylist?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -607,6 +635,78 @@ app.whenReady().then(async () => {
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 180));
+
+        const reorderSource = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
+        const reorderTarget = document.querySelector('[data-playlist-id="smoke-drag-playlist"]');
+        let playlistReorderReady = false;
+        if (reorderSource && reorderTarget) {
+          const dataTransfer = new DataTransfer();
+          reorderSource.dispatchEvent(new DragEvent("dragstart", {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+          }));
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          const targetBounds = reorderTarget.getBoundingClientRect();
+          reorderTarget.dispatchEvent(new DragEvent("dragover", {
+            bubbles: true,
+            cancelable: true,
+            clientY: targetBounds.bottom - 1,
+            dataTransfer,
+          }));
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          reorderTarget.dispatchEvent(new DragEvent("drop", {
+            bubbles: true,
+            cancelable: true,
+            clientY: targetBounds.bottom - 1,
+            dataTransfer,
+          }));
+          reorderSource.dispatchEvent(new DragEvent("dragend", {
+            bubbles: true,
+            dataTransfer,
+          }));
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          const updatedSource = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
+          const updatedTarget = document.querySelector('[data-playlist-id="smoke-drag-playlist"]');
+          playlistReorderReady = Boolean(
+            updatedSource &&
+            updatedTarget &&
+            (updatedTarget.compareDocumentPosition(updatedSource) & Node.DOCUMENT_POSITION_FOLLOWING)
+          );
+        }
+
+        const firstBulkPlaylist = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
+        const secondBulkPlaylist = document.querySelector('[data-playlist-id="smoke-drag-playlist"]');
+        firstBulkPlaylist?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        secondBulkPlaylist?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        secondBulkPlaylist?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 190,
+          clientY: 230,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const bulkDeleteButton = Array.from(document.querySelectorAll('[data-popover] button'))
+          .find((button) => button.textContent?.includes("Delete 2 playlists"));
+        const bulkPlaylistMenuReady = Boolean(bulkDeleteButton);
+        bulkDeleteButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const bulkPlaylistDeleteReady = Boolean(
+          !document.querySelector('[data-playlist-id="smoke-empty-playlist"]') &&
+          !document.querySelector('[data-playlist-id="smoke-drag-playlist"]')
+        );
+
         window.location.hash = "#/playlists/smoke-playlist";
         await new Promise((resolve) => setTimeout(resolve, 60));
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
@@ -884,8 +984,12 @@ app.whenReady().then(async () => {
           persistedDeleteMode,
           playlistRemoveReady,
           playlistFolderReady,
+          nestedPlaylistFolderReady,
           playlistTransferControlsReady,
           playlistExportMoveMenuReady,
+          playlistReorderReady,
+          bulkPlaylistMenuReady,
+          bulkPlaylistDeleteReady,
           windowChromeReady: Boolean(windowChrome && windowBrand && windowControls),
           windowChromeDragRegion: windowChrome
             ? getComputedStyle(windowChrome).getPropertyValue("-webkit-app-region")
@@ -1160,12 +1264,18 @@ app.whenReady().then(async () => {
       }
       if (
         !result.playlistFolderReady ||
+        !result.nestedPlaylistFolderReady ||
         !result.playlistTransferControlsReady ||
-        !result.playlistExportMoveMenuReady
+        !result.playlistExportMoveMenuReady ||
+        !result.playlistReorderReady ||
+        !result.bulkPlaylistMenuReady ||
+        !result.bulkPlaylistDeleteReady
       ) {
         fail(
           `Playlist organization failed: folder=${result.playlistFolderReady}, ` +
-          `controls=${result.playlistTransferControlsReady}, menu=${result.playlistExportMoveMenuReady}`
+          `nested=${result.nestedPlaylistFolderReady}, controls=${result.playlistTransferControlsReady}, ` +
+          `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}, ` +
+          `bulkMenu=${result.bulkPlaylistMenuReady}, bulkDelete=${result.bulkPlaylistDeleteReady}`
         );
         return;
       }

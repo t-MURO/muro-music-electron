@@ -88,10 +88,16 @@ export const useLibraryInit = () => {
             id: playlist.id,
             name: playlist.name,
             folderId: playlist.folder_id ?? undefined,
+            sortOrder: playlist.sort_order,
             trackIds: playlist.track_ids,
           }))
         );
-        setPlaylistFolders(playlistSnapshot.folders);
+        setPlaylistFolders(playlistSnapshot.folders.map((folder) => ({
+          id: folder.id,
+          name: folder.name,
+          parentId: folder.parent_id ?? undefined,
+          sortOrder: folder.sort_order,
+        })));
         setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
       } catch (error) {
         notify.error("Failed to load library");

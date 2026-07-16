@@ -57,11 +57,14 @@ export type Playlist = {
   name: string;
   trackIds: string[];
   folderId?: string;
+  sortOrder: number;
 };
 
 export type PlaylistFolder = {
   id: string;
   name: string;
+  parentId?: string;
+  sortOrder: number;
 };
 
 export type ArtistProfile = {

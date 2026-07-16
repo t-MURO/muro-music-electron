@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { createAlbumCoverService } from "../electron/albumCovers.mjs";
 import { createArtistProfileService } from "../electron/artistProfiles.mjs";
 import { createBackend } from "../electron/backend.mjs";
@@ -40,6 +41,39 @@ assert.deepEqual(unregisteredMediaShortcuts, [
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-node-smoke-"));
 const dbPath = path.join(directory, "muro.db");
+const legacyDbPath = path.join(directory, "legacy-playlists.db");
+const legacyDb = new Database(legacyDbPath);
+legacyDb.exec(`
+  CREATE TABLE playlist_folders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE playlists (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    folder_id TEXT,
+    created_at INTEGER NOT NULL
+  );
+  INSERT INTO playlist_folders(id, name, created_at) VALUES ('legacy-folder', 'Legacy', 1);
+  INSERT INTO playlists(id, name, folder_id, created_at)
+    VALUES ('legacy-newer', 'Newer', 'legacy-folder', 2);
+  INSERT INTO playlists(id, name, folder_id, created_at)
+    VALUES ('legacy-older', 'Older', 'legacy-folder', 1);
+`);
+legacyDb.close();
+const migratedLegacyDb = openDatabase(legacyDbPath);
+assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlist_folders)").all()
+  .some((column) => column.name === "parent_id"));
+assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlists)").all()
+  .some((column) => column.name === "sort_order"));
+assert.deepEqual(
+  migratedLegacyDb.prepare("SELECT id, sort_order FROM playlists ORDER BY sort_order").all(),
+  [
+    { id: "legacy-newer", sort_order: 0 },
+    { id: "legacy-older", sort_order: 1 },
+  ],
+);
 const writeSilentWav = (filePath) => {
   const sampleRate = 8_000;
   const sampleCount = sampleRate / 10;
@@ -311,8 +345,41 @@ try {
     folderId: "folder-1",
   });
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.folders, [{ id: "folder-1", name: "Weekend Sets" }]);
+  assert.deepEqual(playlists.folders, [{
+    id: "folder-1",
+    name: "Weekend Sets",
+    parent_id: null,
+    sort_order: 0,
+  }]);
   assert.equal(playlists.playlists[0].folder_id, "folder-1");
+
+  await backend.invoke("create_playlist", {
+    dbPath,
+    id: "playlist-2",
+    name: "Later Set",
+    folderId: "folder-1",
+  });
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-1", "playlist-2"]);
+  await backend.invoke("reorder_playlists", {
+    dbPath,
+    items: [
+      { id: "playlist-2", folderId: "folder-1", sortOrder: 0 },
+      { id: "playlist-1", folderId: "folder-1", sortOrder: 1 },
+    ],
+  });
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-2", "playlist-1"]);
+  await backend.invoke("delete_playlist", { dbPath, playlistId: "playlist-2" });
+
+  await backend.invoke("create_playlist_folder", {
+    dbPath,
+    id: "folder-2",
+    name: "Nested Sets",
+    parentId: "folder-1",
+  });
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.equal(playlists.folders[1].parent_id, "folder-1");
 
   const importedPlaylistPath = path.join(directory, "smoke-import.m3u8");
   fs.writeFileSync(
@@ -336,17 +403,33 @@ try {
 
   const playlistBundlePath = path.join(directory, "playlist-bundle");
   const nestedPlaylistPath = path.join(playlistBundlePath, "nested");
-  fs.mkdirSync(nestedPlaylistPath, { recursive: true });
+  const deeplyNestedPlaylistPath = path.join(nestedPlaylistPath, "deeper");
+  fs.mkdirSync(deeplyNestedPlaylistPath, { recursive: true });
   const alphaPlaylistPath = path.join(playlistBundlePath, "alpha.m3u8");
   const betaPlaylistPath = path.join(nestedPlaylistPath, "beta.PLS");
+  const gammaPlaylistPath = path.join(deeplyNestedPlaylistPath, "gamma.m3u");
   fs.writeFileSync(alphaPlaylistPath, firstSourcePath, "utf8");
   fs.writeFileSync(betaPlaylistPath, `[playlist]\r\nFile1=${secondSourcePath}\r\n`, "utf8");
+  fs.writeFileSync(gammaPlaylistPath, firstSourcePath, "utf8");
   fs.writeFileSync(path.join(playlistBundlePath, "notes.txt"), "not a playlist", "utf8");
   const playlistFolderScan = await backend.invoke("list_playlist_files", {
     directoryPath: playlistBundlePath,
   });
   assert.equal(playlistFolderScan.name, "playlist-bundle");
-  assert.deepEqual(playlistFolderScan.files, [alphaPlaylistPath, betaPlaylistPath]);
+  assert.deepEqual(playlistFolderScan.files, [alphaPlaylistPath, betaPlaylistPath, gammaPlaylistPath]);
+  assert.deepEqual(playlistFolderScan.entries, [
+    { path: alphaPlaylistPath, relativePath: "alpha.m3u8", folderPath: null },
+    { path: betaPlaylistPath, relativePath: "nested/beta.PLS", folderPath: "nested" },
+    {
+      path: gammaPlaylistPath,
+      relativePath: "nested/deeper/gamma.m3u",
+      folderPath: "nested/deeper",
+    },
+  ]);
+  assert.deepEqual(playlistFolderScan.folders, [
+    { path: "nested", name: "nested", parentPath: null },
+    { path: "nested/deeper", name: "deeper", parentPath: "nested" },
+  ]);
 
   const exportedPlaylistPath = path.join(directory, "smoke-export.m3u8");
   assert.deepEqual(
@@ -363,8 +446,11 @@ try {
 
   await backend.invoke("delete_playlist_folder", { dbPath, folderId: "folder-1" });
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.folders, []);
+  assert.equal(playlists.folders.length, 1);
+  assert.equal(playlists.folders[0].id, "folder-2");
+  assert.equal(playlists.folders[0].parent_id, null);
   assert.equal(playlists.playlists[0].folder_id, null);
+  await backend.invoke("delete_playlist_folder", { dbPath, folderId: "folder-2" });
 
   await backend.invoke("update_track_analysis", {
     dbPath,

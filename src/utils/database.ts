@@ -107,20 +107,27 @@ export const createPlaylist = (
   id: string,
   name: string,
   folderId?: string,
+  sortOrder?: number,
 ) => {
   return invoke<void>("create_playlist", {
     dbPath,
     id,
     name,
     folderId,
+    sortOrder,
   });
 };
 
 export const updatePlaylist = (
   dbPath: string,
   playlistId: string,
-  updates: { name?: string; folderId?: string | null },
+  updates: { name?: string; folderId?: string | null; sortOrder?: number },
 ) => invoke<void>("update_playlist", { dbPath, playlistId, ...updates });
+
+export const reorderPlaylists = (
+  dbPath: string,
+  items: Array<{ id: string; folderId?: string; sortOrder: number }>,
+) => invoke<void>("reorder_playlists", { dbPath, items });
 
 export const deletePlaylist = (dbPath: string, playlistId: string) => {
   return invoke<void>("delete_playlist", {
@@ -165,8 +172,13 @@ export const removeLastTracksFromPlaylist = (
   });
 };
 
-export const createPlaylistFolder = (dbPath: string, id: string, name: string) =>
-  invoke<void>("create_playlist_folder", { dbPath, id, name });
+export const createPlaylistFolder = (
+  dbPath: string,
+  id: string,
+  name: string,
+  parentId?: string,
+  sortOrder?: number,
+) => invoke<void>("create_playlist_folder", { dbPath, id, name, parentId, sortOrder });
 
 export const updatePlaylistFolder = (dbPath: string, folderId: string, name: string) =>
   invoke<void>("update_playlist_folder", { dbPath, folderId, name });
@@ -177,6 +189,16 @@ export const deletePlaylistFolder = (dbPath: string, folderId: string) =>
 export type PlaylistFolderImportScan = {
   name: string;
   files: string[];
+  entries: Array<{
+    path: string;
+    relativePath: string;
+    folderPath: string | null;
+  }>;
+  folders: Array<{
+    path: string;
+    name: string;
+    parentPath: string | null;
+  }>;
 };
 
 export const listPlaylistFiles = (directoryPath: string) =>

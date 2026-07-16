@@ -7,11 +7,12 @@ type PlaylistContextMenuProps = {
   isOpen: boolean;
   position: { x: number; y: number };
   playlistName?: string;
+  selectionCount?: number;
   folders?: PlaylistFolder[];
   currentFolderId?: string;
   onExport?: () => void;
   onMoveToFolder?: (folderId: string | null) => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
   onClose: () => void;
 };
@@ -20,6 +21,7 @@ export const PlaylistContextMenu = ({
   isOpen,
   position,
   playlistName,
+  selectionCount = 1,
   folders = [],
   currentFolderId,
   onExport,
@@ -35,10 +37,12 @@ export const PlaylistContextMenu = ({
           {playlistName}
         </div>
       )}
-      <PopoverItem onClick={onEdit}>
-        <Pencil className="h-4 w-4 opacity-60" />
-        {t("menu.edit")}
-      </PopoverItem>
+      {onEdit && (
+        <PopoverItem onClick={onEdit}>
+          <Pencil className="h-4 w-4 opacity-60" />
+          {t("menu.edit")}
+        </PopoverItem>
+      )}
       {onExport && (
         <PopoverItem onClick={onExport}>
           <Download className="h-4 w-4 opacity-60" />
@@ -70,7 +74,7 @@ export const PlaylistContextMenu = ({
       <PopoverDivider />
       <PopoverItem variant="danger" onClick={onDelete}>
         <Trash2 className="h-4 w-4 opacity-70" />
-        {t("menu.delete")}
+        {selectionCount > 1 ? `Delete ${selectionCount} playlists` : t("menu.delete")}
       </PopoverItem>
     </Popover>
   );

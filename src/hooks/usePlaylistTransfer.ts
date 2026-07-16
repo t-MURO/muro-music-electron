@@ -70,13 +70,17 @@ export const usePlaylistTransfer = () => {
     if (trackIds.length === 0) return null;
 
     sequenceRef.current += 1;
+    const sortOrder = useLibraryStore.getState().playlists
+      .filter((item) => item.folderId === folderId)
+      .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1;
     const playlist = {
       id: `playlist-import-${Date.now()}-${sequenceRef.current}`,
       name: parsed.name || "Imported Playlist",
       trackIds,
       folderId,
+      sortOrder,
     };
-    await createPlaylist(dbPath, playlist.id, playlist.name, folderId);
+    await createPlaylist(dbPath, playlist.id, playlist.name, folderId, sortOrder);
     try {
       await addTracksToPlaylist(dbPath, playlist.id, playlist.trackIds);
     } catch (error) {
@@ -110,7 +114,16 @@ export const usePlaylistTransfer = () => {
   }, [importPlaylistIntoStore, resolveDbPath]);
 
   const importPlaylistFolder = useCallback(async (directoryPath: string) => {
-    let folderId: string | null = null;
+    let dbPath: string | null = null;
+    const createdFolderIds: string[] = [];
+    const cleanupFolders = async () => {
+      if (!dbPath || createdFolderIds.length === 0) return;
+      for (const folderId of [...createdFolderIds].reverse()) {
+        await deletePlaylistFolder(dbPath, folderId).catch(() => undefined);
+      }
+      const created = new Set(createdFolderIds);
+      setPlaylistFolders((current) => current.filter((folder) => !created.has(folder.id)));
+    };
     try {
       const scan = await listPlaylistFiles(directoryPath);
       if (scan.files.length === 0) {
@@ -118,18 +131,51 @@ export const usePlaylistTransfer = () => {
         return null;
       }
 
-      const dbPath = await resolveDbPath();
+      dbPath = await resolveDbPath();
       sequenceRef.current += 1;
-      folderId = `playlist-folder-import-${Date.now()}-${sequenceRef.current}`;
-      const folder = { id: folderId, name: scan.name || "Imported Playlists" };
-      await createPlaylistFolder(dbPath, folder.id, folder.name);
-      setPlaylistFolders((current) => [...current, folder]);
+      const rootFolder = {
+        id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
+        name: scan.name || "Imported Playlists",
+        sortOrder: useLibraryStore.getState().playlistFolders
+          .filter((folder) => !folder.parentId)
+          .reduce((highest, folder) => Math.max(highest, folder.sortOrder), -1) + 1,
+      };
+      await createPlaylistFolder(
+        dbPath,
+        rootFolder.id,
+        rootFolder.name,
+        undefined,
+        rootFolder.sortOrder,
+      );
+      createdFolderIds.push(rootFolder.id);
 
-      notify.info(`Importing ${scan.files.length} playlists from ${folder.name}`);
+      const folderIdByPath = new Map<string, string>([["", rootFolder.id]]);
+      const nextSortOrderByParent = new Map<string, number>();
+      const importedFolders = [rootFolder];
+      for (const scannedFolder of scan.folders) {
+        const parentId = folderIdByPath.get(scannedFolder.parentPath ?? "") ?? rootFolder.id;
+        const sortOrder = nextSortOrderByParent.get(parentId) ?? 0;
+        nextSortOrderByParent.set(parentId, sortOrder + 1);
+        sequenceRef.current += 1;
+        const folder = {
+          id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
+          name: scannedFolder.name,
+          parentId,
+          sortOrder,
+        };
+        await createPlaylistFolder(dbPath, folder.id, folder.name, parentId, sortOrder);
+        createdFolderIds.push(folder.id);
+        folderIdByPath.set(scannedFolder.path, folder.id);
+        importedFolders.push(folder);
+      }
+      setPlaylistFolders((current) => [...current, ...importedFolders]);
+
+      notify.info(`Importing ${scan.files.length} playlists from ${rootFolder.name}`);
       const playlistIds: string[] = [];
-      for (const filePath of scan.files) {
+      for (const entry of scan.entries) {
         try {
-          const result = await importPlaylistIntoStore(dbPath, filePath, folder.id);
+          const folderId = folderIdByPath.get(entry.folderPath ?? "") ?? rootFolder.id;
+          const result = await importPlaylistIntoStore(dbPath, entry.path, folderId);
           if (result) playlistIds.push(result.playlist.id);
         } catch {
           // Keep importing the remaining files and summarize partial failures.
@@ -137,20 +183,17 @@ export const usePlaylistTransfer = () => {
       }
 
       if (playlistIds.length === 0) {
-        await deletePlaylistFolder(dbPath, folder.id).catch(() => undefined);
-        setPlaylistFolders((current) => current.filter((item) => item.id !== folder.id));
+        await cleanupFolders();
         notify.error(`Imported 0 of ${scan.files.length} playlists`);
         return null;
       }
 
       notify.success(
-        `Imported ${playlistIds.length} of ${scan.files.length} playlists into ${folder.name}`
+        `Imported ${playlistIds.length} of ${scan.files.length} playlists into ${rootFolder.name}`
       );
-      return { folderId: folder.id, playlistIds };
+      return { folderId: rootFolder.id, playlistIds };
     } catch {
-      if (folderId) {
-        setPlaylistFolders((current) => current.filter((folder) => folder.id !== folderId));
-      }
+      await cleanupFolders();
       notify.error("Failed to import playlist folder");
       return null;
     }
