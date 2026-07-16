@@ -147,24 +147,24 @@ export const useFileImport = ({
           clearProgressTimerRef.current = null;
         }
         setImportProgress({ imported: 0, total: 0, phase: "scanning" });
+        if (paths.length === 1 && onPlaylistFolderDetected) {
+          try {
+            const playlistScan = await listPlaylistFiles(paths[0]);
+            if (playlistScan.files.length > 0) {
+              setImportProgress(null);
+              await onPlaylistFolderDetected(paths[0]);
+              return;
+            }
+          } catch {
+            // A regular audio file or folder continues through the normal importer.
+          }
+        }
+
         const resolvedDbPath = await resolveDbPath();
         const result = await importFiles(resolvedDbPath, paths);
         const imported = result.imported;
         if (imported.length === 0) {
           if (result.scanned === 0) {
-            if (paths.length === 1 && onPlaylistFolderDetected) {
-              try {
-                const playlistScan = await listPlaylistFiles(paths[0]);
-                if (playlistScan.files.length > 0) {
-                  setImportProgress(null);
-                  await onPlaylistFolderDetected(paths[0]);
-                  return;
-                }
-              } catch {
-                // The path was not a readable playlist directory. Keep the
-                // original audio-import error below.
-              }
-            }
             notify.error("No supported audio files were found");
           } else if (result.failures.length > 0) {
             notify.error(

@@ -30,9 +30,16 @@ export const usePlaylistTransfer = () => {
     folderId?: string,
   ) => {
     const parsed = await importPlaylistFile(dbPath, filePath);
+    const libraryTrackIdByPath = new Map(
+      useLibraryStore.getState().tracks.map((track) => [normalizePath(track.sourcePath), track.id])
+    );
     const missingPaths = [...new Set(
       parsed.entries
-        .filter((entry) => !entry.track_id && entry.exists)
+        .filter((entry) => (
+          !entry.track_id
+          && !libraryTrackIdByPath.has(normalizePath(entry.path))
+          && entry.exists
+        ))
         .map((entry) => entry.path)
     )];
     const importResult = missingPaths.length > 0
@@ -51,7 +58,13 @@ export const usePlaylistTransfer = () => {
       imported.map((track) => [normalizePath(track.source_path), track.id])
     );
     const orderedTrackIds = parsed.entries
-      .map((entry) => entry.track_id ?? importedIdByPath.get(normalizePath(entry.path)) ?? null)
+      .map((entry) => {
+        const normalizedPath = normalizePath(entry.path);
+        return entry.track_id
+          ?? libraryTrackIdByPath.get(normalizedPath)
+          ?? importedIdByPath.get(normalizedPath)
+          ?? null;
+      })
       .filter((trackId): trackId is string => Boolean(trackId));
     const trackIds = [...new Set(orderedTrackIds)];
     if (trackIds.length === 0) return null;

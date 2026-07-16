@@ -267,6 +267,17 @@ try {
   await backend.invoke("accept_tracks", { dbPath, trackIds: ["track-1", "track-2"] });
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 2);
+  assert.equal(snapshot.inbox.length, 0);
+
+  const duplicateLibraryImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [firstSourcePath, secondSourcePath],
+  });
+  assert.deepEqual(duplicateLibraryImport.imported, []);
+  assert.equal(duplicateLibraryImport.scanned, 2);
+  snapshot = await backend.invoke("load_tracks", { dbPath });
+  assert.equal(snapshot.library.length, 2);
+  assert.equal(snapshot.inbox.length, 0);
 
   await backend.invoke("create_playlist", { dbPath, id: "playlist-1", name: "Smoke" });
   await backend.invoke("add_tracks_to_playlist", {
