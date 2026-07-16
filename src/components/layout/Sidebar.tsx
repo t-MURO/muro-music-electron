@@ -123,6 +123,7 @@ export const Sidebar = ({
         onDragOver={(event) => { event.preventDefault(); onPlaylistDragOver(playlist.id); }}
         onDrop={(event) => { event.preventDefault(); event.stopPropagation(); onPlaylistDrop(event, playlist.id); }}
         data-playlist-id={playlist.id}
+        data-playlist-target={playlist.id}
         data-playlist-folder-parent={folderId}
         type="button"
       >

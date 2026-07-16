@@ -124,12 +124,26 @@ app.whenReady().then(async () => {
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
     if (command === "load_tracks") return { library: smokeTracks, inbox: [] };
     if (command === "load_playlists") return {
-      playlists: [{
-        id: "smoke-playlist",
-        name: "Smoke Playlist",
-        folder_id: "smoke-folder",
-        track_ids: smokeTracks.map((track) => track.id),
-      }],
+      playlists: [
+        {
+          id: "smoke-playlist",
+          name: "Smoke Playlist",
+          folder_id: "smoke-folder",
+          track_ids: smokeTracks.map((track) => track.id),
+        },
+        {
+          id: "smoke-empty-playlist",
+          name: "Empty Mix",
+          folder_id: null,
+          track_ids: [],
+        },
+        {
+          id: "smoke-drag-playlist",
+          name: "Drag Target",
+          folder_id: null,
+          track_ids: [],
+        },
+      ],
       folders: [{ id: "smoke-folder", name: "Smoke Sets" }],
     };
     if (command === "load_recently_played") return [];
@@ -152,6 +166,7 @@ app.whenReady().then(async () => {
       command === "generate_track_waveform"
     ) return command === "generate_track_waveform" ? [] : undefined;
     if (command === "playback_toggle") return false;
+    if (command === "add_tracks_to_playlist") return undefined;
     if (command === "test_emit_media_control") {
       event.sender.send("muro:event", "muro://media-control", args.payload ?? args.action);
       return undefined;
@@ -434,6 +449,66 @@ app.whenReady().then(async () => {
         document.querySelector('[data-panel-view="queue"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const queuedFromMix = document.querySelectorAll('[data-queue-track]').length === 1;
+        const playlistDropTargetReady = Boolean(
+          document.querySelector('[data-playlist-target="smoke-playlist"]') &&
+          document.querySelector('[data-playlist-target="smoke-empty-playlist"]') &&
+          document.querySelector('[data-playlist-target="smoke-drag-playlist"]')
+        );
+        firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-testid="add-to-playlist-menu-item"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const playlistChoicesReady = Boolean(
+          document.querySelector('[data-playlist-choices]') &&
+          document.querySelector('[data-playlist-choice="smoke-playlist"]') &&
+          document.querySelector('[data-playlist-choice="smoke-empty-playlist"]')
+        );
+        document.querySelector('[data-playlist-choice="smoke-empty-playlist"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const emptyPlaylistCount = Number(
+          document.querySelector('[data-playlist-id="smoke-empty-playlist"] .sidebar-count')
+            ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+        );
+        const contextAddToPlaylistReady = playlistChoicesReady && emptyPlaylistCount > 0;
+        const dragPlaylistTarget = document.querySelector(
+          '[data-playlist-target="smoke-drag-playlist"]'
+        );
+        let dragAddToPlaylistReady = false;
+        if (firstTrackRow && dragPlaylistTarget) {
+          const originalElementFromPoint = document.elementFromPoint.bind(document);
+          document.elementFromPoint = () => dragPlaylistTarget;
+          firstTrackRow.dispatchEvent(new MouseEvent("mousedown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            clientX: 100,
+            clientY: 100,
+          }));
+          window.dispatchEvent(new MouseEvent("mousemove", {
+            bubbles: true,
+            buttons: 1,
+            clientX: 120,
+            clientY: 120,
+          }));
+          window.dispatchEvent(new MouseEvent("mouseup", {
+            bubbles: true,
+            button: 0,
+            clientX: 120,
+            clientY: 120,
+          }));
+          document.elementFromPoint = originalElementFromPoint;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          const dragPlaylistCount = Number(
+            document.querySelector('[data-playlist-id="smoke-drag-playlist"] .sidebar-count')
+              ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+          );
+          dragAddToPlaylistReady = dragPlaylistCount > 0;
+        }
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
@@ -830,6 +905,9 @@ app.whenReady().then(async () => {
           selectedCamelotCode,
           wheelFilteredTo9A,
           queuedFromMix,
+          playlistDropTargetReady,
+          contextAddToPlaylistReady,
+          dragAddToPlaylistReady,
           artistInformationSettingsReady,
           djMixFeatureGateReady,
           djMixManualSurfaceReady,
@@ -919,6 +997,17 @@ app.whenReady().then(async () => {
           `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
           `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
           `scores=${result.mixScoresReady}, expanded=${result.mixExpanded}, queued=${result.queuedFromMix}`
+        );
+        return;
+      }
+      if (
+        !result.playlistDropTargetReady ||
+        !result.contextAddToPlaylistReady ||
+        !result.dragAddToPlaylistReady
+      ) {
+        fail(
+          `Adding tracks to playlists failed: dropTarget=${result.playlistDropTargetReady}, ` +
+          `contextMenu=${result.contextAddToPlaylistReady}, drag=${result.dragAddToPlaylistReady}`
         );
         return;
       }

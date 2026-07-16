@@ -582,6 +582,15 @@ function App() {
     () => playlistFolders.find((folder) => folder.id === folderMenu?.folderId) ?? null,
     [folderMenu?.folderId, playlistFolders],
   );
+  const playlistAddOptions = useMemo(() => {
+    const folderNames = new Map(playlistFolders.map((folder) => [folder.id, folder.name]));
+    return playlists.map((playlist) => ({
+      id: playlist.id,
+      name: playlist.name,
+      trackCount: playlist.trackIds.length,
+      folderName: playlist.folderId ? folderNames.get(playlist.folderId) : undefined,
+    }));
+  }, [playlistFolders, playlists]);
 
   // Playlist operations
   const {
@@ -1154,6 +1163,12 @@ function App() {
                 onAddToQueue={() => {
                   addToQueue(menuSelection);
                   closeMenu();
+                }}
+                playlistOptions={playlistAddOptions}
+                onAddToPlaylist={(playlistId) => {
+                  const trackIds = [...menuSelection];
+                  closeMenu();
+                  handlePlaylistDrop(playlistId, trackIds);
                 }}
                 onRemoveFromPlaylist={
                   viewConfig.type === "playlist" && viewConfig.playlist
