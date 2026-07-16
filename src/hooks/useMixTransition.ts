@@ -58,7 +58,8 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
         const grid = await getOrComputeBeatGrid(track, dbPath);
         useLibraryStore.getState().updateTrack(track.id, { beatGrid: grid });
         return grid;
-      } catch {
+      } catch (error) {
+        console.warn(`Beat-grid analysis failed for ${track.title}:`, error);
         return null;
       }
     },

@@ -13,6 +13,7 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       stream: true,
+      corsEnabled: true,
     },
   },
 ]);
@@ -64,6 +65,12 @@ app.whenReady().then(async () => {
 
   const audioUrl = `muro-file://local/${encodeURIComponent(audioPath)}`;
   const result = await window.webContents.executeJavaScript(`(async () => {
+    const response = await fetch(${JSON.stringify(audioUrl)});
+    if (!response.ok) throw new Error(\`audio fetch failed (HTTP \${response.status})\`);
+    const encoded = await response.arrayBuffer();
+    const fetchedBytes = encoded.byteLength;
+    const decodeContext = new OfflineAudioContext(1, 1, 11025);
+    const decoded = await decodeContext.decodeAudioData(encoded);
     const audio = new Audio(${JSON.stringify(audioUrl)});
     audio.preload = "metadata";
     await new Promise((resolve, reject) => {
@@ -79,9 +86,18 @@ app.whenReady().then(async () => {
       }, { once: true });
       audio.currentTime = 45;
     });
-    return { currentTime: audio.currentTime, duration: audio.duration };
+    return {
+      currentTime: audio.currentTime,
+      duration: audio.duration,
+      decodedDuration: decoded.duration,
+      decodedSampleRate: decoded.sampleRate,
+      fetchedBytes,
+    };
   })()`);
 
+  assert.ok(result.fetchedBytes > 44, `Unexpected fetched byte count: ${result.fetchedBytes}`);
+  assert.equal(result.decodedSampleRate, 11025);
+  assert.ok(result.decodedDuration >= 59.9, `Unexpected decoded duration: ${result.decodedDuration}`);
   assert.ok(result.duration >= 59.9, `Unexpected duration: ${result.duration}`);
   assert.ok(result.currentTime >= 44.9, `Unexpected seek position: ${result.currentTime}`);
 
