@@ -161,6 +161,14 @@ export const updatePlaylistFolder = (dbPath: string, folderId: string, name: str
 export const deletePlaylistFolder = (dbPath: string, folderId: string) =>
   invoke<void>("delete_playlist_folder", { dbPath, folderId });
 
+export type PlaylistFolderImportScan = {
+  name: string;
+  files: string[];
+};
+
+export const listPlaylistFiles = (directoryPath: string) =>
+  invoke<PlaylistFolderImportScan>("list_playlist_files", { directoryPath });
+
 export const importPlaylistFile = (dbPath: string, filePath: string) =>
   invoke<import("./importApi").ImportedPlaylistFile>("import_playlist_file", {
     dbPath,

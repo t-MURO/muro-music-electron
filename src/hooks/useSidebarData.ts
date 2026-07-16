@@ -12,6 +12,7 @@ type UseSidebarDataArgs = {
   onCreatePlaylist: () => void;
   onCreatePlaylistFolder: () => void;
   onImportPlaylist: () => void;
+  onImportPlaylistFolder: () => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onPlaylistFolderContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onCreateSmartCrate: () => void;
@@ -30,6 +31,7 @@ export const useSidebarData = ({
   onCreatePlaylist,
   onCreatePlaylistFolder,
   onImportPlaylist,
+  onImportPlaylistFolder,
   onPlaylistContextMenu,
   onPlaylistFolderContextMenu,
   onCreateSmartCrate,
@@ -48,6 +50,7 @@ export const useSidebarData = ({
       onCreatePlaylist,
       onCreatePlaylistFolder,
       onImportPlaylist,
+      onImportPlaylistFolder,
       onPlaylistContextMenu,
       onPlaylistFolderContextMenu,
       onCreateSmartCrate,
@@ -65,6 +68,7 @@ export const useSidebarData = ({
       onCreatePlaylist,
       onCreatePlaylistFolder,
       onImportPlaylist,
+      onImportPlaylistFolder,
       onCreateSmartCrate,
       onDeleteSmartCrate,
       onEditSmartCrate,

@@ -49,6 +49,7 @@ export {
   createPlaylistFolder,
   updatePlaylistFolder,
   deletePlaylistFolder,
+  listPlaylistFiles,
   importPlaylistFile,
   exportPlaylistFile,
   backfillSearchText,

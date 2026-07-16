@@ -140,6 +140,20 @@ try {
     ],
   );
 
+  const playlistBundlePath = path.join(directory, "playlist-bundle");
+  const nestedPlaylistPath = path.join(playlistBundlePath, "nested");
+  fs.mkdirSync(nestedPlaylistPath, { recursive: true });
+  const alphaPlaylistPath = path.join(playlistBundlePath, "alpha.m3u8");
+  const betaPlaylistPath = path.join(nestedPlaylistPath, "beta.PLS");
+  fs.writeFileSync(alphaPlaylistPath, firstSourcePath, "utf8");
+  fs.writeFileSync(betaPlaylistPath, `[playlist]\r\nFile1=${secondSourcePath}\r\n`, "utf8");
+  fs.writeFileSync(path.join(playlistBundlePath, "notes.txt"), "not a playlist", "utf8");
+  const playlistFolderScan = await backend.invoke("list_playlist_files", {
+    directoryPath: playlistBundlePath,
+  });
+  assert.equal(playlistFolderScan.name, "playlist-bundle");
+  assert.deepEqual(playlistFolderScan.files, [alphaPlaylistPath, betaPlaylistPath]);
+
   const exportedPlaylistPath = path.join(directory, "smoke-export.m3u8");
   assert.deepEqual(
     await backend.invoke("export_playlist_file", {

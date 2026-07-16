@@ -598,7 +598,7 @@ function App() {
     navigateToView,
   });
   const { createFolder, renameFolder, removeFolder, movePlaylist } = usePlaylistFolders();
-  const { importPlaylist, exportPlaylist } = usePlaylistTransfer();
+  const { importPlaylist, importPlaylistFolder, exportPlaylist } = usePlaylistTransfer();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
@@ -753,6 +753,19 @@ function App() {
     }
   }, [importPlaylist, navigateToView]);
 
+  const handleImportPlaylistFolder = useCallback(async () => {
+    try {
+      const result = await open({ directory: true });
+      const directoryPath = Array.isArray(result) ? result[0] : result;
+      if (!directoryPath) return;
+      const imported = await importPlaylistFolder(directoryPath);
+      const firstPlaylistId = imported?.playlistIds[0];
+      if (firstPlaylistId) navigateToView(`playlist:${firstPlaylistId}` as LibraryView);
+    } catch {
+      notify.error("Playlist folder picker failed");
+    }
+  }, [importPlaylistFolder, navigateToView]);
+
   const handleOpenFolderCreate = useCallback(() => {
     setFolderCreateName("");
     setIsFolderCreateOpen(true);
@@ -771,6 +784,7 @@ function App() {
     onPlaylistContextMenu: handleOpenPlaylistMenu,
     onCreatePlaylistFolder: handleOpenFolderCreate,
     onImportPlaylist: handleImportPlaylistFile,
+    onImportPlaylistFolder: handleImportPlaylistFolder,
     onPlaylistFolderContextMenu: handleOpenFolderMenu,
     onCreateSmartCrate: handleCreateSmartCrate,
     onEditSmartCrate: handleEditSmartCrate,

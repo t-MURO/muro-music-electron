@@ -52,6 +52,36 @@ const normalizePlaylistPath = (value) => {
   return process.platform === "win32" ? normalized.toLocaleLowerCase() : normalized;
 };
 
+const PLAYLIST_EXTENSIONS = new Set([".m3u", ".m3u8", ".pls"]);
+
+const listPlaylistFilesForImport = async (directoryPath) => {
+  const root = path.resolve(String(directoryPath || ""));
+  const rootStats = await fs.promises.stat(root);
+  if (!rootStats.isDirectory()) throw new Error("Playlist import path is not a directory");
+
+  const files = [];
+  const visit = async (directory) => {
+    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(entryPath);
+      } else if (entry.isFile() && PLAYLIST_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+        files.push(entryPath);
+      }
+    }
+  };
+
+  await visit(root);
+  files.sort((a, b) => path.relative(root, a).localeCompare(path.relative(root, b)));
+  return {
+    name: path.basename(root) || root,
+    files,
+  };
+};
+
 const resolvePlaylistEntry = (entry, playlistDirectory) => {
   const trimmed = String(entry || "").trim().replace(/^"|"$/g, "");
   if (!trimmed) return null;
@@ -308,6 +338,7 @@ export const createBackend = ({
         db.prepare("DELETE FROM playlist_folders WHERE id = ?").run(folderId);
       })();
     },
+    list_playlist_files: ({ directoryPath }) => listPlaylistFilesForImport(directoryPath),
     import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
     export_playlist_file: ({ dbPath, playlistId, filePath }) =>
       exportPlaylistFile(dbPath, playlistId, filePath),

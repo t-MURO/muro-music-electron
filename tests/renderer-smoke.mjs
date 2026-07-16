@@ -223,6 +223,7 @@ app.whenReady().then(async () => {
       );
       const playlistTransferControlsReady = Boolean(
         document.querySelector('[data-playlist-import]') &&
+        document.querySelector('[data-playlist-folder-import]') &&
         document.querySelector('[data-playlist-folder-create]')
       );
       if (

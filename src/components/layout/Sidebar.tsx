@@ -5,6 +5,7 @@ import {
   Clock3,
   Disc3,
   Folder,
+  FolderInput,
   FolderPlus,
   Import,
   Inbox,
@@ -40,6 +41,7 @@ type SidebarProps = {
   onCreatePlaylist: () => void;
   onCreatePlaylistFolder: () => void;
   onImportPlaylist: () => void;
+  onImportPlaylistFolder: () => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onPlaylistFolderContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onCreateSmartCrate: () => void;
@@ -60,6 +62,7 @@ export const Sidebar = ({
   onCreatePlaylist,
   onCreatePlaylistFolder,
   onImportPlaylist,
+  onImportPlaylistFolder,
   onPlaylistContextMenu,
   onPlaylistFolderContextMenu,
   onCreateSmartCrate,
@@ -173,6 +176,7 @@ export const Sidebar = ({
             <ListMusic className="h-3.5 w-3.5" />
             <span className="flex-1">Playlists</span>
             <button className="toolbar-icon-button h-6 w-6" onClick={onImportPlaylist} title="Import playlist" aria-label="Import playlist" data-playlist-import type="button"><Import className="h-3.5 w-3.5" /></button>
+            <button className="toolbar-icon-button h-6 w-6" onClick={onImportPlaylistFolder} title="Import folder of playlists" aria-label="Import folder of playlists" data-playlist-folder-import type="button"><FolderInput className="h-3.5 w-3.5" /></button>
             <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylistFolder} title="New playlist folder" aria-label="New playlist folder" data-playlist-folder-create type="button"><FolderPlus className="h-3.5 w-3.5" /></button>
             <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylist} title="New playlist" aria-label="New playlist" type="button"><Plus className="h-3.5 w-3.5" /></button>
           </div>
