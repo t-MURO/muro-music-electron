@@ -566,6 +566,20 @@ app.whenReady().then(async () => {
         const djMixManualSurfaceReady = expectDevSettings
           ? Boolean(document.querySelector("[data-selection-mix]"))
           : !document.querySelector("[data-selection-mix]");
+        document.querySelector('[data-panel-view="mix"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const mixWithCurrentButtons = Array.from(
+          document.querySelectorAll("[data-mix-with-current]"),
+        );
+        const mixWithCurrentActionReady = expectDevSettings
+          ? mixWithCurrentButtons.length > 0 && mixWithCurrentButtons.every(
+            (button) => button instanceof HTMLButtonElement
+              && !button.disabled
+              && button.textContent?.includes("Mix"),
+          )
+          : mixWithCurrentButtons.length === 0;
+        document.querySelector('[data-panel-view="queue"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[data-settings-tab="analysis"]')?.click();
@@ -795,6 +809,7 @@ app.whenReady().then(async () => {
           artistInformationSettingsReady,
           djMixFeatureGateReady,
           djMixManualSurfaceReady,
+          mixWithCurrentActionReady,
           analysisNotationSettingsReady,
           contextMenuOpened,
           contextMenuStayedOpenInside,
@@ -965,6 +980,10 @@ app.whenReady().then(async () => {
       }
       if (!result.djMixManualSurfaceReady) {
         fail("Experimental DJ mix selection controls ignored the feature gate");
+        return;
+      }
+      if (!result.mixWithCurrentActionReady) {
+        fail("Mix Next did not expose the current-track mix action behind the feature gate");
         return;
       }
       if (

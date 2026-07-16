@@ -427,7 +427,7 @@ function App() {
   } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
 
   // DJ-style transitions (manual pair mix + auto-mix into the queue)
-  const { mixSelectedPair, transition } = useMixTransition({
+  const { mixCurrentWith, mixSelectedPair, transition } = useMixTransition({
     enabled: djMixEnabled,
     allTracks,
     playTrack,
@@ -1375,6 +1375,9 @@ function App() {
               onClearQueue={clearQueue}
               onPlayTrack={handlePlayTrack}
               onPlayNext={(trackId) => playNext([trackId])}
+              onMixWithCurrent={djMixEnabled
+                ? (trackId) => { void mixCurrentWith(trackId); }
+                : undefined}
             />
           }
         />

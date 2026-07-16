@@ -33,6 +33,7 @@ type QueuePanelProps = {
   onClearQueue: () => void;
   onPlayTrack: (trackId: string) => void;
   onPlayNext: (trackId: string) => void;
+  onMixWithCurrent?: (trackId: string) => void;
 };
 
 const formatDuration = (seconds: number) => {
@@ -58,6 +59,7 @@ export const QueuePanel = ({
   onClearQueue,
   onPlayTrack,
   onPlayNext,
+  onMixWithCurrent,
 }: QueuePanelProps) => {
   const { startInternalDrag, endInternalDrag } = useDragSession();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -251,6 +253,7 @@ export const QueuePanel = ({
           queuedTrackIds={queueTracks.map((track) => track.id)}
           onPlayTrack={onPlayTrack}
           onPlayNext={onPlayNext}
+          onMixWithCurrent={onMixWithCurrent}
         />
       )}
     </aside>

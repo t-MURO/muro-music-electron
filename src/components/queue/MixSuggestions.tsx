@@ -1,4 +1,4 @@
-import { Gauge, ListPlus, Music2, Play, Sparkles, Star } from "lucide-react";
+import { Blend, Gauge, ListPlus, Music2, Play, Sparkles, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import {
@@ -18,6 +18,7 @@ type MixSuggestionsProps = {
   queuedTrackIds: string[];
   onPlayTrack: (trackId: string) => void;
   onPlayNext: (trackId: string) => void;
+  onMixWithCurrent?: (trackId: string) => void;
 };
 
 type BpmWindow = "any" | "3" | "6" | "10";
@@ -44,6 +45,7 @@ export const MixSuggestions = ({
   queuedTrackIds,
   onPlayTrack,
   onPlayNext,
+  onMixWithCurrent,
 }: MixSuggestionsProps) => {
   const currentCode = toCamelotCode(currentTrack?.key);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
@@ -240,6 +242,19 @@ export const MixSuggestions = ({
                 {track.rating > 0 && <span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[var(--color-text-muted)]"><Star className="h-2.5 w-2.5" fill="currentColor" />{track.rating}</span>}
               </div>
               <div className="mt-2 flex items-center justify-end gap-1.5 pl-[50px]">
+                {onMixWithCurrent && (
+                  <button
+                    className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2.5 text-[10px] font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white"
+                    onClick={() => onMixWithCurrent(track.id)}
+                    title={`Mix the running song into ${track.title}`}
+                    aria-label={`Mix the running song into ${track.title}`}
+                    data-mix-with-current
+                    type="button"
+                  >
+                    <Blend className="h-3.5 w-3.5" />
+                    Mix
+                  </button>
+                )}
                 <button className="toolbar-icon-button h-8 w-8" onClick={() => onPlayTrack(track.id)} title={`Play ${track.title}`} aria-label={`Play ${track.title}`} type="button"><Play className="h-3.5 w-3.5" fill="currentColor" /></button>
                 <button className="toolbar-icon-button h-8 w-8" onClick={() => onPlayNext(track.id)} title={`Play ${track.title} next`} aria-label={`Play ${track.title} next`} data-mix-play-next type="button"><ListPlus className="h-4 w-4" /></button>
               </div>

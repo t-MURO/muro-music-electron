@@ -65,9 +65,45 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
     [getDbPath]
   );
 
+  const cancelAutomaticMix = useCallback(async () => {
+    autoMixGenRef.current += 1;
+    if (!autoArmedRef.current && !autoArmPendingRef.current) return;
+    autoArmedRef.current = false;
+    autoArmPendingRef.current = false;
+    await playbackCancelTransition().catch(() => undefined);
+  }, []);
+
+  const prepareTransition = useCallback(async (a: Track, b: Track) => {
+    const gridA = await resolveGrid(a);
+    const gridB = await resolveGrid(b);
+    const failedTitles = [gridA ? null : a.title, gridB ? null : b.title].filter(
+      (title): title is string => title !== null
+    );
+    if (failedTitles.length > 0) {
+      notify.error(`Beat analysis failed for ${failedTitles.join(" and ")}`);
+    }
+    const plan = planTransition({
+      gridA,
+      gridB,
+      durationASec: a.durationSeconds,
+      durationBSec: b.durationSeconds,
+      bars: mixBars,
+    });
+    return { gridA, gridB, plan };
+  }, [mixBars, resolveGrid]);
+
+  const reportFallbackMode = useCallback((gridA: BeatGrid | null, gridB: BeatGrid | null) => {
+    notify.info(
+      gridA && gridB
+        ? "Tempos too far apart - using a simple blend"
+        : "Beat analysis unavailable - using a simple blend"
+    );
+  }, []);
+
   const mixSelectedPair = useCallback(
     async (trackIds: string[]) => {
       if (!enabled) return;
+      if (manualMixInFlightRef.current) return;
       if (trackIds.length !== 2) {
         notify.error("Select exactly two tracks to mix");
         return;
@@ -80,30 +116,10 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
       }
 
       manualMixInFlightRef.current = true;
-      autoMixGenRef.current += 1;
-      if (autoArmedRef.current || autoArmPendingRef.current) {
-        autoArmedRef.current = false;
-        autoArmPendingRef.current = false;
-        await playbackCancelTransition().catch(() => undefined);
-      }
+      await cancelAutomaticMix();
       try {
         notify.info("Analyzing beats…");
-        const gridA = await resolveGrid(a);
-        const gridB = await resolveGrid(b);
-        const failedTitles = [gridA ? null : a.title, gridB ? null : b.title].filter(
-          (title): title is string => title !== null
-        );
-        if (failedTitles.length > 0) {
-          notify.error(`Beat analysis failed for ${failedTitles.join(" and ")}`);
-        }
-
-        const plan = planTransition({
-          gridA,
-          gridB,
-          durationASec: a.durationSeconds,
-          durationBSec: b.durationSeconds,
-          bars: mixBars,
-        });
+        const { gridA, gridB, plan } = await prepareTransition(a, b);
 
         await playTrack(a);
         await seek(Math.max(0, plan.startAtSec - 10));
@@ -122,8 +138,72 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
         manualMixInFlightRef.current = false;
       }
     },
-    [allTracks, enabled, mixBars, mixPreservePitch, playTrack, resolveGrid, seek]
+    [
+      allTracks,
+      cancelAutomaticMix,
+      enabled,
+      mixPreservePitch,
+      playTrack,
+      prepareTransition,
+      seek,
+    ]
   );
+
+  const mixCurrentWith = useCallback(async (nextTrackId: string) => {
+    if (!enabled || manualMixInFlightRef.current) return;
+    const playback = usePlaybackStore.getState();
+    const outgoingId = playback.currentTrack?.id;
+    if (!playback.isPlaying || !outgoingId) {
+      notify.error("Play a track before starting a mix");
+      return;
+    }
+    const automaticTransition = autoArmedRef.current || autoArmPendingRef.current;
+    if (playback.transition !== null && !automaticTransition) {
+      notify.info("A mix transition is already in progress");
+      return;
+    }
+    if (outgoingId === nextTrackId) {
+      notify.error("Choose a different track to mix next");
+      return;
+    }
+    const outgoing = allTracks.find((track) => track.id === outgoingId);
+    const incoming = allTracks.find((track) => track.id === nextTrackId);
+    if (!outgoing || !incoming) {
+      notify.error("Could not find the selected tracks in the library");
+      return;
+    }
+
+    manualMixInFlightRef.current = true;
+    await cancelAutomaticMix();
+    try {
+      notify.info("Analyzing beats...");
+      const { gridA, gridB, plan } = await prepareTransition(outgoing, incoming);
+      const latestPlayback = usePlaybackStore.getState();
+      if (!latestPlayback.isPlaying || latestPlayback.currentTrack?.id !== outgoing.id) {
+        notify.error("The playing track changed before the mix was ready");
+        return;
+      }
+      const transitionEnd = plan.startAtSec + plan.durationSec;
+      if (latestPlayback.currentPosition >= transitionEnd - 0.5) {
+        notify.error("The running track is too close to its end to start this mix");
+        return;
+      }
+
+      await playbackTransitionTo(toTransitionTarget(incoming), plan, mixPreservePitch);
+      if (plan.mode === "fade") reportFallbackMode(gridA, gridB);
+    } catch {
+      notify.error("Could not start the mix transition");
+    } finally {
+      manualMixInFlightRef.current = false;
+    }
+  }, [
+    allTracks,
+    cancelAutomaticMix,
+    enabled,
+    mixPreservePitch,
+    prepareTransition,
+    reportFallbackMode,
+  ]);
 
   // Clear finished transitions and advance the queue when the mix engine
   // handed playback to the queued track.
@@ -215,5 +295,5 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
     transition,
   ]);
 
-  return { mixSelectedPair, transition: enabled ? transition : null };
+  return { mixCurrentWith, mixSelectedPair, transition: enabled ? transition : null };
 };
