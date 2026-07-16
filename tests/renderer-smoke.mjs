@@ -160,6 +160,9 @@ app.whenReady().then(async () => {
       artistProfileScanCount += 1;
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalArtists: 1 };
     }
+    if (command === "scan_album_covers") {
+      return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalAlbums: 0 };
+    }
     if (command === "playback_get_state") return {
       is_playing: false,
       current_position: 0,

@@ -577,7 +577,7 @@ export const SettingsPanel = ({
                       disabled={coverArtBackfillPending}
                       type="button"
                     >
-                      {coverArtBackfillPending ? "Extracting..." : "Extract cover art"}
+                      {coverArtBackfillPending ? "Finding..." : "Find cover art"}
                     </button>
                     {coverArtBackfillStatus && (
                       <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
@@ -586,7 +586,9 @@ export const SettingsPanel = ({
                     )}
                   </div>
                   <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
-                    Extracts and caches cover art for tracks imported before this feature was added.
+                    Checks embedded artwork first, then uses MusicBrainz Cover Art Archive for
+                    albums with MusicBrainz IDs. Covers are cached locally and shared by every
+                    track on the album.
                   </p>
                 </div>
               </div>

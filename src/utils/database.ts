@@ -82,6 +82,18 @@ export const scanArtistProfiles = (
   limit = 25,
 ) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, ...providerKeys, limit });
 
+export type AlbumCoverScanResult = {
+  checked: number;
+  updated: number;
+  failed: number;
+  queued: number;
+  remaining: number;
+  totalAlbums: number;
+};
+
+export const scanAlbumCovers = (dbPath: string, limit = 25) =>
+  invoke<AlbumCoverScanResult>("scan_album_covers", { dbPath, limit });
+
 // ============================================================================
 // Playlist Operations
 // ============================================================================

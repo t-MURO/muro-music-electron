@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createAlbumCoverService } from "../electron/albumCovers.mjs";
 import { createArtistProfileService } from "../electron/artistProfiles.mjs";
 import { createBackend } from "../electron/backend.mjs";
 import { openDatabase } from "../electron/database.mjs";
@@ -84,6 +85,138 @@ const backend = createBackend({
 try {
   const db = openDatabase(dbPath);
   const now = Math.floor(Date.now() / 1000);
+  const coverDb = openDatabase(path.join(directory, "cover-art-archive.db"));
+  const releaseId = "66666666-6666-4666-8666-666666666666";
+  const releaseGroupId = "77777777-7777-4777-8777-777777777777";
+  const missingReleaseGroupId = "88888888-8888-4888-8888-888888888888";
+  const insertCoverTrack = coverDb.prepare(`
+    INSERT INTO tracks(
+      id, title, artist, album, filename, source_path, import_status,
+      duration_seconds, bitrate_kbps, added_at, updated_at,
+      musicbrainz_albumid, musicbrainz_releasegroupid
+    ) VALUES (?, ?, 'Cover Artist', 'Cover Album', ?, ?, 'accepted', 180, 320, ?, ?, ?, ?)
+  `);
+  insertCoverTrack.run(
+    "cover-track-1",
+    "Cover Track 1",
+    "cover-1.mp3",
+    path.join(directory, "cover-1.mp3"),
+    now,
+    now,
+    releaseId,
+    releaseGroupId,
+  );
+  insertCoverTrack.run(
+    "cover-track-2",
+    "Cover Track 2",
+    "cover-2.mp3",
+    path.join(directory, "cover-2.mp3"),
+    now,
+    now,
+    releaseId,
+    releaseGroupId,
+  );
+  const coverFetchCalls = [];
+  const coverCacheDir = path.join(directory, "cover-art-archive-cache");
+  const albumCoverService = createAlbumCoverService({
+    cacheDir: coverCacheDir,
+    now: () => 1_750_000_000_000,
+    fetchImpl: async (url) => {
+      coverFetchCalls.push(String(url));
+      if (String(url) === `https://coverartarchive.org/release-group/${releaseGroupId}`) {
+        return new Response(JSON.stringify({
+          images: [{
+            front: true,
+            approved: true,
+            image: `http://coverartarchive.org/release/${releaseId}/front-original.jpg`,
+            thumbnails: {
+              250: `http://coverartarchive.org/release/${releaseId}/front-250.jpg`,
+              500: `http://coverartarchive.org/release/${releaseId}/front-500.jpg`,
+            },
+          }],
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url) === `https://coverartarchive.org/release-group/${missingReleaseGroupId}`) {
+        return new Response("not found", { status: 404 });
+      }
+      if (String(url) === `https://coverartarchive.org/release/${releaseId}/front-500.jpg`) {
+        return new Response(Buffer.from("cover art archive image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      throw new Error(`Unexpected Cover Art Archive URL: ${url}`);
+    },
+    cacheCoverBytesImpl: async (bytes, cacheDir) => {
+      assert.equal(Buffer.from(bytes).toString(), "cover art archive image");
+      await fs.promises.mkdir(cacheDir, { recursive: true });
+      const fullPath = path.join(cacheDir, "archive-full.jpg");
+      const thumbPath = path.join(cacheDir, "archive-thumb.jpg");
+      await fs.promises.writeFile(fullPath, bytes);
+      await fs.promises.writeFile(thumbPath, bytes);
+      return { fullPath, thumbPath };
+    },
+  });
+  assert.deepEqual(await albumCoverService.scanCovers(coverDb), {
+    checked: 1,
+    updated: 2,
+    failed: 0,
+    queued: 0,
+    remaining: 0,
+    totalAlbums: 1,
+  });
+  assert.ok(
+    coverFetchCalls.includes(`https://coverartarchive.org/release-group/${releaseGroupId}`),
+    "release-group artwork should be preferred when both MusicBrainz IDs exist",
+  );
+  assert.ok(
+    coverFetchCalls.includes(`https://coverartarchive.org/release/${releaseId}/front-500.jpg`),
+    "the 500px Cover Art Archive thumbnail should be downloaded",
+  );
+  const cachedCover = coverDb.prepare(`
+    SELECT cover_art_path, cover_art_thumb_path FROM tracks WHERE id = 'cover-track-1'
+  `).get();
+  assert.ok(fs.existsSync(cachedCover.cover_art_path));
+  assert.ok(fs.existsSync(cachedCover.cover_art_thumb_path));
+
+  insertCoverTrack.run(
+    "cover-track-3",
+    "Cover Track 3",
+    "cover-3.mp3",
+    path.join(directory, "cover-3.mp3"),
+    now,
+    now,
+    releaseId,
+    releaseGroupId,
+  );
+  const fetchCountBeforeCachedCover = coverFetchCalls.length;
+  assert.deepEqual(await albumCoverService.scanCovers(coverDb), {
+    checked: 0,
+    updated: 1,
+    failed: 0,
+    queued: 0,
+    remaining: 0,
+    totalAlbums: 1,
+  });
+  assert.equal(coverFetchCalls.length, fetchCountBeforeCachedCover);
+
+  insertCoverTrack.run(
+    "cover-track-missing",
+    "Missing Cover",
+    "cover-missing.mp3",
+    path.join(directory, "cover-missing.mp3"),
+    now,
+    now,
+    null,
+    missingReleaseGroupId,
+  );
+  assert.equal((await albumCoverService.scanCovers(coverDb)).checked, 1);
+  const fetchCountBeforeNegativeCache = coverFetchCalls.length;
+  assert.equal((await albumCoverService.scanCovers(coverDb)).checked, 0);
+  assert.equal(
+    coverFetchCalls.length,
+    fetchCountBeforeNegativeCache,
+    "missing covers should use the negative cache",
+  );
   assert.equal(
     await cacheEmbeddedCover(
       { data: Buffer.from("not an image") },
@@ -118,6 +251,14 @@ try {
   `);
   insertTrack.run("track-1", "Smoke Test", "Muro", "Checks", "smoke.mp3", firstSourcePath, 90, 320, now, now);
   insertTrack.run("track-2", "Smoke Test 2", "Muro", "Checks", "smoke-2.mp3", secondSourcePath, 90, 320, now, now);
+  assert.deepEqual(await backend.invoke("scan_album_covers", { dbPath, limit: 1 }), {
+    checked: 0,
+    updated: 0,
+    failed: 0,
+    queued: 0,
+    remaining: 0,
+    totalAlbums: 0,
+  });
 
   let snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.inbox.length, 2);

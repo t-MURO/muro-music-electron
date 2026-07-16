@@ -39,6 +39,7 @@ export {
   loadCachedArtistProfiles,
   getArtistProfile,
   scanArtistProfiles,
+  scanAlbumCovers,
   loadPlaylists,
   createPlaylist,
   updatePlaylist,
@@ -58,6 +59,7 @@ export {
   recordTrackPlay,
   type DeleteTracksResult,
   type ArtistProfileScanResult,
+  type AlbumCoverScanResult,
 } from "./database";
 export {
   importFiles,

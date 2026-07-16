@@ -9,10 +9,16 @@ import {
   loadRecentlyPlayed,
   loadTracks,
   importedTrackToTrack,
+  scanAlbumCovers,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
 import { confirm } from "@muro/desktop/dialogs";
 import { t } from "../i18n";
+
+const INITIAL_COVER_SCAN_DELAY_MS = 10_000;
+const CONTINUE_COVER_SCAN_DELAY_MS = 60_000;
+const PERIODIC_COVER_SCAN_DELAY_MS = 30 * 60_000;
+const COVER_SCAN_BATCH_SIZE = 25;
 
 export const useLibraryInit = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
@@ -98,6 +104,37 @@ export const useLibraryInit = () => {
     };
   }, [resolveDbPath, setTracks, setInboxTracks, setPlaylists, setPlaylistFolders, setRecentlyPlayedTracks]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (delayMs: number) => {
+      if (!cancelled) timer = setTimeout(run, delayMs);
+    };
+    const run = async () => {
+      try {
+        const resolvedPath = await resolveDbPath();
+        const result = await scanAlbumCovers(resolvedPath, COVER_SCAN_BATCH_SIZE);
+        if (cancelled) return;
+        if (result.updated > 0) {
+          const snapshot = await loadTracks(resolvedPath);
+          if (cancelled) return;
+          setTracks(snapshot.library.map(importedTrackToTrack));
+          setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
+        }
+        schedule(result.queued > 0
+          ? CONTINUE_COVER_SCAN_DELAY_MS
+          : PERIODIC_COVER_SCAN_DELAY_MS);
+      } catch {
+        schedule(PERIODIC_COVER_SCAN_DELAY_MS);
+      }
+    };
+    schedule(INITIAL_COVER_SCAN_DELAY_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [resolveDbPath, setInboxTracks, setTracks]);
+
   // Backfill handlers
   const handleBackfillSearchText = useCallback(async () => {
     if (!dbPath.trim()) {
@@ -127,9 +164,9 @@ export const useLibraryInit = () => {
 
     try {
       setCoverArtBackfillPending(true);
-      setCoverArtBackfillStatus("Extracting cover art...");
+      setCoverArtBackfillStatus("Finding cover art...");
       const updated = await backfillCoverArt(dbPath.trim());
-      setCoverArtBackfillStatus(`Extracted cover art for ${updated} tracks.`);
+      setCoverArtBackfillStatus(`Found cover art for ${updated} tracks.`);
       // Reload tracks to get the new cover art paths
       const resolvedPath = await resolveDbPath();
       const snapshot = await loadTracks(resolvedPath);
