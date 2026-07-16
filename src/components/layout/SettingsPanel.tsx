@@ -399,9 +399,10 @@ export const SettingsPanel = ({
                     value={fanartApiKey}
                   />
                   <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
-                    MusicBrainz and Wikipedia are used first. Last.fm and TheAudioDB fill missing
-                    text metadata, while Fanart.tv is the final artwork fallback. Downloaded images
-                    and artist profiles are cached locally.
+                    MusicBrainz, Wikidata, Wikipedia, and Wikimedia Commons provide the first
+                    no-key artist-photo lookup. Last.fm and TheAudioDB fill missing text metadata,
+                    while Fanart.tv is the final artwork fallback. Downloaded images and artist
+                    profiles are cached locally.
                   </p>
                   <button
                     className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"

@@ -179,6 +179,7 @@ const startApplication = async () => {
     const url = new URL(String(value));
     const allowedHost = url.hostname === "musicbrainz.org"
       || url.hostname.endsWith(".wikipedia.org")
+      || url.hostname === "commons.wikimedia.org"
       || url.hostname === "www.last.fm"
       || url.hostname === "www.theaudiodb.com"
       || url.hostname === "fanart.tv"

@@ -427,16 +427,56 @@ try {
           area: isPremiumArtist || isLastFmArtist ? null : { name: "Berlin" },
           "life-span": isPremiumArtist || isLastFmArtist ? {} : { begin: "1990" },
           genres: isPremiumArtist || isLastFmArtist ? [] : [{ name: "electronic" }, { name: "house" }],
-          relations: [{
-            type: "wikipedia",
-            url: { resource: isFallbackArtist
-              ? "https://en.wikipedia.org/wiki/Fallback_Muro"
-              : isPremiumArtist
-                ? "https://en.wikipedia.org/wiki/Premium_Muro"
-                : isLastFmArtist
-                  ? "https://en.wikipedia.org/wiki/LastFm_Muro"
-                : "https://en.wikipedia.org/wiki/Muro_(musician)" },
-          }],
+          relations: [
+            {
+              type: "wikipedia",
+              url: { resource: isFallbackArtist
+                ? "https://en.wikipedia.org/wiki/Fallback_Muro"
+                : isPremiumArtist
+                  ? "https://en.wikipedia.org/wiki/Premium_Muro"
+                  : isLastFmArtist
+                    ? "https://en.wikipedia.org/wiki/LastFm_Muro"
+                  : "https://en.wikipedia.org/wiki/Muro_(musician)" },
+            },
+            ...(!isFallbackArtist && !isPremiumArtist && !isLastFmArtist
+              ? [{ type: "wikidata", url: { resource: "https://www.wikidata.org/wiki/Q123456" } }]
+              : []),
+          ],
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url) === "https://www.wikidata.org/wiki/Special:EntityData/Q123456.json") {
+        return new Response(JSON.stringify({
+          entities: {
+            Q123456: {
+              sitelinks: { enwiki: { title: "Muro (musician)" } },
+              claims: {
+                P18: [{
+                  rank: "preferred",
+                  mainsnak: { datavalue: { value: "Muro artist portrait.jpg" } },
+                }],
+              },
+            },
+          },
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url).startsWith("https://commons.wikimedia.org/w/api.php?")) {
+        const requestUrl = new URL(String(url));
+        assert.equal(requestUrl.searchParams.get("titles"), "File:Muro artist portrait.jpg");
+        assert.equal(requestUrl.searchParams.get("iiurlwidth"), "800");
+        return new Response(JSON.stringify({
+          query: {
+            pages: [{
+              imageinfo: [{
+                thumburl: "https://upload.wikimedia.org/muro-commons.jpg",
+                descriptionurl: "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
+                extmetadata: {
+                  Artist: { value: "<a href=\"https://example.test\">Smoke Photographer</a>" },
+                  LicenseShortName: { value: "CC BY-SA 4.0" },
+                  LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/4.0/" },
+                },
+              }],
+            }],
+          },
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url).includes("/api/rest_v1/page/summary/")) {
@@ -517,6 +557,11 @@ try {
           headers: { "content-type": "image/jpeg" },
         });
       }
+      if (String(url) === "https://upload.wikimedia.org/muro-commons.jpg") {
+        return new Response(Buffer.from("commons artist image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
       if (String(url) === "https://assets.fanart.tv/fallback-best.jpg") {
         return new Response(Buffer.from("fanart smoke image"), {
           headers: { "content-type": "image/jpeg" },
@@ -534,11 +579,33 @@ try {
   assert.equal(artistProfile.status, "ready");
   assert.equal(artistProfile.description, "Electronic musician");
   assert.deepEqual(artistProfile.genres, ["electronic", "house"]);
+  assert.equal(artistProfile.imageProvider, "wikimedia-commons");
+  assert.equal(artistProfile.imageAttribution, "Smoke Photographer");
+  assert.equal(artistProfile.imageLicense, "CC BY-SA 4.0");
+  assert.equal(
+    artistProfile.wikimediaCommonsUrl,
+    "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
+  );
   assert.ok(fs.existsSync(artistProfile.imagePath), "artist image should be cached on disk");
   const artistFetchCount = artistFetchCalls.length;
   const cachedArtistProfile = await artistProfileService.getProfile(db, "Muro");
   assert.equal(cachedArtistProfile.cacheState, "fresh");
   assert.equal(artistFetchCalls.length, artistFetchCount, "fresh artist profiles should not be fetched again");
+  const cachedProfileRow = db.prepare(`
+    SELECT profile_json FROM artist_profiles WHERE artist_key = 'muro'
+  `).get();
+  const legacyCachedProfile = JSON.parse(cachedProfileRow.profile_json);
+  delete legacyCachedProfile.profileVersion;
+  db.prepare(`
+    UPDATE artist_profiles SET profile_json = ? WHERE artist_key = 'muro'
+  `).run(JSON.stringify(legacyCachedProfile));
+  const fetchCountBeforeProfileUpgrade = artistFetchCalls.length;
+  const upgradedArtistProfile = await artistProfileService.getProfile(db, "Muro");
+  assert.equal(upgradedArtistProfile.profileVersion, 2);
+  assert.ok(
+    artistFetchCalls.length > fetchCountBeforeProfileUpgrade,
+    "legacy cached profiles should upgrade to the Commons-capable profile version on demand",
+  );
   const fallbackWithoutKey = await artistProfileService.getProfile(db, "Fallback Muro");
   assert.equal(fallbackWithoutKey.imageUrl, null);
   assert.equal(fallbackWithoutKey.fanartAttempted, false);

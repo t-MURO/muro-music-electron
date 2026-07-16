@@ -7,6 +7,7 @@ const NOT_FOUND_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MUSICBRAINZ_INTERVAL_MS = 1_100;
 const SCAN_FAILURE_BACKOFF_MS = 30 * 60 * 1_000;
 const MAX_ARTIST_IMAGE_BYTES = 8 * 1024 * 1024;
+const PROFILE_VERSION = 2;
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 const FANART_API_ROOT = "https://webservice.fanart.tv/v3.2/music/";
 const THEAUDIODB_API_ROOT = "https://www.theaudiodb.com/api/v2/json";
@@ -74,7 +75,10 @@ const cachedProfileNeedsRefresh = (
     && !cached.profile.imageUrl
     && !cached.profile.fanartAttempted,
   );
-  return shouldTryConfiguredLastFm
+  const needsProfileUpgrade = cached.profile?.status === "ready"
+    && cached.profile.profileVersion !== PROFILE_VERSION;
+  return needsProfileUpgrade
+    || shouldTryConfiguredLastFm
     || shouldTryConfiguredTheAudioDb
     || shouldTryConfiguredFanart
     || nowMs - cached.fetchedAtMs >= ttlMs;
@@ -169,6 +173,15 @@ const secureUrl = (value) => {
 
 const secureImageUrl = secureUrl;
 
+const secureWikimediaUrl = (value) => {
+  const normalized = secureUrl(value);
+  if (!normalized) return null;
+  const url = new URL(normalized);
+  return url.hostname === "upload.wikimedia.org" || url.hostname.endsWith(".wikimedia.org")
+    ? normalized
+    : null;
+};
+
 const nonEmptyString = (...values) => values
   .map((value) => String(value ?? "").trim())
   .find(Boolean) ?? null;
@@ -190,15 +203,31 @@ const decodeHtmlEntities = (value) => String(value ?? "")
   .replace(/&lt;/gi, "<")
   .replace(/&gt;/gi, ">");
 
-const cleanLastFmText = (value) => decodeHtmlEntities(
+const cleanHtmlText = (value, maxLength = 1_000) => decodeHtmlEntities(
   String(value ?? "")
-    .replace(/<a\b[^>]*>\s*Read more(?: on Last\.fm)?\s*<\/a>/gi, " ")
     .replace(/<br\s*\/?\s*>/gi, "\n")
     .replace(/<[^>]+>/g, " "),
 )
   .replace(/\s+/g, " ")
   .trim()
-  .slice(0, 8_000) || null;
+  .slice(0, maxLength) || null;
+
+const cleanLastFmText = (value) => cleanHtmlText(
+  String(value ?? "")
+    .replace(/<a\b[^>]*>\s*Read more(?: on Last\.fm)?\s*<\/a>/gi, " "),
+  8_000,
+);
+
+const wikidataImageFile = (entity) => {
+  const statements = Array.isArray(entity?.claims?.P18) ? entity.claims.P18 : [];
+  const selected = statements.find((statement) => (
+    statement?.rank === "preferred"
+    && typeof statement?.mainsnak?.datavalue?.value === "string"
+  )) ?? statements.find((statement) => (
+    typeof statement?.mainsnak?.datavalue?.value === "string"
+  ));
+  return nonEmptyString(selected?.mainsnak?.datavalue?.value);
+};
 
 const lastFmTags = (artist) => {
   const seen = new Set();
@@ -301,7 +330,7 @@ export const createArtistProfileService = ({
     return request;
   };
 
-  const getWikipediaTargetFromWikidata = async (resource) => {
+  const getWikidataProfile = async (resource) => {
     if (!resource) return null;
     const entityId = String(resource).match(/Q\d+/i)?.[0]?.toUpperCase();
     if (!entityId) return null;
@@ -309,14 +338,21 @@ export const createArtistProfileService = ({
     const entity = data?.entities?.[entityId];
     const sitelink = entity?.sitelinks?.enwiki ?? Object.entries(entity?.sitelinks ?? {})
       .find(([key]) => key.endsWith("wiki") && !key.includes("commons"))?.[1];
-    if (!sitelink?.title) return null;
-    const languageKey = Object.entries(entity?.sitelinks ?? {})
-      .find(([, value]) => value === sitelink)?.[0] ?? "enwiki";
-    const language = languageKey.slice(0, -"wiki".length) || "en";
+    let wikipediaTarget = null;
+    if (sitelink?.title) {
+      const languageKey = Object.entries(entity?.sitelinks ?? {})
+        .find(([, value]) => value === sitelink)?.[0] ?? "enwiki";
+      const language = languageKey.slice(0, -"wiki".length) || "en";
+      wikipediaTarget = {
+        hostname: `${language}.wikipedia.org`,
+        title: sitelink.title.replace(/ /g, "_"),
+        url: `https://${language}.wikipedia.org/wiki/${encodeURIComponent(sitelink.title.replace(/ /g, "_"))}`,
+      };
+    }
     return {
-      hostname: `${language}.wikipedia.org`,
-      title: sitelink.title.replace(/ /g, "_"),
-      url: `https://${language}.wikipedia.org/wiki/${encodeURIComponent(sitelink.title.replace(/ /g, "_"))}`,
+      entityId,
+      wikipediaTarget,
+      imageFileName: wikidataImageFile(entity),
     };
   };
 
@@ -330,6 +366,41 @@ export const createArtistProfileService = ({
       description: summary.description || null,
       imageUrl: summary.thumbnail?.source || summary.originalimage?.source || null,
       wikipediaUrl: summary.content_urls?.desktop?.page || target.url,
+      wikibaseItem: String(summary.wikibase_item ?? "").match(/Q\d+/i)?.[0]?.toUpperCase() ?? null,
+    };
+  };
+
+  const fetchWikimediaCommonsImage = async (fileName) => {
+    if (!fileName) return null;
+    const url = new URL("https://commons.wikimedia.org/w/api.php");
+    url.search = new URLSearchParams({
+      action: "query",
+      format: "json",
+      formatversion: "2",
+      prop: "imageinfo",
+      iiprop: "url|extmetadata",
+      iiurlwidth: "800",
+      iiextmetadatalanguage: "en",
+      iiextmetadatafilter: "Artist|Credit|LicenseShortName|LicenseUrl|UsageTerms",
+      titles: `File:${String(fileName).replace(/^File:/i, "")}`,
+    }).toString();
+    const payload = await fetchJson(url.toString());
+    const page = Array.isArray(payload?.query?.pages) ? payload.query.pages[0] : null;
+    const imageInfo = Array.isArray(page?.imageinfo) ? page.imageinfo[0] : null;
+    const imageUrl = secureWikimediaUrl(imageInfo?.thumburl || imageInfo?.url);
+    if (!imageUrl) return null;
+    const metadata = imageInfo?.extmetadata ?? {};
+    return {
+      imageUrl,
+      commonsUrl: secureWikimediaUrl(imageInfo?.descriptionurl)
+        || `https://commons.wikimedia.org/wiki/${encodeURIComponent(`File:${fileName}`.replace(/ /g, "_"))}`,
+      attribution: cleanHtmlText(metadata?.Artist?.value)
+        || cleanHtmlText(metadata?.Credit?.value)
+        || "Wikimedia Commons contributor",
+      license: cleanHtmlText(metadata?.LicenseShortName?.value)
+        || cleanHtmlText(metadata?.UsageTerms?.value)
+        || "See file page for license",
+      licenseUrl: secureUrl(metadata?.LicenseUrl?.value),
     };
   };
 
@@ -444,6 +515,7 @@ export const createArtistProfileService = ({
       const artist = pickArtist(Array.isArray(search?.artists) ? search.artists : [], requestedName);
       if (!artist?.id || artistScore(artist) < 70) {
         return {
+          profileVersion: PROFILE_VERSION,
           artistKey,
           requestedName,
           name: requestedName,
@@ -459,8 +531,15 @@ export const createArtistProfileService = ({
     const artist = await fetchMusicBrainzJson(lookupUrl.toString());
     const relations = Array.isArray(artist?.relations) ? artist.relations : [];
     let wikipediaTarget = parseWikipediaTarget(wikipediaRelation(relations));
-    if (!wikipediaTarget) {
-      wikipediaTarget = await getWikipediaTargetFromWikidata(wikidataRelation(relations));
+    let wikidata = null;
+    const wikidataResource = wikidataRelation(relations);
+    if (wikidataResource) {
+      try {
+        wikidata = await getWikidataProfile(wikidataResource);
+        wikipediaTarget ||= wikidata?.wikipediaTarget ?? null;
+      } catch (error) {
+        console.warn(`Could not load Wikidata profile for ${requestedName}:`, error);
+      }
     }
 
     let wikipedia = null;
@@ -468,6 +547,23 @@ export const createArtistProfileService = ({
       wikipedia = await fetchWikipediaSummary(wikipediaTarget);
     } catch (error) {
       console.warn(`Could not load Wikipedia profile for ${requestedName}:`, error);
+    }
+
+    if (!wikidata && wikipedia?.wikibaseItem) {
+      try {
+        wikidata = await getWikidataProfile(wikipedia.wikibaseItem);
+      } catch (error) {
+        console.warn(`Could not load Wikidata image data for ${requestedName}:`, error);
+      }
+    }
+
+    let wikimediaCommons = null;
+    if (wikidata?.imageFileName) {
+      try {
+        wikimediaCommons = await fetchWikimediaCommonsImage(wikidata.imageFileName);
+      } catch (error) {
+        console.warn(`Could not load Wikimedia Commons image for ${requestedName}:`, error);
+      }
     }
 
     let lastFm = null;
@@ -493,13 +589,16 @@ export const createArtistProfileService = ({
     }
 
     const premiumImageUrl = theAudioDbImage(theAudioDb);
+    const commonsImageUrl = secureWikimediaUrl(wikimediaCommons?.imageUrl);
     const wikipediaImageUrl = secureImageUrl(wikipedia?.imageUrl);
-    let imageUrl = wikipediaImageUrl || premiumImageUrl;
-    let imageProvider = wikipediaImageUrl
-      ? "wikipedia"
-      : premiumImageUrl
-        ? "theaudiodb"
-        : null;
+    let imageUrl = commonsImageUrl || wikipediaImageUrl || premiumImageUrl;
+    let imageProvider = commonsImageUrl
+      ? "wikimedia-commons"
+      : wikipediaImageUrl
+        ? "wikipedia"
+        : premiumImageUrl
+          ? "theaudiodb"
+          : null;
     let fanartUrl = null;
     let fanartAttempted = false;
     if (!imageUrl && String(fanartApiKey).trim()) {
@@ -535,6 +634,7 @@ export const createArtistProfileService = ({
     const theAudioDbId = nonEmptyString(theAudioDb?.idArtist);
 
     return {
+      profileVersion: PROFILE_VERSION,
       artistKey,
       requestedName,
       name: artist?.name || requestedName,
@@ -561,6 +661,15 @@ export const createArtistProfileService = ({
       imagePath,
       imageUrl,
       imageProvider,
+      imageAttribution: imageProvider === "wikimedia-commons"
+        ? wikimediaCommons?.attribution ?? null
+        : null,
+      imageLicense: imageProvider === "wikimedia-commons"
+        ? wikimediaCommons?.license ?? null
+        : null,
+      imageLicenseUrl: imageProvider === "wikimedia-commons"
+        ? wikimediaCommons?.licenseUrl ?? null
+        : null,
       lastFmAttempted,
       lastFmUrl: secureUrl(lastFm?.url),
       similarArtists,
@@ -571,6 +680,7 @@ export const createArtistProfileService = ({
       musicBrainzId,
       musicBrainzUrl: `https://musicbrainz.org/artist/${musicBrainzId}`,
       wikipediaUrl: wikipedia?.wikipediaUrl || wikipediaTarget?.url || null,
+      wikimediaCommonsUrl: wikimediaCommons?.commonsUrl || null,
       fanartUrl,
       fetchedAt: new Date(now()).toISOString(),
     };

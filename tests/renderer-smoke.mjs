@@ -63,6 +63,7 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   play_count: 0,
 }));
 const smokeArtistProfile = {
+  profileVersion: 2,
   artistKey: "muro",
   requestedName: "Muro",
   name: "Muro",
@@ -77,6 +78,10 @@ const smokeArtistProfile = {
   biography: "Muro is an electronic musician used by the renderer smoke test.",
   imagePath: null,
   imageUrl: null,
+  imageProvider: "wikimedia-commons",
+  imageAttribution: "Smoke Photographer",
+  imageLicense: "CC BY-SA 4.0",
+  wikimediaCommonsUrl: "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
   musicBrainzId: "11111111-1111-4111-8111-111111111111",
   musicBrainzUrl: "https://musicbrainz.org/artist/11111111-1111-4111-8111-111111111111",
   wikipediaUrl: "https://en.wikipedia.org/wiki/Muro_(musician)",
@@ -768,7 +773,9 @@ app.whenReady().then(async () => {
         const albumArtistProfileReady = Boolean(
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
           document.querySelector(".artist-detail-biography")?.textContent?.includes("renderer smoke test") &&
+          document.querySelector(".artist-detail-photo-credit")?.textContent?.includes("Smoke Photographer") &&
           document.querySelector(".artist-detail-similar")?.textContent?.includes("Similar Muro") &&
+          document.querySelector(".artist-detail-sources")?.textContent?.includes("Wikimedia Commons") &&
           document.querySelector(".artist-detail-sources")?.textContent?.includes("Last.fm") &&
           document.querySelector(".artist-detail-sources")?.textContent?.includes("TheAudioDB") &&
           document.querySelector(".artist-detail-sources")?.textContent?.includes("Fanart.tv")

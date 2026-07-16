@@ -94,10 +94,17 @@ export const ArtistDetailPanel = ({
             </div>
           </div>
         )}
-        {(profile?.wikipediaUrl || profile?.musicBrainzUrl || profile?.lastFmUrl || profile?.theAudioDbUrl || profile?.fanartUrl) && (
+        {profile?.imageProvider === "wikimedia-commons" && (
+          <p className="artist-detail-photo-credit">
+            Photo: {profile.imageAttribution || "Wikimedia Commons contributor"}
+            {profile.imageLicense && ` · ${profile.imageLicense}`}
+          </p>
+        )}
+        {(profile?.wikipediaUrl || profile?.wikimediaCommonsUrl || profile?.musicBrainzUrl || profile?.lastFmUrl || profile?.theAudioDbUrl || profile?.fanartUrl) && (
           <div className="artist-detail-sources">
             <span>Information from</span>
             {profile.wikipediaUrl && <button onClick={() => onOpenSource(profile.wikipediaUrl!)} type="button">Wikipedia <ExternalLink /></button>}
+            {profile.wikimediaCommonsUrl && <button onClick={() => onOpenSource(profile.wikimediaCommonsUrl!)} type="button">Wikimedia Commons <ExternalLink /></button>}
             {profile.musicBrainzUrl && <button onClick={() => onOpenSource(profile.musicBrainzUrl!)} type="button">MusicBrainz <ExternalLink /></button>}
             {profile.lastFmUrl && <button onClick={() => onOpenSource(profile.lastFmUrl!)} type="button">Last.fm <ExternalLink /></button>}
             {profile.theAudioDbUrl && <button onClick={() => onOpenSource(profile.theAudioDbUrl!)} type="button">TheAudioDB <ExternalLink /></button>}

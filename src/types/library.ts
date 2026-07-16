@@ -65,6 +65,7 @@ export type PlaylistFolder = {
 };
 
 export type ArtistProfile = {
+  profileVersion?: number;
   artistKey: string;
   requestedName: string;
   name: string;
@@ -82,7 +83,10 @@ export type ArtistProfile = {
   biography?: string | null;
   imagePath?: string | null;
   imageUrl?: string | null;
-  imageProvider?: "wikipedia" | "theaudiodb" | "fanart.tv" | null;
+  imageProvider?: "wikimedia-commons" | "wikipedia" | "theaudiodb" | "fanart.tv" | null;
+  imageAttribution?: string | null;
+  imageLicense?: string | null;
+  imageLicenseUrl?: string | null;
   lastFmAttempted?: boolean;
   lastFmUrl?: string | null;
   similarArtists?: Array<{
@@ -97,6 +101,7 @@ export type ArtistProfile = {
   musicBrainzId?: string | null;
   musicBrainzUrl?: string | null;
   wikipediaUrl?: string | null;
+  wikimediaCommonsUrl?: string | null;
   fanartUrl?: string | null;
   fetchedAt: string;
   cacheState?: "fresh" | "stale";
