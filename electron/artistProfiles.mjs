@@ -9,6 +9,7 @@ const SCAN_FAILURE_BACKOFF_MS = 30 * 60 * 1_000;
 const MAX_ARTIST_IMAGE_BYTES = 8 * 1024 * 1024;
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 const FANART_API_ROOT = "https://webservice.fanart.tv/v3.2/music/";
+const THEAUDIODB_API_ROOT = "https://www.theaudiodb.com/api/v2/json";
 
 export const normalizeArtistKey = (artistName) => String(artistName ?? "")
   .normalize("NFKC")
@@ -46,11 +47,20 @@ const writeCachedProfile = (db, artistKey, requestedName, profile, fetchedAtMs) 
   `).run(artistKey, requestedName, JSON.stringify(profile), Math.floor(fetchedAtMs / 1_000));
 };
 
-const cachedProfileNeedsRefresh = (cached, nowMs, fanartApiKey = "") => {
+const cachedProfileNeedsRefresh = (
+  cached,
+  nowMs,
+  { fanartApiKey = "", theAudioDbApiKey = "" } = {},
+) => {
   if (!cached) return true;
   const ttlMs = cached.profile?.status === "not-found"
     ? NOT_FOUND_CACHE_TTL_MS
     : DEFAULT_CACHE_TTL_MS;
+  const shouldTryConfiguredTheAudioDb = Boolean(
+    String(theAudioDbApiKey).trim()
+    && cached.profile?.status === "ready"
+    && !cached.profile.theAudioDbAttempted,
+  );
   const shouldTryConfiguredFanart = Boolean(
     String(fanartApiKey).trim()
     && cached.profile?.status === "ready"
@@ -58,7 +68,9 @@ const cachedProfileNeedsRefresh = (cached, nowMs, fanartApiKey = "") => {
     && !cached.profile.imageUrl
     && !cached.profile.fanartAttempted,
   );
-  return shouldTryConfiguredFanart || nowMs - cached.fetchedAtMs >= ttlMs;
+  return shouldTryConfiguredTheAudioDb
+    || shouldTryConfiguredFanart
+    || nowMs - cached.fetchedAtMs >= ttlMs;
 };
 
 const findStoredMusicBrainzId = (db, artistName) => {
@@ -147,6 +159,33 @@ const secureImageUrl = (value) => {
     return null;
   }
 };
+
+const nonEmptyString = (...values) => values
+  .map((value) => String(value ?? "").trim())
+  .find(Boolean) ?? null;
+
+const theAudioDbGenres = (artist) => {
+  const seen = new Set();
+  return [artist?.strGenre, artist?.strStyle]
+    .flatMap((value) => String(value ?? "").split(/[,;/]/))
+    .map((value) => value.trim())
+    .filter((value) => {
+      const key = value.toLocaleLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
+};
+
+const theAudioDbImage = (artist) => [
+  artist?.strArtistThumb,
+  artist?.strArtistFanart,
+  artist?.strArtistFanart2,
+  artist?.strArtistFanart3,
+]
+  .map(secureImageUrl)
+  .find(Boolean) ?? null;
 
 const pickFanartArtistImage = (payload) => (Array.isArray(payload?.artistthumb)
   ? payload.artistthumb
@@ -246,6 +285,25 @@ export const createArtistProfileService = ({
     };
   };
 
+  const fetchTheAudioDbArtist = async (musicBrainzId, apiKey) => {
+    const normalizedApiKey = String(apiKey ?? "").trim();
+    if (!normalizedApiKey) return null;
+    const response = await fetchImpl(
+      `${THEAUDIODB_API_ROOT}/lookup/artist_mb/${encodeURIComponent(musicBrainzId)}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": userAgent,
+          "X-API-KEY": normalizedApiKey,
+        },
+      },
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`TheAudioDB request failed (${response.status})`);
+    const payload = await response.json();
+    return Array.isArray(payload?.lookup) ? payload.lookup[0] ?? null : null;
+  };
+
   const cacheArtistImage = async (artistKey, imageUrl) => {
     if (!imageUrl) return null;
     const url = new URL(imageUrl);
@@ -273,7 +331,12 @@ export const createArtistProfileService = ({
     }
   };
 
-  const fetchProfile = async (db, requestedName, artistKey, { fanartApiKey = "" } = {}) => {
+  const fetchProfile = async (
+    db,
+    requestedName,
+    artistKey,
+    { fanartApiKey = "", theAudioDbApiKey = "" } = {},
+  ) => {
     let musicBrainzId = findStoredMusicBrainzId(db, requestedName);
     if (!musicBrainzId) {
       const searchUrl = new URL("https://musicbrainz.org/ws/2/artist/");
@@ -313,8 +376,25 @@ export const createArtistProfileService = ({
       console.warn(`Could not load Wikipedia profile for ${requestedName}:`, error);
     }
 
-    let imageUrl = wikipedia?.imageUrl || null;
-    let imageProvider = imageUrl ? "wikipedia" : null;
+    let theAudioDb = null;
+    let theAudioDbAttempted = false;
+    if (String(theAudioDbApiKey).trim()) {
+      theAudioDbAttempted = true;
+      try {
+        theAudioDb = await fetchTheAudioDbArtist(musicBrainzId, theAudioDbApiKey);
+      } catch (error) {
+        console.warn(`Could not load TheAudioDB profile for ${requestedName}:`, error);
+      }
+    }
+
+    const premiumImageUrl = theAudioDbImage(theAudioDb);
+    const wikipediaImageUrl = secureImageUrl(wikipedia?.imageUrl);
+    let imageUrl = wikipediaImageUrl || premiumImageUrl;
+    let imageProvider = wikipediaImageUrl
+      ? "wikipedia"
+      : premiumImageUrl
+        ? "theaudiodb"
+        : null;
     let fanartUrl = null;
     let fanartAttempted = false;
     if (!imageUrl && String(fanartApiKey).trim()) {
@@ -340,6 +420,13 @@ export const createArtistProfileService = ({
       }
     }
 
+    const musicBrainzGenres = (Array.isArray(artist?.genres) ? artist.genres : [])
+      .map((genre) => genre?.name)
+      .filter(Boolean)
+      .slice(0, 8);
+    const premiumGenres = theAudioDbGenres(theAudioDb);
+    const theAudioDbId = nonEmptyString(theAudioDb?.idArtist);
+
     return {
       artistKey,
       requestedName,
@@ -348,20 +435,22 @@ export const createArtistProfileService = ({
       disambiguation: artist?.disambiguation || null,
       status: "ready",
       type: artist?.type || null,
-      country: artist?.country || null,
+      country: artist?.country || nonEmptyString(theAudioDb?.strCountry),
       area: artist?.area?.name || artist?.["begin-area"]?.name || null,
-      begin: artist?.["life-span"]?.begin || null,
+      begin: artist?.["life-span"]?.begin
+        || nonEmptyString(theAudioDb?.intFormedYear, theAudioDb?.intBornYear),
       end: artist?.["life-span"]?.end || null,
       ended: Boolean(artist?.["life-span"]?.ended),
-      genres: (Array.isArray(artist?.genres) ? artist.genres : [])
-        .map((genre) => genre?.name)
-        .filter(Boolean)
-        .slice(0, 8),
+      genres: musicBrainzGenres.length > 0 ? musicBrainzGenres : premiumGenres,
       description: wikipedia?.description || null,
-      biography: wikipedia?.biography || null,
+      biography: wikipedia?.biography
+        || nonEmptyString(theAudioDb?.strBiography, theAudioDb?.strBiographyEN),
       imagePath,
       imageUrl,
       imageProvider,
+      theAudioDbAttempted,
+      theAudioDbId,
+      theAudioDbUrl: theAudioDbId ? `https://www.theaudiodb.com/artist/${theAudioDbId}` : null,
       fanartAttempted,
       musicBrainzId,
       musicBrainzUrl: `https://musicbrainz.org/artist/${musicBrainzId}`,
@@ -382,21 +471,32 @@ export const createArtistProfileService = ({
       }
     });
 
-  const getProfile = async (db, artistName, { force = false, fanartApiKey = "" } = {}) => {
+  const getProfile = async (
+    db,
+    artistName,
+    { force = false, fanartApiKey = "", theAudioDbApiKey = "" } = {},
+  ) => {
     const requestedName = String(artistName ?? "").trim();
     const artistKey = normalizeArtistKey(requestedName);
     if (!artistKey) throw new Error("Artist name is required");
 
     const cached = readCachedProfile(db, artistKey);
-    if (!force && !cachedProfileNeedsRefresh(cached, now(), fanartApiKey)) {
+    if (!force && !cachedProfileNeedsRefresh(cached, now(), { fanartApiKey, theAudioDbApiKey })) {
       return { ...cached.profile, cacheState: "fresh" };
     }
 
-    const requestKey = `${artistKey}:${String(fanartApiKey).trim() ? "fanart" : "default"}`;
+    const requestKey = [
+      artistKey,
+      String(theAudioDbApiKey).trim() ? "theaudiodb" : "no-theaudiodb",
+      String(fanartApiKey).trim() ? "fanart" : "no-fanart",
+    ].join(":");
     if (inFlight.has(requestKey)) return inFlight.get(requestKey);
     const pending = (async () => {
       try {
-        const profile = await fetchProfile(db, requestedName, artistKey, { fanartApiKey });
+        const profile = await fetchProfile(db, requestedName, artistKey, {
+          fanartApiKey,
+          theAudioDbApiKey,
+        });
         writeCachedProfile(db, artistKey, requestedName, profile, now());
         return { ...profile, cacheState: "fresh" };
       } catch (error) {
@@ -412,7 +512,10 @@ export const createArtistProfileService = ({
     }
   };
 
-  const scanProfiles = async (db, { fanartApiKey = "", limit = 25 } = {}) => {
+  const scanProfiles = async (
+    db,
+    { fanartApiKey = "", theAudioDbApiKey = "", limit = 25 } = {},
+  ) => {
     if (scanInFlight.has(db)) return scanInFlight.get(db);
     const pending = (async () => {
       const artistRows = db.prepare(`
@@ -454,7 +557,7 @@ export const createArtistProfileService = ({
       let failed = 0;
       for (const artist of batch) {
         try {
-          const profile = await getProfile(db, artist.name, { fanartApiKey });
+          const profile = await getProfile(db, artist.name, { fanartApiKey, theAudioDbApiKey });
           if (profile.cacheState === "stale") {
             failed += 1;
             scanRetryAfter.set(artist.artistKey, now() + SCAN_FAILURE_BACKOFF_MS);

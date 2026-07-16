@@ -17,6 +17,7 @@ export const normalizeArtistProfileKey = (artistName: string) => artistName
 
 export const useArtistProfiles = () => {
   const resolveDbPath = useDbPath();
+  const theAudioDbApiKey = useSettingsStore((state) => state.theAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const [profiles, setProfiles] = useState<Record<string, ArtistProfile>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(() => new Set());
@@ -47,7 +48,11 @@ export const useArtistProfiles = () => {
     const run = async () => {
       try {
         const dbPath = await resolveDbPath();
-        const result = await scanArtistProfiles(dbPath, fanartApiKey, SCAN_BATCH_SIZE);
+        const result = await scanArtistProfiles(
+          dbPath,
+          { fanartApiKey, theAudioDbApiKey },
+          SCAN_BATCH_SIZE,
+        );
         if (cancelled) return;
         const cached = await loadCachedArtistProfiles(dbPath);
         if (cancelled) return;
@@ -64,7 +69,7 @@ export const useArtistProfiles = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [fanartApiKey, resolveDbPath]);
+  }, [fanartApiKey, resolveDbPath, theAudioDbApiKey]);
 
   const loadProfile = useCallback(async (artistName: string, force = false) => {
     const artistKey = normalizeArtistProfileKey(artistName);
@@ -77,7 +82,10 @@ export const useArtistProfiles = () => {
     });
     try {
       const dbPath = await resolveDbPath();
-      const profile = await getArtistProfile(dbPath, artistName, force, fanartApiKey);
+      const profile = await getArtistProfile(dbPath, artistName, force, {
+        fanartApiKey,
+        theAudioDbApiKey,
+      });
       setProfiles((current) => ({ ...current, [artistKey]: profile }));
       return profile;
     } catch (error) {
@@ -93,7 +101,7 @@ export const useArtistProfiles = () => {
         return next;
       });
     }
-  }, [fanartApiKey, resolveDbPath]);
+  }, [fanartApiKey, resolveDbPath, theAudioDbApiKey]);
 
   return { profiles, loadingKeys, errors, loadProfile };
 };

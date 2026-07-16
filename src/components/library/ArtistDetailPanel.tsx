@@ -80,11 +80,12 @@ export const ArtistDetailPanel = ({
             {profile.genres.map((genre) => <span key={genre}>{genre}</span>)}
           </div>
         )}
-        {(profile?.wikipediaUrl || profile?.musicBrainzUrl || profile?.fanartUrl) && (
+        {(profile?.wikipediaUrl || profile?.musicBrainzUrl || profile?.theAudioDbUrl || profile?.fanartUrl) && (
           <div className="artist-detail-sources">
             <span>Information from</span>
             {profile.wikipediaUrl && <button onClick={() => onOpenSource(profile.wikipediaUrl!)} type="button">Wikipedia <ExternalLink /></button>}
             {profile.musicBrainzUrl && <button onClick={() => onOpenSource(profile.musicBrainzUrl!)} type="button">MusicBrainz <ExternalLink /></button>}
+            {profile.theAudioDbUrl && <button onClick={() => onOpenSource(profile.theAudioDbUrl!)} type="button">TheAudioDB <ExternalLink /></button>}
             {profile.fanartUrl && <button onClick={() => onOpenSource(profile.fanartUrl!)} type="button">Fanart.tv <ExternalLink /></button>}
             {profile.cacheState === "stale" && <em>cached copy</em>}
           </div>

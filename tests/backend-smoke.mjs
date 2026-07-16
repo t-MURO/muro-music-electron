@@ -172,7 +172,9 @@ try {
   const artistFetchCalls = [];
   const artistId = "11111111-1111-4111-8111-111111111111";
   const fallbackArtistId = "22222222-2222-4222-8222-222222222222";
+  const premiumArtistId = "33333333-3333-4333-8333-333333333333";
   let fanartAuthorization = null;
+  let theAudioDbAuthorization = null;
   const artistProfileService = createArtistProfileService({
     cacheDir: path.join(directory, "artist-profile-cache"),
     musicBrainzIntervalMs: 0,
@@ -181,9 +183,14 @@ try {
       if (String(url).startsWith("https://musicbrainz.org/ws/2/artist/?")) {
         const requestedArtist = new URL(String(url)).searchParams.get("query");
         const isFallbackArtist = requestedArtist === "Fallback Muro";
+        const isPremiumArtist = requestedArtist === "Premium Muro";
         return new Response(JSON.stringify({
           artists: [{
-            id: isFallbackArtist ? fallbackArtistId : artistId,
+            id: isFallbackArtist
+              ? fallbackArtistId
+              : isPremiumArtist
+                ? premiumArtistId
+                : artistId,
             name: requestedArtist,
             score: 100,
           }],
@@ -192,33 +199,60 @@ try {
       if (
         String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`)
         || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${fallbackArtistId}?`)
+        || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${premiumArtistId}?`)
       ) {
         const isFallbackArtist = String(url).includes(fallbackArtistId);
+        const isPremiumArtist = String(url).includes(premiumArtistId);
         return new Response(JSON.stringify({
-          id: isFallbackArtist ? fallbackArtistId : artistId,
-          name: isFallbackArtist ? "Fallback Muro" : "Muro",
+          id: isFallbackArtist ? fallbackArtistId : isPremiumArtist ? premiumArtistId : artistId,
+          name: isFallbackArtist ? "Fallback Muro" : isPremiumArtist ? "Premium Muro" : "Muro",
           type: "Person",
-          country: "DE",
-          area: { name: "Berlin" },
-          "life-span": { begin: "1990" },
-          genres: [{ name: "electronic" }, { name: "house" }],
+          country: isPremiumArtist ? null : "DE",
+          area: isPremiumArtist ? null : { name: "Berlin" },
+          "life-span": isPremiumArtist ? {} : { begin: "1990" },
+          genres: isPremiumArtist ? [] : [{ name: "electronic" }, { name: "house" }],
           relations: [{
             type: "wikipedia",
             url: { resource: isFallbackArtist
               ? "https://en.wikipedia.org/wiki/Fallback_Muro"
-              : "https://en.wikipedia.org/wiki/Muro_(musician)" },
+              : isPremiumArtist
+                ? "https://en.wikipedia.org/wiki/Premium_Muro"
+                : "https://en.wikipedia.org/wiki/Muro_(musician)" },
           }],
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url).includes("/api/rest_v1/page/summary/")) {
         const isFallbackArtist = String(url).includes("Fallback_Muro");
+        const isPremiumArtist = String(url).includes("Premium_Muro");
         return new Response(JSON.stringify({
-          extract: `${isFallbackArtist ? "Fallback Muro" : "Muro"} is an electronic musician used by the smoke test.`,
-          description: "Electronic musician",
-          thumbnail: isFallbackArtist ? undefined : { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
+          extract: isPremiumArtist
+            ? null
+            : `${isFallbackArtist ? "Fallback Muro" : "Muro"} is an electronic musician used by the smoke test.`,
+          description: isPremiumArtist ? null : "Electronic musician",
+          thumbnail: isFallbackArtist || isPremiumArtist
+            ? undefined
+            : { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
           content_urls: { desktop: { page: isFallbackArtist
             ? "https://en.wikipedia.org/wiki/Fallback_Muro"
-            : "https://en.wikipedia.org/wiki/Muro_(musician)" } },
+            : isPremiumArtist
+              ? "https://en.wikipedia.org/wiki/Premium_Muro"
+              : "https://en.wikipedia.org/wiki/Muro_(musician)" } },
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url) === `https://www.theaudiodb.com/api/v2/json/lookup/artist_mb/${premiumArtistId}`) {
+        theAudioDbAuthorization = options.headers?.["X-API-KEY"] ?? null;
+        return new Response(JSON.stringify({
+          lookup: [{
+            idArtist: "654321",
+            strArtist: "Premium Muro",
+            intFormedYear: "2005",
+            strBiography: "Premium biography supplied by TheAudioDB.",
+            strGenre: "Electronic; House",
+            strStyle: "Downtempo",
+            strCountry: "Germany",
+            strArtistThumb: "https://assets.theaudiodb.com/premium-muro.jpg",
+            strMusicBrainzID: premiumArtistId,
+          }],
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url) === `https://webservice.fanart.tv/v3.2/music/${fallbackArtistId}`) {
@@ -237,6 +271,11 @@ try {
       }
       if (String(url) === "https://assets.fanart.tv/fallback-best.jpg") {
         return new Response(Buffer.from("fanart smoke image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      if (String(url) === "https://assets.theaudiodb.com/premium-muro.jpg") {
+        return new Response(Buffer.from("theaudiodb smoke image"), {
           headers: { "content-type": "image/jpeg" },
         });
       }
@@ -275,14 +314,52 @@ try {
   const fallbackFetchCount = artistFetchCalls.length;
   await artistProfileService.getProfile(db, "Fallback Muro", { fanartApiKey: "smoke-fanart-key" });
   assert.equal(artistFetchCalls.length, fallbackFetchCount, "cached Fanart.tv images should not be fetched again");
+  const premiumWithoutKey = await artistProfileService.getProfile(db, "Premium Muro");
+  assert.equal(premiumWithoutKey.biography, null);
+  assert.equal(premiumWithoutKey.imageUrl, null);
+  assert.equal(premiumWithoutKey.theAudioDbAttempted, false);
+  const fetchCountBeforeAddingTheAudioDbKey = artistFetchCalls.length;
+  const premiumProfile = await artistProfileService.getProfile(db, "Premium Muro", {
+    theAudioDbApiKey: "smoke-theaudiodb-key",
+  });
+  assert.ok(
+    artistFetchCalls.length > fetchCountBeforeAddingTheAudioDbKey,
+    "adding a TheAudioDB key should retry a fresh cached profile on demand",
+  );
+  assert.equal(theAudioDbAuthorization, "smoke-theaudiodb-key");
+  assert.equal(premiumProfile.theAudioDbAttempted, true);
+  assert.equal(premiumProfile.theAudioDbId, "654321");
+  assert.equal(premiumProfile.theAudioDbUrl, "https://www.theaudiodb.com/artist/654321");
+  assert.equal(premiumProfile.biography, "Premium biography supplied by TheAudioDB.");
+  assert.equal(premiumProfile.country, "Germany");
+  assert.equal(premiumProfile.begin, "2005");
+  assert.deepEqual(premiumProfile.genres, ["Electronic", "House", "Downtempo"]);
+  assert.equal(premiumProfile.imageProvider, "theaudiodb");
+  assert.ok(fs.existsSync(premiumProfile.imagePath), "TheAudioDB artwork should be cached on disk");
+  assert.ok(
+    artistFetchCalls.every((url) => !url.includes("smoke-theaudiodb-key")),
+    "TheAudioDB credentials should never appear in request URLs",
+  );
+  const premiumFetchCount = artistFetchCalls.length;
+  await artistProfileService.getProfile(db, "Premium Muro", {
+    theAudioDbApiKey: "smoke-theaudiodb-key",
+  });
+  assert.equal(
+    artistFetchCalls.length,
+    premiumFetchCount,
+    "cached TheAudioDB profiles should not be fetched again",
+  );
   assert.deepEqual(
     artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
-    ["fallback muro", "muro"],
+    ["fallback muro", "muro", "premium muro"],
   );
   db.prepare("UPDATE artist_profiles SET fetched_at = 0 WHERE artist_key = ?").run("muro");
   const fetchCountBeforeStaleBackgroundScan = artistFetchCalls.length;
   assert.equal(
-    (await artistProfileService.scanProfiles(db, { limit: 1 })).checked,
+    (await artistProfileService.scanProfiles(db, {
+      limit: 1,
+      theAudioDbApiKey: "smoke-theaudiodb-key",
+    })).checked,
     0,
     "background scans should not refresh an existing stale profile",
   );

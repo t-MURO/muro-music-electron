@@ -79,6 +79,8 @@ const smokeArtistProfile = {
   musicBrainzId: "11111111-1111-4111-8111-111111111111",
   musicBrainzUrl: "https://musicbrainz.org/artist/11111111-1111-4111-8111-111111111111",
   wikipediaUrl: "https://en.wikipedia.org/wiki/Muro_(musician)",
+  theAudioDbId: "654321",
+  theAudioDbUrl: "https://www.theaudiodb.com/artist/654321",
   fanartUrl: "https://fanart.tv/artist/11111111-1111-4111-8111-111111111111/",
   fetchedAt: "2026-07-15T12:00:00.000Z",
   cacheState: "fresh",
@@ -516,9 +518,12 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[data-settings-tab="application"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
+        const theAudioDbApiKeyInput = document.querySelector("[data-theaudiodb-api-key]");
         const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
         const artistInformationSettingsReady = Boolean(
           document.querySelector("[data-artist-information-settings]") &&
+          theAudioDbApiKeyInput instanceof HTMLInputElement &&
+          theAudioDbApiKeyInput.type === "password" &&
           fanartApiKeyInput instanceof HTMLInputElement &&
           fanartApiKeyInput.type === "password"
         );
@@ -637,6 +642,7 @@ app.whenReady().then(async () => {
         const albumArtistProfileReady = Boolean(
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
           document.querySelector(".artist-detail-biography")?.textContent?.includes("renderer smoke test") &&
+          document.querySelector(".artist-detail-sources")?.textContent?.includes("TheAudioDB") &&
           document.querySelector(".artist-detail-sources")?.textContent?.includes("Fanart.tv")
         );
 
@@ -950,7 +956,7 @@ app.whenReady().then(async () => {
         return;
       }
       if (!result.artistInformationSettingsReady) {
-        fail("Fanart.tv fallback settings are not visible in the Application settings tab");
+        fail("Artist information provider settings are not visible in the Application settings tab");
         return;
       }
       if (!result.djMixFeatureGateReady) {

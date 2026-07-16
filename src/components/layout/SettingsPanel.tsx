@@ -107,6 +107,8 @@ export const SettingsPanel = ({
   const setAutoMix = useSettingsStore((state) => state.setAutoMix);
   const setMixBars = useSettingsStore((state) => state.setMixBars);
   const setMixPreservePitch = useSettingsStore((state) => state.setMixPreservePitch);
+  const theAudioDbApiKey = useSettingsStore((state) => state.theAudioDbApiKey);
+  const setTheAudioDbApiKey = useSettingsStore((state) => state.setTheAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const setFanartApiKey = useSettingsStore((state) => state.setFanartApiKey);
   const writesAudioTags = Object.values(analysisOutputs).some((mode) => mode !== "none");
@@ -322,32 +324,62 @@ export const SettingsPanel = ({
               <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                 Artist information
               </h3>
-              <div className="max-w-xl space-y-3">
-                <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="fanart-api-key">
-                  Fanart.tv project API key
-                </label>
-                <input
-                  autoComplete="off"
-                  className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
-                  data-fanart-api-key
-                  id="fanart-api-key"
-                  onChange={(event) => setFanartApiKey(event.target.value.trim())}
-                  placeholder="Optional"
-                  spellCheck={false}
-                  type="password"
-                  value={fanartApiKey}
-                />
-                <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
-                  MusicBrainz and Wikipedia are used first. When Wikipedia has no artist image,
-                  Muro can use Fanart.tv and cache the result locally.
-                </p>
-                <button
-                  className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
-                  onClick={() => { void openExternal("https://fanart.tv/get-an-api-key/"); }}
-                  type="button"
-                >
-                  Get a Fanart.tv API key <ExternalLink className="h-3 w-3" />
-                </button>
+              <div className="max-w-xl space-y-5">
+                <div className="space-y-3">
+                  <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="theaudiodb-api-key">
+                    TheAudioDB Premium API key
+                  </label>
+                  <input
+                    autoComplete="off"
+                    className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                    data-theaudiodb-api-key
+                    id="theaudiodb-api-key"
+                    onChange={(event) => setTheAudioDbApiKey(event.target.value.trim())}
+                    placeholder="Paste your Premium API key"
+                    spellCheck={false}
+                    type="password"
+                    value={theAudioDbApiKey}
+                  />
+                  <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                    Uses the Premium V2 API to fill missing artist biographies, genres, countries,
+                    and artwork. The key stays in this app's local settings.
+                  </p>
+                  <button
+                    className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                    onClick={() => { void openExternal("https://www.theaudiodb.com/free_music_api"); }}
+                    type="button"
+                  >
+                    TheAudioDB API details <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 border-t border-[var(--color-border)] pt-5">
+                  <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="fanart-api-key">
+                    Fanart.tv project API key
+                  </label>
+                  <input
+                    autoComplete="off"
+                    className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                    data-fanart-api-key
+                    id="fanart-api-key"
+                    onChange={(event) => setFanartApiKey(event.target.value.trim())}
+                    placeholder="Optional fallback"
+                    spellCheck={false}
+                    type="password"
+                    value={fanartApiKey}
+                  />
+                  <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                    MusicBrainz and Wikipedia are used first, followed by TheAudioDB. Fanart.tv is
+                    the final artwork fallback. Downloaded images are cached locally.
+                  </p>
+                  <button
+                    className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                    onClick={() => { void openExternal("https://fanart.tv/get-an-api-key/"); }}
+                    type="button"
+                  >
+                    Get a Fanart.tv API key <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
             </div>
               </>

@@ -53,8 +53,18 @@ export const getArtistProfile = (
   dbPath: string,
   artistName: string,
   force = false,
-  fanartApiKey = "",
-) => invoke<ArtistProfile>("get_artist_profile", { dbPath, artistName, force, fanartApiKey });
+  providerKeys: ArtistProfileProviderKeys = {},
+) => invoke<ArtistProfile>("get_artist_profile", {
+  dbPath,
+  artistName,
+  force,
+  ...providerKeys,
+});
+
+export type ArtistProfileProviderKeys = {
+  fanartApiKey?: string;
+  theAudioDbApiKey?: string;
+};
 
 export type ArtistProfileScanResult = {
   checked: number;
@@ -67,9 +77,9 @@ export type ArtistProfileScanResult = {
 
 export const scanArtistProfiles = (
   dbPath: string,
-  fanartApiKey = "",
+  providerKeys: ArtistProfileProviderKeys = {},
   limit = 25,
-) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, fanartApiKey, limit });
+) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, ...providerKeys, limit });
 
 // ============================================================================
 // Playlist Operations
