@@ -107,6 +107,8 @@ export const SettingsPanel = ({
   const setAutoMix = useSettingsStore((state) => state.setAutoMix);
   const setMixBars = useSettingsStore((state) => state.setMixBars);
   const setMixPreservePitch = useSettingsStore((state) => state.setMixPreservePitch);
+  const lastFmApiKey = useSettingsStore((state) => state.lastFmApiKey);
+  const setLastFmApiKey = useSettingsStore((state) => state.setLastFmApiKey);
   const theAudioDbApiKey = useSettingsStore((state) => state.theAudioDbApiKey);
   const setTheAudioDbApiKey = useSettingsStore((state) => state.setTheAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
@@ -326,6 +328,34 @@ export const SettingsPanel = ({
               </h3>
               <div className="max-w-xl space-y-5">
                 <div className="space-y-3">
+                  <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="lastfm-api-key">
+                    Last.fm API key
+                  </label>
+                  <input
+                    autoComplete="off"
+                    className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                    data-lastfm-api-key
+                    id="lastfm-api-key"
+                    onChange={(event) => setLastFmApiKey(event.target.value.trim())}
+                    placeholder="Paste your Last.fm API key"
+                    spellCheck={false}
+                    type="password"
+                    value={lastFmApiKey}
+                  />
+                  <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                    Adds artist biographies, tags, profile links, and similar artists. Last.fm
+                    artwork is not used. The key stays in this app's local settings.
+                  </p>
+                  <button
+                    className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                    onClick={() => { void openExternal("https://www.last.fm/api/account/create"); }}
+                    type="button"
+                  >
+                    Create a Last.fm API key <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 border-t border-[var(--color-border)] pt-5">
                   <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="theaudiodb-api-key">
                     TheAudioDB Premium API key
                   </label>
@@ -369,8 +399,9 @@ export const SettingsPanel = ({
                     value={fanartApiKey}
                   />
                   <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
-                    MusicBrainz and Wikipedia are used first, followed by TheAudioDB. Fanart.tv is
-                    the final artwork fallback. Downloaded images are cached locally.
+                    MusicBrainz and Wikipedia are used first. Last.fm and TheAudioDB fill missing
+                    text metadata, while Fanart.tv is the final artwork fallback. Downloaded images
+                    and artist profiles are cached locally.
                   </p>
                   <button
                     className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"

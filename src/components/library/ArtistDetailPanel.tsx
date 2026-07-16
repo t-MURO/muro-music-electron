@@ -80,11 +80,26 @@ export const ArtistDetailPanel = ({
             {profile.genres.map((genre) => <span key={genre}>{genre}</span>)}
           </div>
         )}
-        {(profile?.wikipediaUrl || profile?.musicBrainzUrl || profile?.theAudioDbUrl || profile?.fanartUrl) && (
+        {profile?.similarArtists && profile.similarArtists.length > 0 && (
+          <div className="artist-detail-similar">
+            <span>Similar artists</span>
+            <div>
+              {profile.similarArtists.map((artist) => artist.url
+                ? (
+                  <button key={artist.name} onClick={() => onOpenSource(artist.url!)} type="button">
+                    {artist.name} <ExternalLink />
+                  </button>
+                )
+                : <em key={artist.name}>{artist.name}</em>)}
+            </div>
+          </div>
+        )}
+        {(profile?.wikipediaUrl || profile?.musicBrainzUrl || profile?.lastFmUrl || profile?.theAudioDbUrl || profile?.fanartUrl) && (
           <div className="artist-detail-sources">
             <span>Information from</span>
             {profile.wikipediaUrl && <button onClick={() => onOpenSource(profile.wikipediaUrl!)} type="button">Wikipedia <ExternalLink /></button>}
             {profile.musicBrainzUrl && <button onClick={() => onOpenSource(profile.musicBrainzUrl!)} type="button">MusicBrainz <ExternalLink /></button>}
+            {profile.lastFmUrl && <button onClick={() => onOpenSource(profile.lastFmUrl!)} type="button">Last.fm <ExternalLink /></button>}
             {profile.theAudioDbUrl && <button onClick={() => onOpenSource(profile.theAudioDbUrl!)} type="button">TheAudioDB <ExternalLink /></button>}
             {profile.fanartUrl && <button onClick={() => onOpenSource(profile.fanartUrl!)} type="button">Fanart.tv <ExternalLink /></button>}
             {profile.cacheState === "stale" && <em>cached copy</em>}

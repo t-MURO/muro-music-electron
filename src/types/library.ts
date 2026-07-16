@@ -83,6 +83,13 @@ export type ArtistProfile = {
   imagePath?: string | null;
   imageUrl?: string | null;
   imageProvider?: "wikipedia" | "theaudiodb" | "fanart.tv" | null;
+  lastFmAttempted?: boolean;
+  lastFmUrl?: string | null;
+  similarArtists?: Array<{
+    name: string;
+    musicBrainzId?: string | null;
+    url?: string | null;
+  }>;
   theAudioDbAttempted?: boolean;
   theAudioDbId?: string | null;
   theAudioDbUrl?: string | null;

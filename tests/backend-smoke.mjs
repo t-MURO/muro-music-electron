@@ -229,7 +229,9 @@ try {
   const artistId = "11111111-1111-4111-8111-111111111111";
   const fallbackArtistId = "22222222-2222-4222-8222-222222222222";
   const premiumArtistId = "33333333-3333-4333-8333-333333333333";
+  const lastFmArtistId = "44444444-4444-4444-8444-444444444444";
   let fanartAuthorization = null;
+  let lastFmAuthorization = null;
   let theAudioDbAuthorization = null;
   const artistProfileService = createArtistProfileService({
     cacheDir: path.join(directory, "artist-profile-cache"),
@@ -240,10 +242,13 @@ try {
         const requestedArtist = new URL(String(url)).searchParams.get("query");
         const isFallbackArtist = requestedArtist === "Fallback Muro";
         const isPremiumArtist = requestedArtist === "Premium Muro";
+        const isLastFmArtist = requestedArtist === "LastFm Muro";
         return new Response(JSON.stringify({
           artists: [{
             id: isFallbackArtist
               ? fallbackArtistId
+              : isLastFmArtist
+                ? lastFmArtistId
               : isPremiumArtist
                 ? premiumArtistId
                 : artistId,
@@ -256,23 +261,39 @@ try {
         String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`)
         || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${fallbackArtistId}?`)
         || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${premiumArtistId}?`)
+        || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${lastFmArtistId}?`)
       ) {
         const isFallbackArtist = String(url).includes(fallbackArtistId);
         const isPremiumArtist = String(url).includes(premiumArtistId);
+        const isLastFmArtist = String(url).includes(lastFmArtistId);
         return new Response(JSON.stringify({
-          id: isFallbackArtist ? fallbackArtistId : isPremiumArtist ? premiumArtistId : artistId,
-          name: isFallbackArtist ? "Fallback Muro" : isPremiumArtist ? "Premium Muro" : "Muro",
+          id: isFallbackArtist
+            ? fallbackArtistId
+            : isPremiumArtist
+              ? premiumArtistId
+              : isLastFmArtist
+                ? lastFmArtistId
+                : artistId,
+          name: isFallbackArtist
+            ? "Fallback Muro"
+            : isPremiumArtist
+              ? "Premium Muro"
+              : isLastFmArtist
+                ? "LastFm Muro"
+                : "Muro",
           type: "Person",
-          country: isPremiumArtist ? null : "DE",
-          area: isPremiumArtist ? null : { name: "Berlin" },
-          "life-span": isPremiumArtist ? {} : { begin: "1990" },
-          genres: isPremiumArtist ? [] : [{ name: "electronic" }, { name: "house" }],
+          country: isPremiumArtist || isLastFmArtist ? null : "DE",
+          area: isPremiumArtist || isLastFmArtist ? null : { name: "Berlin" },
+          "life-span": isPremiumArtist || isLastFmArtist ? {} : { begin: "1990" },
+          genres: isPremiumArtist || isLastFmArtist ? [] : [{ name: "electronic" }, { name: "house" }],
           relations: [{
             type: "wikipedia",
             url: { resource: isFallbackArtist
               ? "https://en.wikipedia.org/wiki/Fallback_Muro"
               : isPremiumArtist
                 ? "https://en.wikipedia.org/wiki/Premium_Muro"
+                : isLastFmArtist
+                  ? "https://en.wikipedia.org/wiki/LastFm_Muro"
                 : "https://en.wikipedia.org/wiki/Muro_(musician)" },
           }],
         }), { headers: { "content-type": "application/json" } });
@@ -280,19 +301,49 @@ try {
       if (String(url).includes("/api/rest_v1/page/summary/")) {
         const isFallbackArtist = String(url).includes("Fallback_Muro");
         const isPremiumArtist = String(url).includes("Premium_Muro");
+        const isLastFmArtist = String(url).includes("LastFm_Muro");
         return new Response(JSON.stringify({
-          extract: isPremiumArtist
+          extract: isPremiumArtist || isLastFmArtist
             ? null
             : `${isFallbackArtist ? "Fallback Muro" : "Muro"} is an electronic musician used by the smoke test.`,
-          description: isPremiumArtist ? null : "Electronic musician",
-          thumbnail: isFallbackArtist || isPremiumArtist
+          description: isPremiumArtist || isLastFmArtist ? null : "Electronic musician",
+          thumbnail: isFallbackArtist || isPremiumArtist || isLastFmArtist
             ? undefined
             : { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
           content_urls: { desktop: { page: isFallbackArtist
             ? "https://en.wikipedia.org/wiki/Fallback_Muro"
             : isPremiumArtist
               ? "https://en.wikipedia.org/wiki/Premium_Muro"
+              : isLastFmArtist
+                ? "https://en.wikipedia.org/wiki/LastFm_Muro"
               : "https://en.wikipedia.org/wiki/Muro_(musician)" } },
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url).startsWith("https://ws.audioscrobbler.com/2.0/?")) {
+        const requestUrl = new URL(String(url));
+        lastFmAuthorization = requestUrl.searchParams.get("api_key");
+        assert.equal(requestUrl.searchParams.get("method"), "artist.getinfo");
+        assert.equal(requestUrl.searchParams.get("mbid"), lastFmArtistId);
+        return new Response(JSON.stringify({
+          artist: {
+            name: "LastFm Muro",
+            mbid: lastFmArtistId,
+            url: "http://www.last.fm/music/LastFm+Muro",
+            image: [{ size: "extralarge", "#text": "https://lastfm.example/ignored.jpg" }],
+            bio: {
+              content: "Last.fm &amp; community biography.<br>Built for smoke. <a href=\"https://www.last.fm/music/LastFm+Muro/+wiki\">Read more on Last.fm</a>",
+            },
+            tags: {
+              tag: [{ name: "Techno" }, { name: "Minimal" }, { name: "techno" }],
+            },
+            similar: {
+              artist: [{
+                name: "Neighbor One",
+                mbid: "55555555-5555-4555-8555-555555555555",
+                url: "http://www.last.fm/music/Neighbor+One",
+              }],
+            },
+          },
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url) === `https://www.theaudiodb.com/api/v2/json/lookup/artist_mb/${premiumArtistId}`) {
@@ -405,9 +456,40 @@ try {
     premiumFetchCount,
     "cached TheAudioDB profiles should not be fetched again",
   );
+  const lastFmWithoutKey = await artistProfileService.getProfile(db, "LastFm Muro");
+  assert.equal(lastFmWithoutKey.biography, null);
+  assert.equal(lastFmWithoutKey.lastFmAttempted, false);
+  const fetchCountBeforeAddingLastFmKey = artistFetchCalls.length;
+  const lastFmProfile = await artistProfileService.getProfile(db, "LastFm Muro", {
+    lastFmApiKey: "smoke-lastfm-key",
+  });
+  assert.ok(
+    artistFetchCalls.length > fetchCountBeforeAddingLastFmKey,
+    "adding a Last.fm key should retry a fresh cached profile on demand",
+  );
+  assert.equal(lastFmAuthorization, "smoke-lastfm-key");
+  assert.equal(lastFmProfile.lastFmAttempted, true);
+  assert.equal(lastFmProfile.lastFmUrl, "https://www.last.fm/music/LastFm+Muro");
+  assert.equal(lastFmProfile.biography, "Last.fm & community biography. Built for smoke.");
+  assert.deepEqual(lastFmProfile.genres, ["Techno", "Minimal"]);
+  assert.deepEqual(lastFmProfile.similarArtists, [{
+    name: "Neighbor One",
+    musicBrainzId: "55555555-5555-4555-8555-555555555555",
+    url: "https://www.last.fm/music/Neighbor+One",
+  }]);
+  assert.equal(lastFmProfile.imageUrl, null, "Last.fm artwork must not be used");
+  const lastFmFetchCount = artistFetchCalls.length;
+  await artistProfileService.getProfile(db, "LastFm Muro", {
+    lastFmApiKey: "smoke-lastfm-key",
+  });
+  assert.equal(
+    artistFetchCalls.length,
+    lastFmFetchCount,
+    "cached Last.fm profiles should not be fetched again",
+  );
   assert.deepEqual(
     artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
-    ["fallback muro", "muro", "premium muro"],
+    ["fallback muro", "lastfm muro", "muro", "premium muro"],
   );
   db.prepare("UPDATE artist_profiles SET fetched_at = 0 WHERE artist_key = ?").run("muro");
   const fetchCountBeforeStaleBackgroundScan = artistFetchCalls.length;

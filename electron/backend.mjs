@@ -238,15 +238,17 @@ export const createBackend = ({
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
-    get_artist_profile: ({ dbPath, artistName, force, fanartApiKey, theAudioDbApiKey }) =>
+    get_artist_profile: ({ dbPath, artistName, force, fanartApiKey, lastFmApiKey, theAudioDbApiKey }) =>
       artistProfiles.getProfile(openDatabase(dbPath), artistName, {
         force: Boolean(force),
         fanartApiKey,
+        lastFmApiKey,
         theAudioDbApiKey,
       }),
-    scan_artist_profiles: ({ dbPath, fanartApiKey, theAudioDbApiKey, limit }) =>
+    scan_artist_profiles: ({ dbPath, fanartApiKey, lastFmApiKey, theAudioDbApiKey, limit }) =>
       artistProfiles.scanProfiles(openDatabase(dbPath), {
         fanartApiKey,
+        lastFmApiKey,
         theAudioDbApiKey,
         limit,
       }),

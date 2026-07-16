@@ -35,6 +35,7 @@ type SettingsState = {
   autoMix: boolean;
   mixBars: MixBars;
   mixPreservePitch: boolean;
+  lastFmApiKey: string;
   theAudioDbApiKey: string;
   fanartApiKey: string;
 };
@@ -55,6 +56,7 @@ type SettingsActions = {
   setAutoMix: (autoMix: boolean) => void;
   setMixBars: (mixBars: MixBars) => void;
   setMixPreservePitch: (mixPreservePitch: boolean) => void;
+  setLastFmApiKey: (lastFmApiKey: string) => void;
   setTheAudioDbApiKey: (theAudioDbApiKey: string) => void;
   setFanartApiKey: (fanartApiKey: string) => void;
 };
@@ -85,6 +87,7 @@ export const useSettingsStore = create<SettingsStore>()(
       autoMix: false,
       mixBars: 8,
       mixPreservePitch: true,
+      lastFmApiKey: "",
       theAudioDbApiKey: "",
       fanartApiKey: "",
 
@@ -121,6 +124,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setAutoMix: (autoMix) => set({ autoMix }),
       setMixBars: (mixBars) => set({ mixBars }),
       setMixPreservePitch: (mixPreservePitch) => set({ mixPreservePitch }),
+      setLastFmApiKey: (lastFmApiKey) => set({ lastFmApiKey }),
       setTheAudioDbApiKey: (theAudioDbApiKey) => set({ theAudioDbApiKey }),
       setFanartApiKey: (fanartApiKey) => set({ fanartApiKey }),
     }),
@@ -139,6 +143,7 @@ export const useSettingsStore = create<SettingsStore>()(
         autoMix: state.autoMix,
         mixBars: state.mixBars,
         mixPreservePitch: state.mixPreservePitch,
+        lastFmApiKey: state.lastFmApiKey,
         theAudioDbApiKey: state.theAudioDbApiKey,
         fanartApiKey: state.fanartApiKey,
       }),

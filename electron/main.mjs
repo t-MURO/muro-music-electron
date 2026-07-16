@@ -179,6 +179,8 @@ const startApplication = async () => {
     const url = new URL(String(value));
     const allowedHost = url.hostname === "musicbrainz.org"
       || url.hostname.endsWith(".wikipedia.org")
+      || url.hostname === "www.last.fm"
+      || url.hostname === "www.theaudiodb.com"
       || url.hostname === "fanart.tv"
       || url.hostname.endsWith(".fanart.tv");
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");

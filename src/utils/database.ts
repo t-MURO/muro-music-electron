@@ -63,6 +63,7 @@ export const getArtistProfile = (
 
 export type ArtistProfileProviderKeys = {
   fanartApiKey?: string;
+  lastFmApiKey?: string;
   theAudioDbApiKey?: string;
 };
 
