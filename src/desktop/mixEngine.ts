@@ -1,4 +1,9 @@
 import type { TransitionPlan } from "../lib/mix/plan";
+import {
+  buildTransitionAutomation,
+  valueAtAutomationPoint,
+  type AutomationPoint,
+} from "../lib/mix/automation";
 
 export type DeckHandle = {
   el: HTMLAudioElement;
@@ -30,8 +35,6 @@ type HoldableParam = AudioParam & {
   cancelAndHoldAtTime?: (cancelTime: number) => AudioParam;
 };
 
-type AutomationPoint = { at: number; value: number };
-
 type ActiveTransition = {
   plan: TransitionPlan;
   incomingEl: HTMLAudioElement;
@@ -62,6 +65,18 @@ let pendingCancelPark: (() => void) | null = null;
 
 const clampNumber = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+const ensureAudioContextRunning = async (): Promise<AudioContext> => {
+  if (!audioContext || audioContext.state === "closed") {
+    audioContext = new AudioContext({ latencyHint: "interactive" });
+  }
+  const context = audioContext;
+  if (context.state !== "running") await context.resume();
+  if (String(context.state) !== "running") {
+    throw new Error("Mix audio output could not be started");
+  }
+  return context;
+};
 
 export function routeElement(el: HTMLAudioElement): void {
   // The graph is created lazily on the first armTransition; until then
@@ -129,52 +144,6 @@ const waitForLoadedMetadata = (player: HTMLAudioElement, timeoutMs: number) =>
     player.addEventListener("error", handleError, { once: true });
   });
 
-const buildAutomation = (plan: TransitionPlan) => {
-  const swapStart = plan.bassSwapAtSec;
-  const swapEnd = Math.min(plan.durationSec, plan.bassSwapAtSec + plan.bassSwapDurSec);
-  // Equal-power crossfade approximated with piecewise-linear ramps.
-  const incomingGain: AutomationPoint[] = [
-    { at: 0, value: 0 },
-    { at: swapStart * 0.5, value: 0.85 * Math.sin(Math.PI / 4) },
-    { at: swapStart, value: 0.85 },
-    { at: swapEnd, value: 1 },
-  ];
-  const outgoingGain: AutomationPoint[] = [
-    { at: 0, value: 1 },
-    { at: swapStart, value: 1 },
-    { at: swapStart + (plan.durationSec - swapStart) * 0.5, value: Math.cos(Math.PI / 4) },
-    { at: plan.durationSec, value: 0 },
-  ];
-  const incomingShelfStart = plan.mode === "beatmatch" ? BASS_KILL_DB : 0;
-  const incomingShelf: AutomationPoint[] = [
-    { at: 0, value: incomingShelfStart },
-    { at: swapStart, value: incomingShelfStart },
-    { at: swapEnd, value: 0 },
-  ];
-  const outgoingShelf: AutomationPoint[] = [
-    { at: 0, value: 0 },
-    { at: swapStart, value: 0 },
-    { at: swapEnd, value: BASS_KILL_DB },
-  ];
-  return { incomingGain, outgoingGain, incomingShelf, outgoingShelf };
-};
-
-const valueAt = (points: AutomationPoint[], offsetSec: number): number => {
-  if (points.length === 0) return 0;
-  if (offsetSec <= points[0].at) return points[0].value;
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1];
-    const next = points[i];
-    if (offsetSec <= next.at) {
-      const span = next.at - prev.at;
-      if (span <= 0) return next.value;
-      const frac = (offsetSec - prev.at) / span;
-      return prev.value + (next.value - prev.value) * frac;
-    }
-  }
-  return points[points.length - 1].value;
-};
-
 const scheduleParam = (
   param: AudioParam,
   points: AutomationPoint[],
@@ -183,7 +152,7 @@ const scheduleParam = (
   if (!audioContext) return;
   const now = audioContext.currentTime;
   param.cancelScheduledValues(now);
-  param.setValueAtTime(valueAt(points, offsetSec), now);
+  param.setValueAtTime(valueAtAutomationPoint(points, offsetSec), now);
   for (const point of points) {
     if (point.at <= offsetSec) continue;
     param.linearRampToValueAtTime(point.value, now + (point.at - offsetSec));
@@ -196,7 +165,7 @@ const scheduleAutomation = (t: ActiveTransition, fromAClockOffset: number): void
   const inChain = getChain(t.incomingEl);
   const outChain = getChain(t.outgoingEl);
   if (!inChain || !outChain) return;
-  const automation = buildAutomation(t.plan);
+  const automation = buildTransitionAutomation(t.plan);
   scheduleParam(inChain.gain.gain, automation.incomingGain, fromAClockOffset);
   scheduleParam(inChain.lowShelf.gain, automation.incomingShelf, fromAClockOffset);
   scheduleParam(outChain.gain.gain, automation.outgoingGain, fromAClockOffset);
@@ -276,17 +245,23 @@ const completeTransition = (t: ActiveTransition): void => {
   t.callbacks.onStateChange("completed", 1);
 };
 
-const applyPhaseCorrection = (t: ActiveTransition, outCur: number): void => {
+const synchronizeIncomingClock = (t: ActiveTransition, outCur: number): void => {
   const expected = t.plan.cueInSec + (outCur - t.plan.startAtSec) * t.plan.rate;
-  const err = t.incomingEl.currentTime - expected;
-  const absErr = Math.abs(err);
-  if (absErr > 0.25) return; // something is off; leave the rate alone
-  if (absErr > 0.004) {
-    t.incomingEl.playbackRate =
-      t.plan.rate * (1 - clampNumber(err * 0.5, -0.02, 0.02));
-  } else {
-    t.incomingEl.playbackRate = t.plan.rate;
+  const duration = t.incomingEl.duration;
+  const boundedExpected = Number.isFinite(duration) && duration > 0
+    ? Math.min(expected, Math.max(0, duration - 0.05))
+    : Math.max(0, expected);
+  if (Math.abs(t.incomingEl.currentTime - boundedExpected) > 0.008) {
+    try {
+      // This runs while the incoming deck is still at zero gain. A single
+      // clock correction is much less audible than changing playbackRate on
+      // every watcher tick.
+      t.incomingEl.currentTime = boundedExpected;
+    } catch {
+      // Keep the pre-cued position if this media format cannot seek here.
+    }
   }
+  t.incomingEl.playbackRate = t.plan.rate;
 };
 
 const startTransition = (t: ActiveTransition, outCur: number): void => {
@@ -304,7 +279,9 @@ const startTransition = (t: ActiveTransition, outCur: number): void => {
       if (transition !== t) return;
       t.starting = false;
       t.started = true;
-      const offset = Math.max(0, t.outgoingEl.currentTime - t.plan.startAtSec);
+      const outgoingNow = t.outgoingEl.currentTime;
+      synchronizeIncomingClock(t, outgoingNow);
+      const offset = Math.max(0, outgoingNow - t.plan.startAtSec);
       scheduleAutomation(t, offset);
       t.lastProgressEmitMs = Date.now();
       t.callbacks.onStateChange(
@@ -328,9 +305,6 @@ const handleWatchTick = (): void => {
     if (!t.started) {
       if (!t.starting && outCur >= t.plan.startAtSec) startTransition(t, outCur);
       return;
-    }
-    if (t.plan.mode === "beatmatch" && t.plan.beatSecA !== null) {
-      applyPhaseCorrection(t, outCur);
     }
     const progress = clampNumber(
       (outCur - t.plan.startAtSec) / t.plan.durationSec,
@@ -362,10 +336,10 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
   cancelTransition();
   flushPendingCancelPark();
 
-  if (!audioContext) audioContext = new AudioContext();
-  if (audioContext.state === "suspended") {
-    void audioContext.resume().catch(() => undefined);
-  }
+  // Never reroute an already-playing media element into a suspended context:
+  // doing so immediately mutes the song. If output cannot start, fail while
+  // the element is still on its normal browser audio path.
+  const context = await ensureAudioContextRunning();
   routeElement(req.outgoing.el);
   routeElement(req.incoming.el);
 
@@ -375,7 +349,7 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
   if ("webkitPreservesPitch" in pitchEl) pitchEl.webkitPreservesPitch = req.preservePitch;
   incomingEl.playbackRate = req.plan.rate;
 
-  const now = audioContext.currentTime;
+  const now = context.currentTime;
   const inChain = getChain(incomingEl);
   if (inChain) {
     inChain.gain.gain.cancelScheduledValues(now);
@@ -489,14 +463,17 @@ export function notifyPause(): void {
   }
 }
 
+export async function resumeAudioOutput(): Promise<void> {
+  if (!audioContext) return;
+  await ensureAudioContextRunning();
+}
+
 export function notifyResume(): void {
   const t = transition;
   if (!t) return;
   t.frozen = false;
   if (!t.started) return;
-  if (audioContext && audioContext.state === "suspended") {
-    void audioContext.resume().catch(() => undefined);
-  }
+  t.incomingEl.playbackRate = t.plan.rate;
   const offset = Math.max(0, t.outgoingEl.currentTime - t.plan.startAtSec);
   scheduleAutomation(t, offset);
 }

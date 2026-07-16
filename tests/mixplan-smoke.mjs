@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { transitionAutomationAt } from "../src/lib/mix/automation.ts";
 import { MIX_BAR_OPTIONS, isDjMixFeatureAvailable } from "../src/lib/mix/config.ts";
 import { planTransition } from "../src/lib/mix/plan.ts";
 
@@ -193,6 +194,50 @@ const approx = (actual, expected, epsilon, label) => {
   });
   assert.equal(plan.mode, "beatmatch");
   approx(plan.durationSec, 30, 1e-9, "32-bar request falls back to 16 bars");
+}
+
+// 11. Transition gains remain complementary so two mastered tracks cannot
+// exceed unity merely because the crossfade overlaps them.
+for (const plan of [
+  planTransition({
+    gridA: grid(128),
+    gridB: grid(128),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 32,
+  }),
+  planTransition({
+    gridA: grid(128),
+    gridB: grid(172),
+    durationASec: 300,
+    durationBSec: 300,
+  }),
+  planTransition({
+    gridA: grid(60, 46),
+    gridB: grid(60),
+    durationASec: 60,
+    durationBSec: 100,
+    bars: 4,
+  }),
+]) {
+  for (let sample = 0; sample <= 200; sample += 1) {
+    const offset = plan.durationSec * sample / 200;
+    const automation = transitionAutomationAt(plan, offset);
+    assert.ok(automation.incomingGain >= 0 && automation.incomingGain <= 1);
+    assert.ok(automation.outgoingGain >= 0 && automation.outgoingGain <= 1);
+    approx(
+      automation.incomingGain + automation.outgoingGain,
+      1,
+      1e-9,
+      `complementary gain at ${offset.toFixed(3)} s`,
+    );
+  }
+  const start = transitionAutomationAt(plan, 0);
+  const end = transitionAutomationAt(plan, plan.durationSec);
+  assert.deepEqual(
+    [start.incomingGain, start.outgoingGain, end.incomingGain, end.outgoingGain],
+    [0, 1, 1, 0],
+  );
 }
 
 console.log("Mix plan smoke test passed.");

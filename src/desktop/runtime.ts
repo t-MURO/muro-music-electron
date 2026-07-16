@@ -259,6 +259,23 @@ const ensureAudio = (): HTMLAudioElement => {
   return audio;
 };
 
+const resumeTransitionPlayers = async (
+  outgoing: HTMLAudioElement,
+  incoming: HTMLAudioElement,
+) => {
+  await mix.resumeAudioOutput();
+  try {
+    await Promise.all([incoming.play(), outgoing.play()]);
+  } catch (error) {
+    // Never leave just one deck running after a partial resume failure.
+    incoming.pause();
+    outgoing.pause();
+    mix.notifyPause();
+    throw error;
+  }
+  mix.notifyResume();
+};
+
 const playbackInvoke = async <T>(
   command: string,
   args: Record<string, unknown>
@@ -290,9 +307,7 @@ const playbackInvoke = async <T>(
     case "playback_toggle":
       if (player.paused) {
         if (mix.isTransitionActive() && idleEl) {
-          await idleEl.play();
-          await player.play();
-          mix.notifyResume();
+          await resumeTransitionPlayers(player, idleEl);
         } else {
           await player.play();
         }
@@ -308,9 +323,7 @@ const playbackInvoke = async <T>(
       return (!player.paused) as T;
     case "playback_play":
       if (mix.isTransitionActive() && idleEl && player.paused) {
-        await idleEl.play();
-        await player.play();
-        mix.notifyResume();
+        await resumeTransitionPlayers(player, idleEl);
       } else {
         await player.play();
       }
