@@ -19,7 +19,6 @@ protocol.registerSchemesAsPrivileged([{
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
 const rendererSmokeUrl = process.env.MURO_RENDERER_SMOKE_URL?.trim() || null;
-const expectDevSettings = process.env.MURO_RENDERER_SMOKE_EXPECT_DEV === "1";
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-renderer-smoke-"));
 const writeSilentWave = (filePath, durationSeconds = 5) => {
   const sampleRate = 8_000;
@@ -258,7 +257,6 @@ app.whenReady().then(async () => {
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const result = await window.webContents.executeJavaScript(`(async () => {
-      const expectDevSettings = ${JSON.stringify(expectDevSettings)};
       const root = document.getElementById("root");
       const selectAll = document.querySelector('[aria-label="Select all tracks"]');
       const scroller = document.querySelector('[data-track-table-scroll]');
@@ -726,27 +724,20 @@ app.whenReady().then(async () => {
           fanartApiKeyInput instanceof HTMLInputElement &&
           fanartApiKeyInput.type === "password"
         );
-        let djMixFeatureGateReady = false;
-        if (expectDevSettings) {
-          document.querySelector('[data-settings-tab="dev"]')?.click();
-          await new Promise((resolve) => setTimeout(resolve, 60));
-          const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
-          const defaultOff = featureToggle instanceof HTMLInputElement && !featureToggle.checked;
-          featureToggle?.click();
-          await new Promise((resolve) => setTimeout(resolve, 60));
-          const mixBars = document.querySelector("[data-mix-bars]");
-          const mixBarOptions = mixBars instanceof HTMLSelectElement
-            ? Array.from(mixBars.options, (option) => Number(option.value))
-            : [];
-          djMixFeatureGateReady =
-            defaultOff &&
-            Boolean(document.querySelector("[data-dj-mix-settings]")) &&
-            mixBarOptions.join(",") === "4,8,16,32";
-        } else {
-          djMixFeatureGateReady =
-            !document.querySelector("[data-dj-mix-feature-toggle]") &&
-            !document.querySelector("[data-dj-mix-settings]");
-        }
+        document.querySelector('[data-settings-tab="dev"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
+        const defaultOff = featureToggle instanceof HTMLInputElement && !featureToggle.checked;
+        featureToggle?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const mixBars = document.querySelector("[data-mix-bars]");
+        const mixBarOptions = mixBars instanceof HTMLSelectElement
+          ? Array.from(mixBars.options, (option) => Number(option.value))
+          : [];
+        const djMixFeatureGateReady =
+          defaultOff &&
+          Boolean(document.querySelector("[data-dj-mix-settings]")) &&
+          mixBarOptions.join(",") === "4,8,16,32";
         window.location.hash = "#/";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const mixRows = document.querySelectorAll('[data-track-index]');
@@ -762,21 +753,18 @@ app.whenReady().then(async () => {
           ctrlKey: true,
         }));
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        const djMixManualSurfaceReady = expectDevSettings
-          ? Boolean(document.querySelector("[data-selection-mix]"))
-          : !document.querySelector("[data-selection-mix]");
+        const djMixManualSurfaceReady = Boolean(document.querySelector("[data-selection-mix]"));
         document.querySelector('[data-panel-view="mix"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const mixWithCurrentButtons = Array.from(
           document.querySelectorAll("[data-mix-with-current]"),
         );
-        const mixWithCurrentActionReady = expectDevSettings
-          ? mixWithCurrentButtons.length > 0 && mixWithCurrentButtons.every(
+        const mixWithCurrentActionReady = mixWithCurrentButtons.length > 0
+          && mixWithCurrentButtons.every(
             (button) => button instanceof HTMLButtonElement
               && !button.disabled
               && button.textContent?.includes("Mix"),
-          )
-          : mixWithCurrentButtons.length === 0;
+          );
         await window.muro.invoke("test_emit_transition_state", {
           status: "active",
           progress: 0.42,
@@ -787,14 +775,12 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 60));
         const mixIndicator = document.querySelector('[data-mix-indicator="active"]');
         const mixProgress = document.querySelector("[data-mix-progress]");
-        const mixIndicatorReady = expectDevSettings
-          ? Boolean(
-            mixIndicator?.textContent?.includes("Mixing") &&
-            mixIndicator?.textContent?.includes("42%") &&
-            mixIndicator?.textContent?.includes("Smoke Track 002") &&
-            mixProgress?.getAttribute("aria-valuenow") === "42"
-          )
-          : !mixIndicator && !mixProgress;
+        const mixIndicatorReady = Boolean(
+          mixIndicator?.textContent?.includes("Mixing") &&
+          mixIndicator?.textContent?.includes("42%") &&
+          mixIndicator?.textContent?.includes("Smoke Track 002") &&
+          mixProgress?.getAttribute("aria-valuenow") === "42"
+        );
         document.querySelector('[data-panel-view="queue"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
         window.location.hash = "#/settings";
@@ -952,7 +938,7 @@ app.whenReady().then(async () => {
         }
         await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[data-smart-crate-save]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, expectDevSettings ? 300 : 100));
+        await new Promise((resolve) => setTimeout(resolve, 300));
         const smartCrateItem = document.querySelector('[data-smart-crate-id]');
         const smartCrateCreated = Boolean(
           smartCrateItem &&

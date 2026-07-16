@@ -55,7 +55,6 @@ const run = async () => {
         ...process.env,
         ELECTRON_RUN_AS_NODE: undefined,
         MURO_RENDERER_SMOKE_URL: devUrl,
-        MURO_RENDERER_SMOKE_EXPECT_DEV: "1",
       },
       stdio: "inherit",
     });

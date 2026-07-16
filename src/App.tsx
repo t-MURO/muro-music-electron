@@ -119,7 +119,7 @@ function App() {
   const locale = useSettingsStore((s) => s.locale);
   const seekMode = useSettingsStore((s) => s.seekMode);
   const djMixFeatureEnabled = useSettingsStore((s) => s.djMixEnabled);
-  const djMixEnabled = isDjMixFeatureAvailable(import.meta.env.DEV, djMixFeatureEnabled);
+  const djMixEnabled = isDjMixFeatureAvailable(djMixFeatureEnabled);
   const dbPath = useSettingsStore((s) => s.dbPath);
   const dbFileName = useSettingsStore((s) => s.dbFileName);
   const setTheme = useSettingsStore((s) => s.setTheme);

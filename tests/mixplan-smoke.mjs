@@ -4,9 +4,8 @@ import { MIX_BAR_OPTIONS, isDjMixFeatureAvailable } from "../src/lib/mix/config.
 import { planTransition } from "../src/lib/mix/plan.ts";
 
 assert.deepEqual(MIX_BAR_OPTIONS, [4, 8, 16, 32]);
-assert.equal(isDjMixFeatureAvailable(true, true), true);
-assert.equal(isDjMixFeatureAvailable(true, false), false);
-assert.equal(isDjMixFeatureAvailable(false, true), false);
+assert.equal(isDjMixFeatureAvailable(true), true);
+assert.equal(isDjMixFeatureAvailable(false), false);
 
 const grid = (bpm, firstDownbeatSec = 0.5, confidence = 0.8) => ({
   version: 1,

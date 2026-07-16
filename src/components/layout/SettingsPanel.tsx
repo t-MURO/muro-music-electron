@@ -87,10 +87,7 @@ export const SettingsPanel = ({
   onClearSongs,
   onUseDefaultLocation,
 }: SettingsPanelProps) => {
-  const isDevMode = import.meta.env.DEV;
-  const [activeTab, setActiveTab] = useState<Tab>(
-    isDevMode ? "dev" : "application"
-  );
+  const [activeTab, setActiveTab] = useState<Tab>("application");
   const analysisNotation = useSettingsStore((state) => state.analysisNotation);
   const analysisCustomCodes = useSettingsStore((state) => state.analysisCustomCodes);
   const analysisDelimiter = useSettingsStore((state) => state.analysisDelimiter);
@@ -119,20 +116,18 @@ export const SettingsPanel = ({
     <div className="flex h-full flex-col">
       {/* Tabs */}
       <div className="flex gap-1 border-b border-[var(--color-border-light)] px-[var(--spacing-lg)]">
-        {isDevMode && (
-          <button
-            className={`px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium transition-all duration-[var(--transition-fast)] ${
-              activeTab === "dev"
-                ? "border-b-2 border-[var(--color-accent)] text-[var(--color-text-primary)]"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-            }`}
-            onClick={() => setActiveTab("dev")}
-            type="button"
-            data-settings-tab="dev"
-          >
-            Dev
-          </button>
-        )}
+        <button
+          className={`px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium transition-all duration-[var(--transition-fast)] ${
+            activeTab === "dev"
+              ? "border-b-2 border-[var(--color-accent)] text-[var(--color-text-primary)]"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+          }`}
+          onClick={() => setActiveTab("dev")}
+          type="button"
+          data-settings-tab="dev"
+        >
+          Dev
+        </button>
         <button
           className={`px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium transition-all duration-[var(--transition-fast)] ${
             activeTab === "application"
@@ -172,7 +167,7 @@ export const SettingsPanel = ({
 
       {/* Tab Content */}
       <div className="flex-1 overflow-auto p-[var(--spacing-lg)]">
-        {activeTab === "dev" && isDevMode && (
+        {activeTab === "dev" && (
           <div className="space-y-8">
             <div>
               <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
@@ -209,7 +204,7 @@ export const SettingsPanel = ({
                 </label>
                 <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
                   Adds beat-grid analysis, manual two-track mixes, and optional automatic transitions.
-                  This feature is available only in development builds while it is being tested.
+                  Keep it disabled if you only want Mix Next recommendations without audio transitions.
                 </p>
 
                 {djMixEnabled && (
