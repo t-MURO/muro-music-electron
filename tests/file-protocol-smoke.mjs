@@ -19,6 +19,7 @@ try {
     audioPath
   );
   assert.equal(response.status, 206);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
   assert.equal(response.headers.get("accept-ranges"), "bytes");
   assert.equal(response.headers.get("content-range"), "bytes 2-5/10");
   assert.equal(response.headers.get("content-length"), "4");
@@ -30,6 +31,7 @@ try {
     audioPath
   );
   assert.equal(invalid.status, 416);
+  assert.equal(invalid.headers.get("access-control-allow-origin"), "*");
   assert.equal(invalid.headers.get("content-range"), "bytes */10");
 
   console.log("File protocol smoke test passed.");

@@ -249,12 +249,21 @@ const attachElementListeners = (el: HTMLAudioElement) => {
   });
 };
 
+const createAudioElement = (preload: "metadata" | "auto") => {
+  const element = new Audio();
+  // The custom file protocol is a different origin from both the packaged
+  // renderer and the dev server. Opt in before assigning a source so Web Audio
+  // can route the media without Chromium replacing it with silence.
+  element.crossOrigin = "anonymous";
+  element.preload = preload;
+  element.volume = masterVolume;
+  attachElementListeners(element);
+  return element;
+};
+
 const ensureAudio = (): HTMLAudioElement => {
   if (audio) return audio;
-  audio = new Audio();
-  audio.preload = "metadata";
-  audio.volume = masterVolume;
-  attachElementListeners(audio);
+  audio = createAudioElement("metadata");
   configureMediaSession();
   return audio;
 };
@@ -380,9 +389,7 @@ const playbackInvoke = async <T>(
       };
       const plan = args.plan as TransitionPlan;
       if (!idleEl) {
-        idleEl = new Audio();
-        idleEl.preload = "auto";
-        attachElementListeners(idleEl);
+        idleEl = createAudioElement("auto");
       }
       idleEl.volume = masterVolume;
       const incomingEl = idleEl;

@@ -59,22 +59,29 @@ export const parseByteRange = (value, size) => {
 
 const responseHeaders = (filePath, contentLength) =>
   new Headers({
+    "Access-Control-Allow-Origin": "*",
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-store",
     "Content-Length": String(contentLength),
     "Content-Type": MIME_TYPES.get(path.extname(filePath).toLowerCase()) ?? "application/octet-stream",
+    "Cross-Origin-Resource-Policy": "cross-origin",
   });
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Cross-Origin-Resource-Policy": "cross-origin",
+};
 
 export const createLocalFileResponse = async (request, filePath) => {
   let fileStats;
   try {
     fileStats = await fs.promises.stat(filePath);
   } catch {
-    return new Response("File not found", { status: 404 });
+    return new Response("File not found", { status: 404, headers: corsHeaders });
   }
 
   if (!fileStats.isFile()) {
-    return new Response("File not found", { status: 404 });
+    return new Response("File not found", { status: 404, headers: corsHeaders });
   }
 
   const size = fileStats.size;
@@ -86,6 +93,7 @@ export const createLocalFileResponse = async (request, filePath) => {
     return new Response(null, {
       status: 416,
       headers: {
+        ...corsHeaders,
         "Accept-Ranges": "bytes",
         "Content-Range": `bytes */${size}`,
       },

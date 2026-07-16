@@ -22,7 +22,7 @@ const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-audio-see
 const audioPath = path.join(temporaryDirectory, "seek-test.wav");
 const htmlPath = path.join(temporaryDirectory, "index.html");
 
-const writeSilentWave = (filePath, durationSeconds = 60) => {
+const writeToneWave = (filePath, durationSeconds = 60) => {
   const sampleRate = 44_100;
   const channelCount = 1;
   const bytesPerSample = 2;
@@ -42,10 +42,14 @@ const writeSilentWave = (filePath, durationSeconds = 60) => {
   buffer.writeUInt16LE(bytesPerSample * 8, 34);
   buffer.write("data", 36);
   buffer.writeUInt32LE(dataSize, 40);
+  for (let sample = 0; sample < sampleRate * durationSeconds; sample += 1) {
+    const value = Math.round(Math.sin((2 * Math.PI * 440 * sample) / sampleRate) * 12_000);
+    buffer.writeInt16LE(value, 44 + sample * bytesPerSample);
+  }
   fs.writeFileSync(filePath, buffer);
 };
 
-writeSilentWave(audioPath);
+writeToneWave(audioPath);
 fs.writeFileSync(htmlPath, "<!doctype html><html><body>Audio seek smoke test</body></html>");
 app.setPath("userData", temporaryDirectory);
 
@@ -71,8 +75,10 @@ app.whenReady().then(async () => {
     const fetchedBytes = encoded.byteLength;
     const decodeContext = new OfflineAudioContext(1, 1, 11025);
     const decoded = await decodeContext.decodeAudioData(encoded);
-    const audio = new Audio(${JSON.stringify(audioUrl)});
+    const audio = new Audio();
+    audio.crossOrigin = "anonymous";
     audio.preload = "metadata";
+    audio.src = ${JSON.stringify(audioUrl)};
     await new Promise((resolve, reject) => {
       audio.addEventListener("loadedmetadata", resolve, { once: true });
       audio.addEventListener("error", () => reject(new Error(audio.error?.message ?? "load failed")), { once: true });
@@ -86,12 +92,29 @@ app.whenReady().then(async () => {
       }, { once: true });
       audio.currentTime = 45;
     });
+    const context = new AudioContext();
+    const source = context.createMediaElementSource(audio);
+    const analyser = context.createAnalyser();
+    const mutedOutput = context.createGain();
+    mutedOutput.gain.value = 0;
+    source.connect(analyser);
+    analyser.connect(mutedOutput);
+    mutedOutput.connect(context.destination);
+    await context.resume();
+    await audio.play();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const samples = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(samples);
+    const graphPeak = samples.reduce((peak, sample) => Math.max(peak, Math.abs(sample)), 0);
+    audio.pause();
+    await context.close();
     return {
       currentTime: audio.currentTime,
       duration: audio.duration,
       decodedDuration: decoded.duration,
       decodedSampleRate: decoded.sampleRate,
       fetchedBytes,
+      graphPeak,
     };
   })()`);
 
@@ -100,6 +123,7 @@ app.whenReady().then(async () => {
   assert.ok(result.decodedDuration >= 59.9, `Unexpected decoded duration: ${result.decodedDuration}`);
   assert.ok(result.duration >= 59.9, `Unexpected duration: ${result.duration}`);
   assert.ok(result.currentTime >= 44.9, `Unexpected seek position: ${result.currentTime}`);
+  assert.ok(result.graphPeak > 0.1, `Web Audio graph was silent (peak: ${result.graphPeak})`);
 
   clearTimeout(timeout);
   window.destroy();
