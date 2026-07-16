@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { isLocale, setLocale as setI18nLocale, type Locale } from "../i18n";
+import type { MixBars } from "../lib/mix/config";
 
 export type AnalysisOutputMode = "none" | "prepend" | "append" | "overwrite";
 export type AnalysisNotationMode = "standard" | "custom" | "combined" | "djCombined";
 export type DeleteMode = "library" | "disk";
+export type { MixBars } from "../lib/mix/config";
 export type AnalysisOutputs = {
   comment: AnalysisOutputMode;
   grouping: AnalysisOutputMode;
@@ -29,6 +31,10 @@ type SettingsState = {
   analysisDelimiter: string;
   analysisOutputs: AnalysisOutputs;
   lastDeleteMode: DeleteMode;
+  djMixEnabled: boolean;
+  autoMix: boolean;
+  mixBars: MixBars;
+  mixPreservePitch: boolean;
   fanartApiKey: string;
 };
 
@@ -44,6 +50,10 @@ type SettingsActions = {
   setAnalysisDelimiter: (delimiter: string) => void;
   setAnalysisOutput: <K extends keyof AnalysisOutputs>(field: K, mode: AnalysisOutputs[K]) => void;
   setLastDeleteMode: (mode: DeleteMode) => void;
+  setDjMixEnabled: (djMixEnabled: boolean) => void;
+  setAutoMix: (autoMix: boolean) => void;
+  setMixBars: (mixBars: MixBars) => void;
+  setMixPreservePitch: (mixPreservePitch: boolean) => void;
   setFanartApiKey: (fanartApiKey: string) => void;
 };
 
@@ -69,6 +79,10 @@ export const useSettingsStore = create<SettingsStore>()(
         bpm: "none",
       },
       lastDeleteMode: "library",
+      djMixEnabled: false,
+      autoMix: false,
+      mixBars: 8,
+      mixPreservePitch: true,
       fanartApiKey: "",
 
       // Actions
@@ -97,6 +111,13 @@ export const useSettingsStore = create<SettingsStore>()(
         analysisOutputs: { ...state.analysisOutputs, [field]: mode },
       })),
       setLastDeleteMode: (lastDeleteMode) => set({ lastDeleteMode }),
+      setDjMixEnabled: (djMixEnabled) => set((state) => ({
+        djMixEnabled,
+        autoMix: djMixEnabled ? state.autoMix : false,
+      })),
+      setAutoMix: (autoMix) => set({ autoMix }),
+      setMixBars: (mixBars) => set({ mixBars }),
+      setMixPreservePitch: (mixPreservePitch) => set({ mixPreservePitch }),
       setFanartApiKey: (fanartApiKey) => set({ fanartApiKey }),
     }),
     {
@@ -110,6 +131,10 @@ export const useSettingsStore = create<SettingsStore>()(
         analysisDelimiter: state.analysisDelimiter,
         analysisOutputs: state.analysisOutputs,
         lastDeleteMode: state.lastDeleteMode,
+        djMixEnabled: state.djMixEnabled,
+        autoMix: state.autoMix,
+        mixBars: state.mixBars,
+        mixPreservePitch: state.mixPreservePitch,
         fanartApiKey: state.fanartApiKey,
       }),
       onRehydrateStorage: () => (state) => {

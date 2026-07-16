@@ -29,6 +29,7 @@ type PlayerBarProps = {
   onVolumeChange: (value: number) => void;
   onSkipPrevious: () => void;
   onSkipNext: () => void;
+  transition?: { status: string; toTitle: string; progress: number } | null;
 };
 
 export const PlayerBar = ({
@@ -37,6 +38,7 @@ export const PlayerBar = ({
   onVolumeChange,
   onSkipPrevious,
   onSkipNext,
+  transition,
 }: PlayerBarProps) => {
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
   const shuffleEnabled = usePlaybackStore((state) => state.shuffleEnabled);
@@ -124,6 +126,12 @@ export const PlayerBar = ({
 
   const controlButtonClass = "player-bar-button flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]";
 
+  const showTransitionBadge =
+    transition != null && (transition.status === "armed" || transition.status === "active");
+  const transitionPercent = transition
+    ? Math.round(Math.min(1, Math.max(0, transition.progress)) * 100)
+    : 0;
+
   return (
     <footer className="player-bar col-span-3 col-start-1 row-start-3 grid h-[var(--media-controls-height)] grid-cols-[minmax(230px,300px)_minmax(360px,1fr)_minmax(190px,300px)] items-center gap-5 border-t border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3">
       <div className="flex min-w-0 items-center gap-3">
@@ -134,7 +142,20 @@ export const PlayerBar = ({
         )}
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTrack ? currentTrack.title : t("player.empty.title")}</p>
-          <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">{currentTrack ? currentTrack.artist : t("player.empty.subtitle")}</p>
+          {showTransitionBadge && transition ? (
+            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--color-accent)]" data-transition-badge={transition.status}>
+              <span className="truncate">
+                {transition.status === "armed" ? `Mix ready → ${transition.toTitle}` : `Mixing → ${transition.toTitle}`}
+              </span>
+              {transition.status === "active" && (
+                <span className="relative h-[3px] w-16 shrink-0 overflow-hidden rounded-[var(--radius-full)] bg-[var(--color-bg-tertiary)]" aria-hidden="true">
+                  <span className="absolute left-0 top-0 h-full rounded-[var(--radius-full)] bg-[var(--color-accent)]" style={{ width: `${transitionPercent}%` }} />
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">{currentTrack ? currentTrack.artist : t("player.empty.subtitle")}</p>
+          )}
           {currentTrack?.album && <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{currentTrack.album}</p>}
         </div>
       </div>

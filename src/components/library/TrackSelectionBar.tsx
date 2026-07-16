@@ -1,5 +1,6 @@
 import {
   AudioWaveform,
+  Blend,
   ListMinus,
   ListPlus,
   Pencil,
@@ -12,6 +13,7 @@ import {
 type TrackSelectionBarProps = {
   selectedCount: number;
   onPlay: () => void;
+  onMix?: () => void;
   onPlayNext: () => void;
   onAddToQueue: () => void;
   onAnalyze: () => void;
@@ -27,6 +29,7 @@ const actionClass =
 export const TrackSelectionBar = ({
   selectedCount,
   onPlay,
+  onMix,
   onPlayNext,
   onAddToQueue,
   onAnalyze,
@@ -49,6 +52,9 @@ export const TrackSelectionBar = ({
         <span>{selectedCount === 1 ? "track" : "tracks"} selected</span>
       </div>
       <button className={`${actionClass} bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] hover:text-white`} onClick={onPlay} data-selection-play type="button"><Play className="h-3.5 w-3.5" fill="currentColor" />Play</button>
+      {selectedCount === 2 && onMix && (
+        <button className={actionClass} onClick={onMix} title="Play a DJ transition from the first into the second track" data-selection-mix type="button"><Blend className="h-3.5 w-3.5" />Mix</button>
+      )}
       <button className={actionClass} onClick={onPlayNext} data-selection-play-next type="button"><SkipForward className="h-3.5 w-3.5" />Play next</button>
       <button className={actionClass} onClick={onAddToQueue} data-selection-queue type="button"><ListPlus className="h-3.5 w-3.5" />Queue</button>
       <span className="mx-1 h-5 w-px shrink-0 bg-[var(--color-border)]" aria-hidden="true" />

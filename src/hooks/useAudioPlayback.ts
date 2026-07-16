@@ -13,6 +13,7 @@ import {
   playbackToggle,
   type PlaybackState,
 } from "../utils";
+import type { TransitionStatePayload } from "../utils/playbackApi";
 
 // Keep the playback track type available to hook consumers.
 export type { CurrentTrack } from "../stores";
@@ -51,6 +52,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   const setCurrentPosition = usePlaybackStore((s) => s.setCurrentPosition);
   const setDuration = usePlaybackStore((s) => s.setDuration);
   const setVolume = usePlaybackStore((s) => s.setVolume);
+  const setTransition = usePlaybackStore((s) => s.setTransition);
 
   // Use refs for callbacks to avoid effect re-runs
   const onTrackEndRef = useRef(onTrackEnd);
@@ -158,6 +160,20 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         listen("muro://track-ended", () => {
           onTrackEndRef.current?.();
         }),
+        listen<TransitionStatePayload>("muro://transition-state", (event) => {
+          const { status, progress, from_id, to_id, to_title } = event.payload;
+          if (status === "cancelled") {
+            setTransition(null);
+            return;
+          }
+          setTransition({
+            status,
+            fromId: from_id,
+            toId: to_id,
+            toTitle: to_title,
+            progress,
+          });
+        }),
       ]);
 
       const cleanup = () => listeners.forEach((removeListener) => removeListener());
@@ -186,7 +202,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       }
       pendingMediaSessionControlsRef.current.clear();
     };
-  }, [setCurrentPosition, updateFromPlaybackState]);
+  }, [setCurrentPosition, setTransition, updateFromPlaybackState]);
 
   useEffect(() => {
     if (!seekMode) {

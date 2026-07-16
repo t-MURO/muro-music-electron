@@ -1,5 +1,7 @@
 import { bridge } from "./bridge";
 import { emitLocal } from "./events";
+import * as mix from "./mixEngine";
+import type { TransitionPlan } from "../lib/mix/plan";
 
 type CurrentTrack = {
   id: string;
@@ -25,6 +27,8 @@ export type MediaControlPayload = {
 };
 
 let audio: HTMLAudioElement | null = null;
+let idleEl: HTMLAudioElement | null = null;
+let masterVolume = 1;
 let currentTrack: CurrentTrack | null = null;
 let durationHint = 0;
 let seekMode = "accurate";
@@ -46,7 +50,7 @@ const state = (): PlaybackState => ({
   is_playing: Boolean(audio && !audio.paused && !audio.ended),
   current_position: audio?.currentTime ?? 0,
   duration: Number.isFinite(audio?.duration) ? audio!.duration : durationHint,
-  volume: audio?.volume ?? 1,
+  volume: masterVolume,
   current_track: currentTrack,
 });
 
@@ -163,7 +167,7 @@ const emitMediaSessionControl = (action: MediaControlPayload["action"]) => {
   emitLocal("muro://media-control", { action, source: "media-session" } satisfies MediaControlPayload);
 };
 
-const configureMediaSession = (player: HTMLAudioElement) => {
+const configureMediaSession = () => {
   if (!("mediaSession" in navigator) || mediaSessionConfigured) return;
   mediaSessionConfigured = true;
 
@@ -189,14 +193,14 @@ const configureMediaSession = (player: HTMLAudioElement) => {
   setHandler("previoustrack", () => emitMediaSessionControl("previous"));
   setHandler("seekbackward", (details) => {
     void queuePlaybackInvoke("playback_seek", {
-      positionSecs: player.currentTime - (details.seekOffset ?? 10),
+      positionSecs: (audio?.currentTime ?? 0) - (details.seekOffset ?? 10),
     }).catch(() => {
       emitLocal("muro://playback-error", "Failed to seek backward");
     });
   });
   setHandler("seekforward", (details) => {
     void queuePlaybackInvoke("playback_seek", {
-      positionSecs: player.currentTime + (details.seekOffset ?? 10),
+      positionSecs: (audio?.currentTime ?? 0) + (details.seekOffset ?? 10),
     }).catch(() => {
       emitLocal("muro://playback-error", "Failed to seek forward");
     });
@@ -210,25 +214,48 @@ const configureMediaSession = (player: HTMLAudioElement) => {
   });
 };
 
+const attachElementListeners = (el: HTMLAudioElement) => {
+  el.addEventListener("timeupdate", () => {
+    if (el !== audio) return;
+    emitLocal("muro://playback-position", el.currentTime);
+    syncMediaSessionState();
+  });
+  el.addEventListener("play", () => {
+    if (el !== audio) return;
+    emitState();
+  });
+  el.addEventListener("pause", () => {
+    if (el !== audio) return;
+    emitState();
+  });
+  el.addEventListener("loadedmetadata", () => {
+    if (el !== audio) return;
+    emitState();
+  });
+  el.addEventListener("ended", () => {
+    if (mix.isTransitionEngaged() && el === audio) {
+      // The outgoing deck ran out mid-transition: force-complete the handoff
+      // instead of announcing a normal track end.
+      mix.notifyOutgoingEnded();
+      return;
+    }
+    if (el !== audio) return;
+    emitState();
+    emitLocal("muro://track-ended", null);
+  });
+  el.addEventListener("error", () => {
+    if (el !== audio) return;
+    emitLocal("muro://playback-error", el.error?.message ?? "Playback failed");
+  });
+};
+
 const ensureAudio = (): HTMLAudioElement => {
   if (audio) return audio;
   audio = new Audio();
   audio.preload = "metadata";
-  audio.addEventListener("timeupdate", () => {
-    emitLocal("muro://playback-position", audio?.currentTime ?? 0);
-    syncMediaSessionState();
-  });
-  audio.addEventListener("play", emitState);
-  audio.addEventListener("pause", emitState);
-  audio.addEventListener("loadedmetadata", emitState);
-  audio.addEventListener("ended", () => {
-    emitState();
-    emitLocal("muro://track-ended", null);
-  });
-  audio.addEventListener("error", () => {
-    emitLocal("muro://playback-error", audio?.error?.message ?? "Playback failed");
-  });
-  configureMediaSession(audio);
+  audio.volume = masterVolume;
+  attachElementListeners(audio);
+  configureMediaSession();
   return audio;
 };
 
@@ -239,6 +266,7 @@ const playbackInvoke = async <T>(
   const player = ensureAudio();
   switch (command) {
     case "playback_play_file": {
+      if (mix.isTransitionEngaged()) mix.cancelTransition();
       // Stop the previous source before changing tracks. This also makes
       // repeated/rapid play requests deterministic on Windows.
       player.pause();
@@ -260,17 +288,45 @@ const playbackInvoke = async <T>(
       return undefined as T;
     }
     case "playback_toggle":
-      if (player.paused) await player.play();
-      else player.pause();
+      if (player.paused) {
+        if (mix.isTransitionActive() && idleEl) {
+          await idleEl.play();
+          await player.play();
+          mix.notifyResume();
+        } else {
+          await player.play();
+        }
+      } else {
+        if (mix.isTransitionActive()) {
+          player.pause();
+          if (idleEl && !idleEl.paused) idleEl.pause();
+          mix.notifyPause();
+        } else {
+          player.pause();
+        }
+      }
       return (!player.paused) as T;
     case "playback_play":
-      await player.play();
+      if (mix.isTransitionActive() && idleEl && player.paused) {
+        await idleEl.play();
+        await player.play();
+        mix.notifyResume();
+      } else {
+        await player.play();
+      }
       return undefined as T;
-    case "playback_pause":
+    case "playback_pause": {
+      const transitionActive = mix.isTransitionActive();
       if (!player.paused) player.pause();
+      if (transitionActive) {
+        if (idleEl && !idleEl.paused) idleEl.pause();
+        mix.notifyPause();
+      }
       emitState();
       return undefined as T;
+    }
     case "playback_stop":
+      if (mix.isTransitionEngaged()) mix.cancelTransition();
       player.pause();
       player.currentTime = 0;
       currentTrack = null;
@@ -278,10 +334,13 @@ const playbackInvoke = async <T>(
       emitState();
       return undefined as T;
     case "playback_seek":
+      if (mix.isTransitionEngaged()) mix.cancelTransition();
       await seekPlayer(player, Math.max(0, Number(args.positionSecs) || 0));
       return undefined as T;
     case "playback_set_volume":
-      player.volume = Math.max(0, Math.min(1, Number(args.volume)));
+      masterVolume = Math.max(0, Math.min(1, Number(args.volume)));
+      player.volume = masterVolume;
+      if (idleEl) idleEl.volume = masterVolume;
       emitState();
       return undefined as T;
     case "playback_set_seek_mode":
@@ -291,6 +350,69 @@ const playbackInvoke = async <T>(
       return state() as T;
     case "playback_is_finished":
       return Boolean(player.ended) as T;
+    case "playback_transition_to": {
+      if (mix.isTransitionEngaged()) mix.cancelTransition();
+      if (!currentTrack || player.paused) {
+        throw new Error("Nothing playing to transition from");
+      }
+      const track = args.track as {
+        id: string;
+        title: string;
+        artist: string;
+        album: string;
+        sourcePath: string;
+        durationHint: number;
+        coverArtPath?: string;
+        coverArtThumbPath?: string;
+      };
+      const plan = args.plan as TransitionPlan;
+      if (!idleEl) {
+        idleEl = new Audio();
+        idleEl.preload = "auto";
+        attachElementListeners(idleEl);
+      }
+      idleEl.volume = masterVolume;
+      const incomingEl = idleEl;
+      const fromId = currentTrack.id;
+      await mix.armTransition({
+        plan,
+        incoming: { el: incomingEl, srcUrl: convertFileSrc(String(track.sourcePath)) },
+        outgoing: { el: player },
+        preservePitch: Boolean(args.preservePitch),
+        callbacks: {
+          onStateChange: (status, progress) => {
+            emitLocal("muro://transition-state", {
+              status,
+              progress,
+              from_id: fromId,
+              to_id: track.id,
+              to_title: track.title,
+            });
+          },
+          onHandoff: () => {
+            const previous = audio;
+            audio = incomingEl;
+            idleEl = previous;
+            currentTrack = {
+              id: String(track.id),
+              title: String(track.title),
+              artist: String(track.artist),
+              album: String(track.album),
+              source_path: String(track.sourcePath),
+              cover_art_path: track.coverArtPath,
+              cover_art_thumb_path: track.coverArtThumbPath,
+            };
+            durationHint = Number(track.durationHint) || 0;
+            setMediaSessionMetadata(currentTrack);
+            emitState();
+          },
+        },
+      });
+      return undefined as T;
+    }
+    case "playback_cancel_transition":
+      mix.cancelTransition();
+      return undefined as T;
     default:
       throw new Error(`Unknown playback command: ${command}`);
   }
@@ -328,6 +450,12 @@ if (import.meta.hot) {
       audio.removeAttribute("src");
       audio.load();
     }
+    if (idleEl) {
+      idleEl.pause();
+      idleEl.removeAttribute("src");
+      idleEl.load();
+    }
+    mix.disposeMixEngine();
     if ("mediaSession" in navigator) {
       for (const action of MEDIA_SESSION_ACTIONS) {
         try {
@@ -339,6 +467,8 @@ if (import.meta.hot) {
       navigator.mediaSession.metadata = null;
     }
     audio = null;
+    idleEl = null;
+    masterVolume = 1;
     currentTrack = null;
     durationHint = 0;
     mediaSessionConfigured = false;

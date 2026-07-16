@@ -51,7 +51,8 @@ const TRACK_SCHEMA = `
     cover_art_path TEXT,
     cover_art_thumb_path TEXT,
     last_played_at TEXT,
-    play_count INTEGER DEFAULT 0
+    play_count INTEGER DEFAULT 0,
+    beat_grid_json TEXT
   );
   CREATE INDEX IF NOT EXISTS tracks_import_status_idx ON tracks(import_status);
   CREATE INDEX IF NOT EXISTS tracks_last_played_idx ON tracks(last_played_at DESC);
@@ -120,6 +121,7 @@ const REQUIRED_TRACK_COLUMNS = {
   cover_art_thumb_path: "TEXT",
   last_played_at: "TEXT",
   play_count: "INTEGER DEFAULT 0",
+  beat_grid_json: "TEXT",
 };
 
 export const openDatabase = (dbPath) => {
@@ -205,6 +207,7 @@ export const rowToTrack = (row) => ({
   disc_total: row.disc_total ?? undefined,
   last_played_at: row.last_played_at || undefined,
   play_count: row.play_count || 0,
+  beat_grid_json: row.beat_grid_json ?? null,
 });
 
 const TRACK_SELECT = `
@@ -212,7 +215,7 @@ const TRACK_SELECT = `
     key, bpm, year, date, added_at, updated_at, rating, duration_seconds,
     bitrate_kbps, import_status, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
-    comment_json, label, disc_number, disc_total
+    comment_json, label, disc_number, disc_total, beat_grid_json
   FROM tracks`;
 
 export const loadTracks = (dbPath) => {

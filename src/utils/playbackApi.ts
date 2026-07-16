@@ -1,4 +1,5 @@
 import { invoke } from "@muro/desktop/runtime";
+import type { TransitionPlan } from "../lib/mix/plan";
 
 // ============================================================================
 // Types
@@ -80,4 +81,37 @@ export const playbackGetState = () => {
 
 export const playbackIsFinished = () => {
   return invoke<boolean>("playback_is_finished");
+};
+
+// ============================================================================
+// DJ Transitions
+// ============================================================================
+
+export type TransitionStatePayload = {
+  status: "armed" | "active" | "completed" | "cancelled";
+  progress: number;
+  from_id: string;
+  to_id: string;
+  to_title: string;
+};
+
+export const playbackTransitionTo = (
+  track: {
+    id: string;
+    title: string;
+    artist: string;
+    album: string;
+    sourcePath: string;
+    durationHint: number;
+    coverArtPath?: string;
+    coverArtThumbPath?: string;
+  },
+  plan: TransitionPlan,
+  preservePitch = true
+) => {
+  return invoke<void>("playback_transition_to", { track, plan, preservePitch });
+};
+
+export const playbackCancelTransition = () => {
+  return invoke<void>("playback_cancel_transition");
 };

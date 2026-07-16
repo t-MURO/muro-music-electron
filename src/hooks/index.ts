@@ -22,6 +22,7 @@ export {
   type AudioPlaybackState,
   type CurrentTrack,
 } from "./useAudioPlayback";
+export { useMixTransition } from "./useMixTransition";
 export { usePlaylistOperations } from "./usePlaylistOperations";
 export { usePlaylistFolders } from "./usePlaylistFolders";
 export { usePlaylistTransfer } from "./usePlaylistTransfer";
