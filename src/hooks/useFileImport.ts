@@ -3,7 +3,14 @@ import { useCallback, useEffect, useRef } from "react";
 import { commandManager, type Command } from "../command-manager/commandManager";
 import { useLibraryStore, useUIStore, notify } from "../stores";
 import { useDbPath } from "./useDbPath";
-import { addTracksToPlaylist, createPlaylist, removeLastTracksFromPlaylist, importFiles, importedTrackToTrack } from "../utils";
+import {
+  addTracksToPlaylist,
+  createPlaylist,
+  removeLastTracksFromPlaylist,
+  importFiles,
+  importedTrackToTrack,
+  listPlaylistFiles,
+} from "../utils";
 import type { Playlist } from "../types";
 
 export type ImportProgress = {
@@ -20,9 +27,13 @@ export type PlaylistDropOperation = {
 
 type UseFileImportArgs = {
   onImportComplete?: () => void;
+  onPlaylistFolderDetected?: (directoryPath: string) => Promise<void>;
 };
 
-export const useFileImport = ({ onImportComplete }: UseFileImportArgs = {}) => {
+export const useFileImport = ({
+  onImportComplete,
+  onPlaylistFolderDetected,
+}: UseFileImportArgs = {}) => {
   const playlistSequenceRef = useRef(0);
   const clearProgressTimerRef = useRef<number | null>(null);
 
@@ -141,6 +152,19 @@ export const useFileImport = ({ onImportComplete }: UseFileImportArgs = {}) => {
         const imported = result.imported;
         if (imported.length === 0) {
           if (result.scanned === 0) {
+            if (paths.length === 1 && onPlaylistFolderDetected) {
+              try {
+                const playlistScan = await listPlaylistFiles(paths[0]);
+                if (playlistScan.files.length > 0) {
+                  setImportProgress(null);
+                  await onPlaylistFolderDetected(paths[0]);
+                  return;
+                }
+              } catch {
+                // The path was not a readable playlist directory. Keep the
+                // original audio-import error below.
+              }
+            }
             notify.error("No supported audio files were found");
           } else if (result.failures.length > 0) {
             notify.error(
@@ -195,7 +219,13 @@ export const useFileImport = ({ onImportComplete }: UseFileImportArgs = {}) => {
         setImportProgress(null);
       }
     },
-    [resolveDbPath, setImportProgress, setInboxTracks, onImportComplete]
+    [
+      resolveDbPath,
+      setImportProgress,
+      setInboxTracks,
+      onImportComplete,
+      onPlaylistFolderDetected,
+    ]
   );
 
   const handleCreatePlaylist = useCallback(

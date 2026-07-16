@@ -539,6 +539,8 @@ function App() {
     [handlePlayTrack, setQueue]
   );
 
+  const { importPlaylist, importPlaylistFolder, exportPlaylist } = usePlaylistTransfer();
+
   // Track ratings
   const { handleRatingChange } = useTrackRatings();
 
@@ -551,6 +553,11 @@ function App() {
     cancelPlaylistDropOperation,
   } = useFileImport({
     onImportComplete: () => navigateToView("inbox"),
+    onPlaylistFolderDetected: async (directoryPath) => {
+      const imported = await importPlaylistFolder(directoryPath);
+      const firstPlaylistId = imported?.playlistIds[0];
+      if (firstPlaylistId) navigateToView(`playlist:${firstPlaylistId}` as LibraryView);
+    },
   });
 
   // Playlist drag
@@ -607,7 +614,6 @@ function App() {
     navigateToView,
   });
   const { createFolder, renameFolder, removeFolder, movePlaylist } = usePlaylistFolders();
-  const { importPlaylist, importPlaylistFolder, exportPlaylist } = usePlaylistTransfer();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
