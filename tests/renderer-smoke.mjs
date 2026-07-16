@@ -156,6 +156,10 @@ app.whenReady().then(async () => {
       event.sender.send("muro:event", "muro://media-control", args.payload ?? args.action);
       return undefined;
     }
+    if (command === "test_emit_transition_state") {
+      event.sender.send("muro:event", "muro://transition-state", args);
+      return undefined;
+    }
     if (command === "delete_tracks") return {
       deletedTrackIds: [],
       failures: (args.trackIds ?? []).map((trackId) => ({
@@ -579,6 +583,24 @@ app.whenReady().then(async () => {
               && button.textContent?.includes("Mix"),
           )
           : mixWithCurrentButtons.length === 0;
+        await window.muro.invoke("test_emit_transition_state", {
+          status: "active",
+          progress: 0.42,
+          from_id: "smoke-track-0",
+          to_id: "smoke-track-2",
+          to_title: "Smoke Track 002",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const mixIndicator = document.querySelector('[data-mix-indicator="active"]');
+        const mixProgress = document.querySelector("[data-mix-progress]");
+        const mixIndicatorReady = expectDevSettings
+          ? Boolean(
+            mixIndicator?.textContent?.includes("Mixing") &&
+            mixIndicator?.textContent?.includes("42%") &&
+            mixIndicator?.textContent?.includes("Smoke Track 002") &&
+            mixProgress?.getAttribute("aria-valuenow") === "42"
+          )
+          : !mixIndicator && !mixProgress;
         document.querySelector('[data-panel-view="queue"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
         window.location.hash = "#/settings";
@@ -811,6 +833,7 @@ app.whenReady().then(async () => {
           djMixFeatureGateReady,
           djMixManualSurfaceReady,
           mixWithCurrentActionReady,
+          mixIndicatorReady,
           analysisNotationSettingsReady,
           contextMenuOpened,
           contextMenuStayedOpenInside,
@@ -985,6 +1008,10 @@ app.whenReady().then(async () => {
       }
       if (!result.mixWithCurrentActionReady) {
         fail("Mix Next did not expose the current-track mix action behind the feature gate");
+        return;
+      }
+      if (!result.mixIndicatorReady) {
+        fail("Active mix progress indicator ignored its transition state or feature gate");
         return;
       }
       if (

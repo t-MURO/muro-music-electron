@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import {
+  ArrowRight,
+  Blend,
   Music2,
   Pause,
   Play,
@@ -128,12 +130,31 @@ export const PlayerBar = ({
 
   const showTransitionBadge =
     transition != null && (transition.status === "armed" || transition.status === "active");
+  const isMixing = transition?.status === "active";
   const transitionPercent = transition
     ? Math.round(Math.min(1, Math.max(0, transition.progress)) * 100)
     : 0;
 
   return (
-    <footer className="player-bar col-span-3 col-start-1 row-start-3 grid h-[var(--media-controls-height)] grid-cols-[minmax(230px,300px)_minmax(360px,1fr)_minmax(190px,300px)] items-center gap-5 border-t border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3">
+    <footer className="player-bar relative col-span-3 col-start-1 row-start-3 grid h-[var(--media-controls-height)] grid-cols-[minmax(230px,300px)_minmax(360px,1fr)_minmax(190px,300px)] items-center gap-5 border-t border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3">
+      {isMixing && transition && (
+        <div
+          className="absolute inset-x-0 top-0 h-[3px] overflow-hidden bg-[var(--color-bg-tertiary)]"
+          role="progressbar"
+          aria-label={`Mix progress into ${transition.toTitle}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={transitionPercent}
+          data-mix-progress
+        >
+          <span
+            className="absolute inset-y-0 left-0 rounded-r-[var(--radius-full)] bg-[var(--color-accent)] transition-[width] duration-150 ease-linear"
+            style={{ width: `${transitionPercent}%` }}
+          >
+            <span className="absolute right-0 top-1/2 h-2 w-2 -translate-y-1/2 translate-x-1/2 animate-pulse rounded-full bg-[var(--color-accent)] shadow-[0_0_10px_var(--color-accent)]" />
+          </span>
+        </div>
+      )}
       <div className="flex min-w-0 items-center gap-3">
         {currentTrack?.coverArtThumbPath ? (
           <img src={convertFileSrc(currentTrack.coverArtThumbPath)} alt={`${currentTrack.title} cover`} className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover" />
@@ -143,16 +164,25 @@ export const PlayerBar = ({
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTrack ? currentTrack.title : t("player.empty.title")}</p>
           {showTransitionBadge && transition ? (
-            <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--color-accent)]" data-transition-badge={transition.status}>
-              <span className="truncate">
-                {transition.status === "armed" ? `Mix ready → ${transition.toTitle}` : `Mixing → ${transition.toTitle}`}
+            <div
+              className="mt-1 flex max-w-full items-center gap-1.5 rounded-[var(--radius-full)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)] shadow-[0_0_14px_var(--color-accent-light)]"
+              data-transition-badge={transition.status}
+              data-mix-indicator={transition.status}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+                {isMixing && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-accent)] opacity-60" />}
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-accent)]" />
               </span>
-              {transition.status === "active" && (
-                <span className="relative h-[3px] w-16 shrink-0 overflow-hidden rounded-[var(--radius-full)] bg-[var(--color-bg-tertiary)]" aria-hidden="true">
-                  <span className="absolute left-0 top-0 h-full rounded-[var(--radius-full)] bg-[var(--color-accent)]" style={{ width: `${transitionPercent}%` }} />
-                </span>
-              )}
-            </p>
+              <Blend className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="shrink-0 uppercase tracking-[0.08em]">
+                {isMixing ? "Mixing" : "Mix ready"}
+              </span>
+              {isMixing && <span className="shrink-0 tabular-nums" data-mix-percent>{transitionPercent}%</span>}
+              <ArrowRight className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+              <span className="truncate text-[var(--color-text-primary)]">{transition.toTitle}</span>
+            </div>
           ) : (
             <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">{currentTrack ? currentTrack.artist : t("player.empty.subtitle")}</p>
           )}
