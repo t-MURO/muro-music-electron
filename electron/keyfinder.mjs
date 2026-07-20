@@ -2,6 +2,7 @@ import {
   KeyFinderClient,
   resolveKeyFinderBinary,
 } from "@neo-keyfinder/engine-client";
+import { availableParallelism } from "node:os";
 
 const camelotCodes = [
   "11B", "8A", "6B", "3A", "1B", "10A", "8B", "5A", "3B", "12A", "10B", "7A",
@@ -95,76 +96,130 @@ const toEngineTrack = (track) => ({
 });
 
 export const createKeyFinderService = ({ binaryDirectories, emit }) => {
-  let client;
+  const clients = [];
   let nextOwner = 1;
+  let nextPublicJob = 1;
   const senders = new Map();
+  const jobs = new Map();
 
-  const getClient = () => {
-    if (client) return client;
-    client = new KeyFinderClient({
+  const cleanupActive = (owner, active) => {
+    senders.delete(owner);
+    clients[active.clientIndex]?.activeOwners.delete(owner);
+    jobs.delete(active.publicJobId);
+    active.finished = true;
+  };
+
+  const createClient = (clientIndex) => {
+    const client = new KeyFinderClient({
       executablePath: resolveKeyFinderBinary({ directories: binaryDirectories }),
     });
+    const state = { client, activeOwners: new Set() };
+    clients[clientIndex] = state;
     client.on("event", (event) => {
       const active = senders.get(event.owner);
-      if (!active || active.sender.isDestroyed?.()) return;
-      emit(active.sender, "muro://keyfinder-analysis", event);
-      if (event.event === "jobFinished") senders.delete(event.owner);
-    });
-    client.once("exit", () => {
-      const failedClient = client;
-      client = undefined;
-      for (const [owner, active] of senders) {
-        if (active.sender.isDestroyed?.()) continue;
-        const jobId = active.jobId || `failed-${owner}`;
-        for (const track of active.tracks) {
-          emit(active.sender, "muro://keyfinder-analysis", {
-            version: 1,
-            event: "trackUpdated",
-            jobId,
-            owner,
-            sequence: 0,
-            payload: {
-              track: {
-                ...toEngineTrack(track),
-                status: "failed",
-                error: {
-                  code: "ENGINE_EXITED",
-                  stage: "analysis",
-                  message: "The analysis engine stopped. This batch can be retried.",
-                },
-              },
-            },
-          });
-        }
+      if (!active || active.clientIndex !== clientIndex) return;
+      if (!active.sender.isDestroyed?.()) {
         emit(active.sender, "muro://keyfinder-analysis", {
-          version: 1,
-          event: "jobFinished",
-          jobId,
-          owner,
-          sequence: 0,
-          payload: { cancelled: false, completed: active.tracks.length, total: active.tracks.length },
+          ...event,
+          jobId: active.publicJobId,
         });
       }
-      senders.clear();
-      if (failedClient) failedClient.removeAllListeners();
+      if (event.event === "jobFinished") cleanupActive(event.owner, active);
     });
-    client.on("stderr", (message) => console.warn(`KeyFinder engine: ${message.trimEnd()}`));
+    client.once("exit", () => {
+      if (clients[clientIndex] === state) clients[clientIndex] = undefined;
+      for (const [owner, active] of senders) {
+        if (active.clientIndex !== clientIndex) continue;
+        if (!active.sender.isDestroyed?.()) {
+          for (const track of active.tracks) {
+            emit(active.sender, "muro://keyfinder-analysis", {
+              version: 1,
+              event: "trackUpdated",
+              jobId: active.publicJobId,
+              owner,
+              sequence: 0,
+              payload: {
+                track: {
+                  ...toEngineTrack(track),
+                  status: "failed",
+                  error: {
+                    code: "ENGINE_EXITED",
+                    stage: "analysis",
+                    message: "The analysis engine stopped. This batch can be retried.",
+                  },
+                },
+              },
+            });
+          }
+          emit(active.sender, "muro://keyfinder-analysis", {
+            version: 1,
+            event: "jobFinished",
+            jobId: active.publicJobId,
+            owner,
+            sequence: 0,
+            payload: { cancelled: false, completed: active.tracks.length, total: active.tracks.length },
+          });
+        }
+        cleanupActive(owner, active);
+      }
+      client.removeAllListeners();
+    });
+    client.on("stderr", (message) => console.warn(`KeyFinder engine ${clientIndex + 1}: ${message.trimEnd()}`));
     client.on("protocolError", (error) => console.warn(error.message));
-    return client;
+    return state;
+  };
+
+  const getClient = (clientIndex = 0) => clients[clientIndex] ?? createClient(clientIndex);
+
+  const poolSizeFor = (performance) => {
+    const available = Math.max(1, availableParallelism());
+    if (performance === "maximum") return Math.min(4, available);
+    if (performance === "fast") return Math.min(2, available);
+    return 1;
+  };
+
+  const trimIdleClients = (poolSize) => {
+    for (let index = poolSize; index < clients.length; index += 1) {
+      const state = clients[index];
+      if (!state || state.activeOwners.size > 0) continue;
+      clients[index] = undefined;
+      state.client.removeAllListeners();
+      state.client.close();
+    }
+  };
+
+  const selectClient = (poolSize) => {
+    const states = Array.from({ length: poolSize }, (_, index) => getClient(index));
+    return states.reduce((selected, candidate) => (
+      candidate.activeOwners.size < selected.activeOwners.size ? candidate : selected
+    ));
   };
 
   return {
     async health() {
-      return getClient().health();
+      return getClient(0).client.health();
     },
 
     async startAnalysis(tracks, sender, requestedSettings, writeAuthorization = false) {
       const owner = `muro-analysis-${nextOwner++}`;
-      const active = { sender, tracks, jobId: null };
+      const publicJobId = `job-${nextPublicJob++}`;
+      const poolSize = poolSizeFor(requestedSettings?.performance);
+      trimIdleClients(poolSize);
+      const state = selectClient(poolSize);
+      const clientIndex = clients.indexOf(state);
+      const active = {
+        sender,
+        tracks,
+        publicJobId,
+        rawJobId: null,
+        clientIndex,
+        finished: false,
+      };
       senders.set(owner, active);
+      state.activeOwners.add(owner);
       const settings = createAnalysisSettings(requestedSettings, writeAuthorization);
       try {
-        const result = await getClient().request(
+        const result = await state.client.request(
           "startAnalysis",
           {
             owner,
@@ -174,29 +229,39 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
           },
           { timeoutMs: 60_000 },
         );
-        active.jobId = result.jobId;
-        return result;
+        active.rawJobId = result.jobId;
+        if (!active.finished && senders.get(owner) === active) {
+          jobs.set(publicJobId, { clientIndex, rawJobId: result.jobId });
+        }
+        return { ...result, jobId: publicJobId };
       } catch (error) {
-        senders.delete(owner);
+        if (senders.get(owner) === active) cleanupActive(owner, active);
         throw error;
       }
     },
 
     cancelAnalysis(jobId) {
-      return getClient().request("cancelJob", { jobId }, { timeoutMs: 5_000 });
+      const job = jobs.get(jobId);
+      const state = job ? clients[job.clientIndex] : null;
+      if (!job || !state) return Promise.resolve({ cancelled: false });
+      return state.client.request("cancelJob", { jobId: job.rawJobId }, { timeoutMs: 5_000 });
     },
 
     recycle() {
-      if (senders.size > 0 || !client) return { recycled: false };
-      const previousClient = client;
-      client = undefined;
-      previousClient.removeAllListeners();
-      previousClient.close();
+      if (senders.size > 0 || clients.every((state) => !state)) return { recycled: false };
+      for (let index = 0; index < clients.length; index += 1) {
+        const state = clients[index];
+        if (!state) continue;
+        clients[index] = undefined;
+        state.client.removeAllListeners();
+        state.client.close();
+      }
+      jobs.clear();
       return { recycled: true };
     },
 
     generateWaveform(sourcePath, points = 512) {
-      return getClient().request(
+      return getClient(0).client.request(
         "generateWaveform",
         { path: String(sourcePath), points: Math.max(32, Math.min(1024, Number(points) || 512)) },
         { timeoutMs: 120_000 },
@@ -205,8 +270,14 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
 
     close() {
       senders.clear();
-      client?.close();
-      client = undefined;
+      jobs.clear();
+      for (let index = 0; index < clients.length; index += 1) {
+        const state = clients[index];
+        if (!state) continue;
+        clients[index] = undefined;
+        state.client.removeAllListeners();
+        state.client.close();
+      }
     },
   };
 };

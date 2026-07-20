@@ -92,10 +92,12 @@ export const SettingsPanel = ({
   const analysisCustomCodes = useSettingsStore((state) => state.analysisCustomCodes);
   const analysisDelimiter = useSettingsStore((state) => state.analysisDelimiter);
   const analysisOutputs = useSettingsStore((state) => state.analysisOutputs);
+  const analysisPerformance = useSettingsStore((state) => state.analysisPerformance);
   const setAnalysisNotation = useSettingsStore((state) => state.setAnalysisNotation);
   const setAnalysisCustomCode = useSettingsStore((state) => state.setAnalysisCustomCode);
   const setAnalysisDelimiter = useSettingsStore((state) => state.setAnalysisDelimiter);
   const setAnalysisOutput = useSettingsStore((state) => state.setAnalysisOutput);
+  const setAnalysisPerformance = useSettingsStore((state) => state.setAnalysisPerformance);
   const djMixEnabled = useSettingsStore((state) => state.djMixEnabled);
   const autoMix = useSettingsStore((state) => state.autoMix);
   const mixBars = useSettingsStore((state) => state.mixBars);
@@ -417,6 +419,28 @@ export const SettingsPanel = ({
                 Key and BPM Analysis
               </h3>
               <div className="max-w-3xl space-y-5 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-[var(--spacing-lg)]">
+                <div>
+                  <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                    Analysis performance
+                  </label>
+                  <div className="relative max-w-md">
+                    <select
+                      value={analysisPerformance}
+                      onChange={(event) => setAnalysisPerformance(event.target.value as "stable" | "fast" | "maximum")}
+                      data-analysis-performance
+                      className="h-[var(--input-height)] w-full appearance-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] pr-10 text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
+                    >
+                      <option value="stable">Stable — 1 worker</option>
+                      <option value="fast">Fast — 2 isolated workers</option>
+                      <option value="maximum">Maximum — up to 4 isolated workers</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                  </div>
+                  <p className="mt-2 max-w-2xl text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                    More workers analyze separate songs at the same accuracy. Maximum uses up to four CPU cores and may increase power use, fan noise, and memory pressure.
+                  </p>
+                </div>
+
                 <div>
                   <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
                     Key notation

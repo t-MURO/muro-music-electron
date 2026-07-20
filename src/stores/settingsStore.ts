@@ -5,6 +5,7 @@ import type { MixBars } from "../lib/mix/config";
 
 export type AnalysisOutputMode = "none" | "prepend" | "append" | "overwrite";
 export type AnalysisNotationMode = "standard" | "custom" | "combined" | "djCombined";
+export type AnalysisPerformanceMode = "stable" | "fast" | "maximum";
 export type DeleteMode = "library" | "disk";
 export type { MixBars } from "../lib/mix/config";
 export type AnalysisOutputs = {
@@ -30,6 +31,7 @@ type SettingsState = {
   analysisCustomCodes: string[];
   analysisDelimiter: string;
   analysisOutputs: AnalysisOutputs;
+  analysisPerformance: AnalysisPerformanceMode;
   lastDeleteMode: DeleteMode;
   djMixEnabled: boolean;
   autoMix: boolean;
@@ -51,6 +53,7 @@ type SettingsActions = {
   setAnalysisCustomCode: (index: number, value: string) => void;
   setAnalysisDelimiter: (delimiter: string) => void;
   setAnalysisOutput: <K extends keyof AnalysisOutputs>(field: K, mode: AnalysisOutputs[K]) => void;
+  setAnalysisPerformance: (performance: AnalysisPerformanceMode) => void;
   setLastDeleteMode: (mode: DeleteMode) => void;
   setDjMixEnabled: (djMixEnabled: boolean) => void;
   setAutoMix: (autoMix: boolean) => void;
@@ -82,6 +85,7 @@ export const useSettingsStore = create<SettingsStore>()(
         initialKey: "none",
         bpm: "none",
       },
+      analysisPerformance: "stable",
       lastDeleteMode: "library",
       djMixEnabled: false,
       autoMix: false,
@@ -116,6 +120,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setAnalysisOutput: (field, mode) => set((state) => ({
         analysisOutputs: { ...state.analysisOutputs, [field]: mode },
       })),
+      setAnalysisPerformance: (analysisPerformance) => set({ analysisPerformance }),
       setLastDeleteMode: (lastDeleteMode) => set({ lastDeleteMode }),
       setDjMixEnabled: (djMixEnabled) => set((state) => ({
         djMixEnabled,
@@ -138,6 +143,7 @@ export const useSettingsStore = create<SettingsStore>()(
         analysisCustomCodes: state.analysisCustomCodes,
         analysisDelimiter: state.analysisDelimiter,
         analysisOutputs: state.analysisOutputs,
+        analysisPerformance: state.analysisPerformance,
         lastDeleteMode: state.lastDeleteMode,
         djMixEnabled: state.djMixEnabled,
         autoMix: state.autoMix,

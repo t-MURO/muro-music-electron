@@ -91,6 +91,7 @@ try {
     sourcePath: path.join(here, "does-not-exist.wav"),
     durationSeconds: 60,
   }], sender, {
+    performance: "stable",
     notation: "djCombined",
     customCodes: [],
     delimiter: " / ",
@@ -107,6 +108,33 @@ try {
   assert.equal(completed.payload.total, 1);
   assert.ok(events.some((event) =>
     event.event === "trackUpdated" && event.payload.track.status === "failed"));
+
+  const isolatedJobs = await Promise.all(Array.from({ length: 4 }, (_, index) => (
+    service.startAnalysis([{
+      id: `isolated-missing-${index}`,
+      title: `Isolated missing ${index}`,
+      artist: "",
+      album: "",
+      sourcePath: path.join(temporaryDirectory, `isolated-missing-${index}.wav`),
+      durationSeconds: 60,
+    }], sender, {
+      performance: "maximum",
+      notation: "custom",
+      customCodes: [],
+      delimiter: " - ",
+      outputs: {
+        comment: "none",
+        grouping: "none",
+        initialKey: "none",
+        bpm: "none",
+      },
+    }, false)
+  )));
+  assert.equal(new Set(isolatedJobs.map((job) => job.jobId)).size, isolatedJobs.length);
+  const isolatedResults = await Promise.all(
+    isolatedJobs.map((job) => waitForFinishedJob(job.jobId)),
+  );
+  assert.ok(isolatedResults.every((result) => result.payload.total === 1));
   assert.deepEqual(service.recycle(), { recycled: true });
 
   const largeBatch = Array.from({ length: 250 }, (_, index) => ({

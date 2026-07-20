@@ -1225,11 +1225,25 @@ app.whenReady().then(async () => {
         const notationOptions = notationSelect instanceof HTMLSelectElement
           ? Array.from(notationSelect.options, (option) => option.value)
           : [];
+        const performanceSelect = document.querySelector('[data-analysis-performance]');
+        const performanceOptions = performanceSelect instanceof HTMLSelectElement
+          ? Array.from(performanceSelect.options, (option) => option.value)
+          : [];
+        if (performanceSelect instanceof HTMLSelectElement) {
+          performanceSelect.value = "maximum";
+          performanceSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        const persistedAnalysisPerformance = JSON.parse(
+          localStorage.getItem("muro-settings") ?? "null"
+        )?.state?.analysisPerformance;
         const analysisNotationSettingsReady =
           notationOptions.includes("standard") &&
           notationOptions.includes("custom") &&
           notationOptions.includes("combined") &&
-          notationOptions.includes("djCombined");
+          notationOptions.includes("djCombined") &&
+          performanceOptions.join(",") === "stable,fast,maximum" &&
+          persistedAnalysisPerformance === "maximum";
         window.location.hash = "#/collection/albums";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const albumsViewReady = Boolean(document.querySelector("[data-albums-view]"));
@@ -1653,6 +1667,10 @@ app.whenReady().then(async () => {
       };
     })()`);
     if (result.childCount > 0 && result.textLength > 0 && result.stickyHeaderReady) {
+      if (!result.analysisNotationSettingsReady) {
+        fail("Key notation and analysis performance settings are not working");
+        return;
+      }
       if (
         !result.bulkPlaylistMenuReady ||
         !result.bulkPlaylistMoveReady ||
@@ -1899,10 +1917,6 @@ app.whenReady().then(async () => {
           `compatible=${result.compatibleCamelotCount}, current=${result.currentCamelotCode}, ` +
           `selected=${result.selectedCamelotCode}, filtered=${result.wheelFilteredTo9A}`
         );
-        return;
-      }
-      if (!result.analysisNotationSettingsReady) {
-        fail("Key notation modes are not visible in the Key Analysis settings tab");
         return;
       }
       if (!result.artistInformationSettingsReady) {

@@ -1,6 +1,7 @@
 import { invoke } from "@muro/desktop/runtime";
 import { listen, type UnlistenFn } from "@muro/desktop/events";
 import type { Track } from "../types";
+import type { AnalysisPerformanceMode } from "../stores/settingsStore";
 
 const DEFAULT_BPM_MIN = 100;
 const DEFAULT_BPM_MAX = 180;
@@ -24,6 +25,7 @@ export interface BpmRange {
 }
 
 export interface TrackAnalysisSettings {
+  performance: AnalysisPerformanceMode;
   notation: "standard" | "custom" | "combined" | "djCombined";
   customCodes: string[];
   delimiter: string;

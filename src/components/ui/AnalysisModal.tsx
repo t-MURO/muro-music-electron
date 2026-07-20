@@ -41,6 +41,15 @@ const ANALYSIS_BATCH_SIZE = 1;
 const ANALYSIS_BATCH_COOLDOWN_MS = 25;
 const FALLBACK_TRACK_DURATION_SECONDS = 180;
 
+const analysisWorkerCount = (performance: "stable" | "fast" | "maximum") => {
+  if (performance === "stable") return 1;
+  if (performance === "fast") return 2;
+  const available = typeof navigator === "undefined"
+    ? 4
+    : Number(navigator.hardwareConcurrency) || 4;
+  return Math.max(1, Math.min(4, available));
+};
+
 const formatEta = (seconds: number) => {
   const rounded = Math.max(0, Math.round(seconds));
   const hours = Math.floor(rounded / 3600);
@@ -65,6 +74,7 @@ export const AnalysisModal = ({
   const analysisCustomCodes = useSettingsStore((state) => state.analysisCustomCodes);
   const analysisDelimiter = useSettingsStore((state) => state.analysisDelimiter);
   const analysisOutputs = useSettingsStore((state) => state.analysisOutputs);
+  const analysisPerformance = useSettingsStore((state) => state.analysisPerformance);
   const [analyses, setAnalyses] = useState<TrackAnalysis[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -72,7 +82,7 @@ export const AnalysisModal = ({
   const [selectedRange, setSelectedRange] = useState<BpmRange>(BPM_RANGES[0]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const jobIdRef = useRef<string | null>(null);
+  const activeJobIdsRef = useRef(new Set<string>());
   const cancelRequestedRef = useRef(false);
   const resultsScrollRef = useRef<HTMLDivElement | null>(null);
   const analysisIndexRef = useRef(new Map<string, number>());
@@ -115,8 +125,11 @@ export const AnalysisModal = ({
     let removeListener: (() => void) | undefined;
     const finishedJobs = new Set<string>();
     const finishResolvers = new Map<string, () => void>();
-    let completedBeforeBatch = 0;
-    let completedWorkBeforeBatch = 0;
+    const trackProgress = new Map<string, number>();
+    const completedTrackIds = new Set<string>();
+    let nextTrackIndex = 0;
+    let completedTracks = 0;
+    let completedWork = 0;
     const trackWork = new Map(tracks.map((track) => [
       track.id,
       Number.isFinite(track.durationSeconds) && track.durationSeconds > 0
@@ -139,6 +152,16 @@ export const AnalysisModal = ({
       setEtaSeconds((previous) => previous === null
         ? estimate
         : (previous * 0.7) + (estimate * 0.3));
+    };
+
+    const updateAggregateEta = () => {
+      const activeWork = [...trackProgress.entries()].reduce(
+        (total, [trackId, fraction]) => (
+          total + ((trackWork.get(trackId) ?? FALLBACK_TRACK_DURATION_SECONDS) * fraction)
+        ),
+        0,
+      );
+      updateEta(completedWork + activeWork);
     };
 
     const runAnalysis = async () => {
@@ -186,84 +209,85 @@ export const AnalysisModal = ({
               });
             }
           } else if (event.event === "trackProgress" && event.payload.trackId) {
-            const duration = trackWork.get(event.payload.trackId) ?? FALLBACK_TRACK_DURATION_SECONDS;
             const fraction = Math.max(0, Math.min(1, Number(event.payload.fraction) || 0));
-            updateEta(completedWorkBeforeBatch + (duration * fraction));
-          } else if (event.event === "jobProgress") {
-            setProgress({
-              current: Math.min(
-                tracks.length,
-                completedBeforeBatch + (Number(event.payload.completed) || 0)
-              ),
-              total: tracks.length,
-            });
+            trackProgress.set(event.payload.trackId, fraction);
+            updateAggregateEta();
           } else if (event.event === "jobFinished") {
             finishedJobs.add(event.jobId);
-            if (jobIdRef.current === event.jobId) jobIdRef.current = null;
+            activeJobIdsRef.current.delete(event.jobId);
             finishResolvers.get(event.jobId)?.();
             finishResolvers.delete(event.jobId);
           }
         });
 
-        for (let offset = 0; offset < tracks.length; offset += ANALYSIS_BATCH_SIZE) {
-          if (disposed || cancelRequestedRef.current) break;
-          const batch = tracks.slice(offset, offset + ANALYSIS_BATCH_SIZE);
-          try {
-            const started = await startTrackAnalysis(batch, {
-              notation: analysisNotation,
-              customCodes: analysisCustomCodes,
-              delimiter: analysisDelimiter,
-              outputs: analysisOutputs,
-            });
-            if (disposed || cancelRequestedRef.current) {
-              await cancelTrackAnalysis(started.jobId).catch(() => undefined);
-              break;
-            }
-            if (!finishedJobs.has(started.jobId)) {
-              jobIdRef.current = started.jobId;
-              await new Promise<void>((resolve) => {
-                if (finishedJobs.has(started.jobId)) {
-                  resolve();
-                } else {
-                  finishResolvers.set(started.jobId, resolve);
-                }
+        const runWorker = async () => {
+          while (!disposed && !cancelRequestedRef.current) {
+            const offset = nextTrackIndex;
+            nextTrackIndex += ANALYSIS_BATCH_SIZE;
+            if (offset >= tracks.length) return;
+            const batch = tracks.slice(offset, offset + ANALYSIS_BATCH_SIZE);
+            try {
+              const started = await startTrackAnalysis(batch, {
+                performance: analysisPerformance,
+                notation: analysisNotation,
+                customCodes: analysisCustomCodes,
+                delimiter: analysisDelimiter,
+                outputs: analysisOutputs,
               });
-            }
-          } catch (error) {
-            if (disposed) break;
-            const message = error instanceof Error ? error.message : "Analysis failed";
-            setAnalyses((previous) => {
-              const next = [...previous];
-              for (const track of batch) {
-                const analysisIndex = analysisIndexRef.current.get(track.id);
-                if (analysisIndex === undefined || !next[analysisIndex]) continue;
-                next[analysisIndex] = {
-                  ...next[analysisIndex],
-                  result: null,
-                  rawBpm: 0,
-                  error: message,
-                  writeError: null,
-                };
+              if (disposed || cancelRequestedRef.current) {
+                await cancelTrackAnalysis(started.jobId).catch(() => undefined);
+                return;
               }
-              return next;
-            });
+              if (!finishedJobs.has(started.jobId)) {
+                activeJobIdsRef.current.add(started.jobId);
+                await new Promise<void>((resolve) => {
+                  if (finishedJobs.has(started.jobId)) {
+                    activeJobIdsRef.current.delete(started.jobId);
+                    resolve();
+                  } else {
+                    finishResolvers.set(started.jobId, resolve);
+                  }
+                });
+              }
+            } catch (error) {
+              if (disposed) return;
+              const message = error instanceof Error ? error.message : "Analysis failed";
+              setAnalyses((previous) => {
+                const next = [...previous];
+                for (const track of batch) {
+                  const analysisIndex = analysisIndexRef.current.get(track.id);
+                  if (analysisIndex === undefined || !next[analysisIndex]) continue;
+                  next[analysisIndex] = {
+                    ...next[analysisIndex],
+                    result: null,
+                    rawBpm: 0,
+                    error: message,
+                    writeError: null,
+                  };
+                }
+                return next;
+              });
+            } finally {
+              for (const track of batch) {
+                trackProgress.delete(track.id);
+                if (completedTrackIds.has(track.id)) continue;
+                completedTrackIds.add(track.id);
+                completedTracks += 1;
+                completedWork += trackWork.get(track.id) ?? FALLBACK_TRACK_DURATION_SECONDS;
+              }
+              updateAggregateEta();
+              setProgress({ current: Math.min(completedTracks, tracks.length), total: tracks.length });
+            }
+            if (nextTrackIndex < tracks.length) {
+              await new Promise((resolve) =>
+                window.setTimeout(resolve, ANALYSIS_BATCH_COOLDOWN_MS)
+              );
+            }
           }
-          completedBeforeBatch += batch.length;
-          completedWorkBeforeBatch += batch.reduce(
-            (total, track) => total + (trackWork.get(track.id) ?? FALLBACK_TRACK_DURATION_SECONDS),
-            0,
-          );
-          updateEta(completedWorkBeforeBatch);
-          setProgress({
-            current: Math.min(completedBeforeBatch, tracks.length),
-            total: tracks.length,
-          });
-          if (completedBeforeBatch < tracks.length) {
-            await new Promise((resolve) =>
-              window.setTimeout(resolve, ANALYSIS_BATCH_COOLDOWN_MS)
-            );
-          }
-        }
+        };
+
+        const workers = Math.min(tracks.length, analysisWorkerCount(analysisPerformance));
+        await Promise.all(Array.from({ length: workers }, () => runWorker()));
       } catch (error) {
         if (disposed) return;
         const message = error instanceof Error ? error.message : "Analysis failed";
@@ -284,9 +308,11 @@ export const AnalysisModal = ({
       removeListener?.();
       for (const resolve of finishResolvers.values()) resolve();
       finishResolvers.clear();
-      const jobId = jobIdRef.current;
-      jobIdRef.current = null;
-      if (jobId) void cancelTrackAnalysis(jobId).catch(() => undefined);
+      const activeJobIds = [...activeJobIdsRef.current];
+      activeJobIdsRef.current.clear();
+      for (const jobId of activeJobIds) {
+        void cancelTrackAnalysis(jobId).catch(() => undefined);
+      }
     };
   }, [isOpen, tracks]);
 
@@ -343,8 +369,11 @@ export const AnalysisModal = ({
 
   const handleCancel = useCallback(() => {
     cancelRequestedRef.current = true;
-    const jobId = jobIdRef.current;
-    if (jobId) void cancelTrackAnalysis(jobId).catch(() => undefined);
+    const activeJobIds = [...activeJobIdsRef.current];
+    activeJobIdsRef.current.clear();
+    for (const jobId of activeJobIds) {
+      void cancelTrackAnalysis(jobId).catch(() => undefined);
+    }
   }, []);
 
   const handleClose = useCallback(() => {
