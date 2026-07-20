@@ -21,6 +21,7 @@ import {
 import { createWaveformCache } from "./waveformCache.mjs";
 import { createArtistProfileService } from "./artistProfiles.mjs";
 import { createAlbumCoverService } from "./albumCovers.mjs";
+import { createCastService } from "./cast/castService.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -437,6 +438,7 @@ export const createBackend = ({
   artistProfileCacheDir,
   metadataFetchImpl,
   musicBrainzIntervalMs,
+  castService: castServiceOverride,
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
@@ -448,7 +450,9 @@ export const createBackend = ({
   const waveformCache = createWaveformCache({
     cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
   });
+  const castService = castServiceOverride ?? createCastService({ emit });
   const commands = {
+    ...castService.commands,
     async import_files({ paths, dbPath }, sender) {
       const audioPaths = await collectAudioPaths(Array.isArray(paths) ? paths : []);
       const imported = [];
@@ -879,6 +883,7 @@ export const createBackend = ({
       return handler(args, sender);
     },
     close() {
+      castService.close();
       keyFinder.close();
       closeDatabases();
     },
