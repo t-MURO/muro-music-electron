@@ -28,13 +28,23 @@ type TableRowProps = {
     isSelected: boolean
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
+  onOpenArtist?: (artist: string) => void;
+  onOpenAlbum?: (trackId: string) => void;
   onRatingChange: (id: string, rating: number) => void;
+};
+
+const formatFileSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1);
+  const value = bytes / (1024 ** (unitIndex + 1));
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 };
 
 const getColumnDisplayValue = (track: Track, key: ColumnConfig["key"]) => {
   switch (key) {
     case "artists":
-      return track.artists ?? track.artist;
+      return track.artists ?? "";
     case "trackNumber":
       return track.trackNumber === undefined || track.trackNumber === null
         ? ""
@@ -43,12 +53,26 @@ const getColumnDisplayValue = (track: Track, key: ColumnConfig["key"]) => {
       return track.trackTotal === undefined || track.trackTotal === null
         ? ""
         : String(track.trackTotal);
+    case "discNumber":
+      return track.discNumber === undefined || track.discNumber === null
+        ? ""
+        : String(track.discNumber);
     case "key":
       return track.key ?? "";
     case "bpm":
       return track.bpm === undefined || track.bpm === null
         ? ""
         : track.bpm.toFixed(1);
+    case "sampleRate":
+      return track.sampleRate && track.sampleRate > 0
+        ? `${Number((track.sampleRate / 1000).toFixed(1))} kHz`
+        : "";
+    case "bitDepth":
+      return track.bitDepth && track.bitDepth > 0 ? `${track.bitDepth}-bit` : "";
+    case "fileSize":
+      return track.fileSize === undefined || track.fileSize < 0
+        ? ""
+        : formatFileSize(track.fileSize);
     case "format": {
       const pathParts = track.sourcePath.split(/[\\/]/);
       const filename = pathParts[pathParts.length - 1] ?? "";
@@ -66,6 +90,13 @@ const getColumnDisplayValue = (track: Track, key: ColumnConfig["key"]) => {
       return track.dateAdded ?? "";
     case "dateModified":
       return track.dateModified ?? "";
+    case "lastPlayedAt": {
+      if (!track.lastPlayedAt) return "";
+      const parsed = new Date(track.lastPlayedAt);
+      return Number.isNaN(parsed.valueOf())
+        ? track.lastPlayedAt
+        : parsed.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    }
     default: {
       const value = track[key as keyof Track];
       return value === undefined || value === null ? "" : String(value);
@@ -88,6 +119,8 @@ export const TableRow = memo(
     onRowMouseDown,
     onRowContextMenu,
     onRowDoubleClick,
+    onOpenArtist,
+    onOpenAlbum,
     onRatingChange,
   }: TableRowProps) => {
     const coverPath = track.coverArtThumbPath || track.coverArtPath;
@@ -177,13 +210,16 @@ export const TableRow = memo(
           }
           const isTitleColumn = column.key === "title";
           const textColorClass = isTitleColumn && isPlayingTrack ? "text-[var(--color-accent)]" : "";
-          const numericClass = column.key === "bpm" || column.key === "duration" || column.key === "bitrate" ? "tabular-nums" : "";
+          const numericClass = column.key === "bpm" || column.key === "duration" || column.key === "bitrate" || column.key === "discNumber" || column.key === "playCount" || column.key === "sampleRate" || column.key === "bitDepth" || column.key === "fileSize" ? "tabular-nums" : "";
           const camelotColor = column.key === "key" ? getCamelotColor(value) : null;
           const keyClass = column.key === "key" && value && !camelotColor ? "font-semibold text-[var(--color-accent)]" : "";
+          const isArtistLink = column.key === "artist" && Boolean(value) && Boolean(onOpenArtist);
+          const isAlbumLink = column.key === "album" && Boolean(value) && Boolean(onOpenAlbum);
           return (
             <div
               key={column.key}
               className={`flex h-[var(--table-row-height)] items-center border-l border-[var(--color-border-light)] px-3 ${isTitleColumn ? "font-medium text-[var(--color-text-primary)]" : ""} ${numericClass} ${keyClass} ${textColorClass}`}
+              data-column-key={column.key}
               role="cell"
             >
               {isTitleColumn && (
@@ -199,8 +235,32 @@ export const TableRow = memo(
                 >
                   {value.trim()}
                 </span>
+              ) : isArtistLink || isAlbumLink ? (
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-left transition-colors hover:text-[var(--color-accent)] hover:underline focus-visible:text-[var(--color-accent)] focus-visible:underline focus-visible:outline-none"
+                  title={isArtistLink ? `Open artist ${value}` : `Open album ${value}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (isArtistLink) {
+                      onOpenArtist?.(track.artist);
+                    } else {
+                      onOpenAlbum?.(track.id);
+                    }
+                  }}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  data-track-artist-link={isArtistLink ? "true" : undefined}
+                  data-track-album-link={isAlbumLink ? "true" : undefined}
+                >
+                  {value}
+                </button>
               ) : (
-                <span className="block truncate">{value}</span>
+                <span
+                  className="block truncate"
+                  title={column.key === "sourcePath" || column.key === "comment" ? value : undefined}
+                >
+                  {value}
+                </span>
               )}
             </div>
           );

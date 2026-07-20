@@ -94,6 +94,16 @@ export type AlbumCoverScanResult = {
 export const scanAlbumCovers = (dbPath: string, limit = 25) =>
   invoke<AlbumCoverScanResult>("scan_album_covers", { dbPath, limit });
 
+export type TechnicalMetadataScanResult = {
+  checked: number;
+  updated: number;
+  failed: number;
+  remaining: number;
+};
+
+export const scanTechnicalMetadata = (dbPath: string, limit = 25) =>
+  invoke<TechnicalMetadataScanResult>("scan_technical_metadata", { dbPath, limit });
+
 // ============================================================================
 // Playlist Operations
 // ============================================================================

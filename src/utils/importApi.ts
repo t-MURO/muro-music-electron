@@ -23,6 +23,9 @@ export type ImportedTrack = {
   duration: string;
   duration_seconds: number;
   bitrate: string;
+  sample_rate_hz?: number;
+  bit_depth?: number;
+  file_size_bytes?: number;
   rating: number;
   source_path: string;
   cover_art_path?: string;
@@ -132,6 +135,9 @@ export const importedTrackToTrack = (imported: ImportedTrack): Track => ({
   duration: imported.duration,
   durationSeconds: imported.duration_seconds,
   bitrate: imported.bitrate,
+  sampleRate: imported.sample_rate_hz,
+  bitDepth: imported.bit_depth,
+  fileSize: imported.file_size_bytes,
   rating: imported.rating,
   sourcePath: imported.source_path,
   coverArtPath: imported.cover_art_path,

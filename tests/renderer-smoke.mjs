@@ -55,11 +55,17 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   duration: "3:00",
   duration_seconds: 180,
   bitrate: "320 kbps",
+  sample_rate_hz: 44_100,
+  bit_depth: 24,
+  file_size_bytes: 10 * 1024 * 1024,
   key: ["8A", "8A", "9A", "7A", "8B", "2B"][index % 6],
   bpm: index === 1 ? 0 : 120 + (index % 8),
   rating: 0,
+  comment: `Smoke comment ${index}`,
+  disc_number: (index % 2) + 1,
+  last_played_at: `2026-07-${String((index % 19) + 1).padStart(2, "0")}T18:30:00.000Z`,
   source_path: path.join(temporaryDirectory, `track-${index}.wav`),
-  play_count: 0,
+  play_count: index,
 }));
 const smokeArtistProfile = {
   profileVersion: 2,
@@ -202,6 +208,9 @@ app.whenReady().then(async () => {
     if (command === "scan_album_covers") {
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalAlbums: 0 };
     }
+    if (command === "scan_technical_metadata") {
+      return { checked: 0, updated: 0, failed: 0, remaining: 0 };
+    }
     if (command === "reorder_playlists" || command === "delete_playlist") return undefined;
     if (command === "update_track_metadata") {
       ratingUpdates.push(args);
@@ -278,6 +287,126 @@ app.whenReady().then(async () => {
       const scroller = document.querySelector('[data-track-table-scroll]');
       const headerScroller = document.querySelector('[data-track-table-header-scroll]');
       const searchShortcutHint = document.querySelector('[data-search-shortcut-hint]');
+      const appShellGrid = document.querySelector('[data-app-shell-grid]');
+      const appShellTransition = appShellGrid ? getComputedStyle(appShellGrid) : null;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const sidebarAnimationReady = Boolean(
+        appShellTransition && (
+          reducedMotion
+            ? appShellTransition.transitionDuration === "0s"
+            : appShellTransition.transitionProperty.includes("grid-template-columns") &&
+              appShellTransition.transitionDuration !== "0s"
+        )
+      );
+      const sidebarResizeHandle = document.querySelector('[role="separator"]');
+      sidebarResizeHandle?.dispatchEvent(new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX: 200,
+      }));
+      const resizeTransitionDisabled = Boolean(
+        document.documentElement.dataset.panelResizing === "true" &&
+        appShellGrid &&
+        getComputedStyle(appShellGrid).transitionDuration === "0s"
+      );
+      window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      const libraryHeader = document.querySelector('.library-command-bar');
+      const libraryHeaderButtons = [...(libraryHeader?.querySelectorAll('button') ?? [])];
+      const libraryTitleRegionReady = (
+        libraryHeader?.querySelector('[data-library-title]')?.getBoundingClientRect().width ?? 0
+      ) >= (window.innerWidth <= 1180 ? 110 : 240);
+      const libraryHeaderControlsReady = Boolean(
+        libraryHeader?.querySelector('[data-library-columns]') &&
+        libraryHeader?.querySelector('[title="Toggle compact table"]') &&
+        !libraryHeader?.querySelector('[title="Filter the current library view"]') &&
+        !libraryHeader?.querySelector('[title="Cycle title sorting"]') &&
+        !libraryHeaderButtons.some((button) => button.textContent?.trim() === "Add Music")
+      );
+      const compactTableButton = libraryHeader?.querySelector('[title="Toggle compact table"]');
+      compactTableButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const compactFirstRow = scroller?.querySelector('[data-track-index="0"]');
+      const compactSecondRow = scroller?.querySelector('[data-track-index="1"]');
+      const compactFirstRect = compactFirstRow?.getBoundingClientRect();
+      const compactSecondRect = compactSecondRow?.getBoundingClientRect();
+      const compactRowHeight = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--table-row-height')
+      );
+      const compactRowsAligned = Boolean(
+        compactFirstRect &&
+        compactSecondRect &&
+        Math.abs(compactFirstRect.height - compactRowHeight) < 1 &&
+        Math.abs(compactSecondRect.height - compactRowHeight) < 1 &&
+        Math.abs(compactSecondRect.top - compactFirstRect.bottom) < 1
+      );
+      compactTableButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const requestedColumnLabels = [
+        "Album Artist",
+        "Genre",
+        "Play Count",
+        "Last Played",
+        "File Path",
+        "Disc #",
+        "Comment",
+        "Sample Rate",
+        "Bit Depth",
+        "File Size",
+      ];
+      const toggleRequestedColumns = () => {
+        const labels = [...document.querySelectorAll('[data-columns-list] label')];
+        for (const labelText of requestedColumnLabels) {
+          const label = labels.find((item) => item.textContent?.trim() === labelText);
+          label?.querySelector('input')?.click();
+        }
+      };
+      libraryHeader?.querySelector('[data-library-columns]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const columnsList = document.querySelector('[data-columns-list]');
+      const availableColumnLabels = [
+        ...(columnsList?.querySelectorAll('label') ?? []),
+      ].map((label) => label.textContent?.trim());
+      const requestedColumnsAvailable = requestedColumnLabels.every(
+        (label) => availableColumnLabels.includes(label)
+      );
+      const columnsMenuScrollable = Boolean(
+        columnsList &&
+        getComputedStyle(columnsList).overflowY === "auto" &&
+        columnsList.scrollHeight > columnsList.clientHeight
+      );
+      toggleRequestedColumns();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      const firstExtendedRow = scroller?.querySelector('[data-track-index="0"]');
+      const requestedColumnValuesReady = Boolean(
+        requestedColumnLabels.length === 10 &&
+        document.querySelector('[role="columnheader"][data-column-key="artists"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="genre"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="playCount"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="lastPlayedAt"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="sourcePath"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="discNumber"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="comment"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="sampleRate"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="bitDepth"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="fileSize"]') &&
+        firstExtendedRow?.querySelector('[data-column-key="artists"]')?.textContent?.trim() === "Muro" &&
+        firstExtendedRow?.querySelector('[data-column-key="genre"]')?.textContent?.trim() === "Electronic" &&
+        firstExtendedRow?.querySelector('[data-column-key="playCount"]')?.textContent?.trim() === "0" &&
+        firstExtendedRow?.querySelector('[data-column-key="lastPlayedAt"]')?.textContent?.includes("2026") &&
+        firstExtendedRow?.querySelector('[data-column-key="sourcePath"]')?.textContent?.includes("track-0.wav") &&
+        firstExtendedRow?.querySelector('[data-column-key="discNumber"]')?.textContent?.trim() === "1" &&
+        firstExtendedRow?.querySelector('[data-column-key="comment"]')?.textContent?.trim() === "Smoke comment 0" &&
+        firstExtendedRow?.querySelector('[data-column-key="sampleRate"]')?.textContent?.trim() === "44.1 kHz" &&
+        firstExtendedRow?.querySelector('[data-column-key="bitDepth"]')?.textContent?.trim() === "24-bit" &&
+        firstExtendedRow?.querySelector('[data-column-key="fileSize"]')?.textContent?.trim() === "10.0 MB"
+      );
+      libraryHeader?.querySelector('[data-library-columns]')?.click();
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      toggleRequestedColumns();
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 180));
       const windowChrome = document.querySelector('[data-window-chrome]');
       const windowBrand = document.querySelector('[data-window-brand]');
       const windowControls = document.querySelector(
@@ -301,6 +430,17 @@ app.whenReady().then(async () => {
         playlistSection &&
         collectionSection.contains(playlistSection)
       );
+      document.querySelector('[aria-label="Collapse queue"]')?.click();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const expandQueueButton = document.querySelector('[aria-label="Expand queue"]');
+      const collapsedQueuePanel = expandQueueButton?.closest('aside');
+      const collapsedQueueControlsReady = Boolean(
+        expandQueueButton &&
+        collapsedQueuePanel?.querySelectorAll('button').length === 1 &&
+        collapsedQueuePanel?.querySelectorAll('svg').length === 1
+      );
+      expandQueueButton?.click();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
         scroller.scrollHeight > scroller.clientHeight
@@ -507,6 +647,17 @@ app.whenReady().then(async () => {
           mixSuggestionCount > 0;
         const mixScoresReady = mixSuggestions.length > 0 && mixSuggestions.every(
           (suggestion) => Number(suggestion.getAttribute("data-mix-score")) > 0
+        );
+        const firstMixSuggestionStyle = mixSuggestions[0]
+          ? getComputedStyle(mixSuggestions[0])
+          : null;
+        const firstMixCover = mixSuggestions[0]?.querySelector('[data-mix-suggestion-cover]');
+        const firstMixAction = mixSuggestions[0]?.querySelector('[data-mix-suggestion-actions] button');
+        const compactMixSuggestionsReady = Boolean(
+          firstMixSuggestionStyle &&
+          parseFloat(firstMixSuggestionStyle.paddingTop) <= 6 &&
+          (firstMixCover?.getBoundingClientRect().height ?? 0) <= 32 &&
+          (firstMixAction?.getBoundingClientRect().height ?? 0) <= 24
         );
         const mixExpandButton = document.querySelector('[data-mix-expand]');
         mixExpandButton?.click();
@@ -984,6 +1135,26 @@ app.whenReady().then(async () => {
           document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "250"
         );
 
+        window.location.hash = "#/";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const tableArtistLink = document.querySelector('[data-track-index="0"] [data-track-artist-link="true"]');
+        tableArtistLink?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const tableArtistNavigationReady =
+          window.location.hash.includes("/collection/artists") &&
+          window.location.hash.includes("value=Muro") &&
+          document.querySelector("h2")?.textContent?.trim() === "Muro";
+
+        window.location.hash = "#/";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const tableAlbumLink = document.querySelector('[data-track-index="0"] [data-track-album-link="true"]');
+        tableAlbumLink?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const tableAlbumNavigationReady =
+          window.location.hash.includes("/collection/albums") &&
+          window.location.hash.includes("album=") &&
+          Boolean(document.querySelector("[data-album-detail]"));
+
         window.location.hash = "#/collection/genres";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const genreItems = document.querySelectorAll('[data-collection-index="genres"] [data-collection-value]');
@@ -1081,6 +1252,14 @@ app.whenReady().then(async () => {
           headerScrollLeft: synchronizedHeaderLeft,
           platform: window.muro?.platform,
           searchShortcut: searchShortcutHint.textContent?.trim(),
+          sidebarAnimationReady,
+          resizeTransitionDisabled,
+          libraryHeaderControlsReady,
+          libraryTitleRegionReady,
+          compactRowsAligned,
+          requestedColumnsAvailable,
+          requestedColumnValuesReady,
+          columnsMenuScrollable,
           deleteModalReady,
           initialLibraryPreference,
           rememberedDiskPreference,
@@ -1090,6 +1269,7 @@ app.whenReady().then(async () => {
           nestedPlaylistFolderReady,
           playlistTransferControlsReady,
           playlistsUnderCollection,
+          collapsedQueueControlsReady,
           playlistExportMoveMenuReady,
           playlistReorderReady,
           bulkPlaylistMenuReady,
@@ -1130,6 +1310,7 @@ app.whenReady().then(async () => {
           mixFiltersReady,
           unknownBpmFallbackReady,
           mixScoresReady,
+          compactMixSuggestionsReady,
           mixExpanded,
           camelotSegmentCount,
           compatibleCamelotCount,
@@ -1171,6 +1352,8 @@ app.whenReady().then(async () => {
           albumArtistProfileReady,
           artistIndexReady,
           artistDetailReady,
+          tableArtistNavigationReady,
+          tableAlbumNavigationReady,
           genreIndexReady,
           genreDrilldownReady,
           genreHistoryReady,
@@ -1208,6 +1391,40 @@ app.whenReady().then(async () => {
         fail(`Unexpected search shortcut hint: ${result.searchShortcut} != ${expectedSearchShortcut}`);
         return;
       }
+      if (!result.libraryHeaderControlsReady) {
+        fail("Library header controls do not match the simplified layout");
+        return;
+      }
+      if (!result.libraryTitleRegionReady) {
+        fail("Library header title region did not expand for longer names");
+        return;
+      }
+      if (!result.compactRowsAligned) {
+        fail("Compact table rows are not aligned with their virtualized offsets");
+        return;
+      }
+      if (
+        !result.requestedColumnsAvailable ||
+        !result.requestedColumnValuesReady ||
+        !result.columnsMenuScrollable
+      ) {
+        fail(
+          `Extended columns failed: available=${result.requestedColumnsAvailable}, ` +
+          `values=${result.requestedColumnValuesReady}, scrollable=${result.columnsMenuScrollable}`
+        );
+        return;
+      }
+      if (!result.sidebarAnimationReady || !result.resizeTransitionDisabled) {
+        fail(
+          `Sidebar animation failed: animated=${result.sidebarAnimationReady}, ` +
+          `resizeDisabled=${result.resizeTransitionDisabled}`
+        );
+        return;
+      }
+      if (!result.collapsedQueueControlsReady) {
+        fail("Collapsed queue sidebar still shows an extra control under Expand");
+        return;
+      }
       if (!result.deleteModalReady) {
         fail("Track deletion did not present both library-only and disk choices");
         return;
@@ -1226,6 +1443,7 @@ app.whenReady().then(async () => {
         !result.mixFiltersReady ||
         !result.unknownBpmFallbackReady ||
         !result.mixScoresReady ||
+        !result.compactMixSuggestionsReady ||
         !result.mixExpanded ||
         !result.queuedFromMix
       ) {
@@ -1233,7 +1451,8 @@ app.whenReady().then(async () => {
           `Camelot suggestions failed: count=${result.mixSuggestionCount}, ` +
           `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
           `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
-          `scores=${result.mixScoresReady}, expanded=${result.mixExpanded}, queued=${result.queuedFromMix}`
+          `scores=${result.mixScoresReady}, compact=${result.compactMixSuggestionsReady}, ` +
+          `expanded=${result.mixExpanded}, queued=${result.queuedFromMix}`
         );
         return;
       }
@@ -1282,6 +1501,13 @@ app.whenReady().then(async () => {
         fail(
           `Show in Finder failed: item=${result.showInFinderReady}, ` +
           `revealed=${shownItemPaths.at(-1)}, expected=${smokeTracks[0].source_path}`
+        );
+        return;
+      }
+      if (!result.tableArtistNavigationReady || !result.tableAlbumNavigationReady) {
+        fail(
+          `Table metadata navigation failed: artist=${result.tableArtistNavigationReady}, ` +
+          `album=${result.tableAlbumNavigationReady}`
         );
         return;
       }

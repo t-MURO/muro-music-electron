@@ -13,6 +13,7 @@ import {
   cacheCoverFile,
   collectAudioPaths,
   extractCoverMetadata,
+  extractTechnicalMetadata,
   importAudioFile,
   writeMetadataToFile,
 } from "./metadata.mjs";
@@ -605,6 +606,44 @@ export const createBackend = ({
         count += scanResult.updated;
       } while (scanResult.queued > 0);
       return count;
+    },
+    scan_technical_metadata: async ({ dbPath, limit }) => {
+      const db = openDatabase(dbPath);
+      const batchSize = Math.max(1, Math.min(200, Number(limit) || 25));
+      const rows = db.prepare(`
+        SELECT id, source_path FROM tracks
+        WHERE sample_rate_hz IS NULL OR file_size_bytes IS NULL
+        ORDER BY added_at DESC
+        LIMIT ?
+      `).all(batchSize);
+      const update = db.prepare(`
+        UPDATE tracks SET sample_rate_hz = ?, bit_depth = ?, file_size_bytes = ?
+        WHERE id = ?
+      `);
+      let updated = 0;
+      let failed = 0;
+      for (const row of rows) {
+        try {
+          const technical = await extractTechnicalMetadata(row.source_path);
+          update.run(
+            technical.sampleRateHz,
+            technical.bitDepth,
+            technical.fileSizeBytes,
+            row.id,
+          );
+          updated += 1;
+        } catch (error) {
+          // Mark an unreadable file as scanned so it does not block future batches.
+          update.run(0, 0, 0, row.id);
+          failed += 1;
+          console.warn(`Failed to extract technical metadata from ${row.source_path}:`, error);
+        }
+      }
+      const remaining = db.prepare(`
+        SELECT COUNT(*) AS count FROM tracks
+        WHERE sample_rate_hz IS NULL OR file_size_bytes IS NULL
+      `).get()?.count ?? 0;
+      return { checked: rows.length, updated, failed, remaining };
     },
     cache_cover_art_from_file: ({ filePath }) => cacheCoverFile(filePath, cacheDir),
   };

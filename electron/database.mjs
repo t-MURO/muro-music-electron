@@ -44,6 +44,9 @@ const TRACK_SCHEMA = `
     import_status TEXT NOT NULL DEFAULT 'staged',
     duration_seconds REAL,
     bitrate_kbps INTEGER,
+    sample_rate_hz INTEGER,
+    bit_depth INTEGER,
+    file_size_bytes INTEGER,
     added_at INTEGER,
     updated_at INTEGER,
     last_write_error TEXT,
@@ -138,6 +141,9 @@ const REQUIRED_TRACK_COLUMNS = {
   import_status: "TEXT DEFAULT 'staged'",
   duration_seconds: "REAL",
   bitrate_kbps: "INTEGER",
+  sample_rate_hz: "INTEGER",
+  bit_depth: "INTEGER",
+  file_size_bytes: "INTEGER",
   added_at: "INTEGER",
   updated_at: "INTEGER",
   last_write_error: "TEXT",
@@ -270,6 +276,11 @@ export const rowToTrack = (row) => ({
   duration: formatDuration(row.duration_seconds),
   duration_seconds: row.duration_seconds || 0,
   bitrate: row.bitrate_kbps > 0 ? `${row.bitrate_kbps} kbps` : "--",
+  sample_rate_hz: row.sample_rate_hz > 0 ? row.sample_rate_hz : undefined,
+  bit_depth: row.bit_depth > 0 ? row.bit_depth : undefined,
+  file_size_bytes: typeof row.file_size_bytes === "number" && row.file_size_bytes >= 0
+    ? row.file_size_bytes
+    : undefined,
   rating: row.rating || 0,
   source_path: row.source_path || "",
   cover_art_path: row.cover_art_path || undefined,
@@ -287,7 +298,8 @@ export const rowToTrack = (row) => ({
 const TRACK_SELECT = `
   SELECT id, title, artist, album_artist, album, track_number, track_total,
     key, bpm, year, date, added_at, updated_at, rating, duration_seconds,
-    bitrate_kbps, import_status, source_path, cover_art_path,
+    bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
+    import_status, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
     comment_json, label, disc_number, disc_total, beat_grid_json
   FROM tracks`;

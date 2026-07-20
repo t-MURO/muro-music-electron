@@ -18,6 +18,9 @@ export type Track = {
   duration: string;
   durationSeconds: number;
   bitrate: string;
+  sampleRate?: number;
+  bitDepth?: number;
+  fileSize?: number;
   rating: number;
   sourcePath: string;
   coverArtPath?: string;
@@ -152,16 +155,25 @@ export type ColumnKey =
   | "album"
   | "trackNumber"
   | "trackTotal"
+  | "discNumber"
   | "key"
   | "bpm"
+  | "genre"
   | "year"
   | "date"
   | "dateAdded"
   | "dateModified"
+  | "lastPlayedAt"
+  | "playCount"
   | "duration"
   | "bitrate"
+  | "sampleRate"
+  | "bitDepth"
+  | "fileSize"
   | "format"
-  | "rating";
+  | "rating"
+  | "comment"
+  | "sourcePath";
 
 export type ColumnConfig = {
   key: ColumnKey;

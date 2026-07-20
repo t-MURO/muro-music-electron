@@ -10,6 +10,7 @@ import {
   loadTracks,
   importedTrackToTrack,
   scanAlbumCovers,
+  scanTechnicalMetadata,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
 import { confirm } from "@muro/desktop/dialogs";
@@ -19,6 +20,9 @@ const INITIAL_COVER_SCAN_DELAY_MS = 10_000;
 const CONTINUE_COVER_SCAN_DELAY_MS = 60_000;
 const PERIODIC_COVER_SCAN_DELAY_MS = 30 * 60_000;
 const COVER_SCAN_BATCH_SIZE = 25;
+const INITIAL_TECHNICAL_SCAN_DELAY_MS = 3_000;
+const CONTINUE_TECHNICAL_SCAN_DELAY_MS = 500;
+const TECHNICAL_SCAN_BATCH_SIZE = 25;
 
 export const useLibraryInit = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
@@ -135,6 +139,35 @@ export const useLibraryInit = () => {
       }
     };
     schedule(INITIAL_COVER_SCAN_DELAY_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [resolveDbPath, setInboxTracks, setTracks]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (delayMs: number) => {
+      if (!cancelled) timer = setTimeout(run, delayMs);
+    };
+    const run = async () => {
+      try {
+        const resolvedPath = await resolveDbPath();
+        const result = await scanTechnicalMetadata(resolvedPath, TECHNICAL_SCAN_BATCH_SIZE);
+        if (cancelled) return;
+        if (result.updated > 0) {
+          const snapshot = await loadTracks(resolvedPath);
+          if (cancelled) return;
+          setTracks(snapshot.library.map(importedTrackToTrack));
+          setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
+        }
+        if (result.remaining > 0) schedule(CONTINUE_TECHNICAL_SCAN_DELAY_MS);
+      } catch (error) {
+        console.warn("Failed to scan technical track metadata", error);
+      }
+    };
+    schedule(INITIAL_TECHNICAL_SCAN_DELAY_MS);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);

@@ -133,8 +133,7 @@ export const QueuePanel = ({
     return (
       <aside className="flex h-full flex-col items-center border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)] py-5">
         <button className="toolbar-icon-button" onClick={onToggleCollapsed} title="Expand queue" aria-label="Expand queue" type="button"><PanelRightOpen className="h-4 w-4" /></button>
-        <ListMusic className="mt-6 h-4 w-4 text-[var(--color-text-muted)]" />
-        {queueTracks.length > 0 && <span className="mt-2 text-[10px] tabular-nums text-[var(--color-accent)]">{queueTracks.length}</span>}
+        {queueTracks.length > 0 && <span className="mt-6 text-[10px] tabular-nums text-[var(--color-accent)]">{queueTracks.length}</span>}
       </aside>
     );
   }

@@ -40,6 +40,7 @@ export {
   getArtistProfile,
   scanArtistProfiles,
   scanAlbumCovers,
+  scanTechnicalMetadata,
   loadPlaylists,
   createPlaylist,
   updatePlaylist,
@@ -61,6 +62,7 @@ export {
   type DeleteTracksResult,
   type ArtistProfileScanResult,
   type AlbumCoverScanResult,
+  type TechnicalMetadataScanResult,
 } from "./database";
 export {
   importFiles,

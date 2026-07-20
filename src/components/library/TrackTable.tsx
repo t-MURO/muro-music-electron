@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import type { ColumnConfig, Track } from "../../types";
 import { TableHeader } from "./TableHeader";
@@ -30,6 +30,8 @@ type TrackTableProps = {
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
   onTogglePlay?: () => void;
+  onOpenArtist?: (artist: string) => void;
+  onOpenAlbum?: (trackId: string) => void;
   onColumnResize: (key: ColumnConfig["key"], width: number) => void;
   onColumnAutoFit: (key: ColumnConfig["key"]) => void;
   onColumnReorder?: (dragKey: ColumnConfig["key"], targetIndex: number) => void;
@@ -53,6 +55,8 @@ export const TrackTable = memo(
     onRowContextMenu,
     onRowDoubleClick,
     onTogglePlay,
+    onOpenArtist,
+    onOpenAlbum,
     onColumnResize,
     onColumnAutoFit,
     onColumnReorder,
@@ -122,6 +126,11 @@ export const TrackTable = memo(
       estimateSize: () => rowHeight,
       overscan: 50,
     });
+
+    useLayoutEffect(() => {
+      rowVirtualizer.measure();
+    }, [rowHeight, rowVirtualizer]);
+
     const virtualRows = rowVirtualizer.getVirtualItems();
 
     const clampIndex = (index: number) =>
@@ -311,6 +320,8 @@ export const TrackTable = memo(
                   onRowMouseDown={handleRowMouseDownStable}
                   onRowContextMenu={handleRowContextMenuStable}
                   onRowDoubleClick={handleRowDoubleClickStable}
+                  onOpenArtist={onOpenArtist}
+                  onOpenAlbum={onOpenAlbum}
                   onRatingChange={handleRatingChangeStable}
                 />
               );

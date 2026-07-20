@@ -17,12 +17,14 @@ export const getSortableValue = (
       return track.trackNumber ?? null;
     case "trackTotal":
       return track.trackTotal ?? null;
+    case "discNumber":
+      return track.discNumber ?? null;
     case "year":
       return track.year ?? null;
     case "bpm":
       return track.bpm ?? null;
     case "artists":
-      return track.artists ?? track.artist;
+      return track.artists ?? null;
     case "key":
       return track.key ?? null;
     case "format": {
@@ -35,13 +37,16 @@ export const getSortableValue = (
     }
     case "date":
     case "dateAdded":
-    case "dateModified": {
+    case "dateModified":
+    case "lastPlayedAt": {
       const raw =
         key === "date"
           ? track.date
           : key === "dateAdded"
             ? track.dateAdded
-            : track.dateModified;
+            : key === "dateModified"
+              ? track.dateModified
+              : track.lastPlayedAt;
       if (!raw) {
         return null;
       }

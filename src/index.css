@@ -753,6 +753,14 @@ body {
       fill var(--transition-theme), stroke var(--transition-theme),
       outline-color var(--transition-theme);
   }
+
+  .app-shell-grid {
+    transition: grid-template-columns var(--transition-normal);
+  }
+
+  :root[data-panel-resizing="true"] .app-shell-grid {
+    transition: none;
+  }
 }
 
 button:focus-visible,
@@ -911,6 +919,15 @@ input:focus-visible,
   opacity: 0.34;
 }
 
+.mix-suggestion-action {
+  height: 24px;
+  min-height: 24px;
+}
+
+.mix-suggestion-action.toolbar-icon-button {
+  width: 24px;
+}
+
 .toolbar-button {
   height: 34px;
   gap: 7px;
@@ -958,8 +975,9 @@ input:focus-visible,
 
 .library-command-bar-inner {
   display: grid;
-  grid-template-columns: 160px minmax(210px, 272px) auto auto auto 72px;
-  justify-content: space-between;
+  grid-template-columns: minmax(240px, 1fr) minmax(210px, 272px) 72px;
+  gap: 16px;
+  justify-content: stretch;
 }
 
 .command-search-shell {
@@ -1004,13 +1022,12 @@ input:focus-visible,
 
 @media (max-width: 1180px) {
   .library-command-bar-inner {
-    grid-template-columns: minmax(110px, 1fr) minmax(160px, 240px) auto auto auto 72px;
+    grid-template-columns: minmax(110px, 1fr) minmax(160px, 240px) 72px;
     gap: 8px;
     justify-content: stretch;
   }
 
-  .library-command-title span,
-  .toolbar-button--ghost span {
+  .library-command-title span {
     display: none;
   }
 }
@@ -1025,7 +1042,7 @@ input:focus-visible,
 
 /* Album collection */
 .library-command-bar-inner--collections {
-  grid-template-columns: minmax(160px, 1fr) minmax(210px, 320px) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(210px, 320px);
   gap: 14px;
   justify-content: stretch;
 }
@@ -1471,7 +1488,7 @@ input:focus-visible,
 }
 
 .library-command-bar-inner--albums {
-  grid-template-columns: minmax(160px, 1fr) minmax(210px, 320px) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(210px, 320px);
   gap: 14px;
   justify-content: stretch;
 }
@@ -2126,7 +2143,7 @@ input:focus-visible,
 
 @media (max-width: 800px) {
   .library-command-bar-inner--albums {
-    grid-template-columns: minmax(112px, 1fr) minmax(170px, 240px) auto;
+    grid-template-columns: minmax(112px, 1fr) minmax(170px, 240px);
     gap: 8px;
   }
 

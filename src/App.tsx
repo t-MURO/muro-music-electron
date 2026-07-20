@@ -256,6 +256,19 @@ function App() {
     loadProfile: loadArtistProfile,
   } = useArtistProfiles();
   const albums = useMemo(() => groupTracksIntoAlbums(tracks), [tracks]);
+  const handleOpenTableArtist = useCallback(
+    (artist: string) => handleOpenCollectionValue("artists", artist),
+    [handleOpenCollectionValue],
+  );
+  const handleOpenTableAlbum = useCallback(
+    (trackId: string) => {
+      const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
+      if (album) {
+        handleSelectAlbum(album.id);
+      }
+    },
+    [albums, handleSelectAlbum],
+  );
   const albumResults = useMemo(
     () => filterAlbumsBySearch(albums, searchQuery),
     [albums, searchQuery]
@@ -1226,7 +1239,8 @@ function App() {
       />
       <WindowChrome />
       <div
-        className="grid min-h-0 flex-1 grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
+        className="app-shell-grid grid min-h-0 flex-1 grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
+        data-app-shell-grid
         style={
           {
             "--sidebar-width": `${sidebarWidth}px`,
@@ -1332,9 +1346,7 @@ function App() {
                   resultCount={isArtistIndex ? artistIndexResults.length : collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
-                  onAddMusic={handleEmptyImport}
                   onShowColumns={openColumnsMenu}
-                  onSort={() => handleSortChange("title")}
                   contentMode={isArtistIndex || collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
                   resultLabel={isArtistIndex ? "artists" : collectionIndexFacet ?? undefined}
                 />
@@ -1469,6 +1481,8 @@ function App() {
                           onRowContextMenu={handleRowContextMenu}
                           onRowDoubleClick={handlePlayTrack}
                           onTogglePlay={togglePlay}
+                          onOpenArtist={handleOpenTableArtist}
+                          onOpenAlbum={handleOpenTableAlbum}
                           onColumnResize={handleColumnResize}
                           onColumnAutoFit={autoFitColumn}
                           onColumnReorder={reorderColumns}

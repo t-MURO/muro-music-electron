@@ -193,6 +193,7 @@ export const TableHeader = ({
             return (
             <div
               key={column.key}
+              data-column-key={column.key}
               ref={(node) => {
                 columnRefs.current[column.key] = node;
               }}

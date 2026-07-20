@@ -268,8 +268,29 @@ try {
   });
   assert.equal(validImport.imported.length, 1, "a valid audio file should import through the real metadata path");
   assert.equal(validImport.imported[0].source_path, validImportPath);
+  assert.equal(validImport.imported[0].sample_rate_hz, 8_000);
+  assert.equal(validImport.imported[0].bit_depth, 16);
+  assert.equal(validImport.imported[0].file_size_bytes, fs.statSync(validImportPath).size);
   assert.equal(validImport.scanned, 1);
   assert.deepEqual(validImport.failures, []);
+  db.prepare(`
+    UPDATE tracks SET sample_rate_hz = NULL, bit_depth = NULL, file_size_bytes = NULL
+    WHERE id = ?
+  `).run(validImport.imported[0].id);
+  assert.deepEqual(await backend.invoke("scan_technical_metadata", { dbPath, limit: 10 }), {
+    checked: 1,
+    updated: 1,
+    failed: 0,
+    remaining: 0,
+  });
+  const rescannedTechnicalMetadata = db.prepare(`
+    SELECT sample_rate_hz, bit_depth, file_size_bytes FROM tracks WHERE id = ?
+  `).get(validImport.imported[0].id);
+  assert.deepEqual(rescannedTechnicalMetadata, {
+    sample_rate_hz: 8_000,
+    bit_depth: 16,
+    file_size_bytes: fs.statSync(validImportPath).size,
+  });
   await backend.invoke("reject_tracks", { dbPath, trackIds: [validImport.imported[0].id] });
   fs.unlinkSync(validImportPath);
 

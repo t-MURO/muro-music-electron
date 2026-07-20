@@ -187,7 +187,7 @@ export const MixSuggestions = ({
         <CamelotWheel currentCode={currentCode} selectedCode={selectedCode} onSelectCode={setSelectedCode} />
       </div>
 
-      <div className="flex h-11 shrink-0 items-center border-b border-[var(--color-border-light)] px-4">
+      <div className="flex h-9 shrink-0 items-center border-b border-[var(--color-border-light)] px-3">
         <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">
           {selectedCode ? `${selectedCode} tracks` : "Ranked matches"}
         </span>
@@ -215,48 +215,48 @@ export const MixSuggestions = ({
           return (
             <div
               key={track.id}
-              className="group border-b border-[var(--color-border-light)] px-3 py-3 hover:bg-[var(--color-bg-hover)]"
+              className="group border-b border-[var(--color-border-light)] px-3 py-1.5 hover:bg-[var(--color-bg-hover)]"
               data-mix-suggestion
               data-mix-reason={reason}
               data-mix-code={code}
               data-mix-score={score}
               data-mix-bpm-difference={Number.isFinite(bpmDifference) ? bpmDifference : undefined}
             >
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]">
-                  {coverPath ? <img src={convertFileSrc(coverPath)} alt="" className="h-full w-full object-cover" /> : <Music2 className="h-4 w-4" />}
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]" data-mix-suggestion-cover>
+                  {coverPath ? <img src={convertFileSrc(coverPath)} alt="" className="h-full w-full object-cover" /> : <Music2 className="h-3.5 w-3.5" />}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[12px] font-semibold text-[var(--color-text-primary)]">{track.title}</div>
                   <div className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{track.artist}</div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-accent-light)] px-2 py-1 text-[11px] font-bold text-[var(--color-accent)]" title="Mix match score"><Gauge className="h-3 w-3" />{score}</div>
-                  <div className="mt-1 text-[10px] font-semibold text-[var(--color-accent)]">{code}</div>
+                  <div className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-[var(--color-accent-light)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-accent)]" title="Mix match score"><Gauge className="h-3 w-3" />{score}</div>
+                  <div className="mt-0.5 text-[9px] font-semibold text-[var(--color-accent)]">{code}</div>
                 </div>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[50px] text-[9px]">
-                <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[var(--color-text-secondary)]">{reason}</span>
-                <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 tabular-nums text-[var(--color-text-muted)]">{track.bpm ? `${track.bpm.toFixed(1)} BPM · ${formatBpmDifference(bpmDifference)}` : "BPM unknown"}</span>
-                {genreMatch && <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[var(--color-text-muted)]">Same genre</span>}
-                {track.rating > 0 && <span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[var(--color-text-muted)]"><Star className="h-2.5 w-2.5" fill="currentColor" />{track.rating}</span>}
+              <div className="mt-1 flex flex-wrap items-center gap-1 pl-10 text-[9px] leading-tight">
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-secondary)]">{reason}</span>
+                <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 tabular-nums text-[var(--color-text-muted)]">{track.bpm ? `${track.bpm.toFixed(1)} BPM · ${formatBpmDifference(bpmDifference)}` : "BPM unknown"}</span>
+                {genreMatch && <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-muted)]">Same genre</span>}
+                {track.rating > 0 && <span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-muted)]"><Star className="h-2.5 w-2.5" fill="currentColor" />{track.rating}</span>}
               </div>
-              <div className="mt-2 flex items-center justify-end gap-1.5 pl-[50px]">
+              <div className="mt-1 flex items-center justify-end gap-1 pl-10" data-mix-suggestion-actions>
                 {onMixWithCurrent && (
                   <button
-                    className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2.5 text-[10px] font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white"
+                    className="mix-suggestion-action inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2 text-[10px] font-semibold text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent)] hover:text-white"
                     onClick={() => onMixWithCurrent(track.id)}
                     title={`Mix the running song into ${track.title}`}
                     aria-label={`Mix the running song into ${track.title}`}
                     data-mix-with-current
                     type="button"
                   >
-                    <Blend className="h-3.5 w-3.5" />
+                    <Blend className="h-3 w-3" />
                     Mix
                   </button>
                 )}
-                <button className="toolbar-icon-button h-8 w-8" onClick={() => onPlayTrack(track.id)} title={`Play ${track.title}`} aria-label={`Play ${track.title}`} type="button"><Play className="h-3.5 w-3.5" fill="currentColor" /></button>
-                <button className="toolbar-icon-button h-8 w-8" onClick={() => onPlayNext(track.id)} title={`Play ${track.title} next`} aria-label={`Play ${track.title} next`} data-mix-play-next type="button"><ListPlus className="h-4 w-4" /></button>
+                <button className="mix-suggestion-action toolbar-icon-button" onClick={() => onPlayTrack(track.id)} title={`Play ${track.title}`} aria-label={`Play ${track.title}`} type="button"><Play className="h-3 w-3" fill="currentColor" /></button>
+                <button className="mix-suggestion-action toolbar-icon-button" onClick={() => onPlayNext(track.id)} title={`Play ${track.title} next`} aria-label={`Play ${track.title} next`} data-mix-play-next type="button"><ListPlus className="h-3.5 w-3.5" /></button>
               </div>
             </div>
           );

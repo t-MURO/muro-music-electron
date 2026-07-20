@@ -1,9 +1,6 @@
 import {
-  ArrowUpDown,
-  Filter,
   LayoutGrid,
   List,
-  Plus,
   Search,
   X,
 } from "lucide-react";
@@ -17,9 +14,7 @@ type LibraryHeaderProps = {
   resultCount: number;
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  onAddMusic: () => void;
   onShowColumns: (event: React.MouseEvent<HTMLButtonElement>) => void;
-  onSort: () => void;
   contentMode?: "tracks" | "albums" | "collections";
   resultLabel?: string;
 };
@@ -31,9 +26,7 @@ export const LibraryHeader = ({
   resultCount,
   searchQuery,
   onSearchChange,
-  onAddMusic,
   onShowColumns,
-  onSort,
   contentMode = "tracks",
   resultLabel,
 }: LibraryHeaderProps) => {
@@ -71,7 +64,7 @@ export const LibraryHeader = ({
   return (
     <header className="library-command-bar shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
       <div className={`min-h-[68px] items-center px-4 ${isSettings ? "flex" : `library-command-bar-inner library-command-bar-inner--${contentMode}`}`}>
-        <div className="library-command-title min-w-0 shrink-0">
+        <div className="library-command-title min-w-0 shrink-0" data-library-title>
           <div className="min-w-0">
             <div className="flex items-baseline gap-2.5">
               <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{title}</h2>
@@ -103,11 +96,8 @@ export const LibraryHeader = ({
                 </kbd>
               )}
             </div>
-            {contentMode === "tracks" && <button className="toolbar-button toolbar-button--ghost" onClick={focusSearch} title="Filter the current library view" type="button"><Filter className="h-4 w-4" /><span>Filters</span></button>}
-            {contentMode === "tracks" && <button className="toolbar-button toolbar-button--ghost" onClick={onSort} title="Cycle title sorting" type="button"><ArrowUpDown className="h-4 w-4" /><span>Sort</span></button>}
-            <button className="toolbar-button toolbar-button--primary" onClick={onAddMusic} type="button"><Plus className="h-4 w-4" /><span>Add Music</span></button>
             {contentMode === "tracks" && <div className="library-view-toggle">
-              <button className="toolbar-icon-button toolbar-view-button" onClick={onShowColumns} title="Choose visible columns" aria-label="Choose visible columns" type="button"><LayoutGrid className="h-4 w-4" /></button>
+              <button className="toolbar-icon-button toolbar-view-button" onClick={onShowColumns} title="Choose visible columns" aria-label="Choose visible columns" data-library-columns type="button"><LayoutGrid className="h-4 w-4" /></button>
               <button className={`toolbar-icon-button ${compactTable ? "toolbar-view-button" : ""}`} onClick={() => setCompactTable((value) => !value)} title="Toggle compact table" aria-label="Toggle compact table" aria-pressed={compactTable} type="button"><List className="h-4 w-4" /></button>
             </div>}
           </>

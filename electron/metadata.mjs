@@ -149,6 +149,9 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     import_status: "staged",
     duration_seconds: format.duration || 0,
     bitrate_kbps: format.bitrate ? Math.round(format.bitrate / 1000) : 0,
+    sample_rate_hz: format.sampleRate ? Math.round(format.sampleRate) : 0,
+    bit_depth: format.bitsPerSample ? Math.round(format.bitsPerSample) : 0,
+    file_size_bytes: stat.size,
     added_at: now,
     updated_at: Math.floor(stat.mtimeMs / 1000) || now,
     cover_art_path: cached?.fullPath ?? null,
@@ -163,7 +166,8 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
       musicbrainz_albumartistid, musicbrainz_releasegroupid, musicbrainz_trackid,
       musicbrainz_releasetrackid, musicbrainz_albumstatus, musicbrainz_albumtype,
       source_path, search_text, import_status,
-      duration_seconds, bitrate_kbps, added_at, updated_at, is_missing,
+      duration_seconds, bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
+      added_at, updated_at, is_missing,
       cover_art_path, cover_art_thumb_path
     ) VALUES (
       @id, @title, @artist, @album, @album_artist, @genre_json, @comment_json, @label,
@@ -172,7 +176,8 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
       @musicbrainz_albumartistid, @musicbrainz_releasegroupid, @musicbrainz_trackid,
       @musicbrainz_releasetrackid, @musicbrainz_albumstatus, @musicbrainz_albumtype,
       @source_path, @search_text, @import_status,
-      @duration_seconds, @bitrate_kbps, @added_at, @updated_at, 0,
+      @duration_seconds, @bitrate_kbps, @sample_rate_hz, @bit_depth, @file_size_bytes,
+      @added_at, @updated_at, 0,
       @cover_art_path, @cover_art_thumb_path
     )
   `).run(record);
@@ -219,6 +224,22 @@ export const extractCoverMetadata = async (sourcePath, cacheDir) => {
     cached: picture?.data ? await cacheCoverBytes(picture.data, cacheDir) : null,
     musicbrainz_albumid: first(metadata.common.musicbrainz_albumid) ?? null,
     musicbrainz_releasegroupid: first(metadata.common.musicbrainz_releasegroupid) ?? null,
+  };
+};
+
+export const extractTechnicalMetadata = async (sourcePath) => {
+  const [metadata, stat] = await Promise.all([
+    parseFile(sourcePath, { duration: false, skipCovers: true }),
+    fs.promises.stat(sourcePath),
+  ]);
+  return {
+    sampleRateHz: metadata.format.sampleRate
+      ? Math.round(metadata.format.sampleRate)
+      : 0,
+    bitDepth: metadata.format.bitsPerSample
+      ? Math.round(metadata.format.bitsPerSample)
+      : 0,
+    fileSizeBytes: stat.size,
   };
 };
 

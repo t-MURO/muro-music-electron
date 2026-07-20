@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@muro/desktop/runtime";
-import { usePlaybackStore, useRecentlyPlayedStore, useSettingsStore } from "../stores";
+import { useLibraryStore, usePlaybackStore, useRecentlyPlayedStore, useSettingsStore } from "../stores";
 import type { Track } from "../types";
 
 const PLAY_THRESHOLD_SECONDS = 30;
@@ -17,6 +17,8 @@ export const usePlayTracking = ({
   const currentTrack = usePlaybackStore((s) => s.currentTrack);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const dbPath = useSettingsStore((s) => s.dbPath);
+  const setTracks = useLibraryStore((s) => s.setTracks);
+  const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
 
   const playSessionTrackId = useRecentlyPlayedStore((s) => s.playSessionTrackId);
   const hasRecordedPlay = useRecentlyPlayedStore((s) => s.hasRecordedPlay);
@@ -74,7 +76,17 @@ export const usePlayTracking = ({
       // Find the full track data to add to recently played
       const track = allTracks.find((t) => t.id === currentTrack.id);
       if (track) {
-        addRecentlyPlayed(track);
+        const playedAt = new Date().toISOString();
+        const applyRecordedPlay = (candidate: Track): Track => candidate.id === track.id
+          ? {
+              ...candidate,
+              lastPlayedAt: playedAt,
+              playCount: (candidate.playCount || 0) + 1,
+            }
+          : candidate;
+        addRecentlyPlayed(track, playedAt);
+        setTracks((current) => current.map(applyRecordedPlay));
+        setInboxTracks((current) => current.map(applyRecordedPlay));
       }
 
       // Update database
@@ -94,6 +106,8 @@ export const usePlayTracking = ({
     dbPath,
     markPlayRecorded,
     addRecentlyPlayed,
+    setTracks,
+    setInboxTracks,
     allTracks,
   ]);
 };
