@@ -99,6 +99,7 @@ const smokeArtistProfile = {
 };
 let artistProfileScanCount = 0;
 const shownItemPaths = [];
+const ratingUpdates = [];
 for (let index = 0; index < 5; index += 1) {
   writeSilentWave(smokeTracks[index].source_path);
 }
@@ -202,6 +203,10 @@ app.whenReady().then(async () => {
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalAlbums: 0 };
     }
     if (command === "reorder_playlists" || command === "delete_playlist") return undefined;
+    if (command === "update_track_metadata") {
+      ratingUpdates.push(args);
+      return undefined;
+    }
     if (command === "playback_get_state") return {
       is_playing: false,
       current_position: 0,
@@ -313,6 +318,38 @@ app.whenReady().then(async () => {
         scroller.dispatchEvent(new Event("scroll"));
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const firstTrackRow = scroller.querySelector('[role="row"]');
+        const ratingCell = firstTrackRow?.querySelector('[data-rating-cell]');
+        const ratingControl = ratingCell?.querySelector('[role="slider"]');
+        const thirdRatingStar = ratingCell?.querySelector('[data-rating-star="3"]');
+        const ratingCellRect = ratingCell?.getBoundingClientRect();
+        const ratingStarRects = [...(ratingCell?.querySelectorAll('[data-rating-star]') ?? [])]
+          .map((element) => element.getBoundingClientRect());
+        const ratingFitsCell = Boolean(
+          ratingCellRect &&
+          ratingStarRects.length === 5 &&
+          ratingStarRects.every((rect) =>
+            rect.left >= ratingCellRect.left && rect.right <= ratingCellRect.right
+          )
+        );
+        const thirdRatingRect = thirdRatingStar?.getBoundingClientRect();
+        if (thirdRatingStar && thirdRatingRect) {
+          thirdRatingStar.dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            clientX: thirdRatingRect.right - 1,
+          }));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const ratingSetToThree = ratingControl?.getAttribute("aria-valuenow") === "3";
+        if (thirdRatingStar && thirdRatingRect) {
+          thirdRatingStar.dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            clientX: thirdRatingRect.left + 1,
+          }));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const threeStarRatingClearsToZero = ratingControl?.getAttribute("aria-valuenow") === "0";
         firstTrackRow?.dispatchEvent(new MouseEvent("mousedown", {
           bubbles: true,
           cancelable: true,
@@ -1067,6 +1104,9 @@ app.whenReady().then(async () => {
           selectedAfterArrowDown,
           selectionBarReady,
           rowThumbnailReady,
+          ratingFitsCell,
+          ratingSetToThree,
+          threeStarRatingClearsToZero,
           selectedRowUsesGreyHighlight,
           keyColumnColorReady,
           playingRowUsesRedHighlight,
@@ -1210,11 +1250,18 @@ app.whenReady().then(async () => {
       }
       if (
         !result.rowThumbnailReady ||
+        !result.ratingFitsCell ||
+        !result.ratingSetToThree ||
+        !result.threeStarRatingClearsToZero ||
+        !ratingUpdates.some((update) => update.updates?.rating === 3) ||
+        !ratingUpdates.some((update) => update.updates?.rating === 0) ||
         !result.selectedRowUsesGreyHighlight ||
         !result.playingRowUsesRedHighlight
       ) {
         fail(
           `Track row selection UI failed: thumbnail=${result.rowThumbnailReady}, ` +
+          `ratingFits=${result.ratingFitsCell}, ratingSet=${result.ratingSetToThree}, ` +
+          `ratingCleared=${result.threeStarRatingClearsToZero}, ratingUpdates=${JSON.stringify(ratingUpdates)}, ` +
           `selectedGrey=${result.selectedRowUsesGreyHighlight}, ` +
           `playingRed=${result.playingRowUsesRedHighlight}`
         );

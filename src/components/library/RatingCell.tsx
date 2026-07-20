@@ -15,13 +15,14 @@ export const RatingCell = memo(
 
     return (
       <div
-        className="flex h-[var(--table-row-height)] items-center px-2"
+        className="flex h-[var(--table-row-height)] min-w-0 items-center overflow-hidden border-l border-[var(--color-border-light)] px-1"
         title={`${rating} / 5`}
         onMouseLeave={() => setHoverValue(null)}
+        data-rating-cell
         role="cell"
       >
         <div
-          className="flex items-center gap-px rounded-[var(--radius-sm)]"
+          className="flex w-full min-w-0 items-center justify-center rounded-[var(--radius-sm)]"
           aria-label={`Rating for ${title}`}
           role="slider"
           tabIndex={0}
@@ -39,8 +40,14 @@ export const RatingCell = memo(
               event.preventDefault();
               onRate(trackId, rating - step);
             }
-            if (event.key === "Home") {
+            if (
+              event.key === "Home" ||
+              event.key === "0" ||
+              event.key === "Backspace" ||
+              event.key === "Delete"
+            ) {
               event.preventDefault();
+              setHoverValue(null);
               onRate(trackId, 0);
             }
             if (event.key === "End") {
@@ -54,14 +61,23 @@ export const RatingCell = memo(
             return (
               <button
                 key={star}
-                aria-hidden="true"
-                className="relative h-3.5 w-3.5 select-none text-[var(--color-text-muted)] focus:outline-none"
+                aria-label={rating === star ? "Clear rating" : `Set rating to ${star} stars`}
+                className="relative h-3.5 w-3.5 shrink-0 select-none text-[var(--color-text-muted)] focus:outline-none"
+                data-rating-star={star}
+                tabIndex={-1}
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (rating === star) {
+                    setHoverValue(null);
+                    onRate(trackId, 0);
+                    return;
+                  }
                   const rect = event.currentTarget.getBoundingClientRect();
                   const isHalf = event.clientX - rect.left < rect.width / 2;
                   const nextRating = isHalf ? star - 0.5 : star;
-                  onRate(trackId, nextRating === rating ? 0 : nextRating);
+                  const resolvedRating = nextRating === rating ? 0 : nextRating;
+                  if (resolvedRating === 0) setHoverValue(null);
+                  onRate(trackId, resolvedRating);
                 }}
                 onMouseMove={(event) => {
                   const rect = event.currentTarget.getBoundingClientRect();
