@@ -38,6 +38,8 @@ export {
   updateTrackBeatGrid,
   loadCachedArtistProfiles,
   getArtistProfile,
+  searchArtistImages,
+  setArtistImage,
   scanArtistProfiles,
   fetchTrackCoverArt,
   searchTrackMetadata,

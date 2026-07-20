@@ -1,6 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { LibrarySnapshot, PlaylistSnapshot } from "./importApi";
-import type { ArtistProfile } from "../types";
+import type { ArtistImageCandidate, ArtistProfile } from "../types";
 
 // ============================================================================
 // Library Operations
@@ -60,6 +60,22 @@ export const getArtistProfile = (
   force,
   ...providerKeys,
 });
+
+export const searchArtistImages = (
+  dbPath: string,
+  artistName: string,
+  providerKeys: ArtistProfileProviderKeys = {},
+) => invoke<ArtistImageCandidate[]>("search_artist_images", {
+  dbPath,
+  artistName,
+  ...providerKeys,
+});
+
+export const setArtistImage = (
+  dbPath: string,
+  artistName: string,
+  candidate: ArtistImageCandidate,
+) => invoke<ArtistProfile>("set_artist_image", { dbPath, artistName, candidate });
 
 export type ArtistProfileProviderKeys = {
   fanartApiKey?: string;

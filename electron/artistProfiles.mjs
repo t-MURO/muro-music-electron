@@ -71,8 +71,11 @@ const cachedProfileNeedsRefresh = (
   const shouldTryConfiguredFanart = Boolean(
     String(fanartApiKey).trim()
     && cached.profile?.status === "ready"
-    && !cached.profile.imagePath
-    && !cached.profile.imageUrl
+    && cached.profile.imageSelection !== "manual"
+    && (
+      (!cached.profile.imagePath && !cached.profile.imageUrl)
+      || cached.profile.imageProvider === "theaudiodb"
+    )
     && !cached.profile.fanartAttempted,
   );
   const needsProfileUpgrade = cached.profile?.status === "ready"
@@ -295,6 +298,159 @@ const pickFanartArtistImage = (payload) => (Array.isArray(payload?.artistthumb)
   .filter((candidate) => Boolean(candidate.url))
   .sort((left, right) => right.likes - left.likes || right.pixels - left.pixels)[0] ?? null;
 
+const artistImageCandidateId = (provider, imageUrl) => crypto
+  .createHash("sha256")
+  .update(`${provider}:${imageUrl}`)
+  .digest("hex");
+
+const fanartArtistImages = (payload, musicBrainzId) => (Array.isArray(payload?.artistthumb)
+  ? payload.artistthumb
+  : [])
+  .flatMap((image) => {
+    const imageUrl = secureImageUrl(image?.url);
+    if (!imageUrl) return [];
+    return [{
+      id: artistImageCandidateId("fanart.tv", imageUrl),
+      provider: "fanart.tv",
+      imageUrl,
+      sourceUrl: `https://fanart.tv/artist/${musicBrainzId}/`,
+      attribution: "Fanart.tv contributor",
+      license: null,
+      licenseUrl: null,
+      width: Number(image?.width ?? 0) || null,
+      height: Number(image?.height ?? 0) || null,
+      score: Number(image?.likes ?? 0),
+    }];
+  })
+  .sort((left, right) => right.score - left.score || (right.width ?? 0) - (left.width ?? 0));
+
+const theAudioDbArtistImages = (artist) => {
+  const sourceUrl = nonEmptyString(artist?.idArtist)
+    ? `https://www.theaudiodb.com/artist/${encodeURIComponent(artist.idArtist)}`
+    : "https://www.theaudiodb.com/";
+  const seen = new Set();
+  return [
+    [artist?.strArtistThumb, 4],
+    [artist?.strArtistFanart, 3],
+    [artist?.strArtistFanart2, 2],
+    [artist?.strArtistFanart3, 1],
+  ].flatMap(([value, score]) => {
+    const imageUrl = secureImageUrl(value);
+    if (!imageUrl || seen.has(imageUrl)) return [];
+    seen.add(imageUrl);
+    return [{
+      id: artistImageCandidateId("theaudiodb", imageUrl),
+      provider: "theaudiodb",
+      imageUrl,
+      sourceUrl,
+      attribution: "TheAudioDB contributor",
+      license: nonEmptyString(artist?.strCreativeCommons),
+      licenseUrl: null,
+      width: null,
+      height: null,
+      score,
+    }];
+  });
+};
+
+const profileArtistImage = (profile) => {
+  const imageUrl = secureImageUrl(profile?.imageUrl);
+  const provider = profile?.imageProvider;
+  if (!imageUrl || !provider) return null;
+  const sourceUrl = provider === "wikimedia-commons"
+    ? profile.wikimediaCommonsUrl
+    : provider === "wikipedia"
+      ? profile.wikipediaUrl
+      : provider === "fanart.tv"
+        ? profile.fanartUrl
+        : profile.theAudioDbUrl;
+  return {
+    id: artistImageCandidateId(provider, imageUrl),
+    provider,
+    imageUrl,
+    sourceUrl: secureUrl(sourceUrl),
+    attribution: profile.imageAttribution ?? null,
+    license: profile.imageLicense ?? null,
+    licenseUrl: secureUrl(profile.imageLicenseUrl),
+    width: null,
+    height: null,
+    score: Number.MAX_SAFE_INTEGER,
+    current: true,
+  };
+};
+
+const commonsArtistImage = (image) => {
+  const imageUrl = secureWikimediaUrl(image?.imageUrl);
+  if (!imageUrl) return null;
+  return {
+    id: artistImageCandidateId("wikimedia-commons", imageUrl),
+    provider: "wikimedia-commons",
+    imageUrl,
+    sourceUrl: secureUrl(image?.commonsUrl),
+    attribution: image?.attribution ?? "Wikimedia Commons contributor",
+    license: image?.license ?? null,
+    licenseUrl: secureUrl(image?.licenseUrl),
+    width: null,
+    height: null,
+    score: 0,
+  };
+};
+
+const wikipediaArtistImage = (summary) => {
+  const imageUrl = secureWikimediaUrl(summary?.imageUrl);
+  if (!imageUrl) return null;
+  return {
+    id: artistImageCandidateId("wikipedia", imageUrl),
+    provider: "wikipedia",
+    imageUrl,
+    sourceUrl: secureUrl(summary?.wikipediaUrl),
+    attribution: "Wikipedia contributor",
+    license: null,
+    licenseUrl: null,
+    width: null,
+    height: null,
+    score: 0,
+  };
+};
+
+const validateCandidateImageUrl = (provider, value) => {
+  const imageUrl = secureImageUrl(value);
+  if (!imageUrl) return null;
+  const hostname = new URL(imageUrl).hostname.toLocaleLowerCase();
+  if (provider === "wikimedia-commons" || provider === "wikipedia") {
+    return hostname === "upload.wikimedia.org" || hostname.endsWith(".wikimedia.org")
+      ? imageUrl
+      : null;
+  }
+  if (provider === "fanart.tv") {
+    return hostname === "fanart.tv" || hostname.endsWith(".fanart.tv") ? imageUrl : null;
+  }
+  if (provider === "theaudiodb") {
+    return hostname === "theaudiodb.com" || hostname.endsWith(".theaudiodb.com")
+      ? imageUrl
+      : null;
+  }
+  return null;
+};
+
+const preserveManualImage = (profile, cachedProfile) => {
+  if (cachedProfile?.imageSelection !== "manual") return profile;
+  return {
+    ...profile,
+    imagePath: cachedProfile.imagePath ?? null,
+    imageUrl: cachedProfile.imageUrl ?? null,
+    imageProvider: cachedProfile.imageProvider ?? null,
+    imageAttribution: cachedProfile.imageAttribution ?? null,
+    imageLicense: cachedProfile.imageLicense ?? null,
+    imageLicenseUrl: cachedProfile.imageLicenseUrl ?? null,
+    imageSelection: "manual",
+    wikimediaCommonsUrl: cachedProfile.wikimediaCommonsUrl ?? profile.wikimediaCommonsUrl,
+    wikipediaUrl: cachedProfile.wikipediaUrl ?? profile.wikipediaUrl,
+    theAudioDbUrl: cachedProfile.theAudioDbUrl ?? profile.theAudioDbUrl,
+    fanartUrl: cachedProfile.fanartUrl ?? profile.fanartUrl,
+  };
+};
+
 export const createArtistProfileService = ({
   cacheDir,
   fetchImpl = globalThis.fetch,
@@ -404,7 +560,7 @@ export const createArtistProfileService = ({
     };
   };
 
-  const fetchFanartArtistImage = async (musicBrainzId, apiKey) => {
+  const fetchFanartArtist = async (musicBrainzId, apiKey) => {
     const normalizedApiKey = String(apiKey ?? "").trim();
     if (!normalizedApiKey) return null;
     const response = await fetchImpl(`${FANART_API_ROOT}${musicBrainzId}`, {
@@ -416,7 +572,11 @@ export const createArtistProfileService = ({
     });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`Fanart.tv request failed (${response.status})`);
-    const selected = pickFanartArtistImage(await response.json());
+    return response.json();
+  };
+
+  const fetchFanartArtistImage = async (musicBrainzId, apiKey) => {
+    const selected = pickFanartArtistImage(await fetchFanartArtist(musicBrainzId, apiKey));
     if (!selected?.url) return null;
     return {
       imageUrl: selected.url,
@@ -591,29 +751,31 @@ export const createArtistProfileService = ({
     const premiumImageUrl = theAudioDbImage(theAudioDb);
     const commonsImageUrl = secureWikimediaUrl(wikimediaCommons?.imageUrl);
     const wikipediaImageUrl = secureImageUrl(wikipedia?.imageUrl);
-    let imageUrl = commonsImageUrl || wikipediaImageUrl || premiumImageUrl;
-    let imageProvider = commonsImageUrl
-      ? "wikimedia-commons"
-      : wikipediaImageUrl
-        ? "wikipedia"
-        : premiumImageUrl
-          ? "theaudiodb"
-          : null;
+    let fanartImageUrl = null;
     let fanartUrl = null;
     let fanartAttempted = false;
-    if (!imageUrl && String(fanartApiKey).trim()) {
+    if (!commonsImageUrl && !wikipediaImageUrl && String(fanartApiKey).trim()) {
       fanartAttempted = true;
       try {
         const fanart = await fetchFanartArtistImage(musicBrainzId, fanartApiKey);
         if (fanart) {
-          imageUrl = fanart.imageUrl;
-          imageProvider = "fanart.tv";
+          fanartImageUrl = fanart.imageUrl;
           fanartUrl = fanart.fanartUrl;
         }
       } catch (error) {
         console.warn(`Could not load Fanart.tv image for ${requestedName}:`, error);
       }
     }
+    const imageUrl = commonsImageUrl || wikipediaImageUrl || fanartImageUrl || premiumImageUrl;
+    const imageProvider = commonsImageUrl
+      ? "wikimedia-commons"
+      : wikipediaImageUrl
+        ? "wikipedia"
+        : fanartImageUrl
+          ? "fanart.tv"
+          : premiumImageUrl
+            ? "theaudiodb"
+            : null;
 
     let imagePath = null;
     if (imageUrl) {
@@ -663,10 +825,18 @@ export const createArtistProfileService = ({
       imageProvider,
       imageAttribution: imageProvider === "wikimedia-commons"
         ? wikimediaCommons?.attribution ?? null
-        : null,
+        : imageProvider === "fanart.tv"
+          ? "Fanart.tv contributor"
+          : imageProvider === "theaudiodb"
+            ? "TheAudioDB contributor"
+            : imageProvider === "wikipedia"
+              ? "Wikipedia contributor"
+              : null,
       imageLicense: imageProvider === "wikimedia-commons"
         ? wikimediaCommons?.license ?? null
-        : null,
+        : imageProvider === "theaudiodb"
+          ? nonEmptyString(theAudioDb?.strCreativeCommons)
+          : null,
       imageLicenseUrl: imageProvider === "wikimedia-commons"
         ? wikimediaCommons?.licenseUrl ?? null
         : null,
@@ -724,11 +894,12 @@ export const createArtistProfileService = ({
     if (inFlight.has(requestKey)) return inFlight.get(requestKey);
     const pending = (async () => {
       try {
-        const profile = await fetchProfile(db, requestedName, artistKey, {
+        const fetchedProfile = await fetchProfile(db, requestedName, artistKey, {
           fanartApiKey,
           lastFmApiKey,
           theAudioDbApiKey,
         });
+        const profile = preserveManualImage(fetchedProfile, cached?.profile);
         writeCachedProfile(db, artistKey, requestedName, profile, now());
         return { ...profile, cacheState: "fresh" };
       } catch (error) {
@@ -742,6 +913,135 @@ export const createArtistProfileService = ({
     } finally {
       inFlight.delete(requestKey);
     }
+  };
+
+  const searchImages = async (
+    db,
+    artistName,
+    { fanartApiKey = "", lastFmApiKey = "", theAudioDbApiKey = "" } = {},
+  ) => {
+    const requestedName = String(artistName ?? "").trim();
+    const profile = await getProfile(db, requestedName, {
+      fanartApiKey,
+      lastFmApiKey,
+      theAudioDbApiKey,
+    });
+    if (profile.status !== "ready" || !profile.musicBrainzId) {
+      throw new Error("No reliable MusicBrainz artist match was found");
+    }
+
+    const candidates = [];
+    const current = profileArtistImage(profile);
+    if (current) candidates.push(current);
+
+    try {
+      const lookupUrl = new URL(`https://musicbrainz.org/ws/2/artist/${profile.musicBrainzId}`);
+      lookupUrl.search = new URLSearchParams({ inc: "url-rels", fmt: "json" }).toString();
+      const artist = await fetchMusicBrainzJson(lookupUrl.toString());
+      const relations = Array.isArray(artist?.relations) ? artist.relations : [];
+      let wikipediaTarget = parseWikipediaTarget(wikipediaRelation(relations));
+      let wikidata = null;
+      const wikidataResource = wikidataRelation(relations);
+      if (wikidataResource) {
+        wikidata = await getWikidataProfile(wikidataResource);
+        wikipediaTarget ||= wikidata?.wikipediaTarget ?? null;
+      }
+      const wikipedia = await fetchWikipediaSummary(wikipediaTarget).catch(() => null);
+      if (!wikidata && wikipedia?.wikibaseItem) {
+        wikidata = await getWikidataProfile(wikipedia.wikibaseItem).catch(() => null);
+      }
+      const commons = wikidata?.imageFileName
+        ? await fetchWikimediaCommonsImage(wikidata.imageFileName).catch(() => null)
+        : null;
+      const openImage = commonsArtistImage(commons) || wikipediaArtistImage(wikipedia);
+      if (openImage) candidates.push(openImage);
+    } catch (error) {
+      console.warn(`Could not search Wikimedia images for ${requestedName}:`, error);
+    }
+
+    if (String(fanartApiKey).trim()) {
+      try {
+        const payload = await fetchFanartArtist(profile.musicBrainzId, fanartApiKey);
+        candidates.push(...fanartArtistImages(payload, profile.musicBrainzId));
+      } catch (error) {
+        console.warn(`Could not search Fanart.tv images for ${requestedName}:`, error);
+      }
+    }
+
+    if (String(theAudioDbApiKey).trim()) {
+      try {
+        const artist = await fetchTheAudioDbArtist(profile.musicBrainzId, theAudioDbApiKey);
+        candidates.push(...theAudioDbArtistImages(artist));
+      } catch (error) {
+        console.warn(`Could not search TheAudioDB images for ${requestedName}:`, error);
+      }
+    }
+
+    const providerRank = {
+      "wikimedia-commons": 0,
+      wikipedia: 1,
+      "fanart.tv": 2,
+      theaudiodb: 3,
+    };
+    const seen = new Set();
+    return candidates
+      .filter((candidate) => {
+        if (seen.has(candidate.imageUrl)) return false;
+        seen.add(candidate.imageUrl);
+        return true;
+      })
+      .sort((left, right) => (
+        Number(Boolean(right.current)) - Number(Boolean(left.current))
+        || (providerRank[left.provider] ?? 99) - (providerRank[right.provider] ?? 99)
+        || right.score - left.score
+      ));
+  };
+
+  const setImage = async (db, artistName, candidate) => {
+    const requestedName = String(artistName ?? "").trim();
+    const artistKey = normalizeArtistKey(requestedName);
+    if (!artistKey) throw new Error("Artist name is required");
+    const cached = readCachedProfile(db, artistKey);
+    if (!cached?.profile || cached.profile.status !== "ready") {
+      throw new Error("Load the artist profile before selecting a picture");
+    }
+
+    const provider = String(candidate?.provider ?? "");
+    const imageUrl = validateCandidateImageUrl(provider, candidate?.imageUrl);
+    if (!imageUrl) throw new Error("The selected artist picture URL is not allowed");
+
+    const imagePath = await cacheArtistImage(`${artistKey}:${imageUrl}`, imageUrl);
+    if (!imagePath) throw new Error("The selected artist picture could not be saved");
+    const sourceUrl = secureUrl(candidate?.sourceUrl);
+    const profile = {
+      ...cached.profile,
+      imagePath,
+      imageUrl,
+      imageProvider: provider,
+      imageAttribution: cleanHtmlText(candidate?.attribution, 500),
+      imageLicense: cleanHtmlText(candidate?.license, 200),
+      imageLicenseUrl: secureUrl(candidate?.licenseUrl),
+      imageSelection: "manual",
+      wikimediaCommonsUrl: provider === "wikimedia-commons"
+        ? sourceUrl
+        : cached.profile.wikimediaCommonsUrl,
+      wikipediaUrl: provider === "wikipedia" ? sourceUrl : cached.profile.wikipediaUrl,
+      fanartUrl: provider === "fanart.tv" ? sourceUrl : cached.profile.fanartUrl,
+      theAudioDbUrl: provider === "theaudiodb" ? sourceUrl : cached.profile.theAudioDbUrl,
+      fetchedAt: new Date(now()).toISOString(),
+    };
+    writeCachedProfile(db, artistKey, requestedName, profile, now());
+
+    const previousImagePath = cached.profile.imagePath;
+    const resolvedCacheDir = path.resolve(cacheDir);
+    if (
+      previousImagePath
+      && previousImagePath !== imagePath
+      && path.resolve(previousImagePath).startsWith(`${resolvedCacheDir}${path.sep}`)
+    ) {
+      await fs.promises.rm(previousImagePath, { force: true }).catch(() => undefined);
+    }
+    return { ...profile, cacheState: "fresh" };
   };
 
   const scanProfiles = async (
@@ -823,5 +1123,5 @@ export const createArtistProfileService = ({
     }
   };
 
-  return { loadCachedProfiles, getProfile, scanProfiles };
+  return { loadCachedProfiles, getProfile, scanProfiles, searchImages, setImage };
 };

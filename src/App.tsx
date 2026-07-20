@@ -27,6 +27,7 @@ import {
   EditTrackModal,
   MetadataSearchModal,
   AlbumMetadataSearchModal,
+  ArtistImageModal,
   PlaylistCreateModal,
   PlaylistEditModal,
   SmartCrateModal,
@@ -84,7 +85,7 @@ import {
 import { confirm, open, save } from "@muro/desktop/dialogs";
 import { openExternal, showItemInFolder } from "./desktop/shell";
 import { isDjMixFeatureAvailable } from "./lib/mix/config";
-import type { ColumnConfig, SmartCrate, Track, TrackMetadataUpdates } from "./types";
+import type { ArtistImageCandidate, ColumnConfig, SmartCrate, Track, TrackMetadataUpdates } from "./types";
 
 function App() {
   const location = useLocation();
@@ -118,6 +119,7 @@ function App() {
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(() => new Set());
   const [metadataSearchTrackId, setMetadataSearchTrackId] = useState<string | null>(null);
   const [albumMetadataTrackIds, setAlbumMetadataTrackIds] = useState<string[]>([]);
+  const [artistImageArtistName, setArtistImageArtistName] = useState<string | null>(null);
   const [revealTrackRequest, setRevealTrackRequest] = useState<{
     trackId: string;
     requestId: number;
@@ -262,6 +264,8 @@ function App() {
     loadingKeys: artistProfileLoadingKeys,
     errors: artistProfileErrors,
     loadProfile: loadArtistProfile,
+    searchImages: searchArtistProfileImages,
+    selectImage: selectArtistProfileImage,
   } = useArtistProfiles();
   const albums = useMemo(() => groupTracksIntoAlbums(tracks), [tracks]);
   const handleOpenTableArtist = useCallback(
@@ -313,6 +317,14 @@ function App() {
     if (!selectedArtistName) return;
     void loadArtistProfile(selectedArtistName);
   }, [loadArtistProfile, selectedArtistName]);
+
+  const handleSelectArtistImage = useCallback(async (
+    artistName: string,
+    candidate: ArtistImageCandidate,
+  ) => {
+    await selectArtistProfileImage(artistName, candidate);
+    notify.success("Artist picture updated");
+  }, [selectArtistProfileImage]);
 
   // Apply search filter
   const filteredTracks = useMemo(() => {
@@ -1340,6 +1352,13 @@ function App() {
         onLoadRelease={handleLoadAlbumMetadata}
         onApply={handleApplyAlbumMetadata}
       />
+      <ArtistImageModal
+        artistName={artistImageArtistName}
+        onClose={() => setArtistImageArtistName(null)}
+        onSearch={searchArtistProfileImages}
+        onApply={handleSelectArtistImage}
+        onOpenSource={handleOpenArtistSource}
+      />
       <WindowChrome />
       <div
         className="app-shell-grid grid min-h-0 flex-1 grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
@@ -1541,6 +1560,7 @@ function App() {
                             trackCount={displayedTracks.length}
                             albumCount={selectedArtistAlbumCount}
                             onRefresh={() => { void loadArtistProfile(selectedArtistName, true); }}
+                            onChangePicture={() => setArtistImageArtistName(selectedArtistName)}
                             onOpenSource={handleOpenArtistSource}
                           />
                         )}

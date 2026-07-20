@@ -689,6 +689,16 @@ try {
           ],
         }), { headers: { "content-type": "application/json" } });
       }
+      if (String(url) === `https://webservice.fanart.tv/v3.2/music/${premiumArtistId}`) {
+        return new Response(JSON.stringify({
+          artistthumb: [{
+            url: "https://assets.fanart.tv/premium-fanart.jpg",
+            likes: "8",
+            width: "1200",
+            height: "1200",
+          }],
+        }), { headers: { "content-type": "application/json" } });
+      }
       if (String(url) === "https://upload.wikimedia.org/muro-smoke.jpg") {
         return new Response(Buffer.from("smoke image"), {
           headers: { "content-type": "image/jpeg" },
@@ -701,6 +711,16 @@ try {
       }
       if (String(url) === "https://assets.fanart.tv/fallback-best.jpg") {
         return new Response(Buffer.from("fanart smoke image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      if (String(url) === "https://assets.fanart.tv/fallback-low.jpg") {
+        return new Response(Buffer.from("alternate fanart smoke image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      if (String(url) === "https://assets.fanart.tv/premium-fanart.jpg") {
+        return new Response(Buffer.from("preferred fanart smoke image"), {
           headers: { "content-type": "image/jpeg" },
         });
       }
@@ -763,6 +783,33 @@ try {
     artistFetchCalls.includes("https://assets.fanart.tv/fallback-best.jpg"),
     "the most-liked Fanart.tv artist thumbnail should be selected",
   );
+  const fallbackImageCandidates = await artistProfileService.searchImages(db, "Fallback Muro", {
+    fanartApiKey: "smoke-fanart-key",
+  });
+  assert.equal(fallbackImageCandidates.length, 2);
+  assert.equal(fallbackImageCandidates[0].current, true);
+  assert.ok(fallbackImageCandidates.every((candidate) => candidate.provider === "fanart.tv"));
+  const alternateFanart = fallbackImageCandidates.find(
+    (candidate) => candidate.imageUrl === "https://assets.fanart.tv/fallback-low.jpg",
+  );
+  assert.ok(alternateFanart, "manual artist image search should return alternate provider images");
+  const manuallySelectedProfile = await artistProfileService.setImage(
+    db,
+    "Fallback Muro",
+    alternateFanart,
+  );
+  assert.equal(manuallySelectedProfile.imageSelection, "manual");
+  assert.equal(manuallySelectedProfile.imageUrl, "https://assets.fanart.tv/fallback-low.jpg");
+  assert.ok(fs.existsSync(manuallySelectedProfile.imagePath));
+  const refreshedManualProfile = await artistProfileService.getProfile(db, "Fallback Muro", {
+    force: true,
+    fanartApiKey: "smoke-fanart-key",
+  });
+  assert.equal(
+    refreshedManualProfile.imageUrl,
+    "https://assets.fanart.tv/fallback-low.jpg",
+    "profile refreshes should preserve manually selected artist pictures",
+  );
   const fallbackFetchCount = artistFetchCalls.length;
   await artistProfileService.getProfile(db, "Fallback Muro", { fanartApiKey: "smoke-fanart-key" });
   assert.equal(artistFetchCalls.length, fallbackFetchCount, "cached Fanart.tv images should not be fetched again");
@@ -792,6 +839,16 @@ try {
     artistFetchCalls.every((url) => !url.includes("smoke-theaudiodb-key")),
     "TheAudioDB credentials should never appear in request URLs",
   );
+  const premiumWithFanart = await artistProfileService.getProfile(db, "Premium Muro", {
+    fanartApiKey: "smoke-fanart-key",
+    theAudioDbApiKey: "smoke-theaudiodb-key",
+  });
+  assert.equal(
+    premiumWithFanart.imageProvider,
+    "fanart.tv",
+    "Fanart.tv should be preferred over TheAudioDB when both provide artist images",
+  );
+  assert.equal(premiumWithFanart.biography, "Premium biography supplied by TheAudioDB.");
   const premiumFetchCount = artistFetchCalls.length;
   await artistProfileService.getProfile(db, "Premium Muro", {
     theAudioDbApiKey: "smoke-theaudiodb-key",

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ArtistProfile } from "../types";
-import { getArtistProfile, loadCachedArtistProfiles, scanArtistProfiles } from "../utils";
+import type { ArtistImageCandidate, ArtistProfile } from "../types";
+import {
+  getArtistProfile,
+  loadCachedArtistProfiles,
+  scanArtistProfiles,
+  searchArtistImages,
+  setArtistImage,
+} from "../utils";
 import { useSettingsStore } from "../stores";
 import { useDbPath } from "./useDbPath";
 
@@ -105,5 +111,22 @@ export const useArtistProfiles = () => {
     }
   }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
-  return { profiles, loadingKeys, errors, loadProfile };
+  const searchImages = useCallback(async (artistName: string) => {
+    const dbPath = await resolveDbPath();
+    return searchArtistImages(dbPath, artistName, {
+      fanartApiKey,
+      lastFmApiKey,
+      theAudioDbApiKey,
+    });
+  }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
+
+  const selectImage = useCallback(async (artistName: string, candidate: ArtistImageCandidate) => {
+    const artistKey = normalizeArtistProfileKey(artistName);
+    const dbPath = await resolveDbPath();
+    const profile = await setArtistImage(dbPath, artistName, candidate);
+    setProfiles((current) => ({ ...current, [artistKey]: profile }));
+    return profile;
+  }, [resolveDbPath]);
+
+  return { profiles, loadingKeys, errors, loadProfile, searchImages, selectImage };
 };

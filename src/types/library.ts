@@ -99,6 +99,7 @@ export type ArtistProfile = {
   imageAttribution?: string | null;
   imageLicense?: string | null;
   imageLicenseUrl?: string | null;
+  imageSelection?: "automatic" | "manual";
   lastFmAttempted?: boolean;
   lastFmUrl?: string | null;
   similarArtists?: Array<{
@@ -117,6 +118,20 @@ export type ArtistProfile = {
   fanartUrl?: string | null;
   fetchedAt: string;
   cacheState?: "fresh" | "stale";
+};
+
+export type ArtistImageCandidate = {
+  id: string;
+  provider: "wikimedia-commons" | "wikipedia" | "theaudiodb" | "fanart.tv";
+  imageUrl: string;
+  sourceUrl?: string | null;
+  attribution?: string | null;
+  license?: string | null;
+  licenseUrl?: string | null;
+  width?: number | null;
+  height?: number | null;
+  score?: number;
+  current?: boolean;
 };
 
 export type SmartCrateField =

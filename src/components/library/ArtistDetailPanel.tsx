@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, Disc3, ExternalLink, MapPin, Music2, RefreshCw, UserRound } from "lucide-react";
+import { CalendarDays, Disc3, ExternalLink, ImageIcon, MapPin, Music2, RefreshCw, UserRound } from "lucide-react";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import type { ArtistProfile } from "../../types";
 
@@ -23,6 +23,7 @@ type ArtistDetailPanelProps = {
   trackCount: number;
   albumCount: number;
   onRefresh: () => void;
+  onChangePicture: () => void;
   onOpenSource: (url: string) => void;
 };
 
@@ -34,6 +35,7 @@ export const ArtistDetailPanel = ({
   trackCount,
   albumCount,
   onRefresh,
+  onChangePicture,
   onOpenSource,
 }: ArtistDetailPanelProps) => {
   const imageSource = profileImageSource(profile);
@@ -43,11 +45,11 @@ export const ArtistDetailPanel = ({
 
   return (
     <section className="artist-detail-panel" data-artist-detail={artistName} data-artist-status={profile?.status ?? (isLoading ? "loading" : "empty")}>
-      <div className="artist-detail-photo" aria-hidden="true">
+      <button className="artist-detail-photo" onClick={onChangePicture} title="Change artist picture" type="button">
         {imageSource && !imageFailed
-          ? <img alt="" onError={() => setImageFailed(true)} src={imageSource} />
-          : <UserRound />}
-      </div>
+          ? <img alt={`${profile?.name || artistName} profile`} onError={() => setImageFailed(true)} src={imageSource} />
+          : <UserRound aria-hidden="true" />}
+      </button>
       <div className="artist-detail-content">
         <div className="artist-detail-heading">
           <div>
@@ -57,10 +59,16 @@ export const ArtistDetailPanel = ({
               <p className="artist-detail-description">{profile.description || profile.disambiguation}</p>
             )}
           </div>
-          <button className="artist-detail-refresh" disabled={isLoading} onClick={onRefresh} title="Refresh artist information" type="button">
-            <RefreshCw className={isLoading ? "animate-spin" : ""} />
-            {isLoading ? "Loading" : "Refresh"}
-          </button>
+          <div className="artist-detail-heading-actions">
+            <button className="artist-detail-refresh" onClick={onChangePicture} title="Search for another artist picture" type="button">
+              <ImageIcon />
+              Picture
+            </button>
+            <button className="artist-detail-refresh" disabled={isLoading} onClick={onRefresh} title="Refresh artist information" type="button">
+              <RefreshCw className={isLoading ? "animate-spin" : ""} />
+              {isLoading ? "Loading" : "Refresh"}
+            </button>
+          </div>
         </div>
 
         <div className="artist-detail-facts">
@@ -94,9 +102,9 @@ export const ArtistDetailPanel = ({
             </div>
           </div>
         )}
-        {profile?.imageProvider === "wikimedia-commons" && (
+        {(profile?.imageAttribution || profile?.imageLicense) && (
           <p className="artist-detail-photo-credit">
-            Photo: {profile.imageAttribution || "Wikimedia Commons contributor"}
+            Photo: {profile.imageAttribution || profile.imageProvider || "online source"}
             {profile.imageLicense && ` · ${profile.imageLicense}`}
           </p>
         )}

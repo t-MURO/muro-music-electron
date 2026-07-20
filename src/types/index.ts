@@ -4,6 +4,7 @@ export type {
   Playlist,
   PlaylistFolder,
   ArtistProfile,
+  ArtistImageCandidate,
   SmartCrate,
   SmartCrateField,
   SmartCrateOperator,

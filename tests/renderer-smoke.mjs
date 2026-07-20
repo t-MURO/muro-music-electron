@@ -105,6 +105,7 @@ const smokeArtistProfile = {
 };
 let artistProfileScanCount = 0;
 let manualCoverFetchCount = 0;
+let artistImageSaveCount = 0;
 const shownItemPaths = [];
 const ratingUpdates = [];
 for (let index = 0; index < 5; index += 1) {
@@ -202,6 +203,38 @@ app.whenReady().then(async () => {
     if (command === "load_recently_played") return [];
     if (command === "load_cached_artist_profiles") return [smokeArtistProfile];
     if (command === "get_artist_profile") return smokeArtistProfile;
+    if (command === "search_artist_images") return [
+      {
+        id: "commons-current",
+        provider: "wikimedia-commons",
+        imageUrl: "https://upload.wikimedia.org/muro-commons.jpg",
+        sourceUrl: smokeArtistProfile.wikimediaCommonsUrl,
+        attribution: "Smoke Photographer",
+        license: "CC BY-SA 4.0",
+        current: true,
+      },
+      {
+        id: "fanart-alternate",
+        provider: "fanart.tv",
+        imageUrl: "https://assets.fanart.tv/muro-alternate.jpg",
+        sourceUrl: smokeArtistProfile.fanartUrl,
+        attribution: "Fanart.tv contributor",
+        width: 1000,
+        height: 1000,
+      },
+    ];
+    if (command === "set_artist_image") {
+      artistImageSaveCount += 1;
+      return {
+        ...smokeArtistProfile,
+        imagePath: path.join(appRoot, "src", "assets", "app-logo.png"),
+        imageUrl: args.candidate?.imageUrl ?? null,
+        imageProvider: args.candidate?.provider ?? null,
+        imageAttribution: args.candidate?.attribution ?? null,
+        imageLicense: args.candidate?.license ?? null,
+        imageSelection: "manual",
+      };
+    }
     if (command === "scan_artist_profiles") {
       artistProfileScanCount += 1;
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalArtists: 1 };
@@ -272,7 +305,7 @@ app.whenReady().then(async () => {
       };
     }
     if (command === "test_get_cover_counts") {
-      return { manualCoverFetchCount };
+      return { manualCoverFetchCount, artistImageSaveCount };
     }
     if (command === "scan_technical_metadata") {
       return { checked: 0, updated: 0, failed: 0, remaining: 0 };
@@ -1300,6 +1333,23 @@ app.whenReady().then(async () => {
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
           document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "250"
         );
+        document.querySelector('[title="Search for another artist picture"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const artistImageChooserReady = Boolean(
+          document.querySelector("[data-artist-image-modal]") &&
+          document.querySelectorAll("[data-artist-image-candidate]").length === 2 &&
+          document.querySelector('[data-artist-image-candidate="wikimedia-commons"]') &&
+          document.querySelector('[data-artist-image-candidate="fanart.tv"]')
+        );
+        document.querySelector('[data-artist-image-candidate="fanart.tv"] [role="radio"]')?.click();
+        document.querySelector("[data-apply-artist-image]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const artistImageCounts = await window.muro.invoke("test_get_cover_counts");
+        const artistImageApplied = Boolean(
+          !document.querySelector("[data-artist-image-modal]") &&
+          artistImageCounts.artistImageSaveCount === 1 &&
+          document.querySelector(".artist-detail-photo img")?.getAttribute("src")?.includes("app-logo.png")
+        );
 
         window.location.hash = "#/";
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1539,6 +1589,8 @@ app.whenReady().then(async () => {
           albumArtistProfileReady,
           artistIndexReady,
           artistDetailReady,
+          artistImageChooserReady,
+          artistImageApplied,
           tableArtistNavigationReady,
           tableAlbumNavigationReady,
           genreIndexReady,
@@ -1732,6 +1784,13 @@ app.whenReady().then(async () => {
         fail(
           `Metadata search failed: menu=${result.searchMetadataMenuReady}, ` +
           `modal=${result.metadataSearchReady}, fields=${result.metadataFieldSelectionReady}`
+        );
+        return;
+      }
+      if (!result.artistImageChooserReady || !result.artistImageApplied) {
+        fail(
+          `Artist picture chooser failed: chooser=${result.artistImageChooserReady}, ` +
+          `applied=${result.artistImageApplied}, saves=${artistImageSaveCount}`
         );
         return;
       }

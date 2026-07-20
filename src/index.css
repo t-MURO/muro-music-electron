@@ -1289,6 +1289,13 @@ input:focus-visible,
   background: var(--color-bg-tertiary);
   color: var(--color-text-muted);
   box-shadow: var(--shadow-md);
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.artist-detail-photo:hover,
+.artist-detail-photo:focus-visible {
+  border-color: var(--color-accent);
+  transform: scale(1.02);
 }
 
 .artist-detail-photo img {
@@ -1312,6 +1319,12 @@ input:focus-visible,
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.artist-detail-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
 }
 
 .artist-detail-eyebrow {

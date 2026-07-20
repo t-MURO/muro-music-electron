@@ -443,6 +443,14 @@ export const createBackend = ({
         lastFmApiKey,
         theAudioDbApiKey,
       }),
+    search_artist_images: ({ dbPath, artistName, fanartApiKey, lastFmApiKey, theAudioDbApiKey }) =>
+      artistProfiles.searchImages(openDatabase(dbPath), artistName, {
+        fanartApiKey,
+        lastFmApiKey,
+        theAudioDbApiKey,
+      }),
+    set_artist_image: ({ dbPath, artistName, candidate }) =>
+      artistProfiles.setImage(openDatabase(dbPath), artistName, candidate),
     scan_artist_profiles: ({ dbPath, fanartApiKey, lastFmApiKey, theAudioDbApiKey, limit }) =>
       artistProfiles.scanProfiles(openDatabase(dbPath), {
         fanartApiKey,
