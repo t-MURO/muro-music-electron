@@ -356,8 +356,8 @@ const playbackInvoke = async <T>(
       emitState();
       return undefined as T;
     case "playback_seek":
-      if (mix.isTransitionEngaged()) mix.cancelTransition();
       await seekPlayer(player, Math.max(0, Number(args.positionSecs) || 0));
+      if (mix.isTransitionEngaged()) mix.notifySeek();
       return undefined as T;
     case "playback_set_volume":
       masterVolume = Math.max(0, Math.min(1, Number(args.volume)));

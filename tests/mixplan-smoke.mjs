@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { transitionAutomationAt } from "../src/lib/mix/automation.ts";
 import { MIX_BAR_OPTIONS, isDjMixFeatureAvailable } from "../src/lib/mix/config.ts";
 import { planTransition } from "../src/lib/mix/plan.ts";
+import { getTransitionSeekPhase } from "../src/lib/mix/seek.ts";
 
 assert.deepEqual(MIX_BAR_OPTIONS, [4, 8, 16, 32]);
 assert.equal(isDjMixFeatureAvailable(true), true);
@@ -236,6 +237,27 @@ for (const plan of [
   assert.deepEqual(
     [start.incomingGain, start.outgoingGain, end.incomingGain, end.outgoingGain],
     [0, 1, 1, 0],
+  );
+}
+
+// Seeking keeps an armed mix and tells the engine whether to re-arm,
+// synchronize both decks, or complete the handoff.
+{
+  const plan = planTransition({
+    gridA: grid(128),
+    gridB: grid(128),
+    durationASec: 300,
+    durationBSec: 300,
+  });
+  assert.equal(getTransitionSeekPhase(plan, plan.startAtSec - 1), "before");
+  assert.equal(getTransitionSeekPhase(plan, plan.startAtSec), "inside");
+  assert.equal(
+    getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec - 0.01),
+    "inside",
+  );
+  assert.equal(
+    getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec),
+    "after",
   );
 }
 

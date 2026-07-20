@@ -1,9 +1,11 @@
 import type { TransitionPlan } from "../lib/mix/plan";
 import {
   buildTransitionAutomation,
+  transitionAutomationAt,
   valueAtAutomationPoint,
   type AutomationPoint,
 } from "../lib/mix/automation";
+import { getTransitionSeekPhase } from "../lib/mix/seek";
 
 export type DeckHandle = {
   el: HTMLAudioElement;
@@ -45,6 +47,7 @@ type ActiveTransition = {
   frozen: boolean;    // user paused mid-transition
   watcherId: number | null;
   lastProgressEmitMs: number;
+  activationId: number;
 };
 
 const BASS_KILL_DB = -28;
@@ -172,6 +175,24 @@ const scheduleAutomation = (t: ActiveTransition, fromAClockOffset: number): void
   scheduleParam(outChain.lowShelf.gain, automation.outgoingShelf, fromAClockOffset);
 };
 
+const setAutomationAt = (t: ActiveTransition, offsetSec: number): void => {
+  if (!audioContext) return;
+  const incoming = getChain(t.incomingEl);
+  const outgoing = getChain(t.outgoingEl);
+  if (!incoming || !outgoing) return;
+  const now = audioContext.currentTime;
+  const snapshot = transitionAutomationAt(t.plan, offsetSec);
+  for (const [param, value] of [
+    [incoming.gain.gain, snapshot.incomingGain],
+    [incoming.lowShelf.gain, snapshot.incomingShelf],
+    [outgoing.gain.gain, snapshot.outgoingGain],
+    [outgoing.lowShelf.gain, snapshot.outgoingShelf],
+  ] as const) {
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(value, now);
+  }
+};
+
 const stopWatcher = (t: ActiveTransition): void => {
   if (t.watcherId !== null) {
     window.clearInterval(t.watcherId);
@@ -265,6 +286,7 @@ const synchronizeIncomingClock = (t: ActiveTransition, outCur: number): void => 
 };
 
 const startTransition = (t: ActiveTransition, outCur: number): void => {
+  const activationId = ++t.activationId;
   t.starting = true;
   const lateBy = Math.max(0, outCur - t.plan.startAtSec);
   if (lateBy > 0.05) {
@@ -276,7 +298,7 @@ const startTransition = (t: ActiveTransition, outCur: number): void => {
   }
   t.incomingEl.play().then(
     () => {
-      if (transition !== t) return;
+      if (transition !== t || activationId !== t.activationId) return;
       t.starting = false;
       t.started = true;
       const outgoingNow = t.outgoingEl.currentTime;
@@ -290,7 +312,7 @@ const startTransition = (t: ActiveTransition, outCur: number): void => {
       );
     },
     () => {
-      if (transition !== t) return;
+      if (transition !== t || activationId !== t.activationId) return;
       t.starting = false;
       cancelTransition();
     }
@@ -373,6 +395,7 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
     frozen: false,
     watcherId: null,
     lastProgressEmitMs: 0,
+    activationId: 0,
   };
   transition = t;
 
@@ -438,6 +461,64 @@ export function cancelTransition(): void {
     parkIncoming();
   }, CANCEL_RAMP_SEC * 1000 + 50);
   t.callbacks.onStateChange("cancelled", 0);
+}
+
+export function notifySeek(): void {
+  const t = transition;
+  if (!t) return;
+
+  const outgoingPosition = t.outgoingEl.currentTime;
+  const phase = getTransitionSeekPhase(t.plan, outgoingPosition);
+
+  if (phase === "before") {
+    t.activationId += 1;
+    t.started = false;
+    t.starting = false;
+    t.frozen = false;
+    t.incomingEl.pause();
+    t.incomingEl.playbackRate = t.plan.rate;
+    try {
+      t.incomingEl.currentTime = Math.max(0, t.plan.cueInSec);
+    } catch {
+      // The deck will be synchronized again when the transition starts.
+    }
+    setAutomationAt(t, 0);
+    t.callbacks.onStateChange("armed", 0);
+    return;
+  }
+
+  if (phase === "after") {
+    synchronizeIncomingClock(t, outgoingPosition);
+    if (t.started || t.outgoingEl.paused) {
+      completeTransition(t);
+      return;
+    }
+    const activationId = ++t.activationId;
+    void t.incomingEl.play().then(
+      () => {
+        if (transition !== t || activationId !== t.activationId) return;
+        completeTransition(t);
+      },
+      () => {
+        if (transition === t && activationId === t.activationId) cancelTransition();
+      },
+    );
+    return;
+  }
+
+  const offset = Math.max(0, outgoingPosition - t.plan.startAtSec);
+  synchronizeIncomingClock(t, outgoingPosition);
+  if (!t.started) {
+    if (!t.outgoingEl.paused && !t.starting) startTransition(t, outgoingPosition);
+    return;
+  }
+
+  if (t.frozen) setAutomationAt(t, offset);
+  else scheduleAutomation(t, offset);
+  t.callbacks.onStateChange(
+    "active",
+    clampNumber(offset / t.plan.durationSec, 0, 1),
+  );
 }
 
 export function notifyOutgoingEnded(): void {
