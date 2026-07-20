@@ -96,6 +96,7 @@ const writeSilentWav = (filePath) => {
 let keyFinderClosed = false;
 let keyFinderStartArguments;
 let waveformGenerationCount = 0;
+let metadataFetchAttempts = 0;
 const keyFinder = {
   health: async () => ({ service: "keyfinder-native", protocolVersion: 1 }),
   startAnalysis: async (tracks, _sender, settings, writeAuthorization) => {
@@ -114,10 +115,53 @@ const backend = createBackend({
   cacheDir: path.join(directory, "covers"),
   emit: () => {},
   keyFinder,
+  musicBrainzIntervalMs: 0,
+  metadataFetchImpl: async (url) => {
+    metadataFetchAttempts += 1;
+    const metadataQuery = new URL(String(url)).searchParams.get("query") ?? "";
+    if (metadataFetchAttempts === 1 || metadataQuery.includes("Offline Track")) {
+      const connectionReset = Object.assign(new Error("TLS connection reset"), { code: "ECONNRESET" });
+      throw new TypeError("fetch failed", { cause: connectionReset });
+    }
+    assert.ok(String(url).startsWith("https://musicbrainz.org/ws/2/recording/?"));
+    return new Response(JSON.stringify({
+      recordings: [{
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        title: "Retry Track",
+        score: 100,
+        "artist-credit": [{ name: "Retry Artist" }],
+        releases: [{
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          title: "Retry Album",
+          date: "2026-01-01",
+          country: "DE",
+          status: "Official",
+          "artist-credit": [{ name: "Retry Artist" }],
+          "release-group": { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
+        }],
+      }],
+    }), { headers: { "content-type": "application/json" } });
+  },
 });
 
 try {
   const db = openDatabase(dbPath);
+  const metadataResults = await backend.invoke("search_track_metadata", {
+    title: "Retry Track",
+    artist: "Retry Artist",
+    album: "Retry Album",
+  });
+  assert.equal(metadataFetchAttempts, 2, "metadata search should retry transient network failures");
+  assert.equal(metadataResults[0].title, "Retry Track");
+  assert.equal(metadataResults[0].albumMatch, true);
+  await assert.rejects(
+    backend.invoke("search_track_metadata", {
+      title: "Offline Track",
+      artist: "Retry Artist",
+      album: "Retry Album",
+    }),
+    /MusicBrainz is temporarily unreachable \(ECONNRESET\)/,
+  );
   const now = Math.floor(Date.now() / 1000);
   const coverDb = openDatabase(path.join(directory, "cover-art-archive.db"));
   const releaseId = "66666666-6666-4666-8666-666666666666";

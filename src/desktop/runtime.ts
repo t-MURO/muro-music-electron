@@ -455,6 +455,16 @@ const queuePlaybackInvoke = <T>(
   return operation;
 };
 
+const cleanRemoteError = (error: unknown) => {
+  if (!(error instanceof Error)) return error;
+  const message = error.message
+    .replace(/^Error invoking remote method '[^']+':\s*/i, "")
+    .replace(/^(?:Error|TypeError):\s*/i, "");
+  return message === error.message
+    ? error
+    : Object.assign(new Error(message), { cause: error });
+};
+
 export const invoke = <T>(
   command: string,
   args: Record<string, unknown> = {}
@@ -473,7 +483,9 @@ export const invoke = <T>(
     }
     return queuePlaybackInvoke<T>(command, args);
   }
-  return bridge().invoke<T>(command, args);
+  return bridge().invoke<T>(command, args).catch((error) => {
+    throw cleanRemoteError(error);
+  });
 };
 
 export const convertFileSrc = (filePath: string): string =>

@@ -48,20 +48,55 @@ const allowedUpdates = {
 const MUSICBRAINZ_RECORDING_SEARCH = "https://musicbrainz.org/ws/2/recording/";
 const MUSICBRAINZ_RELEASE_SEARCH = "https://musicbrainz.org/ws/2/release/";
 const MUSICBRAINZ_USER_AGENT = "MuroMusicElectron/0.1.0 (https://github.com/t-MURO/muro-music-electron)";
-let musicBrainzRequestQueue = Promise.resolve();
-let nextMusicBrainzRequestAt = 0;
+const MUSICBRAINZ_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const fetchMusicBrainz = (url) => {
-  const request = musicBrainzRequestQueue.then(async () => {
-    const waitMs = Math.max(0, nextMusicBrainzRequestAt - Date.now());
-    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    nextMusicBrainzRequestAt = Date.now() + 1_100;
-    return fetch(url, {
+const createMusicBrainzFetcher = ({
+  fetchImpl = globalThis.fetch,
+  intervalMs = 1_100,
+  requestTimeoutMs = 15_000,
+  retryCount = 2,
+} = {}) => {
+  let requestQueue = Promise.resolve();
+  let nextRequestAt = 0;
+
+  const requestOnce = async (url) => {
+    const waitMs = Math.max(0, nextRequestAt - Date.now());
+    if (waitMs > 0) await sleep(waitMs);
+    nextRequestAt = Date.now() + intervalMs;
+    return fetchImpl(url, {
       headers: { Accept: "application/json", "User-Agent": MUSICBRAINZ_USER_AGENT },
+      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(requestTimeoutMs)
+        : undefined,
     });
-  });
-  musicBrainzRequestQueue = request.then(() => undefined, () => undefined);
-  return request;
+  };
+
+  return (url) => {
+    const request = requestQueue.then(async () => {
+      let lastError;
+      for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+        try {
+          const response = await requestOnce(url);
+          if (!MUSICBRAINZ_RETRYABLE_STATUSES.has(response.status) || attempt === retryCount) {
+            return response;
+          }
+          await response.body?.cancel().catch(() => undefined);
+        } catch (error) {
+          lastError = error;
+          if (attempt === retryCount) break;
+        }
+      }
+      const cause = lastError?.cause ?? lastError;
+      const code = typeof cause?.code === "string" ? ` (${cause.code})` : "";
+      throw new Error(
+        `MusicBrainz is temporarily unreachable${code}. Check your connection and try again.`,
+        { cause: lastError },
+      );
+    });
+    requestQueue = request.then(() => undefined, () => undefined);
+    return request;
+  };
 };
 
 const quotedMusicBrainzTerm = (value) => `"${String(value ?? "")
@@ -72,7 +107,7 @@ const artistCreditName = (credit) => Array.isArray(credit)
   ? credit.map((entry) => `${entry?.name ?? entry?.artist?.name ?? ""}${entry?.joinphrase ?? ""}`).join("").trim()
   : "";
 
-const searchTrackMetadata = async ({ title, artist, album }) => {
+const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) => {
   const cleanTitle = String(title ?? "").trim();
   const cleanArtist = String(artist ?? "").trim();
   if (!cleanTitle || !cleanArtist) throw new Error("Title and artist are required to search for metadata");
@@ -137,7 +172,7 @@ const releaseTrackCount = (release) => {
   return media.reduce((total, medium) => total + Number(medium?.["track-count"] ?? medium?.tracks?.length ?? 0), 0);
 };
 
-const searchAlbumMetadata = async ({ album, artist }) => {
+const searchAlbumMetadata = async ({ album, artist }, fetchMusicBrainz) => {
   const cleanAlbum = String(album ?? "").trim();
   const cleanArtist = String(artist ?? "").trim();
   if (!cleanAlbum || !cleanArtist) throw new Error("Album and album artist are required to search for metadata");
@@ -166,7 +201,7 @@ const searchAlbumMetadata = async ({ album, artist }) => {
   })).sort((left, right) => right.score - left.score || (left.year ?? 9999) - (right.year ?? 9999));
 };
 
-const loadAlbumMetadata = async ({ releaseId }) => {
+const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
   const id = String(releaseId ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Invalid MusicBrainz release ID");
   const url = new URL(`${MUSICBRAINZ_RELEASE_SEARCH}${id}`);
@@ -400,10 +435,16 @@ export const createBackend = ({
   keyFinder,
   waveformCacheDir,
   artistProfileCacheDir,
+  metadataFetchImpl,
+  musicBrainzIntervalMs,
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
   const albumCovers = createAlbumCoverService({ cacheDir });
+  const fetchMusicBrainz = createMusicBrainzFetcher({
+    fetchImpl: metadataFetchImpl,
+    intervalMs: musicBrainzIntervalMs,
+  });
   const waveformCache = createWaveformCache({
     cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
   });
@@ -470,11 +511,11 @@ export const createBackend = ({
         artist,
       }),
     search_track_metadata: ({ title, artist, album }) =>
-      searchTrackMetadata({ title, artist, album }),
+      searchTrackMetadata({ title, artist, album }, fetchMusicBrainz),
     search_album_metadata: ({ album, artist }) =>
-      searchAlbumMetadata({ album, artist }),
+      searchAlbumMetadata({ album, artist }, fetchMusicBrainz),
     load_album_metadata: ({ releaseId }) =>
-      loadAlbumMetadata({ releaseId }),
+      loadAlbumMetadata({ releaseId }, fetchMusicBrainz),
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
