@@ -44,3 +44,9 @@ export {
   useSmartCrateStore,
   type SmartCrateStore,
 } from "./smartCrateStore";
+export {
+  useCastStore,
+  selectCastOutputActive,
+  isCastOutputActive,
+  type CastStore,
+} from "./castStore";

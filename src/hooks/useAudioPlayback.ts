@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@muro/desktop/events";
+import { t } from "../i18n";
 import type { Track } from "../types";
 import { usePlaybackStore, trackToCurrentTrack, notify } from "../stores";
+import { useCastStore, isCastOutputActive } from "../stores/castStore";
 import {
   playbackGetState,
   playbackPause,
@@ -14,6 +16,18 @@ import {
   type PlaybackState,
 } from "../utils";
 import type { TransitionStatePayload } from "../utils/playbackApi";
+import {
+  castErrorCode,
+  castGetState,
+  castLoadTrack,
+  castPause,
+  castPlay,
+  castSeek,
+  castSetVolume,
+  type CastDiscoverySnapshot,
+  type CastMediaStatusEvent,
+  type CastSessionState,
+} from "../utils/castApi";
 
 // Keep the playback track type available to hook consumers.
 export type { CurrentTrack } from "../stores";
@@ -105,11 +119,33 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
 
     const setup = async () => {
       const listeners = await Promise.all([
+        // While the cast output is active the receiver's status drives the
+        // store; events from the (paused) local element are ignored.
         listen<PlaybackState>("muro://playback-state", (event) => {
+          if (isCastOutputActive()) return;
           updateFromPlaybackState(event.payload);
         }),
         listen<number>("muro://playback-position", (event) => {
+          if (isCastOutputActive()) return;
           setCurrentPosition(event.payload);
+        }),
+        listen<CastDiscoverySnapshot>("muro://cast-devices", (event) => {
+          useCastStore.getState().applyDiscovery(event.payload);
+        }),
+        listen<CastSessionState>("muro://cast-state", (event) => {
+          useCastStore.getState().applySessionState(event.payload);
+        }),
+        listen<CastMediaStatusEvent>("muro://cast-media-status", (event) => {
+          const { status, finished } = event.payload;
+          useCastStore.getState().applyMediaStatus(status);
+          if (isCastOutputActive()) {
+            setCurrentPosition(status.position);
+            if (typeof status.duration === "number" && status.duration > 0) {
+              setDuration(status.duration);
+            }
+            setIsPlaying(status.playerState === "playing" || status.playerState === "buffering");
+          }
+          if (finished) onTrackEndRef.current?.();
         }),
         listen<MediaControlEvent>("muro://media-control", (event) => {
           const action = typeof event.payload === "string"
@@ -158,6 +194,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
           onMediaControlRef.current?.(action);
         }),
         listen("muro://track-ended", () => {
+          if (isCastOutputActive()) return;
           onTrackEndRef.current?.();
         }),
         listen<TransitionStatePayload>("muro://transition-state", (event) => {
@@ -183,10 +220,21 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       }
       removeListeners = cleanup;
 
+      // Recover cast session state first (survives a renderer reload).
+      try {
+        const castState = await castGetState();
+        if (!cancelled) {
+          useCastStore.getState().applySessionState(castState);
+          useCastStore.getState().applyDiscovery(castState.discovery);
+        }
+      } catch {
+        // The desktop bridge may predate cast support; local playback works.
+      }
+
       // Get initial state
       try {
         const initialState = await playbackGetState();
-        if (!cancelled) updateFromPlaybackState(initialState);
+        if (!cancelled && !isCastOutputActive()) updateFromPlaybackState(initialState);
       } catch (error) {
         if (!cancelled) notify.error("Failed to get initial playback state");
       }
@@ -213,8 +261,36 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
     });
   }, [seekMode]);
 
+  // Commands below route to exactly one output: the Cast receiver while a
+  // cast session owns playback, the local audio element otherwise.
   const playTrack = useCallback(
     async (track: Track) => {
+      if (isCastOutputActive()) {
+        try {
+          await castLoadTrack({
+            trackId: track.id,
+            sourcePath: track.sourcePath,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            durationSeconds: track.durationSeconds,
+            coverArtPath: track.coverArtPath,
+            startPositionSecs: 0,
+            autoplay: true,
+          });
+          setIsPlaying(true);
+          setCurrentPosition(0);
+          setDuration(track.durationSeconds);
+          setCurrentTrack(trackToCurrentTrack(track));
+        } catch (error) {
+          notify.error(
+            castErrorCode(error) === "CAST_UNSUPPORTED_FORMAT"
+              ? t("player.cast.unsupported")
+              : t("player.cast.loadFailed"),
+          );
+        }
+        return;
+      }
       try {
         await playbackPlayFile(
           track.id,
@@ -238,6 +314,21 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   );
 
   const togglePlay = useCallback(async () => {
+    if (isCastOutputActive()) {
+      const remoteState = useCastStore.getState().remoteMedia?.playerState;
+      try {
+        if (remoteState === "playing" || remoteState === "buffering") {
+          await castPause();
+          setIsPlaying(false);
+        } else {
+          await castPlay();
+          setIsPlaying(true);
+        }
+      } catch (error) {
+        notify.error(t("player.cast.commandFailed"));
+      }
+      return;
+    }
     try {
       const isNowPlaying = await playbackToggle();
       setIsPlaying(isNowPlaying);
@@ -247,6 +338,15 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   }, [setIsPlaying]);
 
   const play = useCallback(async () => {
+    if (isCastOutputActive()) {
+      try {
+        await castPlay();
+        setIsPlaying(true);
+      } catch (error) {
+        notify.error(t("player.cast.commandFailed"));
+      }
+      return;
+    }
     try {
       await playbackPlay();
       setIsPlaying(true);
@@ -256,6 +356,15 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   }, [setIsPlaying]);
 
   const pause = useCallback(async () => {
+    if (isCastOutputActive()) {
+      try {
+        await castPause();
+        setIsPlaying(false);
+      } catch (error) {
+        notify.error(t("player.cast.commandFailed"));
+      }
+      return;
+    }
     try {
       await playbackPause();
       setIsPlaying(false);
@@ -266,6 +375,15 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
 
   const seek = useCallback(
     async (positionSecs: number) => {
+      if (isCastOutputActive()) {
+        try {
+          await castSeek(positionSecs);
+          setCurrentPosition(positionSecs);
+        } catch (error) {
+          notify.error(t("player.cast.commandFailed"));
+        }
+        return;
+      }
       try {
         await playbackSeek(positionSecs);
         setCurrentPosition(positionSecs);
@@ -278,8 +396,17 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
 
   const handleSetVolume = useCallback(
     async (newVolume: number) => {
+      const clamped = Math.max(0, Math.min(1, newVolume));
+      if (isCastOutputActive()) {
+        try {
+          await castSetVolume(clamped);
+          setVolume(clamped);
+        } catch (error) {
+          notify.error(t("player.cast.commandFailed"));
+        }
+        return;
+      }
       try {
-        const clamped = Math.max(0, Math.min(1, newVolume));
         await playbackSetVolume(clamped);
         setVolume(clamped);
       } catch (error) {

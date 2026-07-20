@@ -80,3 +80,26 @@ export {
   type LibrarySnapshot,
   type PlaylistSnapshot,
 } from "./importApi";
+export {
+  castStartDiscovery,
+  castStopDiscovery,
+  castGetDevices,
+  castConnect,
+  castDisconnect,
+  castLoadTrack,
+  castPlay,
+  castPause,
+  castSeek,
+  castSetVolume,
+  castGetState,
+  castErrorCode,
+  type CastDevice,
+  type CastDiscoverySnapshot,
+  type CastSessionState,
+  type CastSessionStateName,
+  type CastMediaStatus,
+  type CastMediaStatusEvent,
+  type CastErrorPayload,
+  type CastLoadedTrack,
+} from "./castApi";
+export { connectToCastDevice, disconnectFromCast } from "./castController";
