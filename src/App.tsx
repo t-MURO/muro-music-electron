@@ -97,6 +97,10 @@ function App() {
   const playlists = useLibraryStore((s) => s.playlists);
   const playlistFolders = useLibraryStore((s) => s.playlistFolders);
   const allTracks = useLibraryStore(selectAllTracks);
+  const allTracksById = useMemo(
+    () => new Map(allTracks.map((track) => [track.id, track])),
+    [allTracks],
+  );
 
   const recentlyPlayedTracks = useRecentlyPlayedStore((s) => s.recentlyPlayedTracks);
   const smartCrates = useSmartCrateStore((s) => s.smartCrates);
@@ -427,6 +431,29 @@ function App() {
     setVolume,
   } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
 
+  const playbackContextIdsRef = useRef<string[]>([]);
+  const playTrackById = useCallback((trackId: string, contextTracks?: Track[]) => {
+    const track = allTracksById.get(trackId);
+    if (!track) return;
+    if (contextTracks && contextTracks.some((item) => item.id === trackId)) {
+      playbackContextIdsRef.current = contextTracks.map((item) => item.id);
+    }
+    void playTrack(track);
+  }, [allTracksById, playTrack]);
+
+  const getPlaybackContext = useCallback((activeTrackId: string | null) => {
+    const remembered = playbackContextIdsRef.current
+      .map((id) => allTracksById.get(id))
+      .filter((track): track is Track => track !== undefined);
+    if (activeTrackId && remembered.some((track) => track.id === activeTrackId)) {
+      return remembered;
+    }
+    if (activeTrackId && sortedTracks.some((track) => track.id === activeTrackId)) {
+      return sortedTracks;
+    }
+    return allTracks;
+  }, [allTracks, allTracksById, sortedTracks]);
+
   // DJ-style transitions (manual pair mix + auto-mix into the queue)
   const { mixCurrentWith, mixSelectedPair, transition } = useMixTransition({
     enabled: djMixEnabled,
@@ -445,13 +472,14 @@ function App() {
       void seek(0);
       return;
     }
+    const playbackList = getPlaybackContext(playbackState.currentTrack?.id ?? null);
     const currentIndex = playbackState.currentTrack
-      ? allTracks.findIndex((t) => t.id === playbackState.currentTrack?.id)
+      ? playbackList.findIndex((track) => track.id === playbackState.currentTrack?.id)
       : -1;
     if (currentIndex > 0) {
-      void playTrack(allTracks[currentIndex - 1]);
+      void playTrack(playbackList[currentIndex - 1]);
     }
-  }, [allTracks, seek, playTrack]);
+  }, [getPlaybackContext, seek, playTrack]);
 
   // Shared advance logic for skip-next and natural track end.
   const advanceToNext = useCallback(() => {
@@ -460,7 +488,7 @@ function App() {
     // If there's a track in the queue, use it
     if (currentQueue.length > 0) {
       const nextTrackId = currentQueue[0];
-      const nextTrack = allTracks.find((t) => t.id === nextTrackId);
+      const nextTrack = allTracksById.get(nextTrackId);
       if (nextTrack) {
         setQueue(currentQueue.slice(1));
         void playTrack(nextTrack);
@@ -470,28 +498,29 @@ function App() {
 
     // No queue - fall back to normal progression
     const activeTrack = usePlaybackStore.getState().currentTrack;
+    const playbackList = getPlaybackContext(activeTrack?.id ?? null);
     const currentIndex = activeTrack
-      ? allTracks.findIndex((t) => t.id === activeTrack.id)
+      ? playbackList.findIndex((track) => track.id === activeTrack.id)
       : -1;
 
     // Shuffle
-    if (shuffleEnabled) {
-      const randomIndex = Math.floor(Math.random() * allTracks.length);
-      void playTrack(allTracks[randomIndex]);
+    if (shuffleEnabled && playbackList.length > 0) {
+      const randomIndex = Math.floor(Math.random() * playbackList.length);
+      void playTrack(playbackList[randomIndex]);
       return;
     }
 
     // Next track in list
-    if (currentIndex < allTracks.length - 1) {
-      void playTrack(allTracks[currentIndex + 1]);
+    if (currentIndex >= 0 && currentIndex < playbackList.length - 1) {
+      void playTrack(playbackList[currentIndex + 1]);
       return;
     }
 
     // Repeat all - wrap to beginning
-    if (repeatMode === "all" && allTracks.length > 0) {
-      void playTrack(allTracks[0]);
+    if (repeatMode === "all" && playbackList.length > 0) {
+      void playTrack(playbackList[0]);
     }
-  }, [allTracks, shuffleEnabled, repeatMode, playTrack, setQueue]);
+  }, [allTracksById, getPlaybackContext, shuffleEnabled, repeatMode, playTrack, setQueue]);
 
   const handleSkipNext = advanceToNext;
 
@@ -523,21 +552,26 @@ function App() {
 
   const handlePlayTrack = useCallback(
     (trackId: string) => {
-      const track = allTracks.find((t) => t.id === trackId);
-      if (track) {
-        playTrack(track);
-      }
+      playTrackById(trackId, sortedTracks.length > 0 ? sortedTracks : allTracks);
     },
-    [allTracks, playTrack]
+    [allTracks, playTrackById, sortedTracks]
   );
+
+  const handlePlayAlbumTrack = useCallback((trackId: string) => {
+    const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
+    playTrackById(trackId, album?.tracks);
+  }, [albums, playTrackById]);
 
   const handlePlayAlbum = useCallback(
     (trackIds: string[]) => {
       if (trackIds.length === 0) return;
+      const contextTracks = trackIds
+        .map((id) => allTracksById.get(id))
+        .filter((track): track is Track => track !== undefined);
       setQueue(trackIds.slice(1));
-      handlePlayTrack(trackIds[0]);
+      playTrackById(trackIds[0], contextTracks);
     },
-    [handlePlayTrack, setQueue]
+    [allTracksById, playTrackById, setQueue]
   );
 
   const { importPlaylist, importPlaylistFolder, exportPlaylist } = usePlaylistTransfer();
@@ -1221,11 +1255,15 @@ function App() {
                 onClose={closeMenu}
                 onPlay={() => {
                   if (menuSelection.length > 0) {
-                    const firstTrack = allTracks.find(
-                      (t) => t.id === menuSelection[0]
-                    );
+                    const firstTrack = allTracksById.get(menuSelection[0]);
                     if (firstTrack) {
-                      playTrack(firstTrack);
+                      const album = isAlbumsView
+                        ? albums.find((item) => item.tracks.some((track) => track.id === firstTrack.id))
+                        : undefined;
+                      playTrackById(
+                        firstTrack.id,
+                        album?.tracks ?? (sortedTracks.length > 0 ? sortedTracks : allTracks),
+                      );
                     }
                   }
                   closeMenu();
@@ -1361,7 +1399,7 @@ function App() {
                       currentTrackId={currentTrack?.id ?? null}
                       isPlaying={isPlaying}
                       onSelectAlbum={handleSelectAlbum}
-                      onPlayTrack={handlePlayTrack}
+                      onPlayTrack={handlePlayAlbumTrack}
                       onPlayAlbum={handlePlayAlbum}
                       onTogglePlay={togglePlay}
                       onPlayNext={playNext}
@@ -1483,7 +1521,7 @@ function App() {
               onRemoveFromQueue={removeFromQueue}
               onReorderQueue={reorderQueue}
               onClearQueue={clearQueue}
-              onPlayTrack={handlePlayTrack}
+              onPlayTrack={(trackId) => playTrackById(trackId)}
               onPlayNext={(trackId) => playNext([trackId])}
               onMixWithCurrent={djMixEnabled
                 ? (trackId) => { void mixCurrentWith(trackId); }

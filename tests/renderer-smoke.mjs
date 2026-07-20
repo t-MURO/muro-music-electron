@@ -162,6 +162,13 @@ app.whenReady().then(async () => {
           track_ids: [],
         },
         {
+          id: "smoke-next-playlist",
+          name: "Next Context",
+          folder_id: null,
+          sort_order: 2,
+          track_ids: ["smoke-track-0", "smoke-track-10", "smoke-track-20"],
+        },
+        {
           id: "smoke-nested-playlist",
           name: "Nested Playlist",
           folder_id: "smoke-nested-folder",
@@ -1009,6 +1016,23 @@ app.whenReady().then(async () => {
           persistedSmartCrateCount = JSON.parse(localStorage.getItem("muro-smart-crates") ?? "null")
             ?.state?.smartCrates?.length ?? 0;
         } catch {}
+        document.querySelector('[data-panel-view="queue"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[aria-label="Clear queue"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        window.location.hash = "#/playlists/smoke-next-playlist";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-track-index="0"]')?.dispatchEvent(new MouseEvent("dblclick", {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        document.querySelector('button[title="Next"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const nextUsesCurrentList = Boolean(
+          document.querySelector('[data-track-index="1"][data-track-playing="true"]') &&
+          document.querySelector('[data-track-index="1"]')?.textContent?.includes("Smoke Track 010")
+        );
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -1117,6 +1141,7 @@ app.whenReady().then(async () => {
           smartCrateCreated,
           smartCrateMatchedTracks,
           persistedSmartCrateCount,
+          nextUsesCurrentList,
         };
       }
       return {
@@ -1200,6 +1225,10 @@ app.whenReady().then(async () => {
           `Album context menus failed: card=${result.albumCardContextMenuReady}, ` +
           `track=${result.albumTrackContextMenuReady}`
         );
+        return;
+      }
+      if (!result.nextUsesCurrentList) {
+        fail("Next did not advance within the current playlist when the queue was empty");
         return;
       }
       if (!result.showInFinderReady || shownItemPaths.at(-1) !== smokeTracks[0].source_path) {
