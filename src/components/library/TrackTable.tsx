@@ -32,6 +32,7 @@ type TrackTableProps = {
   onTogglePlay?: () => void;
   onOpenArtist?: (artist: string) => void;
   onOpenAlbum?: (trackId: string) => void;
+  onAlbumContextMenu?: (event: React.MouseEvent, trackId: string) => void;
   onColumnResize: (key: ColumnConfig["key"], width: number) => void;
   onColumnAutoFit: (key: ColumnConfig["key"]) => void;
   onColumnReorder?: (dragKey: ColumnConfig["key"], targetIndex: number) => void;
@@ -57,6 +58,7 @@ export const TrackTable = memo(
     onTogglePlay,
     onOpenArtist,
     onOpenAlbum,
+    onAlbumContextMenu,
     onColumnResize,
     onColumnAutoFit,
     onColumnReorder,
@@ -322,6 +324,7 @@ export const TrackTable = memo(
                   onRowDoubleClick={handleRowDoubleClickStable}
                   onOpenArtist={onOpenArtist}
                   onOpenAlbum={onOpenAlbum}
+                  onAlbumContextMenu={onAlbumContextMenu}
                   onRatingChange={handleRatingChangeStable}
                 />
               );

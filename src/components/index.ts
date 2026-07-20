@@ -31,6 +31,8 @@ export {
   DragOverlay,
   DuplicateTracksModal,
   EditTrackModal,
+  MetadataSearchModal,
+  AlbumMetadataSearchModal,
   PlaylistContextMenu,
   PlaylistCreateModal,
   PlaylistEditModal,

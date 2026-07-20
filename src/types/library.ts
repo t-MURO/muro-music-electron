@@ -33,6 +33,9 @@ export type Track = {
   lastPlayedAt?: string;
   playCount: number;
   beatGrid?: BeatGrid;
+  musicBrainzTrackId?: string;
+  musicBrainzAlbumId?: string;
+  musicBrainzReleaseGroupId?: string;
 };
 
 export type TrackMetadataUpdates = {
@@ -53,6 +56,9 @@ export type TrackMetadataUpdates = {
   rating?: number;
   coverArtPath?: string;
   coverArtThumbPath?: string;
+  musicBrainzTrackId?: string;
+  musicBrainzAlbumId?: string;
+  musicBrainzReleaseGroupId?: string;
 };
 
 export type Playlist = {

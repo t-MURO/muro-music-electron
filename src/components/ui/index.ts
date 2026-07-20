@@ -4,6 +4,8 @@ export { DeleteTracksModal } from "./DeleteTracksModal";
 export { DragOverlay } from "./DragOverlay";
 export { DuplicateTracksModal } from "./DuplicateTracksModal";
 export { EditTrackModal } from "./EditTrackModal";
+export { MetadataSearchModal } from "./MetadataSearchModal";
+export { AlbumMetadataSearchModal } from "./AlbumMetadataSearchModal";
 export { PlaylistContextMenu } from "./PlaylistContextMenu";
 export { PlaylistCreateModal } from "./PlaylistCreateModal";
 export { PlaylistEditModal } from "./PlaylistEditModal";

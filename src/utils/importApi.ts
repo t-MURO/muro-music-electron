@@ -38,6 +38,9 @@ export type ImportedTrack = {
   last_played_at?: string;
   play_count: number;
   beat_grid_json?: string | null;
+  musicbrainz_trackid?: string;
+  musicbrainz_albumid?: string;
+  musicbrainz_releasegroupid?: string;
 };
 
 export type LibrarySnapshot = {
@@ -150,4 +153,7 @@ export const importedTrackToTrack = (imported: ImportedTrack): Track => ({
   lastPlayedAt: imported.last_played_at,
   playCount: imported.play_count,
   beatGrid: parseBeatGrid(imported.beat_grid_json),
+  musicBrainzTrackId: imported.musicbrainz_trackid,
+  musicBrainzAlbumId: imported.musicbrainz_albumid,
+  musicBrainzReleaseGroupId: imported.musicbrainz_releasegroupid,
 });

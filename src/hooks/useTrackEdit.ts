@@ -2,6 +2,16 @@ import { useCallback } from "react";
 import { invoke } from "@muro/desktop/runtime";
 import { useLibraryStore, useUIStore } from "../stores";
 import type { Track, TrackMetadataUpdates } from "../types";
+import {
+  fetchTrackCoverArt,
+  searchTrackMetadata,
+  searchAlbumMetadata,
+  loadAlbumMetadata,
+  type FetchedCoverArt,
+  type MetadataSearchCandidate,
+  type AlbumMetadataCandidate,
+  type AlbumMetadataRelease,
+} from "../utils/database";
 import { useDbPath } from "./useDbPath";
 
 export const useTrackEdit = () => {
@@ -48,11 +58,52 @@ export const useTrackEdit = () => {
     [resolveDbPath, setTracks, setInboxTracks]
   );
 
+  const handleFetchCoverArt = useCallback(
+    async (
+      trackId: string,
+      metadata: { album?: string; artist?: string },
+    ): Promise<FetchedCoverArt | null> => {
+      const dbPath = await resolveDbPath();
+      return fetchTrackCoverArt(dbPath, trackId, metadata);
+    },
+    [resolveDbPath],
+  );
+
+  const handleSearchMetadata = useCallback(
+    (track: Track): Promise<MetadataSearchCandidate[]> => searchTrackMetadata({
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+    }),
+    [],
+  );
+
+  const handleSearchAlbumMetadata = useCallback(
+    (tracks: Track[]): Promise<AlbumMetadataCandidate[]> => {
+      const first = tracks[0];
+      if (!first) return Promise.resolve([]);
+      return searchAlbumMetadata({
+        album: first.album,
+        artist: first.artists || first.artist,
+      });
+    },
+    [],
+  );
+
+  const handleLoadAlbumMetadata = useCallback(
+    (releaseId: string): Promise<AlbumMetadataRelease> => loadAlbumMetadata(releaseId),
+    [],
+  );
+
   return {
     editTrackIds,
     isEditModalOpen: editTrackIds.length > 0,
     openEditModal,
     closeEditModal,
     handleSaveMetadata,
+    handleFetchCoverArt,
+    handleSearchMetadata,
+    handleSearchAlbumMetadata,
+    handleLoadAlbumMetadata,
   };
 };

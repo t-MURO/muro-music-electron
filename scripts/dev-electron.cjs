@@ -1,4 +1,5 @@
 const { spawn } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 const electron = require("electron");
 
@@ -9,6 +10,9 @@ const devUrl = `http://${host}:${port}`;
 
 let rendererProcess = null;
 let electronProcess = null;
+let electronWatcher = null;
+let electronRestartTimer = null;
+let restartingElectron = false;
 let shuttingDown = false;
 
 const stopProcess = (child) => {
@@ -18,6 +22,8 @@ const stopProcess = (child) => {
 const shutdown = (exitCode = 0) => {
   if (shuttingDown) return;
   shuttingDown = true;
+  if (electronRestartTimer) clearTimeout(electronRestartTimer);
+  electronWatcher?.close();
   stopProcess(electronProcess);
   stopProcess(rendererProcess);
   process.exitCode = exitCode;
@@ -77,7 +83,38 @@ const startElectron = () => {
     console.error("Failed to start Electron:", error);
     shutdown(1);
   });
-  electronProcess.on("exit", (code) => shutdown(code ?? 1));
+  electronProcess.on("exit", (code) => {
+    electronProcess = null;
+    if (shuttingDown) return;
+    if (restartingElectron) {
+      restartingElectron = false;
+      startElectron();
+      return;
+    }
+    shutdown(code ?? 1);
+  });
+};
+
+const watchElectronSources = () => {
+  const electronDirectory = path.join(projectRoot, "electron");
+  electronWatcher = fs.watch(electronDirectory, { recursive: true }, (_event, filename) => {
+    if (!filename || !/\.(?:cjs|mjs)$/.test(String(filename))) return;
+    if (electronRestartTimer) clearTimeout(electronRestartTimer);
+    electronRestartTimer = setTimeout(() => {
+      electronRestartTimer = null;
+      if (shuttingDown || restartingElectron) return;
+      console.log(`Restarting Electron after ${filename} changed`);
+      restartingElectron = true;
+      if (electronProcess) stopProcess(electronProcess);
+      else {
+        restartingElectron = false;
+        startElectron();
+      }
+    }, 150);
+  });
+  electronWatcher.on("error", (error) => {
+    console.error("Electron source watcher failed:", error);
+  });
 };
 
 const run = async () => {
@@ -89,11 +126,14 @@ const run = async () => {
     console.log(`Renderer ready at ${devUrl}`);
   }
   startElectron();
+  watchElectronSources();
 };
 
 process.on("SIGINT", () => shutdown(130));
 process.on("SIGTERM", () => shutdown(143));
 process.on("exit", () => {
+  if (electronRestartTimer) clearTimeout(electronRestartTimer);
+  electronWatcher?.close();
   stopProcess(electronProcess);
   stopProcess(rendererProcess);
 });

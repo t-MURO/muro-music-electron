@@ -573,7 +573,7 @@ export const SettingsPanel = ({
                       disabled={coverArtBackfillPending}
                       type="button"
                     >
-                      {coverArtBackfillPending ? "Finding..." : "Find cover art"}
+                      {coverArtBackfillPending ? "Extracting..." : "Extract embedded cover art"}
                     </button>
                     {coverArtBackfillStatus && (
                       <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
@@ -582,9 +582,8 @@ export const SettingsPanel = ({
                     )}
                   </div>
                   <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
-                    Checks embedded artwork first, then uses MusicBrainz Cover Art Archive for
-                    albums with MusicBrainz IDs. Covers are cached locally and shared by every
-                    track on the album.
+                    Rebuilds locally cached covers from artwork already embedded in your audio
+                    files. It never contacts an online artwork service.
                   </p>
                 </div>
               </div>

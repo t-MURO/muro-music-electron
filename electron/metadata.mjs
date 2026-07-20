@@ -194,6 +194,9 @@ const propertyMap = {
   bpm: "BPM",
   key: "INITIALKEY",
   rating: "RATING",
+  musicBrainzTrackId: "MUSICBRAINZ_TRACKID",
+  musicBrainzAlbumId: "MUSICBRAINZ_ALBUMID",
+  musicBrainzReleaseGroupId: "MUSICBRAINZ_RELEASEGROUPID",
 };
 
 export const writeMetadataToFile = async (sourcePath, updates) => {

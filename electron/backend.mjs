@@ -39,6 +39,171 @@ const allowedUpdates = {
   rating: "rating",
   coverArtPath: "cover_art_path",
   coverArtThumbPath: "cover_art_thumb_path",
+  musicBrainzTrackId: "musicbrainz_trackid",
+  musicBrainzAlbumId: "musicbrainz_albumid",
+  musicBrainzReleaseGroupId: "musicbrainz_releasegroupid",
+};
+
+const MUSICBRAINZ_RECORDING_SEARCH = "https://musicbrainz.org/ws/2/recording/";
+const MUSICBRAINZ_RELEASE_SEARCH = "https://musicbrainz.org/ws/2/release/";
+const MUSICBRAINZ_USER_AGENT = "MuroMusicElectron/0.1.0 (https://github.com/t-MURO/muro-music-electron)";
+let musicBrainzRequestQueue = Promise.resolve();
+let nextMusicBrainzRequestAt = 0;
+
+const fetchMusicBrainz = (url) => {
+  const request = musicBrainzRequestQueue.then(async () => {
+    const waitMs = Math.max(0, nextMusicBrainzRequestAt - Date.now());
+    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    nextMusicBrainzRequestAt = Date.now() + 1_100;
+    return fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": MUSICBRAINZ_USER_AGENT },
+    });
+  });
+  musicBrainzRequestQueue = request.then(() => undefined, () => undefined);
+  return request;
+};
+
+const quotedMusicBrainzTerm = (value) => `"${String(value ?? "")
+  .trim()
+  .replace(/([\\"])/g, "\\$1")}"`;
+
+const artistCreditName = (credit) => Array.isArray(credit)
+  ? credit.map((entry) => `${entry?.name ?? entry?.artist?.name ?? ""}${entry?.joinphrase ?? ""}`).join("").trim()
+  : "";
+
+const searchTrackMetadata = async ({ title, artist, album }) => {
+  const cleanTitle = String(title ?? "").trim();
+  const cleanArtist = String(artist ?? "").trim();
+  if (!cleanTitle || !cleanArtist) throw new Error("Title and artist are required to search for metadata");
+
+  const url = new URL(MUSICBRAINZ_RECORDING_SEARCH);
+  url.searchParams.set(
+    "query",
+    `recording:${quotedMusicBrainzTerm(cleanTitle)} AND artist:${quotedMusicBrainzTerm(cleanArtist)}`,
+  );
+  url.searchParams.set("fmt", "json");
+  url.searchParams.set("limit", "10");
+  const response = await fetchMusicBrainz(url);
+  if (!response.ok) throw new Error(`MusicBrainz metadata search failed (${response.status})`);
+  const payload = await response.json();
+  const candidates = [];
+  for (const recording of Array.isArray(payload?.recordings) ? payload.recordings : []) {
+    const releases = Array.isArray(recording?.releases) && recording.releases.length > 0
+      ? recording.releases
+      : [null];
+    for (const release of releases) {
+      const releaseTitle = String(release?.title ?? "").trim();
+      const releaseArtist = artistCreditName(release?.["artist-credit"]);
+      const tags = Array.isArray(recording?.tags) ? [...recording.tags] : [];
+      tags.sort((left, right) => Number(right?.count ?? 0) - Number(left?.count ?? 0));
+      candidates.push({
+        id: `${recording.id}:${release?.id ?? "recording"}`,
+        score: Number(recording?.score ?? 0),
+        recordingId: recording?.id ?? null,
+        releaseId: release?.id ?? null,
+        releaseGroupId: release?.["release-group"]?.id ?? null,
+        title: String(recording?.title ?? cleanTitle),
+        artist: artistCreditName(recording?.["artist-credit"]) || cleanArtist,
+        album: releaseTitle,
+        albumArtist: releaseArtist || artistCreditName(recording?.["artist-credit"]) || cleanArtist,
+        year: /^\d{4}/.test(String(release?.date ?? "")) ? Number(String(release.date).slice(0, 4)) : null,
+        country: release?.country ?? null,
+        status: release?.status ?? null,
+        genre: tags[0]?.name ?? null,
+        albumMatch: Boolean(album && releaseTitle.localeCompare(String(album), undefined, { sensitivity: "base" }) === 0),
+      });
+    }
+  }
+  candidates.sort((left, right) => (
+    Number(right.albumMatch) - Number(left.albumMatch)
+    || right.score - left.score
+    || (left.year ?? 9999) - (right.year ?? 9999)
+  ));
+  return candidates.slice(0, 30);
+};
+
+const releaseYear = (release) => /^\d{4}/.test(String(release?.date ?? ""))
+  ? Number(String(release.date).slice(0, 4))
+  : null;
+
+const releaseLabel = (release) => {
+  const labels = Array.isArray(release?.["label-info"]) ? release["label-info"] : [];
+  return labels.map((entry) => entry?.label?.name).filter(Boolean).join(", ") || null;
+};
+
+const releaseTrackCount = (release) => {
+  const media = Array.isArray(release?.media) ? release.media : [];
+  return media.reduce((total, medium) => total + Number(medium?.["track-count"] ?? medium?.tracks?.length ?? 0), 0);
+};
+
+const searchAlbumMetadata = async ({ album, artist }) => {
+  const cleanAlbum = String(album ?? "").trim();
+  const cleanArtist = String(artist ?? "").trim();
+  if (!cleanAlbum || !cleanArtist) throw new Error("Album and album artist are required to search for metadata");
+  const url = new URL(MUSICBRAINZ_RELEASE_SEARCH);
+  url.searchParams.set(
+    "query",
+    `release:${quotedMusicBrainzTerm(cleanAlbum)} AND artist:${quotedMusicBrainzTerm(cleanArtist)}`,
+  );
+  url.searchParams.set("fmt", "json");
+  url.searchParams.set("limit", "15");
+  const response = await fetchMusicBrainz(url);
+  if (!response.ok) throw new Error(`MusicBrainz album search failed (${response.status})`);
+  const payload = await response.json();
+  return (Array.isArray(payload?.releases) ? payload.releases : []).map((release) => ({
+    id: release.id,
+    score: Number(release?.score ?? 0),
+    title: String(release?.title ?? cleanAlbum),
+    artist: artistCreditName(release?.["artist-credit"]) || cleanArtist,
+    releaseGroupId: release?.["release-group"]?.id ?? null,
+    year: releaseYear(release),
+    country: release?.country ?? null,
+    status: release?.status ?? null,
+    barcode: release?.barcode ?? null,
+    trackCount: releaseTrackCount(release),
+    disambiguation: release?.disambiguation ?? null,
+  })).sort((left, right) => right.score - left.score || (left.year ?? 9999) - (right.year ?? 9999));
+};
+
+const loadAlbumMetadata = async ({ releaseId }) => {
+  const id = String(releaseId ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Invalid MusicBrainz release ID");
+  const url = new URL(`${MUSICBRAINZ_RELEASE_SEARCH}${id}`);
+  url.searchParams.set("inc", "recordings+artist-credits+release-groups+labels+genres");
+  url.searchParams.set("fmt", "json");
+  const response = await fetchMusicBrainz(url);
+  if (!response.ok) throw new Error(`MusicBrainz album lookup failed (${response.status})`);
+  const release = await response.json();
+  const media = Array.isArray(release?.media) ? release.media : [];
+  const genres = Array.isArray(release?.genres) ? [...release.genres] : [];
+  genres.sort((left, right) => Number(right?.count ?? 0) - Number(left?.count ?? 0));
+  return {
+    id: release.id,
+    title: String(release?.title ?? ""),
+    artist: artistCreditName(release?.["artist-credit"]),
+    releaseGroupId: release?.["release-group"]?.id ?? null,
+    year: releaseYear(release),
+    country: release?.country ?? null,
+    status: release?.status ?? null,
+    label: releaseLabel(release),
+    genre: genres[0]?.name ?? null,
+    discTotal: media.length || null,
+    tracks: media.flatMap((medium, mediumIndex) => {
+      const tracks = Array.isArray(medium?.tracks) ? medium.tracks : [];
+      return tracks.map((track, trackIndex) => ({
+        id: track.id ?? `${mediumIndex + 1}:${trackIndex + 1}`,
+        recordingId: track?.recording?.id ?? null,
+        title: String(track?.title ?? track?.recording?.title ?? ""),
+        artist: artistCreditName(track?.["artist-credit"])
+          || artistCreditName(track?.recording?.["artist-credit"])
+          || artistCreditName(release?.["artist-credit"]),
+        trackNumber: Number(track?.position ?? trackIndex + 1),
+        trackTotal: Number(medium?.["track-count"] ?? tracks.length),
+        discNumber: Number(medium?.position ?? mediumIndex + 1),
+        discTotal: media.length,
+      }));
+    }),
+  };
 };
 
 const listJson = (value) => JSON.stringify(
@@ -285,8 +450,18 @@ export const createBackend = ({
         theAudioDbApiKey,
         limit,
       }),
-    scan_album_covers: ({ dbPath, limit }) =>
-      albumCovers.scanCovers(openDatabase(dbPath), { limit }),
+    fetch_track_cover_art: ({ dbPath, trackId, album, artist }) =>
+      albumCovers.fetchCoverForTrack(openDatabase(dbPath), {
+        trackId,
+        album,
+        artist,
+      }),
+    search_track_metadata: ({ title, artist, album }) =>
+      searchTrackMetadata({ title, artist, album }),
+    search_album_metadata: ({ album, artist }) =>
+      searchAlbumMetadata({ album, artist }),
+    load_album_metadata: ({ releaseId }) =>
+      loadAlbumMetadata({ releaseId }),
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
@@ -600,11 +775,6 @@ export const createBackend = ({
           console.warn(`Failed to extract cover from ${row.source_path}:`, error);
         }
       }
-      let scanResult;
-      do {
-        scanResult = await albumCovers.scanCovers(db, { limit: 50 });
-        count += scanResult.updated;
-      } while (scanResult.queued > 0);
       return count;
     },
     scan_technical_metadata: async ({ dbPath, limit }) => {

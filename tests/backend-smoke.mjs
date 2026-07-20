@@ -157,6 +157,11 @@ try {
     now: () => 1_750_000_000_000,
     fetchImpl: async (url) => {
       coverFetchCalls.push(String(url));
+      if (String(url).startsWith("https://musicbrainz.org/ws/2/release-group/")) {
+        return new Response(JSON.stringify({
+          "release-groups": [{ id: releaseGroupId, title: "Cover Album", score: 100 }],
+        }), { headers: { "content-type": "application/json" } });
+      }
       if (String(url) === `https://coverartarchive.org/release-group/${releaseGroupId}`) {
         return new Response(JSON.stringify({
           images: [{
@@ -190,13 +195,8 @@ try {
       return { fullPath, thumbPath };
     },
   });
-  assert.deepEqual(await albumCoverService.scanCovers(coverDb), {
-    checked: 1,
-    updated: 2,
-    failed: 0,
-    queued: 0,
-    remaining: 0,
-    totalAlbums: 1,
+  const fetchedCover = await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-1",
   });
   assert.ok(
     coverFetchCalls.includes(`https://coverartarchive.org/release-group/${releaseGroupId}`),
@@ -206,11 +206,13 @@ try {
     coverFetchCalls.includes(`https://coverartarchive.org/release/${releaseId}/front-500.jpg`),
     "the 500px Cover Art Archive thumbnail should be downloaded",
   );
-  const cachedCover = coverDb.prepare(`
+  assert.ok(fs.existsSync(fetchedCover.fullPath));
+  assert.ok(fs.existsSync(fetchedCover.thumbPath));
+  const unchangedTrackCover = coverDb.prepare(`
     SELECT cover_art_path, cover_art_thumb_path FROM tracks WHERE id = 'cover-track-1'
   `).get();
-  assert.ok(fs.existsSync(cachedCover.cover_art_path));
-  assert.ok(fs.existsSync(cachedCover.cover_art_thumb_path));
+  assert.equal(unchangedTrackCover.cover_art_path, null);
+  assert.equal(unchangedTrackCover.cover_art_thumb_path, null);
 
   insertCoverTrack.run(
     "cover-track-3",
@@ -223,15 +225,37 @@ try {
     releaseGroupId,
   );
   const fetchCountBeforeCachedCover = coverFetchCalls.length;
-  assert.deepEqual(await albumCoverService.scanCovers(coverDb), {
-    checked: 0,
-    updated: 1,
-    failed: 0,
-    queued: 0,
-    remaining: 0,
-    totalAlbums: 1,
+  const reusedCover = await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-3",
   });
+  assert.equal(reusedCover.fullPath, fetchedCover.fullPath);
   assert.equal(coverFetchCalls.length, fetchCountBeforeCachedCover);
+
+  insertCoverTrack.run(
+    "cover-track-manual",
+    "Cover Track Manual",
+    "cover-manual.mp3",
+    path.join(directory, "cover-manual.mp3"),
+    now,
+    now,
+    null,
+    null,
+  );
+  const manualCover = await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-manual",
+    album: "Cover Album",
+    artist: "Cover Artist",
+  });
+  assert.equal(manualCover?.fullPath, fetchedCover.fullPath);
+  assert.ok(
+    coverFetchCalls.some((url) => url.startsWith("https://musicbrainz.org/ws/2/release-group/")),
+    "manual cover fetch should fall back to MusicBrainz when the file has no release IDs",
+  );
+  const manualTrackCover = coverDb.prepare(`
+    SELECT cover_art_path, cover_art_thumb_path FROM tracks WHERE id = 'cover-track-manual'
+  `).get();
+  assert.equal(manualTrackCover.cover_art_path, null);
+  assert.equal(manualTrackCover.cover_art_thumb_path, null);
 
   insertCoverTrack.run(
     "cover-track-missing",
@@ -243,9 +267,13 @@ try {
     null,
     missingReleaseGroupId,
   );
-  assert.equal((await albumCoverService.scanCovers(coverDb)).checked, 1);
+  assert.equal(await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-missing",
+  }), null);
   const fetchCountBeforeNegativeCache = coverFetchCalls.length;
-  assert.equal((await albumCoverService.scanCovers(coverDb)).checked, 0);
+  assert.equal(await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-missing",
+  }), null);
   assert.equal(
     coverFetchCalls.length,
     fetchCountBeforeNegativeCache,
@@ -306,15 +334,6 @@ try {
   `);
   insertTrack.run("track-1", "Smoke Test", "Muro", "Checks", "smoke.mp3", firstSourcePath, 90, 320, now, now);
   insertTrack.run("track-2", "Smoke Test 2", "Muro", "Checks", "smoke-2.mp3", secondSourcePath, 90, 320, now, now);
-  assert.deepEqual(await backend.invoke("scan_album_covers", { dbPath, limit: 1 }), {
-    checked: 0,
-    updated: 0,
-    failed: 0,
-    queued: 0,
-    remaining: 0,
-    totalAlbums: 0,
-  });
-
   let snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.inbox.length, 2);
   assert.equal(snapshot.library.length, 0);

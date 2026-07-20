@@ -9,17 +9,12 @@ import {
   loadRecentlyPlayed,
   loadTracks,
   importedTrackToTrack,
-  scanAlbumCovers,
   scanTechnicalMetadata,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
 import { confirm } from "@muro/desktop/dialogs";
 import { t } from "../i18n";
 
-const INITIAL_COVER_SCAN_DELAY_MS = 10_000;
-const CONTINUE_COVER_SCAN_DELAY_MS = 60_000;
-const PERIODIC_COVER_SCAN_DELAY_MS = 30 * 60_000;
-const COVER_SCAN_BATCH_SIZE = 25;
 const INITIAL_TECHNICAL_SCAN_DELAY_MS = 3_000;
 const CONTINUE_TECHNICAL_SCAN_DELAY_MS = 500;
 const TECHNICAL_SCAN_BATCH_SIZE = 25;
@@ -123,37 +118,6 @@ export const useLibraryInit = () => {
     const run = async () => {
       try {
         const resolvedPath = await resolveDbPath();
-        const result = await scanAlbumCovers(resolvedPath, COVER_SCAN_BATCH_SIZE);
-        if (cancelled) return;
-        if (result.updated > 0) {
-          const snapshot = await loadTracks(resolvedPath);
-          if (cancelled) return;
-          setTracks(snapshot.library.map(importedTrackToTrack));
-          setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
-        }
-        schedule(result.queued > 0
-          ? CONTINUE_COVER_SCAN_DELAY_MS
-          : PERIODIC_COVER_SCAN_DELAY_MS);
-      } catch {
-        schedule(PERIODIC_COVER_SCAN_DELAY_MS);
-      }
-    };
-    schedule(INITIAL_COVER_SCAN_DELAY_MS);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [resolveDbPath, setInboxTracks, setTracks]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const schedule = (delayMs: number) => {
-      if (!cancelled) timer = setTimeout(run, delayMs);
-    };
-    const run = async () => {
-      try {
-        const resolvedPath = await resolveDbPath();
         const result = await scanTechnicalMetadata(resolvedPath, TECHNICAL_SCAN_BATCH_SIZE);
         if (cancelled) return;
         if (result.updated > 0) {
@@ -203,9 +167,9 @@ export const useLibraryInit = () => {
 
     try {
       setCoverArtBackfillPending(true);
-      setCoverArtBackfillStatus("Finding cover art...");
+      setCoverArtBackfillStatus("Extracting embedded cover art...");
       const updated = await backfillCoverArt(dbPath.trim());
-      setCoverArtBackfillStatus(`Found cover art for ${updated} tracks.`);
+      setCoverArtBackfillStatus(`Extracted embedded cover art for ${updated} tracks.`);
       // Reload tracks to get the new cover art paths
       const resolvedPath = await resolveDbPath();
       const snapshot = await loadTracks(resolvedPath);
@@ -213,7 +177,7 @@ export const useLibraryInit = () => {
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Cover art extraction failed.";
+        error instanceof Error ? error.message : "Embedded cover art extraction failed.";
       setCoverArtBackfillStatus(message);
     } finally {
       setCoverArtBackfillPending(false);

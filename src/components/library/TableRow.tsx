@@ -30,6 +30,7 @@ type TableRowProps = {
   onRowDoubleClick?: (trackId: string) => void;
   onOpenArtist?: (artist: string) => void;
   onOpenAlbum?: (trackId: string) => void;
+  onAlbumContextMenu?: (event: React.MouseEvent, trackId: string) => void;
   onRatingChange: (id: string, rating: number) => void;
 };
 
@@ -121,6 +122,7 @@ export const TableRow = memo(
     onRowDoubleClick,
     onOpenArtist,
     onOpenAlbum,
+    onAlbumContextMenu,
     onRatingChange,
   }: TableRowProps) => {
     const coverPath = track.coverArtThumbPath || track.coverArtPath;
@@ -221,6 +223,13 @@ export const TableRow = memo(
               className={`flex h-[var(--table-row-height)] items-center border-l border-[var(--color-border-light)] px-3 ${isTitleColumn ? "font-medium text-[var(--color-text-primary)]" : ""} ${numericClass} ${keyClass} ${textColorClass}`}
               data-column-key={column.key}
               role="cell"
+              onContextMenu={column.key === "album" && onAlbumContextMenu
+                ? (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onAlbumContextMenu(event, track.id);
+                  }
+                : undefined}
             >
               {isTitleColumn && (
                 isPlayingTrack

@@ -1,6 +1,7 @@
 import {
   AudioWaveform,
   ChevronLeft,
+  DatabaseZap,
   FolderOpen,
   ListChecks,
   ListMusic,
@@ -32,6 +33,8 @@ type ContextMenuProps = {
   onShowInFinder?: () => void;
   onRemoveFromPlaylist?: () => void;
   onShowBpmKey?: () => void;
+  onSearchMetadata?: () => void;
+  onSearchAlbumMetadata?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onClose: () => void;
@@ -49,6 +52,8 @@ export const ContextMenu = ({
   onShowInFinder,
   onRemoveFromPlaylist,
   onShowBpmKey,
+  onSearchMetadata,
+  onSearchAlbumMetadata,
   onEdit,
   onDelete,
   onClose,
@@ -130,6 +135,18 @@ export const ContextMenu = ({
             <AudioWaveform className="h-4 w-4 opacity-60" />
             {t("menu.showBpmKey")}
           </PopoverItem>
+          {onSearchMetadata && (
+            <PopoverItem onClick={onSearchMetadata} dataTestId="search-metadata-menu-item">
+              <DatabaseZap className="h-4 w-4 opacity-60" />
+              {t("metadataSearch.menu")}
+            </PopoverItem>
+          )}
+          {onSearchAlbumMetadata && (
+            <PopoverItem onClick={onSearchAlbumMetadata} dataTestId="search-album-metadata-menu-item">
+              <DatabaseZap className="h-4 w-4 opacity-60" />
+              Search for album metadata
+            </PopoverItem>
+          )}
           <PopoverItem onClick={onEdit}>
             <Pencil className="h-4 w-4 opacity-60" />
             {t("menu.edit")}

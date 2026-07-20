@@ -82,17 +82,87 @@ export const scanArtistProfiles = (
   limit = 25,
 ) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, ...providerKeys, limit });
 
-export type AlbumCoverScanResult = {
-  checked: number;
-  updated: number;
-  failed: number;
-  queued: number;
-  remaining: number;
-  totalAlbums: number;
+export type FetchedCoverArt = {
+  fullPath: string;
+  thumbPath: string;
+  sourceUrl?: string | null;
 };
 
-export const scanAlbumCovers = (dbPath: string, limit = 25) =>
-  invoke<AlbumCoverScanResult>("scan_album_covers", { dbPath, limit });
+export const fetchTrackCoverArt = (
+  dbPath: string,
+  trackId: string,
+  metadata: { album?: string; artist?: string } = {},
+) => invoke<FetchedCoverArt | null>("fetch_track_cover_art", {
+  dbPath,
+  trackId,
+  ...metadata,
+});
+
+export type MetadataSearchCandidate = {
+  id: string;
+  score: number;
+  recordingId: string | null;
+  releaseId: string | null;
+  releaseGroupId: string | null;
+  title: string;
+  artist: string;
+  album: string;
+  albumArtist: string;
+  year: number | null;
+  country: string | null;
+  status: string | null;
+  genre: string | null;
+  albumMatch: boolean;
+};
+
+export const searchTrackMetadata = (
+  metadata: { title: string; artist: string; album?: string },
+) => invoke<MetadataSearchCandidate[]>("search_track_metadata", metadata);
+
+export type AlbumMetadataCandidate = {
+  id: string;
+  score: number;
+  title: string;
+  artist: string;
+  releaseGroupId: string | null;
+  year: number | null;
+  country: string | null;
+  status: string | null;
+  barcode: string | null;
+  trackCount: number;
+  disambiguation: string | null;
+};
+
+export type AlbumMetadataTrack = {
+  id: string;
+  recordingId: string | null;
+  title: string;
+  artist: string;
+  trackNumber: number;
+  trackTotal: number;
+  discNumber: number;
+  discTotal: number;
+};
+
+export type AlbumMetadataRelease = {
+  id: string;
+  title: string;
+  artist: string;
+  releaseGroupId: string | null;
+  year: number | null;
+  country: string | null;
+  status: string | null;
+  label: string | null;
+  genre: string | null;
+  discTotal: number | null;
+  tracks: AlbumMetadataTrack[];
+};
+
+export const searchAlbumMetadata = (metadata: { album: string; artist: string }) =>
+  invoke<AlbumMetadataCandidate[]>("search_album_metadata", metadata);
+
+export const loadAlbumMetadata = (releaseId: string) =>
+  invoke<AlbumMetadataRelease>("load_album_metadata", { releaseId });
 
 export type TechnicalMetadataScanResult = {
   checked: number;

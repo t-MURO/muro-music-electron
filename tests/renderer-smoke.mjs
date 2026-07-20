@@ -104,6 +104,7 @@ const smokeArtistProfile = {
   cacheState: "fresh",
 };
 let artistProfileScanCount = 0;
+let manualCoverFetchCount = 0;
 const shownItemPaths = [];
 const ratingUpdates = [];
 for (let index = 0; index < 5; index += 1) {
@@ -205,8 +206,73 @@ app.whenReady().then(async () => {
       artistProfileScanCount += 1;
       return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalArtists: 1 };
     }
-    if (command === "scan_album_covers") {
-      return { checked: 0, updated: 0, failed: 0, queued: 0, remaining: 0, totalAlbums: 0 };
+    if (command === "fetch_track_cover_art") {
+      manualCoverFetchCount += 1;
+      return {
+        fullPath: smokeTracks[0].source_path,
+        thumbPath: smokeTracks[0].source_path,
+        sourceUrl: "https://coverartarchive.org/release/smoke/front",
+      };
+    }
+    if (command === "search_track_metadata") {
+      return [{
+        id: "smoke-recording:smoke-release",
+        score: 100,
+        recordingId: "99999999-9999-4999-8999-999999999999",
+        releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        title: "Smoke Track Zero",
+        artist: "Muro",
+        album: "Smoke Album 00",
+        albumArtist: "Muro",
+        year: 2000,
+        country: "DE",
+        status: "Official",
+        genre: "House",
+        albumMatch: true,
+      }];
+    }
+    if (command === "search_album_metadata") {
+      return [{
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        score: 100,
+        title: "Smoke Album 00",
+        artist: "Muro",
+        releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        year: 2000,
+        country: "DE",
+        status: "Official",
+        barcode: "1234567890123",
+        trackCount: 10,
+        disambiguation: null,
+      }];
+    }
+    if (command === "load_album_metadata") {
+      return {
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        title: "Smoke Album 00",
+        artist: "Muro",
+        releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        year: 2000,
+        country: "DE",
+        status: "Official",
+        label: "Smoke Label",
+        genre: "Electronic",
+        discTotal: 1,
+        tracks: smokeTracks.slice(0, 10).map((track, index) => ({
+          id: `release-track-${index}`,
+          recordingId: `recording-${index}`,
+          title: track.title,
+          artist: track.artist,
+          trackNumber: index + 1,
+          trackTotal: 10,
+          discNumber: 1,
+          discTotal: 1,
+        })),
+      };
+    }
+    if (command === "test_get_cover_counts") {
+      return { manualCoverFetchCount };
     }
     if (command === "scan_technical_metadata") {
       return { checked: 0, updated: 0, failed: 0, remaining: 0 };
@@ -458,6 +524,18 @@ app.whenReady().then(async () => {
         scroller.dispatchEvent(new Event("scroll"));
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const firstTrackRow = scroller.querySelector('[role="row"]');
+        firstTrackRow?.querySelector('[data-column-key="album"]')?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 240,
+          clientY: 180,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const tableAlbumMetadataMenuReady = Boolean(
+          document.querySelector('[data-testid="search-album-metadata-menu-item"]')?.textContent?.includes("Search for album metadata")
+        );
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
         const ratingCell = firstTrackRow?.querySelector('[data-rating-cell]');
         const ratingControl = ratingCell?.querySelector('[role="slider"]');
         const thirdRatingStar = ratingCell?.querySelector('[data-rating-star="3"]');
@@ -518,6 +596,29 @@ app.whenReady().then(async () => {
           document.querySelector('[data-selection-edit]') &&
           document.querySelector('[data-selection-delete]')
         );
+        document.querySelector('[data-selection-edit]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const editCoverField = document.querySelector('[data-cover-art-field]');
+        editCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const fetchCoverMenuItem = document.querySelector('[data-testid="fetch-cover-art-menu-item"]');
+        const manualCoverMenuReady = Boolean(fetchCoverMenuItem);
+        fetchCoverMenuItem?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const coverCounts = await window.muro.invoke("test_get_cover_counts");
+        const manualCoverFetchReady = Boolean(
+          coverCounts.manualCoverFetchCount === 1 &&
+          editCoverField?.querySelector("img")
+        );
+        [...document.querySelectorAll("button")]
+          .find((button) => button.textContent?.trim() === "Cancel")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
         const rowThumbnailReady = Boolean(
           firstTrackRow?.querySelector('[data-track-thumbnail]') &&
           document.querySelector('[aria-label="Select all tracks"]')
@@ -797,6 +898,44 @@ app.whenReady().then(async () => {
           clientY: 160,
         }));
         await new Promise((resolve) => setTimeout(resolve, 40));
+        const searchMetadataItem = document.querySelector('[data-testid="search-metadata-menu-item"]');
+        const searchMetadataMenuReady = Boolean(
+          searchMetadataItem?.textContent?.includes("Search for metadata")
+        );
+        searchMetadataItem?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const metadataSearchReady = Boolean(
+          document.querySelector("[data-metadata-search-modal]") &&
+          document.querySelector("[data-metadata-candidate]") &&
+          document.querySelector("[data-apply-metadata]")
+        );
+        const metadataFieldRows = document.querySelectorAll("[data-metadata-field]");
+        const metadataTitleCheckbox = document.querySelector('[data-metadata-field="title"] input');
+        const metadataArtistCheckbox = document.querySelector('[data-metadata-field="artist"] input');
+        document.querySelector("[data-metadata-clear]")?.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const applyMetadataButton = document.querySelector("[data-apply-metadata]");
+        const applyDisabledAfterClear = applyMetadataButton?.disabled === true;
+        document.querySelector("[data-metadata-select-all]")?.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const metadataFieldSelectionReady = Boolean(
+          metadataFieldRows.length === 6 &&
+          metadataTitleCheckbox?.checked &&
+          metadataArtistCheckbox?.disabled &&
+          applyDisabledAfterClear &&
+          applyMetadataButton?.disabled === false
+        );
+        [...document.querySelectorAll("button")]
+          .find((button) => button.textContent?.trim() === "Cancel")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
         document.querySelector('[data-testid="delete-track-menu-item"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
         const deleteModalReady = Boolean(
@@ -1040,8 +1179,23 @@ app.whenReady().then(async () => {
           Array.from(document.querySelectorAll("[data-popover]"), (node) => node.textContent ?? "")
             .some((text) => text.includes("10 selected") && text.includes("Add to playlist"))
         );
-        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        const searchAlbumMetadataItem = document.querySelector('[data-testid="search-album-metadata-menu-item"]');
+        const albumMetadataMenuReady = Boolean(
+          searchAlbumMetadataItem?.textContent?.includes("Search for album metadata")
+        );
+        searchAlbumMetadataItem?.click();
+        await new Promise((resolve) => setTimeout(resolve, 160));
+        const albumMetadataModalReady = Boolean(
+          document.querySelector("[data-album-metadata-modal]") &&
+          document.querySelector("[data-album-metadata-candidate]") &&
+          document.querySelectorAll("[data-album-metadata-field]").length === 12 &&
+          document.querySelectorAll('[data-album-track-match="matched"]').length === 10 &&
+          document.querySelector("[data-apply-album-metadata]")?.textContent?.includes("10 tracks")
+        );
+        [...document.querySelectorAll("button")]
+          .find((button) => button.textContent?.trim() === "Cancel")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
         document.querySelector(".album-card-open")?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
         const albumDetailReady = Boolean(document.querySelector("[data-album-detail]"));
@@ -1064,6 +1218,18 @@ app.whenReady().then(async () => {
         document.querySelector('[aria-label="List view"]')?.click();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const albumListReady = Boolean(document.querySelector(".album-collection--list"));
+        document.querySelector(".album-collection--list [data-album-card]")?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 240,
+          clientY: 200,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const albumListMetadataMenuReady = Boolean(
+          document.querySelector('[data-testid="search-album-metadata-menu-item"]')
+        );
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
         const historyBackButton = document.querySelector("[data-history-back]");
         const historyForwardButton = document.querySelector("[data-history-forward]");
         const historyButtonsReady = Boolean(historyBackButton && historyForwardButton);
@@ -1283,8 +1449,11 @@ app.whenReady().then(async () => {
           tableFocusedAfterClick,
           selectedAfterArrowDown,
           selectionBarReady,
+          manualCoverMenuReady,
+          manualCoverFetchReady,
           rowThumbnailReady,
           ratingFitsCell,
+          tableAlbumMetadataMenuReady,
           ratingSetToThree,
           threeStarRatingClearsToZero,
           selectedRowUsesGreyHighlight,
@@ -1332,14 +1501,20 @@ app.whenReady().then(async () => {
           contextMenuStayedOpenInside,
           contextMenuClosedOutside,
           showInFinderReady,
+          searchMetadataMenuReady,
+          metadataSearchReady,
+          metadataFieldSelectionReady,
           albumsViewReady,
           albumCardCount,
           albumSortOptions,
           albumDetailReady,
           albumDetailTrackCount,
           albumCardContextMenuReady,
+          albumMetadataMenuReady,
+          albumMetadataModalReady,
           albumTrackContextMenuReady,
           albumListReady,
+          albumListMetadataMenuReady,
           historyButtonsReady,
           historyBackEnabled,
           historyBackReachedAlbumDetail,
@@ -1493,6 +1668,20 @@ app.whenReady().then(async () => {
         );
         return;
       }
+      if (!result.albumMetadataMenuReady || !result.albumMetadataModalReady) {
+        fail(
+          `Album metadata search failed: menu=${result.albumMetadataMenuReady}, ` +
+          `modal=${result.albumMetadataModalReady}`
+        );
+        return;
+      }
+      if (!result.tableAlbumMetadataMenuReady || !result.albumListMetadataMenuReady) {
+        fail(
+          `Album metadata surfaces failed: table=${result.tableAlbumMetadataMenuReady}, ` +
+          `list=${result.albumListMetadataMenuReady}`
+        );
+        return;
+      }
       if (!result.nextUsesCurrentList) {
         fail("Next did not advance within the current playlist when the queue was empty");
         return;
@@ -1508,6 +1697,24 @@ app.whenReady().then(async () => {
         fail(
           `Table metadata navigation failed: artist=${result.tableArtistNavigationReady}, ` +
           `album=${result.tableAlbumNavigationReady}`
+        );
+        return;
+      }
+      if (!result.manualCoverMenuReady || !result.manualCoverFetchReady) {
+        fail(
+          `Manual cover fetch failed: menu=${result.manualCoverMenuReady}, ` +
+          `fetch=${result.manualCoverFetchReady}`
+        );
+        return;
+      }
+      if (
+        !result.searchMetadataMenuReady ||
+        !result.metadataSearchReady ||
+        !result.metadataFieldSelectionReady
+      ) {
+        fail(
+          `Metadata search failed: menu=${result.searchMetadataMenuReady}, ` +
+          `modal=${result.metadataSearchReady}, fields=${result.metadataFieldSelectionReady}`
         );
         return;
       }

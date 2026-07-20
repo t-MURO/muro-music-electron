@@ -955,6 +955,12 @@ function App() {
     [openForSelection]
   );
 
+  const handleTableAlbumContextMenu = useCallback((event: React.MouseEvent, trackId: string) => {
+    const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
+    if (!album) return;
+    openForSelection(event, album.tracks.map((track) => track.id));
+  }, [albums, openForSelection]);
+
   const handleShowBpmKey = useCallback(() => {
     openAnalysisModal(menuSelection);
     closeMenu();
@@ -1552,6 +1558,7 @@ function App() {
                           onTogglePlay={togglePlay}
                           onOpenArtist={handleOpenTableArtist}
                           onOpenAlbum={handleOpenTableAlbum}
+                          onAlbumContextMenu={handleTableAlbumContextMenu}
                           onColumnResize={handleColumnResize}
                           onColumnAutoFit={autoFitColumn}
                           onColumnReorder={reorderColumns}

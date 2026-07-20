@@ -3,15 +3,27 @@ import { createPortal } from "react-dom";
 import { invoke } from "@muro/desktop/runtime";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
-import { Disc3, ImagePlus } from "lucide-react";
+import { Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
 import { t } from "../../i18n";
+import { notify } from "../../stores";
 import type { Track, TrackMetadataUpdates } from "../../types";
+import { Popover, PopoverHeader, PopoverItem } from "./Popover";
+
+type FetchedCoverArt = {
+  fullPath: string;
+  thumbPath: string;
+  sourceUrl?: string | null;
+};
 
 type EditTrackModalProps = {
   isOpen: boolean;
   tracks: Track[];
   onClose: () => void;
   onSave: (trackIds: string[], updates: TrackMetadataUpdates) => Promise<void>;
+  onFetchCoverArt: (
+    trackId: string,
+    metadata: { album?: string; artist?: string },
+  ) => Promise<FetchedCoverArt | null>;
 };
 
 type FormState = {
@@ -79,12 +91,15 @@ export const EditTrackModal = ({
   tracks,
   onClose,
   onSave,
+  onFetchCoverArt,
 }: EditTrackModalProps) => {
   const isBatch = tracks.length > 1;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverMenuPosition, setCoverMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isFetchingCover, setIsFetchingCover] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   // Stable key: only re-init when the modal opens with new track IDs
@@ -102,6 +117,8 @@ export const EditTrackModal = ({
       setDirtyFields(new Set());
     }
     setCoverPreview(null);
+    setCoverMenuPosition(null);
+    setIsFetchingCover(false);
     setIsSaving(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, trackIdKey]);
@@ -119,12 +136,16 @@ export const EditTrackModal = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        if (coverMenuPosition) {
+          setCoverMenuPosition(null);
+          return;
+        }
         onClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [coverMenuPosition, isOpen, onClose]);
 
   const updateField = useCallback(
     (field: keyof FormState, value: string | number | null) => {
@@ -172,6 +193,31 @@ export const EditTrackModal = ({
       console.error("Failed to cache cover art:", error);
     }
   }, [updateField]);
+
+  const handleFetchCoverArt = useCallback(async () => {
+    const track = tracks[0];
+    if (!track || isFetchingCover) return;
+    setCoverMenuPosition(null);
+    setIsFetchingCover(true);
+    try {
+      const cached = await onFetchCoverArt(track.id, {
+        album: form.album.trim() || track.album,
+        artist: form.artists.trim() || form.artist.trim() || track.artists || track.artist,
+      });
+      if (!cached) {
+        notify.info(t("edit.coverArtFetchNotFound"));
+        return;
+      }
+      updateField("coverArtPath", cached.fullPath);
+      updateField("coverArtThumbPath", cached.thumbPath);
+      setCoverPreview(convertFileSrc(cached.fullPath));
+      notify.success(t("edit.coverArtFetched"));
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("edit.coverArtFetchFailed"));
+    } finally {
+      setIsFetchingCover(false);
+    }
+  }, [form.album, form.artist, form.artists, isFetchingCover, onFetchCoverArt, tracks, updateField]);
 
   const handleRatingClick = useCallback(
     (event: React.MouseEvent, star: number) => {
@@ -274,7 +320,13 @@ export const EditTrackModal = ({
               type="button"
               className="group relative h-[140px] w-[140px] flex-shrink-0 overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] transition-colors hover:border-[var(--color-accent)]"
               onClick={handleCoverArtClick}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setCoverMenuPosition({ x: event.clientX, y: event.clientY });
+              }}
               title={t("edit.coverArt")}
+              data-cover-art-field
             >
               {existingCoverSrc ? (
                 <img
@@ -287,8 +339,12 @@ export const EditTrackModal = ({
                   <Disc3 className="h-10 w-10 opacity-30" />
                 </div>
               )}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/40">
-                <ImagePlus className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className={`absolute inset-0 flex items-center justify-center transition-colors ${isFetchingCover ? "bg-black/45" : "bg-black/0 group-hover:bg-black/40"}`}>
+                {isFetchingCover ? (
+                  <LoaderCircle className="h-6 w-6 animate-spin text-white" aria-label={t("edit.coverArtFetching")} />
+                ) : (
+                  <ImagePlus className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                )}
               </div>
             </button>
 
@@ -465,6 +521,21 @@ export const EditTrackModal = ({
             </button>
           </div>
         </div>
+        <Popover
+          isOpen={coverMenuPosition !== null}
+          position={coverMenuPosition ?? { x: 0, y: 0 }}
+          className="w-52 py-1"
+          onClose={() => setCoverMenuPosition(null)}
+        >
+          <PopoverHeader>{t("edit.coverArtMenu")}</PopoverHeader>
+          <PopoverItem
+            onClick={() => { void handleFetchCoverArt(); }}
+            dataTestId="fetch-cover-art-menu-item"
+          >
+            <Download className="h-4 w-4 opacity-60" />
+            {t("edit.fetchCoverArt")}
+          </PopoverItem>
+        </Popover>
       </div>
     </div>,
     document.body

@@ -2,12 +2,18 @@ import fs from "node:fs";
 import { cacheCoverBytes } from "./metadata.mjs";
 
 const COVER_ART_ARCHIVE_ROOT = "https://coverartarchive.org";
+const MUSICBRAINZ_RELEASE_GROUP_ROOT = "https://musicbrainz.org/ws/2/release-group/";
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 const NOT_FOUND_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
-const FAILURE_BACKOFF_MS = 30 * 60 * 1_000;
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 
 const musicBrainzId = (value) => String(value ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null;
+
+const normalizedName = (value) => String(value ?? "").trim().toLocaleLowerCase();
+
+const quotedSearchTerm = (value) => `"${String(value ?? "")
+  .trim()
+  .replace(/([\\"])/g, "\\$1")}"`;
 
 const coverIdentity = (row) => {
   const releaseGroupId = musicBrainzId(row.musicbrainz_releasegroupid);
@@ -94,17 +100,6 @@ const cachedFilesExist = (cached) => Boolean(
   && fs.existsSync(cached.thumb_path)
 );
 
-const applyCoverToTracks = (db, trackIds, cached) => {
-  if (!cachedFilesExist(cached) || trackIds.length === 0) return 0;
-  const placeholders = trackIds.map(() => "?").join(", ");
-  return db.prepare(`
-    UPDATE tracks
-    SET cover_art_path = ?, cover_art_thumb_path = ?
-    WHERE id IN (${placeholders})
-      AND (cover_art_path IS NULL OR cover_art_path = '')
-  `).run(cached.full_path, cached.thumb_path, ...trackIds).changes;
-};
-
 export const createAlbumCoverService = ({
   cacheDir,
   fetchImpl = globalThis.fetch,
@@ -112,9 +107,6 @@ export const createAlbumCoverService = ({
   now = () => Date.now(),
   userAgent = "MuroMusicElectron/0.1.0 (https://github.com/t-MURO/muro-music-electron)",
 } = {}) => {
-  const scanInFlight = new WeakMap();
-  const retryAfter = new Map();
-
   const fetchCover = async (identity) => {
     const response = await fetchImpl(
       `${COVER_ART_ARCHIVE_ROOT}/${identity.kind}/${identity.musicBrainzId}`,
@@ -138,81 +130,66 @@ export const createAlbumCoverService = ({
     return { ...cached, sourceUrl: imageUrl };
   };
 
-  const scanCovers = async (db, { limit = 25 } = {}) => {
-    if (scanInFlight.has(db)) return scanInFlight.get(db);
-    const pending = (async () => {
-      const rows = db.prepare(`
-        SELECT id, musicbrainz_albumid, musicbrainz_releasegroupid
-        FROM tracks
-        WHERE (cover_art_path IS NULL OR cover_art_path = '')
-          AND (
-            (musicbrainz_releasegroupid IS NOT NULL AND musicbrainz_releasegroupid != '')
-            OR (musicbrainz_albumid IS NOT NULL AND musicbrainz_albumid != '')
-          )
-      `).all();
-      const groups = new Map();
-      for (const row of rows) {
-        const identity = coverIdentity(row);
-        if (!identity) continue;
-        const existing = groups.get(identity.key);
-        if (existing) existing.trackIds.push(String(row.id));
-        else groups.set(identity.key, { ...identity, trackIds: [String(row.id)] });
-      }
-
-      let updated = 0;
-      const due = [];
-      const scanStartedAt = now();
-      for (const identity of groups.values()) {
-        const cached = readCachedCover(db, identity.key);
-        if (cachedFilesExist(cached)) {
-          updated += applyCoverToTracks(db, identity.trackIds, cached);
-          continue;
-        }
-        const negativeCacheIsFresh = cached?.status === "not-found"
-          && scanStartedAt - Number(cached.fetched_at) * 1_000 < NOT_FOUND_CACHE_TTL_MS;
-        if (!negativeCacheIsFresh && (retryAfter.get(identity.key) ?? 0) <= scanStartedAt) {
-          due.push(identity);
-        }
-      }
-
-      const batchLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 25)));
-      const batch = due.slice(0, batchLimit);
-      let failed = 0;
-      for (const identity of batch) {
-        try {
-          const result = await fetchCover(identity);
-          writeCachedCover(db, identity, result, now());
-          if (result) {
-            updated += applyCoverToTracks(db, identity.trackIds, {
-              status: "ready",
-              full_path: result.fullPath,
-              thumb_path: result.thumbPath,
-            });
-          }
-          retryAfter.delete(identity.key);
-        } catch (error) {
-          failed += 1;
-          retryAfter.set(identity.key, now() + FAILURE_BACKOFF_MS);
-          console.warn(`Could not load album cover for ${identity.musicBrainzId}:`, error);
-        }
-      }
-
-      return {
-        checked: batch.length,
-        updated,
-        failed,
-        queued: Math.max(0, due.length - batch.length),
-        remaining: Math.max(0, due.length - batch.length + failed),
-        totalAlbums: groups.size,
-      };
-    })();
-    scanInFlight.set(db, pending);
-    try {
-      return await pending;
-    } finally {
-      scanInFlight.delete(db);
-    }
+  const searchReleaseGroup = async ({ album, artist }) => {
+    if (!String(album ?? "").trim() || !String(artist ?? "").trim()) return null;
+    const searchUrl = new URL(MUSICBRAINZ_RELEASE_GROUP_ROOT);
+    searchUrl.searchParams.set(
+      "query",
+      `releasegroup:${quotedSearchTerm(album)} AND artist:${quotedSearchTerm(artist)}`,
+    );
+    searchUrl.searchParams.set("fmt", "json");
+    searchUrl.searchParams.set("limit", "5");
+    const response = await fetchImpl(searchUrl, {
+      headers: { Accept: "application/json", "User-Agent": userAgent },
+    });
+    if (!response.ok) throw new Error(`MusicBrainz cover lookup failed (${response.status})`);
+    const payload = await response.json();
+    const candidates = Array.isArray(payload?.["release-groups"])
+      ? payload["release-groups"]
+      : [];
+    const exact = candidates.find((candidate) => (
+      normalizedName(candidate?.title) === normalizedName(album)
+      && Number(candidate?.score ?? 0) >= 80
+    ));
+    const selected = exact ?? candidates.find((candidate) => Number(candidate?.score ?? 0) >= 90);
+    const releaseGroupId = musicBrainzId(selected?.id);
+    return releaseGroupId ? {
+      key: `release-group:${releaseGroupId.toLocaleLowerCase()}`,
+      kind: "release-group",
+      musicBrainzId: releaseGroupId,
+    } : null;
   };
 
-  return { scanCovers };
+  const fetchCoverForTrack = async (db, { trackId, album, artist } = {}) => {
+    const row = db.prepare(`
+      SELECT id, artist, album_artist, album, musicbrainz_albumid, musicbrainz_releasegroupid
+      FROM tracks
+      WHERE id = ?
+    `).get(String(trackId ?? ""));
+    if (!row) throw new Error("Track was not found in the library");
+
+    const identity = coverIdentity(row) ?? await searchReleaseGroup({
+      album: String(album ?? row.album ?? "").trim(),
+      artist: String(artist ?? row.album_artist ?? row.artist ?? "").trim(),
+    });
+    if (!identity) return null;
+
+    const cached = readCachedCover(db, identity.key);
+    if (cachedFilesExist(cached)) {
+      return {
+        fullPath: cached.full_path,
+        thumbPath: cached.thumb_path,
+        sourceUrl: cached.source_url,
+      };
+    }
+    const cacheIsFresh = cached?.status === "not-found"
+      && now() - Number(cached.fetched_at) * 1_000 < NOT_FOUND_CACHE_TTL_MS;
+    if (cacheIsFresh) return null;
+
+    const result = await fetchCover(identity);
+    writeCachedCover(db, identity, result, now());
+    return result;
+  };
+
+  return { fetchCoverForTrack };
 };
