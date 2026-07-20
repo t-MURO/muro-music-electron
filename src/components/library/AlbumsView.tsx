@@ -35,6 +35,7 @@ type AlbumsViewProps = {
   onTracksContextMenu: (event: React.MouseEvent, trackIds: string[]) => void;
   onImportFiles: () => void;
   onImportFolder: () => void;
+  revealRequest?: { trackId: string; requestId: number } | null;
 };
 
 const formatDuration = (seconds: number) => {
@@ -138,6 +139,7 @@ const AlbumDetail = ({
   onOpenArtist,
   onOpenGenre,
   onTracksContextMenu,
+  revealRequest,
 }: {
   album: Album;
   currentTrackId: string | null;
@@ -151,11 +153,23 @@ const AlbumDetail = ({
   onOpenArtist: (artist: string) => void;
   onOpenGenre: (genre: string) => void;
   onTracksContextMenu: (event: React.MouseEvent, trackIds: string[]) => void;
+  revealRequest?: { trackId: string; requestId: number } | null;
 }) => {
   const trackIds = album.tracks.map((track) => track.id);
   const currentAlbumIsActive = album.tracks.some((track) => track.id === currentTrackId);
   const currentAlbumIsPlaying = isPlaying && currentAlbumIsActive;
   let previousDisc: number | undefined;
+
+  useEffect(() => {
+    if (!revealRequest || !album.tracks.some((track) => track.id === revealRequest.trackId)) return;
+    const frame = requestAnimationFrame(() => {
+      const row = Array.from(document.querySelectorAll<HTMLElement>("[data-album-track]"))
+        .find((element) => element.dataset.albumTrack === revealRequest.trackId);
+      row?.scrollIntoView({ block: "center", behavior: "smooth" });
+      row?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [album.tracks, revealRequest]);
 
   return (
     <div className="album-detail" data-album-detail={album.id}>
@@ -255,6 +269,7 @@ export const AlbumsView = ({
   onTracksContextMenu,
   onImportFiles,
   onImportFolder,
+  revealRequest,
 }: AlbumsViewProps) => {
   const [sort, setSort] = useState<AlbumSort>("title");
   const [layout, setLayout] = useState<AlbumLayout>(() =>
@@ -302,6 +317,7 @@ export const AlbumsView = ({
         onOpenArtist={onOpenArtist}
         onOpenGenre={onOpenGenre}
         onTracksContextMenu={onTracksContextMenu}
+        revealRequest={revealRequest}
       />
     );
   }

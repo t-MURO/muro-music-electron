@@ -118,6 +118,10 @@ function App() {
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(() => new Set());
   const [metadataSearchTrackId, setMetadataSearchTrackId] = useState<string | null>(null);
   const [albumMetadataTrackIds, setAlbumMetadataTrackIds] = useState<string[]>([]);
+  const [revealTrackRequest, setRevealTrackRequest] = useState<{
+    trackId: string;
+    requestId: number;
+  } | null>(null);
   const [folderMenu, setFolderMenu] = useState<{
     folderId: string;
     position: { x: number; y: number };
@@ -449,14 +453,36 @@ function App() {
   } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
 
   const playbackContextIdsRef = useRef<string[]>([]);
-  const playTrackById = useCallback((trackId: string, contextTracks?: Track[]) => {
+  const playbackSourceRef = useRef<{ path: string; trackIds: string[] } | null>(null);
+  const playTrackById = useCallback((trackId: string, contextTracks?: Track[], sourcePath?: string) => {
     const track = allTracksById.get(trackId);
     if (!track) return;
     if (contextTracks && contextTracks.some((item) => item.id === trackId)) {
-      playbackContextIdsRef.current = contextTracks.map((item) => item.id);
+      const trackIds = contextTracks.map((item) => item.id);
+      playbackContextIdsRef.current = trackIds;
+      playbackSourceRef.current = {
+        path: sourcePath ?? `${location.pathname}${location.search}`,
+        trackIds,
+      };
     }
     void playTrack(track);
-  }, [allTracksById, playTrack]);
+  }, [allTracksById, location.pathname, location.search, playTrack]);
+
+  const handleOpenCurrentTrack = useCallback(() => {
+    const activeTrackId = usePlaybackStore.getState().currentTrack?.id;
+    if (!activeTrackId) return;
+
+    const source = playbackSourceRef.current;
+    const destination = source?.trackIds.includes(activeTrackId) ? source.path : "/";
+    setSearchQuery("");
+    setRevealTrackRequest((current) => ({
+      trackId: activeTrackId,
+      requestId: (current?.requestId ?? 0) + 1,
+    }));
+    if (`${location.pathname}${location.search}` !== destination) {
+      navigate(destination);
+    }
+  }, [location.pathname, location.search, navigate, setSearchQuery]);
 
   const getPlaybackContext = useCallback((activeTrackId: string | null) => {
     const remembered = playbackContextIdsRef.current
@@ -585,10 +611,14 @@ function App() {
       const contextTracks = trackIds
         .map((id) => allTracksById.get(id))
         .filter((track): track is Track => track !== undefined);
+      const album = albums.find((item) => item.tracks.some((track) => track.id === trackIds[0]));
+      const sourcePath = album
+        ? `/collection/albums?album=${encodeURIComponent(album.id)}`
+        : undefined;
       setQueue(trackIds.slice(1));
-      playTrackById(trackIds[0], contextTracks);
+      playTrackById(trackIds[0], contextTracks, sourcePath);
     },
-    [allTracksById, playTrackById, setQueue]
+    [albums, allTracksById, playTrackById, setQueue]
   );
 
   const { importPlaylist, importPlaylistFolder, exportPlaylist } = usePlaylistTransfer();
@@ -1350,6 +1380,7 @@ function App() {
                       playTrackById(
                         firstTrack.id,
                         album?.tracks ?? (sortedTracks.length > 0 ? sortedTracks : allTracks),
+                        album ? `/collection/albums?album=${encodeURIComponent(album.id)}` : undefined,
                       );
                     }
                   }
@@ -1496,6 +1527,7 @@ function App() {
                       onTracksContextMenu={handleAlbumTracksContextMenu}
                       onImportFiles={handleEmptyImport}
                       onImportFolder={handleEmptyImportFolder}
+                      revealRequest={revealTrackRequest}
                     />
                   ) : (
                     viewConfig.trackTable && (
@@ -1565,6 +1597,7 @@ function App() {
                           onHeaderContextMenu={openColumnsMenu}
                           onSortChange={handleSortChange}
                           onRatingChange={handleRatingChange}
+                          revealRequest={revealTrackRequest}
                         />
                         <TrackSelectionBar
                           selectedCount={selectedVisibleTrackIds.length}
@@ -1622,6 +1655,7 @@ function App() {
         />
         <PlayerBar
           onTogglePlay={togglePlay}
+          onOpenCurrentTrack={handleOpenCurrentTrack}
           onSeekChange={seek}
           onVolumeChange={setVolume}
           onSkipPrevious={handleSkipPrevious}

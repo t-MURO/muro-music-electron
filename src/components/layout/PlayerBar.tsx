@@ -27,6 +27,7 @@ const formatTime = (seconds: number) => {
 
 type PlayerBarProps = {
   onTogglePlay: () => void;
+  onOpenCurrentTrack: () => void;
   onSeekChange: (value: number) => void;
   onVolumeChange: (value: number) => void;
   onSkipPrevious: () => void;
@@ -36,6 +37,7 @@ type PlayerBarProps = {
 
 export const PlayerBar = ({
   onTogglePlay,
+  onOpenCurrentTrack,
   onSeekChange,
   onVolumeChange,
   onSkipPrevious,
@@ -155,11 +157,18 @@ export const PlayerBar = ({
           </span>
         </div>
       )}
-      <div className="flex min-w-0 items-center gap-3">
+      <button
+        className="group flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
+        onClick={onOpenCurrentTrack}
+        disabled={!currentTrack}
+        title={currentTrack ? "Show current track in its list" : undefined}
+        type="button"
+        data-now-playing-link
+      >
         {currentTrack?.coverArtThumbPath ? (
-          <img src={convertFileSrc(currentTrack.coverArtThumbPath)} alt={`${currentTrack.title} cover`} className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover" />
+          <img src={convertFileSrc(currentTrack.coverArtThumbPath)} alt={`${currentTrack.title} cover`} className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-colors group-hover:border-[var(--color-accent)]" />
         ) : (
-          <div className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]"><Music2 className="h-5 w-5" /></div>
+          <div className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] transition-colors group-hover:border-[var(--color-accent)]"><Music2 className="h-5 w-5" /></div>
         )}
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTrack ? currentTrack.title : t("player.empty.title")}</p>
@@ -188,7 +197,7 @@ export const PlayerBar = ({
           )}
           {currentTrack?.album && <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{currentTrack.album}</p>}
         </div>
-      </div>
+      </button>
 
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center justify-center gap-2">

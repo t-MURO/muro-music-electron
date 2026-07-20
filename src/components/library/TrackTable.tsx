@@ -39,6 +39,7 @@ type TrackTableProps = {
   onHeaderContextMenu?: (event: React.MouseEvent<HTMLDivElement>) => void;
   onSortChange?: (key: ColumnConfig["key"]) => void;
   onRatingChange: (id: string, rating: number) => void;
+  revealRequest?: { trackId: string; requestId: number } | null;
 };
 
 export const TrackTable = memo(
@@ -65,6 +66,7 @@ export const TrackTable = memo(
     onHeaderContextMenu,
     onSortChange,
     onRatingChange,
+    revealRequest,
   }: TrackTableProps) => {
     // Read state from stores
     const selectedIds = useUIStore((s) => s.selectedIds);
@@ -132,6 +134,20 @@ export const TrackTable = memo(
     useLayoutEffect(() => {
       rowVirtualizer.measure();
     }, [rowHeight, rowVirtualizer]);
+
+    useLayoutEffect(() => {
+      if (!revealRequest) return;
+      const index = tracks.findIndex((track) => track.id === revealRequest.trackId);
+      if (index < 0) return;
+
+      onRowSelect(index, revealRequest.trackId);
+      rowVirtualizer.scrollToIndex(index, { align: "center" });
+      const frame = requestAnimationFrame(() => {
+        rowVirtualizer.scrollToIndex(index, { align: "center" });
+        tableContainerRef.current?.focus({ preventScroll: true });
+      });
+      return () => cancelAnimationFrame(frame);
+    }, [onRowSelect, revealRequest, rowVirtualizer, tracks]);
 
     const virtualRows = rowVirtualizer.getVirtualItems();
 

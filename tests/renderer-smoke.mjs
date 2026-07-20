@@ -1407,6 +1407,18 @@ app.whenReady().then(async () => {
           document.querySelector('[data-track-index="1"][data-track-playing="true"]') &&
           document.querySelector('[data-track-index="1"]')?.textContent?.includes("Smoke Track 010")
         );
+        window.location.hash = "#/";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-now-playing-link]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 140));
+        const revealedPlayingTrack = document.querySelector(
+          '[data-track-index="1"][data-track-playing="true"][data-track-selected="true"]',
+        );
+        const nowPlayingReturnsToSource = Boolean(
+          window.location.hash.includes("/playlists/smoke-next-playlist") &&
+          revealedPlayingTrack?.textContent?.includes("Smoke Track 010") &&
+          document.activeElement?.matches('[data-track-table-scroll]')
+        );
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -1540,6 +1552,7 @@ app.whenReady().then(async () => {
           smartCrateMatchedTracks,
           persistedSmartCrateCount,
           nextUsesCurrentList,
+          nowPlayingReturnsToSource,
         };
       }
       return {
@@ -1684,6 +1697,10 @@ app.whenReady().then(async () => {
       }
       if (!result.nextUsesCurrentList) {
         fail("Next did not advance within the current playlist when the queue was empty");
+        return;
+      }
+      if (!result.nowPlayingReturnsToSource) {
+        fail("Now-playing link did not return to and reveal the current track's source list");
         return;
       }
       if (!result.showInFinderReady || shownItemPaths.at(-1) !== smokeTracks[0].source_path) {
