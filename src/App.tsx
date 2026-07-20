@@ -25,6 +25,8 @@ import {
   AnalysisModal,
   DuplicateTracksModal,
   EditTrackModal,
+  MetadataSearchModal,
+  AlbumMetadataSearchModal,
   PlaylistCreateModal,
   PlaylistEditModal,
   SmartCrateModal,
@@ -82,7 +84,7 @@ import {
 import { confirm, open, save } from "@muro/desktop/dialogs";
 import { openExternal, showItemInFolder } from "./desktop/shell";
 import { isDjMixFeatureAvailable } from "./lib/mix/config";
-import type { ColumnConfig, SmartCrate, Track } from "./types";
+import type { ColumnConfig, SmartCrate, Track, TrackMetadataUpdates } from "./types";
 
 function App() {
   const location = useLocation();
@@ -114,6 +116,8 @@ function App() {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [folderEditName, setFolderEditName] = useState("");
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(() => new Set());
+  const [metadataSearchTrackId, setMetadataSearchTrackId] = useState<string | null>(null);
+  const [albumMetadataTrackIds, setAlbumMetadataTrackIds] = useState<string[]>([]);
   const [folderMenu, setFolderMenu] = useState<{
     folderId: string;
     position: { x: number; y: number };
@@ -712,7 +716,33 @@ function App() {
     openEditModal,
     closeEditModal,
     handleSaveMetadata,
+    handleFetchCoverArt,
+    handleSearchMetadata,
+    handleSearchAlbumMetadata,
+    handleLoadAlbumMetadata,
   } = useTrackEdit();
+
+  const metadataSearchTrack = metadataSearchTrackId
+    ? allTracksById.get(metadataSearchTrackId) ?? null
+    : null;
+
+  const handleApplySearchedMetadata = useCallback(async (updates: TrackMetadataUpdates) => {
+    if (!metadataSearchTrackId) return;
+    await handleSaveMetadata([metadataSearchTrackId], updates);
+  }, [handleSaveMetadata, metadataSearchTrackId]);
+
+  const albumMetadataTracks = useMemo(
+    () => albumMetadataTrackIds.map((id) => allTracksById.get(id)).filter((track): track is Track => Boolean(track)),
+    [albumMetadataTrackIds, allTracksById],
+  );
+
+  const handleApplyAlbumMetadata = useCallback(async (
+    entries: Array<{ trackId: string; updates: TrackMetadataUpdates }>,
+  ) => {
+    for (const entry of entries) {
+      await handleSaveMetadata([entry.trackId], entry.updates);
+    }
+  }, [handleSaveMetadata]);
 
   const {
     pendingTracks: pendingDeleteTracks,
@@ -945,6 +975,29 @@ function App() {
     openEditModal(menuSelection);
     closeMenu();
   }, [menuSelection, closeMenu, openEditModal]);
+
+  const handleOpenMetadataSearch = useCallback(() => {
+    const trackId = menuSelection.length === 1 ? menuSelection[0] : null;
+    closeMenu();
+    if (trackId) setMetadataSearchTrackId(trackId);
+  }, [closeMenu, menuSelection]);
+
+  const menuAlbumTracks = useMemo(
+    () => menuSelection.map((id) => allTracksById.get(id)).filter((track): track is Track => Boolean(track)),
+    [allTracksById, menuSelection],
+  );
+  const menuIsSingleAlbum = menuAlbumTracks.length > 1
+    && menuAlbumTracks.every((track) => (
+      track.album.trim().toLocaleLowerCase() === menuAlbumTracks[0].album.trim().toLocaleLowerCase()
+      && (track.artists || track.artist).trim().toLocaleLowerCase()
+        === (menuAlbumTracks[0].artists || menuAlbumTracks[0].artist).trim().toLocaleLowerCase()
+    ));
+
+  const handleOpenAlbumMetadataSearch = useCallback(() => {
+    const trackIds = menuIsSingleAlbum ? menuAlbumTracks.map((track) => track.id) : [];
+    closeMenu();
+    if (trackIds.length > 0) setAlbumMetadataTrackIds(trackIds);
+  }, [closeMenu, menuAlbumTracks, menuIsSingleAlbum]);
 
   const handleDeleteTracks = useCallback(() => {
     const trackIds = [...menuSelection];
@@ -1236,6 +1289,20 @@ function App() {
           .filter((t): t is Track => t !== undefined)}
         onClose={closeEditModal}
         onSave={handleSaveMetadata}
+        onFetchCoverArt={handleFetchCoverArt}
+      />
+      <MetadataSearchModal
+        track={metadataSearchTrack}
+        onClose={() => setMetadataSearchTrackId(null)}
+        onSearch={handleSearchMetadata}
+        onApply={handleApplySearchedMetadata}
+      />
+      <AlbumMetadataSearchModal
+        tracks={albumMetadataTracks}
+        onClose={() => setAlbumMetadataTrackIds([])}
+        onSearch={handleSearchAlbumMetadata}
+        onLoadRelease={handleLoadAlbumMetadata}
+        onApply={handleApplyAlbumMetadata}
       />
       <WindowChrome />
       <div
@@ -1297,6 +1364,8 @@ function App() {
                   handlePlaylistDrop(playlistId, trackIds);
                 }}
                 onShowInFinder={menuSelection.length === 1 ? handleShowInFinder : undefined}
+                onSearchMetadata={menuSelection.length === 1 ? handleOpenMetadataSearch : undefined}
+                onSearchAlbumMetadata={menuIsSingleAlbum ? handleOpenAlbumMetadataSearch : undefined}
                 onRemoveFromPlaylist={
                   viewConfig.type === "playlist" && viewConfig.playlist
                     ? handleRemoveMenuTracksFromPlaylist
@@ -1532,6 +1601,7 @@ function App() {
               allTracks={allTracks}
               currentTrack={currentTrack}
               currentTrackDetails={currentTrack ? allTracks.find((track) => track.id === currentTrack.id) : null}
+              currentPlaylist={viewConfig.playlist}
               onRemoveFromQueue={removeFromQueue}
               onReorderQueue={reorderQueue}
               onClearQueue={clearQueue}

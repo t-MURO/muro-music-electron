@@ -16,6 +16,7 @@ type MixSuggestionsProps = {
   tracks: Track[];
   currentTrack: Track | null | undefined;
   queuedTrackIds: string[];
+  currentPlaylistTrackIds?: string[];
   onPlayTrack: (trackId: string) => void;
   onPlayNext: (trackId: string) => void;
   onMixWithCurrent?: (trackId: string) => void;
@@ -43,6 +44,7 @@ export const MixSuggestions = ({
   tracks,
   currentTrack,
   queuedTrackIds,
+  currentPlaylistTrackIds,
   onPlayTrack,
   onPlayNext,
   onMixWithCurrent,
@@ -53,7 +55,12 @@ export const MixSuggestions = ({
   const [sameGenreOnly, setSameGenreOnly] = useState(false);
   const [minimumRating, setMinimumRating] = useState(0);
   const [sortMode, setSortMode] = useState<SortMode>("score");
+  const [playlistOnly, setPlaylistOnly] = useState(false);
   const excludedTrackIds = useMemo(() => new Set(queuedTrackIds), [queuedTrackIds]);
+  const playlistTrackIds = useMemo(
+    () => new Set(currentPlaylistTrackIds ?? []),
+    [currentPlaylistTrackIds],
+  );
 
   const automaticSuggestions = useMemo(
     () => getCamelotSuggestions(currentTrack, tracks, excludedTrackIds),
@@ -85,7 +92,8 @@ export const MixSuggestions = ({
     const filtered = (selectedCode ? selectedSuggestions : automaticSuggestions).filter((suggestion) =>
       (!currentTrackHasBpm || suggestion.bpmDifference <= bpmLimit) &&
       (!sameGenreOnly || suggestion.genreMatch) &&
-      (suggestion.track.rating ?? 0) >= minimumRating
+      (suggestion.track.rating ?? 0) >= minimumRating &&
+      (!playlistOnly || playlistTrackIds.has(suggestion.track.id))
     );
     filtered.sort((left, right) => {
       if (sortMode === "bpm") {
@@ -97,18 +105,25 @@ export const MixSuggestions = ({
       return right.score - left.score || left.rank - right.rank || left.bpmDifference - right.bpmDifference;
     });
     return filtered.slice(0, MAX_SUGGESTIONS);
-  }, [automaticSuggestions, bpmWindow, currentTrack?.bpm, minimumRating, sameGenreOnly, selectedCode, selectedSuggestions, sortMode]);
+  }, [automaticSuggestions, bpmWindow, currentTrack?.bpm, minimumRating, playlistOnly, playlistTrackIds, sameGenreOnly, selectedCode, selectedSuggestions, sortMode]);
 
   const resetFilters = () => {
     setBpmWindow("any");
     setMinimumRating(0);
     setSameGenreOnly(false);
     setSelectedCode(null);
+    setPlaylistOnly(false);
   };
 
   useEffect(() => {
     setSelectedCode(null);
   }, [currentTrack?.id]);
+
+  useEffect(() => {
+    if (!currentPlaylistTrackIds?.length) {
+      setPlaylistOnly(false);
+    }
+  }, [currentPlaylistTrackIds]);
 
   if (!currentTrack) {
     return (
@@ -180,6 +195,20 @@ export const MixSuggestions = ({
           type="button"
         >
           Same genre
+        </button>
+        <button
+          className={`mt-4 h-8 rounded-[var(--radius-sm)] border px-2 text-[10px] font-medium transition-colors ${playlistOnly ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]" : "border-[var(--color-border)] bg-[var(--color-bg-primary)] text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"} ${currentPlaylistTrackIds?.length ? "" : "cursor-not-allowed opacity-50"}`}
+          onClick={() => {
+            if (!currentPlaylistTrackIds?.length) return;
+            setPlaylistOnly((value) => !value);
+          }}
+          aria-pressed={playlistOnly}
+          aria-disabled={!currentPlaylistTrackIds?.length}
+          data-mix-filter-playlist
+          disabled={!currentPlaylistTrackIds?.length}
+          type="button"
+        >
+          Current playlist
         </button>
       </div>
 

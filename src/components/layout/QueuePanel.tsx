@@ -16,7 +16,7 @@ import { t } from "../../i18n";
 import { useDragSession } from "../../contexts/DragSessionContext";
 import { NowPlayingTrack } from "../queue/NowPlayingTrack";
 import { MixSuggestions } from "../queue/MixSuggestions";
-import type { Track } from "../../types";
+import type { Playlist, Track } from "../../types";
 import type { CurrentTrack } from "../../hooks";
 
 type QueuePanelProps = {
@@ -28,6 +28,7 @@ type QueuePanelProps = {
   allTracks: Track[];
   currentTrack: CurrentTrack | null;
   currentTrackDetails?: Track | null;
+  currentPlaylist?: Playlist | null;
   onRemoveFromQueue: (index: number) => void;
   onReorderQueue: (fromIndex: number, toIndex: number) => void;
   onClearQueue: () => void;
@@ -54,6 +55,7 @@ export const QueuePanel = ({
   allTracks,
   currentTrack,
   currentTrackDetails,
+  currentPlaylist,
   onRemoveFromQueue,
   onReorderQueue,
   onClearQueue,
@@ -250,6 +252,7 @@ export const QueuePanel = ({
           tracks={allTracks}
           currentTrack={currentTrackDetails}
           queuedTrackIds={queueTracks.map((track) => track.id)}
+          currentPlaylistTrackIds={currentPlaylist?.trackIds}
           onPlayTrack={onPlayTrack}
           onPlayNext={onPlayNext}
           onMixWithCurrent={onMixWithCurrent}
