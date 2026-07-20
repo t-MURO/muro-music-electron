@@ -1,6 +1,7 @@
 import { bridge } from "./bridge";
 import { emitLocal } from "./events";
 import * as mix from "./mixEngine";
+import { playWithTimeout } from "./mediaPlayback";
 import type { TransitionPlan } from "../lib/mix/plan";
 
 type CurrentTrack = {
@@ -45,6 +46,7 @@ const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
   "seekforward",
   "seekto",
 ];
+const PLAYBACK_START_TIMEOUT_MS = 8_000;
 
 const state = (): PlaybackState => ({
   is_playing: Boolean(audio && !audio.paused && !audio.ended),
@@ -274,7 +276,10 @@ const resumeTransitionPlayers = async (
 ) => {
   await mix.resumeAudioOutput();
   try {
-    await Promise.all([incoming.play(), outgoing.play()]);
+    await Promise.all([
+      playWithTimeout(incoming, PLAYBACK_START_TIMEOUT_MS, "Incoming deck playback"),
+      playWithTimeout(outgoing, PLAYBACK_START_TIMEOUT_MS, "Outgoing deck playback"),
+    ]);
   } catch (error) {
     // Never leave just one deck running after a partial resume failure.
     incoming.pause();
@@ -310,7 +315,7 @@ const playbackInvoke = async <T>(
       player.src = convertFileSrc(currentTrack.source_path);
       player.currentTime = 0;
       emitState();
-      await player.play();
+      await playWithTimeout(player, PLAYBACK_START_TIMEOUT_MS, "Track playback");
       return undefined as T;
     }
     case "playback_toggle":
@@ -318,7 +323,7 @@ const playbackInvoke = async <T>(
         if (mix.isTransitionActive() && idleEl) {
           await resumeTransitionPlayers(player, idleEl);
         } else {
-          await player.play();
+          await playWithTimeout(player, PLAYBACK_START_TIMEOUT_MS, "Track playback");
         }
       } else {
         if (mix.isTransitionActive()) {
@@ -334,7 +339,7 @@ const playbackInvoke = async <T>(
       if (mix.isTransitionActive() && idleEl && player.paused) {
         await resumeTransitionPlayers(player, idleEl);
       } else {
-        await player.play();
+        await playWithTimeout(player, PLAYBACK_START_TIMEOUT_MS, "Track playback");
       }
       return undefined as T;
     case "playback_pause": {
@@ -454,7 +459,20 @@ export const invoke = <T>(
   command: string,
   args: Record<string, unknown> = {}
 ): Promise<T> => {
-  if (command.startsWith("playback_")) return queuePlaybackInvoke<T>(command, args);
+  if (command.startsWith("playback_")) {
+    if (
+      command === "playback_play_file" ||
+      command === "playback_pause" ||
+      command === "playback_stop"
+    ) {
+      // Interrupt a pending media.play() immediately. The queued command then
+      // runs in order once the interrupted promise rejects, instead of sitting
+      // behind a browser media promise that may never settle.
+      audio?.pause();
+      idleEl?.pause();
+    }
+    return queuePlaybackInvoke<T>(command, args);
+  }
   return bridge().invoke<T>(command, args);
 };
 
