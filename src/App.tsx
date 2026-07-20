@@ -80,7 +80,7 @@ import {
   groupTracksIntoAlbums,
 } from "./utils";
 import { confirm, open, save } from "@muro/desktop/dialogs";
-import { openExternal } from "./desktop/shell";
+import { openExternal, showItemInFolder } from "./desktop/shell";
 import { isDjMixFeatureAvailable } from "./lib/mix/config";
 import type { ColumnConfig, SmartCrate, Track } from "./types";
 
@@ -353,7 +353,7 @@ function App() {
   } = useColumns({ tracks });
 
   // Context menus
-  const { closeMenu, menuPosition, menuSelection, openForRow, openMenuId } =
+  const { closeMenu, menuPosition, menuSelection, openForRow, openForSelection, openMenuId } =
     useContextMenu({
       selectedIds,
       onSelectRow: handleRowSelect,
@@ -871,10 +871,28 @@ function App() {
     [openForRow]
   );
 
+  const handleAlbumTracksContextMenu = useCallback(
+    (event: React.MouseEvent, trackIds: string[]) => {
+      openForSelection(event, trackIds);
+    },
+    [openForSelection]
+  );
+
   const handleShowBpmKey = useCallback(() => {
     openAnalysisModal(menuSelection);
     closeMenu();
   }, [menuSelection, closeMenu, openAnalysisModal]);
+
+  const handleShowInFinder = useCallback(() => {
+    const track = menuSelection.length === 1
+      ? allTracks.find((item) => item.id === menuSelection[0])
+      : undefined;
+    closeMenu();
+    if (!track) return;
+    void showItemInFolder(track.sourcePath).catch(() => {
+      notify.error("Could not show the track in Finder");
+    });
+  }, [allTracks, closeMenu, menuSelection]);
 
   const handleEdit = useCallback(() => {
     openEditModal(menuSelection);
@@ -1226,6 +1244,7 @@ function App() {
                   closeMenu();
                   handlePlaylistDrop(playlistId, trackIds);
                 }}
+                onShowInFinder={menuSelection.length === 1 ? handleShowInFinder : undefined}
                 onRemoveFromPlaylist={
                   viewConfig.type === "playlist" && viewConfig.playlist
                     ? handleRemoveMenuTracksFromPlaylist
@@ -1349,6 +1368,7 @@ function App() {
                       onAddToQueue={addToQueue}
                       onOpenArtist={(artist) => handleOpenCollectionValue("artists", artist)}
                       onOpenGenre={(genre) => handleOpenCollectionValue("genres", genre)}
+                      onTracksContextMenu={handleAlbumTracksContextMenu}
                       onImportFiles={handleEmptyImport}
                       onImportFolder={handleEmptyImportFolder}
                     />

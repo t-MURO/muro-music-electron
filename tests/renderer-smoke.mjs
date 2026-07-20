@@ -98,6 +98,7 @@ const smokeArtistProfile = {
   cacheState: "fresh",
 };
 let artistProfileScanCount = 0;
+const shownItemPaths = [];
 for (let index = 0; index < 5; index += 1) {
   writeSilentWave(smokeTracks[index].source_path);
 }
@@ -131,6 +132,9 @@ app.whenReady().then(async () => {
     if (action === "minimize") testWindow.minimize();
     if (action === "close") testWindow.close();
     return false;
+  });
+  ipcMain.handle("muro:show-item-in-folder", (_event, filePath) => {
+    shownItemPaths.push(filePath);
   });
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
     if (command === "load_tracks") return { library: smokeTracks, inbox: [] };
@@ -277,6 +281,13 @@ app.whenReady().then(async () => {
         document.querySelector('[data-playlist-import]') &&
         document.querySelector('[data-playlist-folder-import]') &&
         document.querySelector('[data-playlist-folder-create]')
+      );
+      const collectionSection = document.querySelector('[data-sidebar-section="collection"]');
+      const playlistSection = document.querySelector('[data-sidebar-section="playlists"]');
+      const playlistsUnderCollection = Boolean(
+        collectionSection &&
+        playlistSection &&
+        collectionSection.contains(playlistSection)
       );
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
@@ -566,6 +577,24 @@ app.whenReady().then(async () => {
         }));
         await new Promise((resolve) => setTimeout(resolve, 180));
         const contextMenuClosedOutside = !document.querySelector('[data-popover]');
+        firstTrackRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const showInFinderItem = document.querySelector('[data-testid="show-in-finder-menu-item"]');
+        const showInFinderReady = Boolean(
+          showInFinderItem?.textContent?.includes("Show in Finder")
+        );
+        showInFinderItem?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
@@ -804,10 +833,37 @@ app.whenReady().then(async () => {
         const albumSortOptions = albumSort instanceof HTMLSelectElement
           ? Array.from(albumSort.options, (option) => option.value)
           : [];
+        const firstAlbumCard = document.querySelector("[data-album-card]");
+        firstAlbumCard?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 220,
+          clientY: 180,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const albumCardContextMenuReady = Boolean(
+          Array.from(document.querySelectorAll("[data-popover]"), (node) => node.textContent ?? "")
+            .some((text) => text.includes("10 selected") && text.includes("Add to playlist"))
+        );
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
         document.querySelector(".album-card-open")?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
         const albumDetailReady = Boolean(document.querySelector("[data-album-detail]"));
         const albumDetailTrackCount = document.querySelectorAll("[data-album-track]").length;
+        document.querySelector("[data-album-track]")?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 300,
+          clientY: 260,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const albumTrackContextMenuReady = Boolean(
+          Array.from(document.querySelectorAll("[data-popover]"), (node) => node.textContent ?? "")
+            .some((text) => text.includes("Play next") && text.includes("Add to playlist"))
+        );
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
         document.querySelector(".album-back-button")?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         document.querySelector('[aria-label="List view"]')?.click();
@@ -972,6 +1028,7 @@ app.whenReady().then(async () => {
           playlistFolderReady,
           nestedPlaylistFolderReady,
           playlistTransferControlsReady,
+          playlistsUnderCollection,
           playlistExportMoveMenuReady,
           playlistReorderReady,
           bulkPlaylistMenuReady,
@@ -1029,11 +1086,14 @@ app.whenReady().then(async () => {
           contextMenuOpened,
           contextMenuStayedOpenInside,
           contextMenuClosedOutside,
+          showInFinderReady,
           albumsViewReady,
           albumCardCount,
           albumSortOptions,
           albumDetailReady,
           albumDetailTrackCount,
+          albumCardContextMenuReady,
+          albumTrackContextMenuReady,
           albumListReady,
           historyButtonsReady,
           historyBackEnabled,
@@ -1135,6 +1195,20 @@ app.whenReady().then(async () => {
         );
         return;
       }
+      if (!result.albumCardContextMenuReady || !result.albumTrackContextMenuReady) {
+        fail(
+          `Album context menus failed: card=${result.albumCardContextMenuReady}, ` +
+          `track=${result.albumTrackContextMenuReady}`
+        );
+        return;
+      }
+      if (!result.showInFinderReady || shownItemPaths.at(-1) !== smokeTracks[0].source_path) {
+        fail(
+          `Show in Finder failed: item=${result.showInFinderReady}, ` +
+          `revealed=${shownItemPaths.at(-1)}, expected=${smokeTracks[0].source_path}`
+        );
+        return;
+      }
       if (!result.pausedAfterSecondSpace || !result.pausedRowUsesGreyHighlight) {
         fail(
           `Pressing Space again did not pause cleanly: ` +
@@ -1225,22 +1299,29 @@ app.whenReady().then(async () => {
         !result.albumSortOptions.includes("recent") ||
         !result.albumDetailReady ||
         result.albumDetailTrackCount !== 10 ||
+        !result.albumCardContextMenuReady ||
+        !result.albumTrackContextMenuReady ||
         !result.albumListReady
       ) {
         fail(
           `Album view failed: view=${result.albumsViewReady}, cards=${result.albumCardCount}, ` +
-          `detail=${result.albumDetailReady}, tracks=${result.albumDetailTrackCount}, list=${result.albumListReady}`
+          `detail=${result.albumDetailReady}, tracks=${result.albumDetailTrackCount}, ` +
+          `cardMenu=${result.albumCardContextMenuReady}, trackMenu=${result.albumTrackContextMenuReady}, ` +
+          `list=${result.albumListReady}`
         );
         return;
       }
       if (
         !result.contextMenuOpened ||
         !result.contextMenuStayedOpenInside ||
-        !result.contextMenuClosedOutside
+        !result.contextMenuClosedOutside ||
+        !result.showInFinderReady ||
+        shownItemPaths.at(-1) !== smokeTracks[0].source_path
       ) {
         fail(
           `Context-menu dismissal failed: opened=${result.contextMenuOpened}, ` +
-          `inside=${result.contextMenuStayedOpenInside}, outside=${result.contextMenuClosedOutside}`
+          `inside=${result.contextMenuStayedOpenInside}, outside=${result.contextMenuClosedOutside}, ` +
+          `showInFinder=${result.showInFinderReady}, revealed=${shownItemPaths.at(-1)}`
         );
         return;
       }
@@ -1252,6 +1333,7 @@ app.whenReady().then(async () => {
         !result.playlistFolderReady ||
         !result.nestedPlaylistFolderReady ||
         !result.playlistTransferControlsReady ||
+        !result.playlistsUnderCollection ||
         !result.playlistExportMoveMenuReady ||
         !result.playlistReorderReady ||
         !result.bulkPlaylistMenuReady ||
@@ -1260,6 +1342,7 @@ app.whenReady().then(async () => {
         fail(
           `Playlist organization failed: folder=${result.playlistFolderReady}, ` +
           `nested=${result.nestedPlaylistFolderReady}, controls=${result.playlistTransferControlsReady}, ` +
+          `underCollection=${result.playlistsUnderCollection}, ` +
           `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}, ` +
           `bulkMenu=${result.bulkPlaylistMenuReady}, bulkDelete=${result.bulkPlaylistDeleteReady}`
         );

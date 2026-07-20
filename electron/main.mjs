@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./backend.mjs";
@@ -186,6 +187,13 @@ const startApplication = async () => {
       || url.hostname.endsWith(".fanart.tv");
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
     await shell.openExternal(url.toString());
+  });
+  ipcMain.handle("muro:show-item-in-folder", (_event, value) => {
+    const filePath = String(value || "");
+    if (!path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
+      throw new Error("Track source file does not exist");
+    }
+    shell.showItemInFolder(path.normalize(filePath));
   });
   ipcMain.handle("muro:confirm-dialog", async (_event, message, options) => {
     const result = await dialog.showMessageBox(mainWindow, {

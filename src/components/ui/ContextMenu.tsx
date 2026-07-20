@@ -1,6 +1,7 @@
 import {
   AudioWaveform,
   ChevronLeft,
+  FolderOpen,
   ListChecks,
   ListMusic,
   ListMinus,
@@ -28,6 +29,7 @@ type ContextMenuProps = {
     folderName?: string;
   }>;
   onAddToPlaylist?: (playlistId: string) => void;
+  onShowInFinder?: () => void;
   onRemoveFromPlaylist?: () => void;
   onShowBpmKey?: () => void;
   onEdit?: () => void;
@@ -44,6 +46,7 @@ export const ContextMenu = ({
   onAddToQueue,
   playlistOptions = [],
   onAddToPlaylist,
+  onShowInFinder,
   onRemoveFromPlaylist,
   onShowBpmKey,
   onEdit,
@@ -110,6 +113,12 @@ export const ContextMenu = ({
             <ListPlus className="h-4 w-4 opacity-60" />
             {t("menu.addPlaylist")}
           </PopoverItem>
+          {onShowInFinder && (
+            <PopoverItem onClick={onShowInFinder} dataTestId="show-in-finder-menu-item">
+              <FolderOpen className="h-4 w-4 opacity-60" />
+              {window.muro?.platform === "darwin" ? "Show in Finder" : "Show in folder"}
+            </PopoverItem>
+          )}
           {onRemoveFromPlaylist && (
             <PopoverItem onClick={onRemoveFromPlaylist}>
               <ListMinus className="h-4 w-4 opacity-60" />

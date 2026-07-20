@@ -32,6 +32,7 @@ type AlbumsViewProps = {
   onAddToQueue: (trackIds: string[]) => void;
   onOpenArtist: (artist: string) => void;
   onOpenGenre: (genre: string) => void;
+  onTracksContextMenu: (event: React.MouseEvent, trackIds: string[]) => void;
   onImportFiles: () => void;
   onImportFolder: () => void;
 };
@@ -80,6 +81,7 @@ const AlbumCard = ({
   isPlaying,
   onOpen,
   onPlay,
+  onContextMenu,
 }: {
   album: Album;
   layout: AlbumLayout;
@@ -87,12 +89,15 @@ const AlbumCard = ({
   isPlaying: boolean;
   onOpen: () => void;
   onPlay: () => void;
+  onContextMenu: (event: React.MouseEvent) => void;
 }) => {
   const subtitle = [album.artist, album.year].filter(Boolean).join(" · ");
   return (
     <article
       className={`album-card album-card--${layout}${isCurrentAlbum ? " album-card--current" : ""}`}
+      onContextMenu={onContextMenu}
       data-album-card={album.id}
+      data-album-context-target={album.id}
     >
       <div className="album-card-artwork-wrap">
         <button className="album-card-open" onClick={onOpen} type="button" aria-label={`Open ${album.title}`}>
@@ -132,6 +137,7 @@ const AlbumDetail = ({
   onAddToQueue,
   onOpenArtist,
   onOpenGenre,
+  onTracksContextMenu,
 }: {
   album: Album;
   currentTrackId: string | null;
@@ -144,6 +150,7 @@ const AlbumDetail = ({
   onAddToQueue: (trackIds: string[]) => void;
   onOpenArtist: (artist: string) => void;
   onOpenGenre: (genre: string) => void;
+  onTracksContextMenu: (event: React.MouseEvent, trackIds: string[]) => void;
 }) => {
   const trackIds = album.tracks.map((track) => track.id);
   const currentAlbumIsActive = album.tracks.some((track) => track.id === currentTrackId);
@@ -152,7 +159,11 @@ const AlbumDetail = ({
 
   return (
     <div className="album-detail" data-album-detail={album.id}>
-      <div className="album-detail-hero">
+      <div
+        className="album-detail-hero"
+        onContextMenu={(event) => onTracksContextMenu(event, trackIds)}
+        data-album-context-target={album.id}
+      >
         <button className="album-back-button" onClick={onBack} type="button">
           <ArrowLeft />
           <span>All albums</span>
@@ -202,6 +213,7 @@ const AlbumDetail = ({
               <button
                 className={`album-track-row${isCurrent ? " album-track-row--current" : ""}`}
                 onClick={() => onPlayTrack(track.id)}
+                onContextMenu={(event) => onTracksContextMenu(event, [track.id])}
                 type="button"
                 role="row"
                 data-album-track={track.id}
@@ -240,6 +252,7 @@ export const AlbumsView = ({
   onAddToQueue,
   onOpenArtist,
   onOpenGenre,
+  onTracksContextMenu,
   onImportFiles,
   onImportFolder,
 }: AlbumsViewProps) => {
@@ -288,6 +301,7 @@ export const AlbumsView = ({
         onAddToQueue={onAddToQueue}
         onOpenArtist={onOpenArtist}
         onOpenGenre={onOpenGenre}
+        onTracksContextMenu={onTracksContextMenu}
       />
     );
   }
@@ -344,6 +358,10 @@ export const AlbumsView = ({
                 if (album.id === currentAlbumId) onTogglePlay();
                 else onPlayAlbum(album.tracks.map((track) => track.id));
               }}
+              onContextMenu={(event) => onTracksContextMenu(
+                event,
+                album.tracks.map((track) => track.id),
+              )}
             />
           ))}
         </div>

@@ -358,19 +358,42 @@ export const Sidebar = ({
 
       {!collapsed && (
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--color-border-light)] px-3 py-4">
-          <div className="sidebar-section-label">
-            <ListMusic className="h-3.5 w-3.5" />
-            <span className="flex-1">Playlists</span>
-            <button className="toolbar-icon-button h-6 w-6" onClick={onImportPlaylist} title="Import playlist" aria-label="Import playlist" data-playlist-import type="button"><Import className="h-3.5 w-3.5" /></button>
-            <button className="toolbar-icon-button h-6 w-6" onClick={onImportPlaylistFolder} title="Import folder of playlists" aria-label="Import folder of playlists" data-playlist-folder-import type="button"><FolderInput className="h-3.5 w-3.5" /></button>
-            <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylistFolder} title="New playlist folder" aria-label="New playlist folder" data-playlist-folder-create type="button"><FolderPlus className="h-3.5 w-3.5" /></button>
-            <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylist} title="New playlist" aria-label="New playlist" type="button"><Plus className="h-3.5 w-3.5" /></button>
+          <div data-sidebar-section="collection">
+            <div className="sidebar-section-label">Collection</div>
+            <div className="space-y-1">
+              {collections.map(({ facet, label, icon: Icon }) => {
+                const collectionView = `collection:${facet}` as LibraryView;
+                return (
+                  <button
+                    key={facet}
+                    className={itemClass(currentView === collectionView)}
+                    onClick={() => onViewChange(collectionView)}
+                    data-collection-facet={facet}
+                    type="button"
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 border-t border-[var(--color-border-light)] pt-4" data-sidebar-section="playlists">
+              <div className="sidebar-section-label">
+                <ListMusic className="h-3.5 w-3.5" />
+                <span className="flex-1">Playlists</span>
+                <button className="toolbar-icon-button h-6 w-6" onClick={onImportPlaylist} title="Import playlist" aria-label="Import playlist" data-playlist-import type="button"><Import className="h-3.5 w-3.5" /></button>
+                <button className="toolbar-icon-button h-6 w-6" onClick={onImportPlaylistFolder} title="Import folder of playlists" aria-label="Import folder of playlists" data-playlist-folder-import type="button"><FolderInput className="h-3.5 w-3.5" /></button>
+                <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylistFolder} title="New playlist folder" aria-label="New playlist folder" data-playlist-folder-create type="button"><FolderPlus className="h-3.5 w-3.5" /></button>
+                <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylist} title="New playlist" aria-label="New playlist" type="button"><Plus className="h-3.5 w-3.5" /></button>
+              </div>
+              <div className="space-y-1">
+                {rootPlaylists.map((playlist) => renderPlaylist(playlist))}
+                {(childFoldersByParent.get("") ?? []).map((folder) => renderFolder(folder))}
+              </div>
+            </div>
           </div>
-          <div className="space-y-1">
-            {rootPlaylists.map((playlist) => renderPlaylist(playlist))}
-            {(childFoldersByParent.get("") ?? []).map((folder) => renderFolder(folder))}
-          </div>
-          <div className="mt-4 border-t border-[var(--color-border-light)] pt-4">
+          <div className="mt-4 border-t border-[var(--color-border-light)] pt-4" data-sidebar-section="smart-crates">
             <div className="sidebar-section-label">
               <Sparkles className="h-3.5 w-3.5" />
               <span className="flex-1">Smart Crates</span>
@@ -420,26 +443,6 @@ export const Sidebar = ({
                 Build a live playlist from BPM, key, genre, rating, and more.
               </button>
             )}
-          </div>
-          <div className="mt-4 border-t border-[var(--color-border-light)] pt-4">
-            <div className="sidebar-section-label">Collection</div>
-            <div className="space-y-1">
-              {collections.map(({ facet, label, icon: Icon }) => {
-                const collectionView = `collection:${facet}` as LibraryView;
-                return (
-                  <button
-                    key={facet}
-                    className={itemClass(currentView === collectionView)}
-                    onClick={() => onViewChange(collectionView)}
-                    data-collection-facet={facet}
-                    type="button"
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </div>
       )}
