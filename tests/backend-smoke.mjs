@@ -288,6 +288,21 @@ try {
     undefined,
     "unsupported embedded artwork should not abort an audio import",
   );
+  const validPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64",
+  );
+  const recoveredEmbeddedCover = await cacheEmbeddedCover(
+    [
+      { type: "A bright coloured fish", data: Buffer.from("not an image") },
+      { type: "Cover (front)", data: validPng },
+    ],
+    path.join(directory, "fallback-cover-cache"),
+    "fallback-cover.mp3",
+  );
+  assert.ok(recoveredEmbeddedCover, "a valid front cover should be preferred over malformed artwork");
+  assert.ok(fs.existsSync(recoveredEmbeddedCover.fullPath));
+  assert.ok(fs.existsSync(recoveredEmbeddedCover.thumbPath));
   const validImportPath = path.join(directory, "valid-import.wav");
   writeSilentWav(validImportPath);
   const validImport = await backend.invoke("import_files", {
@@ -451,11 +466,13 @@ try {
   fs.writeFileSync(alphaPlaylistPath, firstSourcePath, "utf8");
   fs.writeFileSync(betaPlaylistPath, `[playlist]\r\nFile1=${secondSourcePath}\r\n`, "utf8");
   fs.writeFileSync(gammaPlaylistPath, firstSourcePath, "utf8");
+  fs.writeFileSync(path.join(playlistBundlePath, "local-song.mp3"), "smoke audio placeholder", "utf8");
   fs.writeFileSync(path.join(playlistBundlePath, "notes.txt"), "not a playlist", "utf8");
   const playlistFolderScan = await backend.invoke("list_playlist_files", {
     directoryPath: playlistBundlePath,
   });
   assert.equal(playlistFolderScan.name, "playlist-bundle");
+  assert.equal(playlistFolderScan.audioFileCount, 1);
   assert.deepEqual(playlistFolderScan.files, [alphaPlaylistPath, betaPlaylistPath, gammaPlaylistPath]);
   assert.deepEqual(playlistFolderScan.entries, [
     { path: alphaPlaylistPath, relativePath: "alpha.m3u8", folderPath: null },
@@ -944,6 +961,7 @@ try {
 
   assert.equal((await backend.invoke("keyfinder_health", {})).service, "keyfinder-native");
   const analysisSettings = {
+    performance: "fast",
     notation: "djCombined",
     customCodes: ["1A"],
     delimiter: " / ",

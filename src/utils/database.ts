@@ -284,6 +284,7 @@ export const deletePlaylistFolder = (dbPath: string, folderId: string) =>
 
 export type PlaylistFolderImportScan = {
   name: string;
+  audioFileCount: number;
   files: string[];
   entries: Array<{
     path: string;

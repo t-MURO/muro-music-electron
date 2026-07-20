@@ -150,7 +150,10 @@ export const useFileImport = ({
         if (paths.length === 1 && onPlaylistFolderDetected) {
           try {
             const playlistScan = await listPlaylistFiles(paths[0]);
-            if (playlistScan.files.length > 0) {
+            // A normal music folder can also contain exported playlists. In that
+            // case import its songs; reserve automatic playlist-folder routing
+            // for bundles that contain playlists but no audio of their own.
+            if (playlistScan.files.length > 0 && playlistScan.audioFileCount === 0) {
               setImportProgress(null);
               await onPlaylistFolderDetected(paths[0]);
               return;

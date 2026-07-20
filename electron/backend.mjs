@@ -10,6 +10,7 @@ import {
   refreshSearchText,
 } from "./database.mjs";
 import {
+  AUDIO_EXTENSIONS,
   cacheCoverFile,
   collectAudioPaths,
   extractCoverMetadata,
@@ -227,6 +228,7 @@ const listPlaylistFilesForImport = async (directoryPath) => {
   if (!rootStats.isDirectory()) throw new Error("Playlist import path is not a directory");
 
   const files = [];
+  let audioFileCount = 0;
   const visit = async (directory) => {
     const entries = await fs.promises.readdir(directory, { withFileTypes: true });
     entries.sort((a, b) => a.name.localeCompare(b.name));
@@ -235,8 +237,10 @@ const listPlaylistFilesForImport = async (directoryPath) => {
       const entryPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         await visit(entryPath);
-      } else if (entry.isFile() && PLAYLIST_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
-        files.push(entryPath);
+      } else if (entry.isFile()) {
+        const extension = path.extname(entry.name).toLowerCase();
+        if (PLAYLIST_EXTENSIONS.has(extension)) files.push(entryPath);
+        if (AUDIO_EXTENSIONS.has(extension)) audioFileCount += 1;
       }
     }
   };
@@ -262,6 +266,7 @@ const listPlaylistFilesForImport = async (directoryPath) => {
   }
   return {
     name: path.basename(root) || root,
+    audioFileCount,
     files,
     entries,
     folders: [...folderPaths]

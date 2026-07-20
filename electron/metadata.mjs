@@ -7,7 +7,7 @@ import sharp from "sharp";
 import { TagLib } from "taglib-wasm";
 import { normalizeSearchText, openDatabase, rowToTrack } from "./database.mjs";
 
-const AUDIO_EXTENSIONS = new Set([
+export const AUDIO_EXTENSIONS = new Set([
   ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".aiff", ".aif", ".alac",
 ]);
 
@@ -64,17 +64,32 @@ export const cacheCoverBytes = async (bytes, cacheDir) => {
 export const cacheCoverFile = async (filePath, cacheDir) =>
   cacheCoverBytes(await fs.promises.readFile(filePath), cacheDir);
 
-export const cacheEmbeddedCover = async (picture, cacheDir, filePath) => {
-  if (!picture?.data) return undefined;
-  try {
-    return await cacheCoverBytes(picture.data, cacheDir);
-  } catch (error) {
-    // Malformed and uncommon embedded artwork should not make an otherwise
-    // playable audio file impossible to import. The cover can be replaced or
-    // backfilled later.
-    console.warn(`Skipping unsupported embedded artwork in ${filePath}:`, error);
-    return undefined;
+export const cacheEmbeddedCover = async (pictures, cacheDir, filePath) => {
+  const candidates = values(pictures)
+    .filter((picture) => picture?.data)
+    .map((picture, index) => ({ picture, index }))
+    .sort((left, right) => {
+      const priority = ({ picture }) => /cover\s*\(front\)|front\s*cover/i.test(String(picture.type ?? ""))
+        ? 0
+        : 1;
+      return priority(left) - priority(right) || left.index - right.index;
+    });
+  let lastError;
+  for (const { picture } of candidates) {
+    try {
+      return await cacheCoverBytes(picture.data, cacheDir);
+    } catch (error) {
+      lastError = error;
+    }
   }
+  if (lastError) {
+    // Malformed and uncommon embedded artwork should not make an otherwise
+    // playable audio file impossible to import. Keep this concise because a
+    // library import can encounter the same bad tag on many tracks.
+    const message = lastError instanceof Error ? lastError.message : String(lastError);
+    console.warn(`No usable embedded artwork in ${filePath}: ${message}`);
+  }
+  return undefined;
 };
 
 const ratingFromMetadata = (common) => {
@@ -101,8 +116,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
   const album = common.album || "Unknown Album";
   const albumArtist = common.albumartist || undefined;
   const label = first(common.label) || undefined;
-  const picture = first(common.picture);
-  const cached = await cacheEmbeddedCover(picture, cacheDir, filePath);
+  const cached = await cacheEmbeddedCover(common.picture, cacheDir, filePath);
   const now = Math.floor(Date.now() / 1000);
   const stat = await fs.promises.stat(filePath);
   const id = randomUUID();
@@ -222,9 +236,8 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
 
 export const extractCoverMetadata = async (sourcePath, cacheDir) => {
   const metadata = await parseFile(sourcePath, { skipCovers: false });
-  const picture = first(metadata.common.picture);
   return {
-    cached: picture?.data ? await cacheCoverBytes(picture.data, cacheDir) : null,
+    cached: await cacheEmbeddedCover(metadata.common.picture, cacheDir, sourcePath) ?? null,
     musicbrainz_albumid: first(metadata.common.musicbrainz_albumid) ?? null,
     musicbrainz_releasegroupid: first(metadata.common.musicbrainz_releasegroupid) ?? null,
   };
