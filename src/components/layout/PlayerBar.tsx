@@ -17,6 +17,7 @@ import { convertFileSrc } from "@muro/desktop/runtime";
 import { t } from "../../i18n";
 import { getAudioWaveform } from "../../lib/keyfinder";
 import { useLibraryStore, usePlaybackStore } from "../../stores";
+import { CastMenu } from "../player/CastMenu";
 import { WaveformSeekBar } from "../player/WaveformSeekBar";
 
 const formatTime = (seconds: number) => {
@@ -236,6 +237,7 @@ export const PlayerBar = ({
             {trackDetails?.key && <div className="font-semibold text-[var(--color-accent)]">{trackDetails.key}</div>}
           </div>
         )}
+        <CastMenu />
         <button className={controlButtonClass} onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)} title={volume > 0 ? "Mute" : "Unmute"} type="button">
           {volume > 0 ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
         </button>
