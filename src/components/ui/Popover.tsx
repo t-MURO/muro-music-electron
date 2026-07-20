@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 
 type PopoverProps = {
@@ -83,18 +90,18 @@ export const Popover = ({
   );
 };
 
-type PopoverItemProps = {
+type PopoverItemProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
   children: ReactNode;
-  onClick?: () => void;
   variant?: "default" | "danger";
   dataTestId?: string;
 };
 
 export const PopoverItem = ({
   children,
-  onClick,
   variant = "default",
   dataTestId,
+  className = "",
+  ...buttonProps
 }: PopoverItemProps) => {
   const baseClass =
     "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-100";
@@ -104,7 +111,12 @@ export const PopoverItem = ({
       : "text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]";
 
   return (
-    <button className={`${baseClass} ${variantClass}`} data-testid={dataTestId} onClick={onClick}>
+    <button
+      {...buttonProps}
+      className={`${baseClass} ${variantClass} ${className}`}
+      data-testid={dataTestId}
+      type={buttonProps.type ?? "button"}
+    >
       {children}
     </button>
   );

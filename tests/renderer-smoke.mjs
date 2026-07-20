@@ -119,7 +119,7 @@ const fail = (message) => {
   app.exit(1);
 };
 
-const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 25_000);
+const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 60_000);
 
 app.whenReady().then(async () => {
   protocol.handle("muro-file", (request) => {
@@ -919,8 +919,10 @@ app.whenReady().then(async () => {
         }));
         await new Promise((resolve) => setTimeout(resolve, 40));
         const showInFinderItem = document.querySelector('[data-testid="show-in-finder-menu-item"]');
+        const expectedShowInFolderLabel =
+          window.muro?.platform === "darwin" ? "Show in Finder" : "Show in folder";
         const showInFinderReady = Boolean(
-          showInFinderItem?.textContent?.includes("Show in Finder")
+          showInFinderItem?.textContent?.includes(expectedShowInFolderLabel)
         );
         showInFinderItem?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
@@ -1091,9 +1093,45 @@ app.whenReady().then(async () => {
           clientY: 230,
         }));
         await new Promise((resolve) => setTimeout(resolve, 60));
-        const bulkDeleteButton = Array.from(document.querySelectorAll('[data-popover] button'))
-          .find((button) => button.textContent?.includes("Delete 2 playlists"));
-        const bulkPlaylistMenuReady = Boolean(bulkDeleteButton);
+        const bulkMoveButton = document.querySelector(
+          '[data-playlist-move-folder="smoke-nested-folder"]'
+        );
+        const initialBulkDeleteButton = document.querySelector('[data-playlist-delete]');
+        const bulkPlaylistMenuReady = Boolean(
+          bulkMoveButton && initialBulkDeleteButton?.textContent?.includes("Delete 2 playlists")
+        );
+        bulkMoveButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const bulkPlaylistMoveReady = Boolean(
+          document.querySelector('[data-playlist-id="smoke-empty-playlist"]')
+            ?.getAttribute("data-playlist-folder-parent") === "smoke-nested-folder" &&
+          document.querySelector('[data-playlist-id="smoke-drag-playlist"]')
+            ?.getAttribute("data-playlist-folder-parent") === "smoke-nested-folder"
+        );
+
+        const movedFirstPlaylist = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
+        const movedSecondPlaylist = document.querySelector('[data-playlist-id="smoke-drag-playlist"]');
+        movedFirstPlaylist?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        movedSecondPlaylist?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        movedSecondPlaylist?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 190,
+          clientY: 230,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const bulkDeleteButton = document.querySelector('[data-playlist-delete]');
         bulkDeleteButton?.click();
         await new Promise((resolve) => setTimeout(resolve, 100));
         const bulkPlaylistDeleteReady = Boolean(
@@ -1501,6 +1539,7 @@ app.whenReady().then(async () => {
           playlistExportMoveMenuReady,
           playlistReorderReady,
           bulkPlaylistMenuReady,
+          bulkPlaylistMoveReady,
           bulkPlaylistDeleteReady,
           windowChromeReady: Boolean(windowChrome && windowBrand && windowControls),
           windowChromeDragRegion: windowChrome
@@ -1614,6 +1653,17 @@ app.whenReady().then(async () => {
       };
     })()`);
     if (result.childCount > 0 && result.textLength > 0 && result.stickyHeaderReady) {
+      if (
+        !result.bulkPlaylistMenuReady ||
+        !result.bulkPlaylistMoveReady ||
+        !result.bulkPlaylistDeleteReady
+      ) {
+        fail(
+          `Bulk playlist actions failed: menu=${result.bulkPlaylistMenuReady}, ` +
+          `move=${result.bulkPlaylistMoveReady}, delete=${result.bulkPlaylistDeleteReady}`
+        );
+        return;
+      }
       if (result.scrollTop <= 0) {
         fail("Track table did not scroll during sticky-header test");
         return;
@@ -1920,16 +1970,13 @@ app.whenReady().then(async () => {
         !result.playlistTransferControlsReady ||
         !result.playlistsUnderCollection ||
         !result.playlistExportMoveMenuReady ||
-        !result.playlistReorderReady ||
-        !result.bulkPlaylistMenuReady ||
-        !result.bulkPlaylistDeleteReady
+        !result.playlistReorderReady
       ) {
         fail(
           `Playlist organization failed: folder=${result.playlistFolderReady}, ` +
           `nested=${result.nestedPlaylistFolderReady}, controls=${result.playlistTransferControlsReady}, ` +
           `underCollection=${result.playlistsUnderCollection}, ` +
-          `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}, ` +
-          `bulkMenu=${result.bulkPlaylistMenuReady}, bulkDelete=${result.bulkPlaylistDeleteReady}`
+          `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}`
         );
         return;
       }

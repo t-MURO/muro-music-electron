@@ -10,6 +10,7 @@ type PlaylistContextMenuProps = {
   selectionCount?: number;
   folders?: PlaylistFolder[];
   currentFolderId?: string;
+  showRootMoveOption?: boolean;
   onExport?: () => void;
   onMoveToFolder?: (folderId: string | null) => void;
   onEdit?: () => void;
@@ -24,6 +25,7 @@ export const PlaylistContextMenu = ({
   selectionCount = 1,
   folders = [],
   currentFolderId,
+  showRootMoveOption = false,
   onExport,
   onMoveToFolder,
   onEdit,
@@ -49,14 +51,14 @@ export const PlaylistContextMenu = ({
           Export playlist
         </PopoverItem>
       )}
-      {onMoveToFolder && (folders.length > 0 || currentFolderId) && (
+      {onMoveToFolder && (folders.length > 0 || showRootMoveOption) && (
         <>
           <PopoverDivider />
           <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted)]">
             Move to
           </div>
-          {currentFolderId && (
-            <PopoverItem onClick={() => onMoveToFolder(null)}>
+          {showRootMoveOption && (
+            <PopoverItem onClick={() => onMoveToFolder(null)} data-playlist-move-root>
               <FolderInput className="h-4 w-4 opacity-60" />
               Playlists
             </PopoverItem>
@@ -64,7 +66,11 @@ export const PlaylistContextMenu = ({
           {folders
             .filter((folder) => folder.id !== currentFolderId)
             .map((folder) => (
-              <PopoverItem key={folder.id} onClick={() => onMoveToFolder(folder.id)}>
+              <PopoverItem
+                key={folder.id}
+                onClick={() => onMoveToFolder(folder.id)}
+                data-playlist-move-folder={folder.id}
+              >
                 <FolderInput className="h-4 w-4 opacity-60" />
                 <span className="truncate">{folder.name}</span>
               </PopoverItem>
@@ -72,7 +78,7 @@ export const PlaylistContextMenu = ({
         </>
       )}
       <PopoverDivider />
-      <PopoverItem variant="danger" onClick={onDelete}>
+      <PopoverItem variant="danger" onClick={onDelete} data-playlist-delete>
         <Trash2 className="h-4 w-4 opacity-70" />
         {selectionCount > 1 ? `Delete ${selectionCount} playlists` : t("menu.delete")}
       </PopoverItem>

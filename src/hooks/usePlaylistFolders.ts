@@ -4,7 +4,6 @@ import {
   createPlaylistFolder as createPlaylistFolderInDatabase,
   deletePlaylistFolder as deletePlaylistFolderInDatabase,
   reorderPlaylists as reorderPlaylistsInDatabase,
-  updatePlaylist,
   updatePlaylistFolder as updatePlaylistFolderInDatabase,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
@@ -110,25 +109,50 @@ export const usePlaylistFolders = () => {
     }
   }, [playlistFolders, resolveDbPath, setPlaylistFolders, setPlaylists]);
 
-  const movePlaylist = useCallback(async (
-    playlistId: string,
+  const movePlaylists = useCallback(async (
+    playlistIds: string[],
     folderId: string | null,
   ) => {
+    const selectedIds = new Set(playlistIds);
+    const playlistsById = new Map(playlists.map((playlist) => [playlist.id, playlist]));
+    const selected = playlistIds.flatMap((playlistId) => {
+      const playlist = playlistsById.get(playlistId);
+      return playlist ? [playlist] : [];
+    });
+    if (selected.length === 0) return false;
     try {
-      const dbPath = await resolveDbPath();
-      const sortOrder = playlists
-        .filter((playlist) => (playlist.folderId ?? null) === folderId && playlist.id !== playlistId)
+      let nextSortOrder = playlists
+        .filter((playlist) => (
+          (playlist.folderId ?? null) === folderId && !selectedIds.has(playlist.id)
+        ))
         .reduce((highest, playlist) => Math.max(highest, playlist.sortOrder), -1) + 1;
-      await updatePlaylist(dbPath, playlistId, { folderId, sortOrder });
-      setPlaylists((current) => current.map((playlist) =>
-        playlist.id === playlistId
-          ? { ...playlist, folderId: folderId ?? undefined, sortOrder }
-          : playlist
-      ));
-      notify.success(folderId ? "Moved playlist to folder" : "Moved playlist to Playlists");
+      const moved = selected.map((playlist) => ({
+        ...playlist,
+        folderId: folderId ?? undefined,
+        sortOrder: nextSortOrder++,
+      }));
+      const movedById = new Map(moved.map((playlist) => [playlist.id, {
+        folderId: playlist.folderId,
+        sortOrder: playlist.sortOrder,
+      }]));
+      const dbPath = await resolveDbPath();
+      await reorderPlaylistsInDatabase(
+        dbPath,
+        moved.map((playlist) => ({
+          id: playlist.id,
+          folderId: playlist.folderId,
+          sortOrder: playlist.sortOrder,
+        })),
+      );
+      setPlaylists((current) => current.map((playlist) => {
+        const movedFields = movedById.get(playlist.id);
+        return movedFields ? { ...playlist, ...movedFields } : playlist;
+      }));
+      const subject = moved.length === 1 ? "playlist" : `${moved.length} playlists`;
+      notify.success(folderId ? `Moved ${subject} to folder` : `Moved ${subject} to Playlists`);
       return true;
     } catch {
-      notify.error("Failed to move playlist");
+      notify.error(selected.length === 1 ? "Failed to move playlist" : "Failed to move playlists");
       return false;
     }
   }, [playlists, resolveDbPath, setPlaylists]);
@@ -192,5 +216,11 @@ export const usePlaylistFolders = () => {
     }
   }, [playlists, resolveDbPath, setPlaylists]);
 
-  return { createFolder, renameFolder, removeFolder, movePlaylist, reorderPlaylist };
+  return {
+    createFolder,
+    renameFolder,
+    removeFolder,
+    movePlaylists,
+    reorderPlaylist,
+  };
 };

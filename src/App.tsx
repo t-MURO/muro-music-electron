@@ -684,8 +684,20 @@ function App() {
     if (!selectedPlaylistIds.has(playlistMenuId)) {
       return playlistMenuTarget ? [playlistMenuTarget] : [];
     }
-    return playlists.filter((playlist) => selectedPlaylistIds.has(playlist.id));
+    const selected: typeof playlists = [];
+    for (const playlistId of selectedPlaylistIds) {
+      const playlist = playlists.find((candidate) => candidate.id === playlistId);
+      if (playlist) selected.push(playlist);
+    }
+    return selected;
   }, [playlistMenuId, playlistMenuTarget, playlists, selectedPlaylistIds]);
+  const playlistMenuCommonFolderId = useMemo(() => {
+    if (playlistMenuSelection.length === 0) return undefined;
+    const folderIds = new Set(playlistMenuSelection.map((playlist) => playlist.folderId ?? ""));
+    if (folderIds.size !== 1) return undefined;
+    const folderId = [...folderIds][0];
+    return folderId || undefined;
+  }, [playlistMenuSelection]);
   const folderMenuTarget = useMemo(
     () => playlistFolders.find((folder) => folder.id === folderMenu?.folderId) ?? null,
     [folderMenu?.folderId, playlistFolders],
@@ -728,7 +740,13 @@ function App() {
     currentView: view,
     navigateToView,
   });
-  const { createFolder, renameFolder, removeFolder, movePlaylist, reorderPlaylist } = usePlaylistFolders();
+  const {
+    createFolder,
+    renameFolder,
+    removeFolder,
+    movePlaylists,
+    reorderPlaylist,
+  } = usePlaylistFolders();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
@@ -1119,10 +1137,11 @@ function App() {
   }, [closePlaylistMenu, exportPlaylist, playlistMenuTarget]);
 
   const handleMovePlaylist = useCallback((folderId: string | null) => {
-    if (!playlistMenuTarget || playlistMenuSelection.length !== 1) return;
+    const ids = playlistMenuSelection.map((playlist) => playlist.id);
+    if (ids.length === 0) return;
     closePlaylistMenu();
-    void movePlaylist(playlistMenuTarget.id, folderId);
-  }, [closePlaylistMenu, movePlaylist, playlistMenuSelection.length, playlistMenuTarget]);
+    void movePlaylists(ids, folderId);
+  }, [closePlaylistMenu, movePlaylists, playlistMenuSelection]);
 
   const handleFolderCreateSubmit = useCallback(async () => {
     if (await createFolder(folderCreateName)) {
@@ -1443,9 +1462,10 @@ function App() {
                 onExport={playlistMenuSelection.length === 1
                   ? () => { void handlePlaylistMenuExport(); }
                   : undefined}
-                folders={playlistMenuSelection.length === 1 ? playlistFolderOptions : []}
-                currentFolderId={playlistMenuTarget?.folderId}
-                onMoveToFolder={playlistMenuSelection.length === 1 ? handleMovePlaylist : undefined}
+                folders={playlistMenuSelection.length > 0 ? playlistFolderOptions : []}
+                currentFolderId={playlistMenuCommonFolderId}
+                showRootMoveOption={playlistMenuSelection.some((playlist) => playlist.folderId)}
+                onMoveToFolder={playlistMenuSelection.length > 0 ? handleMovePlaylist : undefined}
                 onDelete={handlePlaylistMenuDelete}
               />
               <PlaylistContextMenu
