@@ -29,6 +29,27 @@ no Cast device was available, so its exit criteria move to first manual test:
   firewall prompt, load/seek/volume on a real receiver), Windows packaging
   smoke, and any allowlist expansion that testing justifies.
 
+## DLNA/UPnP output (2026-07-21, branch `feature/dlna-renderer`)
+
+The same architecture now drives DLNA MediaRenderers, and unlike the Cast
+path this one is **verified end-to-end on real hardware** (a Denon AVR-S760H
+on the development network): SSDP discovery, tokenized LAN streaming,
+playback, range-request seeking, and stop, via `tests/manual/dlna-spike.mjs`.
+
+- `electron/dlna/` mirrors `electron/cast/`: SSDP discovery with
+  device-description parsing (embedded renderers such as HEOS included), a
+  dependency-free SOAP AVTransport/RenderingControl client with DIDL-Lite
+  metadata, and a `dlna_*` session service with `DLNA_*` error codes.
+- The tokenized media server is shared (`electron/lanMediaServer.mjs`) and
+  answers DLNA.ORG probe headers.
+- The renderer has one remote-output layer (`remoteOutputStore`/`Api`/
+  `Controller`, `OutputMenu`): Cast and DLNA devices appear in the same
+  picker with protocol badges, and playback routes through whichever
+  protocol owns the session.
+- Real-device behaviors encoded from testing: wait for the URI to register
+  before `Play`, and ignore the empty transport states busy renderers report.
+- `npm run test:dlna` covers the client, discovery parsing, and service flows.
+
 ## Executive summary
 
 Chromecast support is feasible, but it is not equivalent to selecting a different local audio output. A Cast receiver does not consume the audio that Muro is already playing. It receives a media URL from Muro and then fetches and plays that URL itself.
