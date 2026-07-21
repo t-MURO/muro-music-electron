@@ -975,9 +975,23 @@ input:focus-visible,
 
 .library-command-bar-inner {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(210px, 272px) 72px;
+  grid-template-columns: minmax(240px, 1fr) minmax(250px, 320px) 72px;
   gap: 16px;
   justify-content: stretch;
+}
+
+.command-search-group {
+  display: flex;
+  width: 100%;
+  max-width: 320px;
+  align-items: center;
+  gap: 6px;
+}
+
+.command-search-group .command-search-shell {
+  min-width: 0;
+  max-width: none;
+  flex: 1;
 }
 
 .command-search-shell {
@@ -1022,7 +1036,7 @@ input:focus-visible,
 
 @media (max-width: 1180px) {
   .library-command-bar-inner {
-    grid-template-columns: minmax(110px, 1fr) minmax(160px, 240px) 72px;
+    grid-template-columns: minmax(110px, 1fr) minmax(200px, 280px) 72px;
     gap: 8px;
     justify-content: stretch;
   }

@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ColumnConfig } from "../types";
 import type { PlaylistDropOperation } from "../hooks/useFileImport";
+import {
+  DEFAULT_ADVANCED_TRACK_FILTERS,
+  type AdvancedTrackFilters,
+} from "../utils/trackFilters";
 
 export type SortState = {
   key: ColumnConfig["key"];
@@ -22,6 +26,7 @@ type UIState = {
 
   // Search
   searchQuery: string;
+  advancedTrackFilters: AdvancedTrackFilters;
 
   // Modals
   analysisTrackIds: string[];
@@ -60,6 +65,10 @@ type UIActions = {
 
   // Search
   setSearchQuery: (query: string) => void;
+  setAdvancedTrackFilters: (
+    filters: AdvancedTrackFilters | ((current: AdvancedTrackFilters) => AdvancedTrackFilters),
+  ) => void;
+  resetAdvancedTrackFilters: () => void;
 
   // Analysis modal
   openAnalysisModal: (trackIds: string[]) => void;
@@ -98,6 +107,7 @@ export const useUIStore = create<UIStore>()(persist((set, get) => ({
   sortViewKey: "library",
   sortStates: {},
   searchQuery: "",
+  advancedTrackFilters: { ...DEFAULT_ADVANCED_TRACK_FILTERS },
   analysisTrackIds: [],
   isAnalysisModalMinimized: false,
   editTrackIds: [],
@@ -179,6 +189,14 @@ export const useUIStore = create<UIStore>()(persist((set, get) => ({
 
   // Search
   setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setAdvancedTrackFilters: (filters) => set((state) => ({
+    advancedTrackFilters: typeof filters === "function"
+      ? filters(state.advancedTrackFilters)
+      : filters,
+  })),
+  resetAdvancedTrackFilters: () => set({
+    advancedTrackFilters: { ...DEFAULT_ADVANCED_TRACK_FILTERS, missingMetadata: [] },
+  }),
 
   // Analysis Modal
   openAnalysisModal: (trackIds) => set({

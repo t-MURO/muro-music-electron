@@ -20,6 +20,17 @@ export {
   type TransitionStatePayload,
 } from "./playbackApi";
 export { matchesSearchQuery, filterTracksBySearch } from "./search";
+export {
+  DEFAULT_ADVANCED_TRACK_FILTERS,
+  countAdvancedTrackFilters,
+  filterTracksAdvanced,
+  listTrackFormats,
+  matchesAdvancedTrackFilters,
+  trackFormat,
+  type AdvancedTrackFilters,
+  type MissingMetadataField,
+  type TrackAnalysisFilter,
+} from "./trackFilters";
 export { getPathForView } from "./viewRouting";
 export {
   filterAlbumsBySearch,

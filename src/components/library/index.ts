@@ -1,4 +1,5 @@
 export { ColumnsMenu } from "./ColumnsMenu";
+export { AdvancedFilterPopover } from "./AdvancedFilterPopover";
 export { InboxBanner } from "./InboxBanner";
 export { PlaylistSelectionBar } from "./PlaylistSelectionBar";
 export { RatingCell } from "./RatingCell";

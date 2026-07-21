@@ -80,6 +80,9 @@ import {
   compareSortValues,
   getSortableValue,
   filterTracksBySearch,
+  filterTracksAdvanced,
+  countAdvancedTrackFilters,
+  listTrackFormats,
   filterAlbumsBySearch,
   groupTracksIntoAlbums,
 } from "./utils";
@@ -167,6 +170,7 @@ function App() {
   const selectedIds = useUIStore((s) => s.selectedIds);
   const sortState = useUIStore((s) => s.sortState);
   const searchQuery = useUIStore((s) => s.searchQuery);
+  const advancedTrackFilters = useUIStore((s) => s.advancedTrackFilters);
   const importProgress = useUIStore((s) => s.importProgress);
   const pendingPlaylistDrop = useUIStore((s) => s.pendingPlaylistDrop);
   const isPlaylistModalOpen = useUIStore((s) => s.isPlaylistModalOpen);
@@ -175,6 +179,8 @@ function App() {
   const activateSortView = useUIStore((s) => s.activateSortView);
   const toggleSort = useUIStore((s) => s.toggleSort);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
+  const setAdvancedTrackFilters = useUIStore((s) => s.setAdvancedTrackFilters);
+  const resetAdvancedTrackFilters = useUIStore((s) => s.resetAdvancedTrackFilters);
   const openPlaylistModal = useUIStore((s) => s.openPlaylistModal);
   const closePlaylistModal = useUIStore((s) => s.closePlaylistModal);
   const setPlaylistModalName = useUIStore((s) => s.setPlaylistModalName);
@@ -342,10 +348,21 @@ function App() {
     notify.success("Artist picture updated");
   }, [selectArtistProfileImage]);
 
-  // Apply search filter
+  const filterFormats = useMemo(
+    () => listTrackFormats(displayedTracks),
+    [displayedTracks],
+  );
+  const activeTrackFilterCount = useMemo(
+    () => countAdvancedTrackFilters(advancedTrackFilters),
+    [advancedTrackFilters],
+  );
+
+  // Apply text search first, then the structured track filters.
   const filteredTracks = useMemo(() => {
-    return filterTracksBySearch(displayedTracks, searchQuery);
-  }, [displayedTracks, searchQuery]);
+    const searchResults = filterTracksBySearch(displayedTracks, searchQuery);
+    return filterTracksAdvanced(searchResults, advancedTrackFilters);
+  }, [advancedTrackFilters, displayedTracks, searchQuery]);
+  const hasTrackSearchFilters = searchQuery.trim().length > 0 || activeTrackFilterCount > 0;
 
   const sortedTracks = useMemo(() => {
     if (!sortState) {
@@ -1507,6 +1524,10 @@ function App() {
                   resultCount={isArtistIndex ? artistIndexResults.length : collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
+                  advancedFilters={advancedTrackFilters}
+                  filterFormats={filterFormats}
+                  onAdvancedFiltersChange={setAdvancedTrackFilters}
+                  onAdvancedFiltersReset={resetAdvancedTrackFilters}
                   onShowColumns={openColumnsMenu}
                   contentMode={isArtistIndex || collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
                   resultLabel={isArtistIndex ? "artists" : collectionIndexFacet ?? undefined}
@@ -1604,36 +1625,36 @@ function App() {
                           tracks={sortedTracks}
                           columns={columns}
                           emptyTitle={
-                            searchQuery && sortedTracks.length === 0
+                            hasTrackSearchFilters && sortedTracks.length === 0
                               ? t("search.noResults")
                               : viewConfig.trackTable.emptyState.title
                           }
                           emptyDescription={
-                            searchQuery && sortedTracks.length === 0
+                            hasTrackSearchFilters && sortedTracks.length === 0
                               ? ""
                               : viewConfig.trackTable.emptyState.description
                           }
                           emptyActionLabel={
-                            searchQuery && sortedTracks.length === 0
+                            hasTrackSearchFilters && sortedTracks.length === 0
                               ? undefined
                               : viewConfig.trackTable.emptyState.primaryAction
                                   ?.label
                           }
                           onEmptyAction={
-                            searchQuery && sortedTracks.length === 0
+                            hasTrackSearchFilters && sortedTracks.length === 0
                               ? undefined
                               : viewConfig.trackTable.showImportActions
                                 ? handleEmptyImport
                                 : undefined
                           }
                           emptySecondaryActionLabel={
-                            searchQuery && sortedTracks.length === 0
+                            hasTrackSearchFilters && sortedTracks.length === 0
                               ? undefined
                               : viewConfig.trackTable.emptyState.secondaryAction
                                   ?.label
                           }
                           onEmptySecondaryAction={
-                            searchQuery && sortedTracks.length === 0
+                            hasTrackSearchFilters && sortedTracks.length === 0
                               ? undefined
                               : viewConfig.trackTable.showImportActions
                                 ? handleEmptyImportFolder
