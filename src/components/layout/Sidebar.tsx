@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { t } from "../../i18n";
+import { useStickyState } from "../../hooks/useStickyState";
 import { useLibraryStore, useSmartCrateStore } from "../../stores";
 import { filterTracksBySmartCrate } from "../../utils";
 import type { CollectionFacet, LibraryView } from "../../hooks";
@@ -57,6 +58,18 @@ type SidebarProps = {
   onDeleteSmartCrate: (id: string) => void;
 };
 
+const parseCollapsedPlaylistFolders = (raw: string) => {
+  const parsed: unknown = JSON.parse(raw);
+  return new Set(
+    Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string")
+      : [],
+  );
+};
+
+const serializeCollapsedPlaylistFolders = (folderIds: Set<string>) =>
+  JSON.stringify([...folderIds]);
+
 export const Sidebar = ({
   collapsed,
   currentView,
@@ -84,7 +97,14 @@ export const Sidebar = ({
   const inboxTracks = useLibraryStore((state) => state.inboxTracks);
   const playlists = useLibraryStore((state) => state.playlists);
   const playlistFolders = useLibraryStore((state) => state.playlistFolders);
-  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(() => new Set());
+  const [collapsedFolderIds, setCollapsedFolderIds] = useStickyState(
+    "muro-collapsed-playlist-folders",
+    new Set<string>(),
+    {
+      parse: parseCollapsedPlaylistFolders,
+      serialize: serializeCollapsedPlaylistFolders,
+    },
+  );
   const [playlistSelectionAnchorId, setPlaylistSelectionAnchorId] = useState<string | null>(null);
   const [reorderingPlaylistId, setReorderingPlaylistId] = useState<string | null>(null);
   const [reorderTarget, setReorderTarget] = useState<{

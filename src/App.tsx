@@ -161,6 +161,7 @@ function App() {
   const isPlaylistModalOpen = useUIStore((s) => s.isPlaylistModalOpen);
   const playlistModalName = useUIStore((s) => s.playlistModalName);
   const selectTrack = useUIStore((s) => s.selectTrack);
+  const activateSortView = useUIStore((s) => s.activateSortView);
   const toggleSort = useUIStore((s) => s.toggleSort);
   const setSearchQuery = useUIStore((s) => s.setSearchQuery);
   const openPlaylistModal = useUIStore((s) => s.openPlaylistModal);
@@ -191,6 +192,10 @@ function App() {
     },
     [navigate]
   );
+
+  useEffect(() => {
+    activateSortView(view);
+  }, [activateSortView, view]);
 
   const isAlbumsView = view === "collection:albums";
   const collectionFilterValue = collectionMatch?.params.facet

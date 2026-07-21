@@ -20,6 +20,13 @@ const DEFAULT_CUSTOM_CODES = [
   "5B", "2A", "12B", "9A", "7B", "4A", "2B", "11A", "9B", "6A", "4B", "1A", "",
 ];
 
+const DEFAULT_ANALYSIS_OUTPUTS: AnalysisOutputs = {
+  comment: "none",
+  grouping: "none",
+  initialKey: "none",
+  bpm: "none",
+};
+
 type SettingsState = {
   theme: string;
   locale: Locale;
@@ -82,12 +89,7 @@ export const useSettingsStore = create<SettingsStore>()(
       analysisNotation: "custom",
       analysisCustomCodes: [...DEFAULT_CUSTOM_CODES],
       analysisDelimiter: " - ",
-      analysisOutputs: {
-        comment: "none",
-        grouping: "none",
-        initialKey: "none",
-        bpm: "none",
-      },
+      analysisOutputs: { ...DEFAULT_ANALYSIS_OUTPUTS },
       analysisPerformance: "stable",
       lastDeleteMode: "library",
       djMixEnabled: false,
@@ -142,10 +144,14 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "muro-settings",
+      version: 1,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
         seekMode: state.seekMode,
+        dbPath: state.dbPath,
+        dbFileName: state.dbFileName,
+        useAutoDbPath: state.useAutoDbPath,
         analysisNotation: state.analysisNotation,
         analysisCustomCodes: state.analysisCustomCodes,
         analysisDelimiter: state.analysisDelimiter,
@@ -162,6 +168,31 @@ export const useSettingsStore = create<SettingsStore>()(
         audioOutputDeviceId: state.audioOutputDeviceId,
         audioOutputDeviceLabel: state.audioOutputDeviceLabel,
       }),
+      migrate: (persistedState) => persistedState,
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState && typeof persistedState === "object"
+          ? persistedState as Partial<SettingsState>
+          : {};
+        const savedCustomCodes = Array.isArray(persisted.analysisCustomCodes)
+          ? persisted.analysisCustomCodes
+          : [];
+
+        return {
+          ...currentState,
+          ...persisted,
+          // Analysis settings are a nested group. Merge them with their defaults so
+          // settings written by older versions cannot discard newer Key/BPM fields.
+          analysisCustomCodes: DEFAULT_CUSTOM_CODES.map((fallback, index) =>
+            typeof savedCustomCodes[index] === "string"
+              ? savedCustomCodes[index]
+              : fallback
+          ),
+          analysisOutputs: {
+            ...DEFAULT_ANALYSIS_OUTPUTS,
+            ...(persisted.analysisOutputs ?? {}),
+          },
+        };
+      },
       onRehydrateStorage: () => (state) => {
         if (state) {
           // Apply theme on rehydrate
