@@ -33,6 +33,7 @@ export {
   EditTrackModal,
   MetadataSearchModal,
   AlbumMetadataSearchModal,
+  AcoustIdModal,
   ArtistImageModal,
   PlaylistContextMenu,
   PlaylistCreateModal,

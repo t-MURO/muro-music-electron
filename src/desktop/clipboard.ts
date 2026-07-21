@@ -8,3 +8,5 @@ export type CachedClipboardCover = {
 export const clipboardHasImage = () => bridge().clipboardHasImage();
 
 export const cacheClipboardCoverArt = () => bridge().cacheClipboardCoverArt();
+
+export const copyImageToClipboard = (filePath: string) => bridge().copyImageToClipboard(filePath);

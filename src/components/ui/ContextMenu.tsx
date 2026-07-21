@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   DatabaseZap,
   FolderOpen,
+  Fingerprint,
   ListChecks,
   ListMusic,
   ListMinus,
@@ -35,6 +36,7 @@ type ContextMenuProps = {
   onShowBpmKey?: () => void;
   onSearchMetadata?: () => void;
   onSearchAlbumMetadata?: () => void;
+  onIdentifyWithAcoustId?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onClose: () => void;
@@ -54,6 +56,7 @@ export const ContextMenu = ({
   onShowBpmKey,
   onSearchMetadata,
   onSearchAlbumMetadata,
+  onIdentifyWithAcoustId,
   onEdit,
   onDelete,
   onClose,
@@ -145,6 +148,12 @@ export const ContextMenu = ({
             <PopoverItem onClick={onSearchAlbumMetadata} dataTestId="search-album-metadata-menu-item">
               <DatabaseZap className="h-4 w-4 opacity-60" />
               Search for album metadata
+            </PopoverItem>
+          )}
+          {onIdentifyWithAcoustId && (
+            <PopoverItem onClick={onIdentifyWithAcoustId} dataTestId="identify-acoustid-menu-item">
+              <Fingerprint className="h-4 w-4 opacity-60" />
+              Identify with AcoustID
             </PopoverItem>
           )}
           <PopoverItem onClick={onEdit}>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, nativeImage, protocol, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -127,6 +127,9 @@ const startApplication = async () => {
     artistProfileCacheDir: path.join(app.getPath("userData"), "artists"),
     emit: (sender, name, payload) => sender.send("muro:event", name, payload),
     keyFinder,
+    fpcalcBinaryDirectories: app.isPackaged
+      ? [path.join(process.resourcesPath, "fpcalc")]
+      : [path.join(appRoot, "build", "fpcalc")],
   });
 
   ipcMain.handle("muro:invoke", (event, command, args) =>
@@ -138,6 +141,12 @@ const startApplication = async () => {
     const image = clipboard.readImage();
     if (image.isEmpty()) return null;
     return backend.invoke("cache_cover_art_from_bytes", { bytes: image.toPNG() });
+  });
+  ipcMain.handle("muro:copy-image-to-clipboard", (_event, filePath) => {
+    const image = nativeImage.createFromPath(String(filePath ?? ""));
+    if (image.isEmpty()) throw new Error("The cover art could not be read");
+    clipboard.writeImage(image);
+    return true;
   });
   ipcMain.handle("muro:window-is-maximized", (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -190,6 +199,8 @@ const startApplication = async () => {
       || url.hostname === "www.last.fm"
       || url.hostname === "www.theaudiodb.com"
       || url.hostname === "fanart.tv"
+      || url.hostname === "acoustid.org"
+      || url.hostname.endsWith(".acoustid.org")
       || url.hostname.endsWith(".fanart.tv");
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
     await shell.openExternal(url.toString());

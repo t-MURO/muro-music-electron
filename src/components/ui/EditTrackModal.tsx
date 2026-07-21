@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import { invoke } from "@muro/desktop/runtime";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
-import { ClipboardPaste, Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
+import { ClipboardCopy, ClipboardPaste, Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
 import { t } from "../../i18n";
 import { notify } from "../../stores";
 import type { Track, TrackMetadataUpdates } from "../../types";
-import { cacheClipboardCoverArt, clipboardHasImage } from "../../desktop/clipboard";
+import { cacheClipboardCoverArt, clipboardHasImage, copyImageToClipboard } from "../../desktop/clipboard";
 import { Popover, PopoverHeader, PopoverItem } from "./Popover";
 
 type FetchedCoverArt = {
@@ -243,6 +243,18 @@ export const EditTrackModal = ({
       setIsPastingCover(false);
     }
   }, [isPastingCover, updateField]);
+
+  const handleCopyCoverArt = useCallback(async () => {
+    const coverArtPath = form.coverArtPath;
+    if (!coverArtPath) return;
+    setCoverMenuPosition(null);
+    try {
+      await copyImageToClipboard(coverArtPath);
+      notify.success(t("edit.coverArtCopied"));
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("edit.coverArtCopyFailed"));
+    }
+  }, [form.coverArtPath]);
 
   const handleRatingClick = useCallback(
     (event: React.MouseEvent, star: number) => {
@@ -553,6 +565,15 @@ export const EditTrackModal = ({
           onClose={() => setCoverMenuPosition(null)}
         >
           <PopoverHeader>{t("edit.coverArtMenu")}</PopoverHeader>
+          <PopoverItem
+            onClick={() => { void handleCopyCoverArt(); }}
+            disabled={!form.coverArtPath}
+            className="disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            dataTestId="copy-cover-art-menu-item"
+          >
+            <ClipboardCopy className="h-4 w-4 opacity-60" />
+            {t("edit.copyCoverArt")}
+          </PopoverItem>
           <PopoverItem
             onClick={() => { void handlePasteCoverArt(); }}
             disabled={!clipboardImageAvailable || isPastingCover}

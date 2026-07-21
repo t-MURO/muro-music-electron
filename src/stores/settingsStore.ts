@@ -67,6 +67,7 @@ type SettingsState = {
   lastFmApiKey: string;
   theAudioDbApiKey: string;
   fanartApiKey: string;
+  acoustIdClientKey: string;
   audioOutputDeviceId: string;
   audioOutputDeviceLabel: string;
 };
@@ -91,6 +92,7 @@ type SettingsActions = {
   setLastFmApiKey: (lastFmApiKey: string) => void;
   setTheAudioDbApiKey: (theAudioDbApiKey: string) => void;
   setFanartApiKey: (fanartApiKey: string) => void;
+  setAcoustIdClientKey: (acoustIdClientKey: string) => void;
   setAudioOutputDevice: (deviceId: string, label: string) => void;
 };
 
@@ -119,6 +121,7 @@ export const useSettingsStore = create<SettingsStore>()(
       lastFmApiKey: "",
       theAudioDbApiKey: "",
       fanartApiKey: "",
+      acoustIdClientKey: "",
       audioOutputDeviceId: "",
       audioOutputDeviceLabel: "",
 
@@ -157,6 +160,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setLastFmApiKey: (lastFmApiKey) => set({ lastFmApiKey }),
       setTheAudioDbApiKey: (theAudioDbApiKey) => set({ theAudioDbApiKey }),
       setFanartApiKey: (fanartApiKey) => set({ fanartApiKey }),
+      setAcoustIdClientKey: (acoustIdClientKey) => set({ acoustIdClientKey }),
       setAudioOutputDevice: (audioOutputDeviceId, audioOutputDeviceLabel) =>
         set({ audioOutputDeviceId, audioOutputDeviceLabel }),
     }),
@@ -183,6 +187,7 @@ export const useSettingsStore = create<SettingsStore>()(
         lastFmApiKey: state.lastFmApiKey,
         theAudioDbApiKey: state.theAudioDbApiKey,
         fanartApiKey: state.fanartApiKey,
+        acoustIdClientKey: state.acoustIdClientKey,
         audioOutputDeviceId: state.audioOutputDeviceId,
         audioOutputDeviceLabel: state.audioOutputDeviceLabel,
       }),

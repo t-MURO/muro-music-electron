@@ -41,6 +41,7 @@ export type ImportedTrack = {
   musicbrainz_trackid?: string;
   musicbrainz_albumid?: string;
   musicbrainz_releasegroupid?: string;
+  acoustid_id?: string;
 };
 
 export type LibrarySnapshot = {
@@ -156,4 +157,5 @@ export const importedTrackToTrack = (imported: ImportedTrack): Track => ({
   musicBrainzTrackId: imported.musicbrainz_trackid,
   musicBrainzAlbumId: imported.musicbrainz_albumid,
   musicBrainzReleaseGroupId: imported.musicbrainz_releasegroupid,
+  acoustIdId: imported.acoustid_id,
 });

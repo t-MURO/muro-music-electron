@@ -39,6 +39,7 @@ const TRACK_SCHEMA = `
     musicbrainz_releasetrackid TEXT,
     musicbrainz_albumstatus TEXT,
     musicbrainz_albumtype TEXT,
+    acoustid_id TEXT,
     source_path TEXT UNIQUE NOT NULL,
     search_text TEXT,
     import_status TEXT NOT NULL DEFAULT 'staged',
@@ -112,6 +113,21 @@ const ALBUM_COVER_CACHE_SCHEMA = `
     ON album_cover_cache(fetched_at DESC);
 `;
 
+const ACOUSTID_CACHE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS acoustid_fingerprints (
+    track_id TEXT PRIMARY KEY REFERENCES tracks(id) ON DELETE CASCADE,
+    source_mtime_ms REAL NOT NULL,
+    source_size INTEGER NOT NULL,
+    duration_seconds INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    result_json TEXT,
+    looked_up_at INTEGER,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS acoustid_fingerprints_looked_up_idx
+    ON acoustid_fingerprints(looked_up_at DESC);
+`;
+
 const REQUIRED_TRACK_COLUMNS = {
   album_artist: "TEXT",
   genre_json: "TEXT",
@@ -136,6 +152,7 @@ const REQUIRED_TRACK_COLUMNS = {
   musicbrainz_releasetrackid: "TEXT",
   musicbrainz_albumstatus: "TEXT",
   musicbrainz_albumtype: "TEXT",
+  acoustid_id: "TEXT",
   source_path: "TEXT",
   search_text: "TEXT",
   import_status: "TEXT DEFAULT 'staged'",
@@ -174,6 +191,7 @@ export const openDatabase = (dbPath) => {
   db.exec(PLAYLIST_SCHEMA);
   db.exec(ARTIST_PROFILE_SCHEMA);
   db.exec(ALBUM_COVER_CACHE_SCHEMA);
+  db.exec(ACOUSTID_CACHE_SCHEMA);
   const playlistColumns = new Set(
     db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
   );
@@ -293,6 +311,10 @@ export const rowToTrack = (row) => ({
   last_played_at: row.last_played_at || undefined,
   play_count: row.play_count || 0,
   beat_grid_json: row.beat_grid_json ?? null,
+  musicbrainz_trackid: row.musicbrainz_trackid || undefined,
+  musicbrainz_albumid: row.musicbrainz_albumid || undefined,
+  musicbrainz_releasegroupid: row.musicbrainz_releasegroupid || undefined,
+  acoustid_id: row.acoustid_id || undefined,
 });
 
 const TRACK_SELECT = `
@@ -301,7 +323,8 @@ const TRACK_SELECT = `
     bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
     import_status, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
-    comment_json, label, disc_number, disc_total, beat_grid_json
+    comment_json, label, disc_number, disc_total, beat_grid_json,
+    musicbrainz_trackid, musicbrainz_albumid, musicbrainz_releasegroupid, acoustid_id
   FROM tracks`;
 
 export const loadTracks = (dbPath) => {

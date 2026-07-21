@@ -27,6 +27,7 @@ import {
   EditTrackModal,
   MetadataSearchModal,
   AlbumMetadataSearchModal,
+  AcoustIdModal,
   ArtistImageModal,
   PlaylistCreateModal,
   PlaylistEditModal,
@@ -123,6 +124,7 @@ function App() {
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string>>(() => new Set());
   const [metadataSearchTrackId, setMetadataSearchTrackId] = useState<string | null>(null);
   const [albumMetadataTrackIds, setAlbumMetadataTrackIds] = useState<string[]>([]);
+  const [acoustIdTrackIds, setAcoustIdTrackIds] = useState<string[]>([]);
   const [artistImageArtistName, setArtistImageArtistName] = useState<string | null>(null);
   const [revealTrackRequest, setRevealTrackRequest] = useState<{
     trackId: string;
@@ -813,6 +815,7 @@ function App() {
     handleSearchMetadata,
     handleSearchAlbumMetadata,
     handleLoadAlbumMetadata,
+    handleIdentifyWithAcoustId,
   } = useTrackEdit();
 
   const metadataSearchTrack = metadataSearchTrackId
@@ -835,6 +838,22 @@ function App() {
     for (const entry of entries) {
       await handleSaveMetadata([entry.trackId], entry.updates);
     }
+  }, [handleSaveMetadata]);
+
+  const acoustIdTracks = useMemo(
+    () => acoustIdTrackIds
+      .map((id) => allTracksById.get(id))
+      .filter((track): track is Track => Boolean(track)),
+    [acoustIdTrackIds, allTracksById],
+  );
+
+  const handleApplyAcoustIdMatches = useCallback(async (
+    entries: Array<{ trackId: string; updates: TrackMetadataUpdates }>,
+  ) => {
+    for (const entry of entries) {
+      await handleSaveMetadata([entry.trackId], entry.updates);
+    }
+    notify.success(`Applied AcoustID metadata to ${entries.length} ${entries.length === 1 ? "track" : "tracks"}`);
   }, [handleSaveMetadata]);
 
   const {
@@ -1097,6 +1116,12 @@ function App() {
     closeMenu();
     if (trackIds.length > 0) setAlbumMetadataTrackIds(trackIds);
   }, [closeMenu, menuAlbumTracks, menuIsSingleAlbum]);
+
+  const handleOpenAcoustId = useCallback(() => {
+    const trackIds = [...menuSelection];
+    closeMenu();
+    if (trackIds.length > 0) setAcoustIdTrackIds(trackIds);
+  }, [closeMenu, menuSelection]);
 
   const handleDeleteTracks = useCallback(() => {
     const trackIds = [...menuSelection];
@@ -1404,6 +1429,12 @@ function App() {
         onLoadRelease={handleLoadAlbumMetadata}
         onApply={handleApplyAlbumMetadata}
       />
+      <AcoustIdModal
+        tracks={acoustIdTracks}
+        onClose={() => setAcoustIdTrackIds([])}
+        onIdentify={handleIdentifyWithAcoustId}
+        onApply={handleApplyAcoustIdMatches}
+      />
       <ArtistImageModal
         artistName={artistImageArtistName}
         onClose={() => setArtistImageArtistName(null)}
@@ -1474,6 +1505,7 @@ function App() {
                 onShowInFinder={menuSelection.length === 1 ? handleShowInFinder : undefined}
                 onSearchMetadata={menuSelection.length === 1 ? handleOpenMetadataSearch : undefined}
                 onSearchAlbumMetadata={menuIsSingleAlbum ? handleOpenAlbumMetadataSearch : undefined}
+                onIdentifyWithAcoustId={menuSelection.length > 0 ? handleOpenAcoustId : undefined}
                 onRemoveFromPlaylist={
                   viewConfig.type === "playlist" && viewConfig.playlist
                     ? handleRemoveMenuTracksFromPlaylist

@@ -114,6 +114,8 @@ export const SettingsPanel = ({
   const setTheAudioDbApiKey = useSettingsStore((state) => state.setTheAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const setFanartApiKey = useSettingsStore((state) => state.setFanartApiKey);
+  const acoustIdClientKey = useSettingsStore((state) => state.acoustIdClientKey);
+  const setAcoustIdClientKey = useSettingsStore((state) => state.setAcoustIdClientKey);
   const writesAudioTags = Object.values(analysisOutputs).some((mode) => mode !== "none");
 
   return (
@@ -321,7 +323,53 @@ export const SettingsPanel = ({
               </div>
             </div>
 
-            <div data-artist-information-settings>
+            <div data-acoustid-settings>
+              <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                Track identification
+              </h3>
+              <div className="max-w-xl space-y-3">
+                <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="acoustid-client-key">
+                  AcoustID application API key
+                </label>
+                <input
+                  autoComplete="off"
+                  className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                  data-acoustid-client-key
+                  id="acoustid-client-key"
+                  onChange={(event) => setAcoustIdClientKey(event.target.value.trim())}
+                  placeholder="Paste the key from My Applications"
+                  spellCheck={false}
+                  type="password"
+                  value={acoustIdClientKey}
+                />
+                <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                  Identifies recordings from their audio fingerprint. Audio stays on this computer;
+                  only the compact fingerprint and duration are sent to AcoustID.
+                </p>
+                <p className="text-[var(--font-size-xs)] leading-relaxed text-amber-600 dark:text-amber-400">
+                  Do not use the personal user API key shown on your profile. That key is only for
+                  submitting fingerprints and AcoustID will reject it for identification lookups.
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  <button
+                    className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                    onClick={() => { void openExternal("https://acoustid.org/new-application"); }}
+                    type="button"
+                  >
+                    Create application key <ExternalLink className="h-3 w-3" />
+                  </button>
+                  <button
+                    className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                    onClick={() => { void openExternal("https://acoustid.org/my-applications"); }}
+                    type="button"
+                  >
+                    View my application keys <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-[var(--color-border)] pt-6" data-artist-information-settings>
               <h3 className="mb-[var(--spacing-md)] text-[var(--font-size-sm)] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                 Artist information
               </h3>

@@ -6,6 +6,7 @@ export { DuplicateTracksModal } from "./DuplicateTracksModal";
 export { EditTrackModal } from "./EditTrackModal";
 export { MetadataSearchModal } from "./MetadataSearchModal";
 export { AlbumMetadataSearchModal } from "./AlbumMetadataSearchModal";
+export { AcoustIdModal } from "./AcoustIdModal";
 export { ArtistImageModal } from "./ArtistImageModal";
 export { PlaylistContextMenu } from "./PlaylistContextMenu";
 export { PlaylistCreateModal } from "./PlaylistCreateModal";

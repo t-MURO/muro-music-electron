@@ -1,16 +1,18 @@
 import { useCallback } from "react";
 import { invoke } from "@muro/desktop/runtime";
-import { notify, useLibraryStore, useUIStore } from "../stores";
+import { notify, useLibraryStore, useSettingsStore, useUIStore } from "../stores";
 import type { Track, TrackMetadataUpdates } from "../types";
 import {
   fetchTrackCoverArt,
   searchTrackMetadata,
   searchAlbumMetadata,
   loadAlbumMetadata,
+  identifyTrackWithAcoustId,
   type FetchedCoverArt,
   type MetadataSearchCandidate,
   type AlbumMetadataCandidate,
   type AlbumMetadataRelease,
+  type AcoustIdIdentificationResult,
 } from "../utils/database";
 import { useDbPath } from "./useDbPath";
 
@@ -27,6 +29,7 @@ export const useTrackEdit = () => {
   const openEditModal = useUIStore((s) => s.openEditModal);
   const closeEditModal = useUIStore((s) => s.closeEditModal);
   const resolveDbPath = useDbPath();
+  const acoustIdClientKey = useSettingsStore((state) => state.acoustIdClientKey);
 
   const handleSaveMetadata = useCallback(
     async (trackIds: string[], updates: TrackMetadataUpdates) => {
@@ -121,6 +124,14 @@ export const useTrackEdit = () => {
     [],
   );
 
+  const handleIdentifyWithAcoustId = useCallback(
+    async (track: Track, force = false): Promise<AcoustIdIdentificationResult> => {
+      const dbPath = await resolveDbPath();
+      return identifyTrackWithAcoustId(dbPath, track.id, acoustIdClientKey, force);
+    },
+    [acoustIdClientKey, resolveDbPath],
+  );
+
   return {
     editTrackIds,
     isEditModalOpen: editTrackIds.length > 0,
@@ -131,5 +142,6 @@ export const useTrackEdit = () => {
     handleSearchMetadata,
     handleSearchAlbumMetadata,
     handleLoadAlbumMetadata,
+    handleIdentifyWithAcoustId,
   };
 };

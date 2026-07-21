@@ -107,6 +107,7 @@ let artistProfileScanCount = 0;
 let manualCoverFetchCount = 0;
 let artistImageSaveCount = 0;
 const shownItemPaths = [];
+const copiedCoverPaths = [];
 const ratingUpdates = [];
 for (let index = 0; index < 5; index += 1) {
   writeSilentWave(smokeTracks[index].source_path);
@@ -129,6 +130,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
   ipcMain.handle("muro:clipboard-has-image", () => false);
   ipcMain.handle("muro:cache-clipboard-cover-art", () => null);
+  ipcMain.handle("muro:copy-image-to-clipboard", (_event, filePath) => {
+    copiedCoverPaths.push(filePath);
+    return true;
+  });
   ipcMain.handle("muro:window-is-maximized", (event) =>
     BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
   );
@@ -267,6 +272,30 @@ app.whenReady().then(async () => {
         albumMatch: true,
       }];
     }
+    if (command === "identify_track_acoustid") {
+      return {
+        trackId: args.trackId,
+        cached: false,
+        duration: 180,
+        candidates: [{
+          id: "11111111-1111-4111-8111-111111111111:99999999-9999-4999-8999-999999999999:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          acoustidId: "11111111-1111-4111-8111-111111111111",
+          score: 0.98,
+          recordingId: "99999999-9999-4999-8999-999999999999",
+          releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          title: "Smoke Track Zero",
+          artist: "Muro",
+          album: "Smoke Album 00",
+          albumArtist: "Muro",
+          year: 2000,
+          country: "DE",
+          status: "Official",
+          genre: null,
+          albumMatch: true,
+        }],
+      };
+    }
     if (command === "search_album_metadata") {
       return [{
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -307,7 +336,7 @@ app.whenReady().then(async () => {
       };
     }
     if (command === "test_get_cover_counts") {
-      return { manualCoverFetchCount, artistImageSaveCount };
+      return { manualCoverFetchCount, artistImageSaveCount, copiedCoverPaths: [...copiedCoverPaths] };
     }
     if (command === "scan_technical_metadata") {
       return { checked: 0, updated: 0, failed: 0, remaining: 0 };
@@ -658,8 +687,11 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 80));
         const fetchCoverMenuItem = document.querySelector('[data-testid="fetch-cover-art-menu-item"]');
         const pasteCoverMenuItem = document.querySelector('[data-testid="paste-cover-art-menu-item"]');
+        const copyCoverMenuItem = document.querySelector('[data-testid="copy-cover-art-menu-item"]');
         const manualCoverMenuReady = Boolean(
           fetchCoverMenuItem &&
+          copyCoverMenuItem instanceof HTMLButtonElement &&
+          copyCoverMenuItem.disabled &&
           pasteCoverMenuItem instanceof HTMLButtonElement &&
           pasteCoverMenuItem.disabled
         );
@@ -669,6 +701,23 @@ app.whenReady().then(async () => {
         const manualCoverFetchReady = Boolean(
           coverCounts.manualCoverFetchCount === 1 &&
           editCoverField?.querySelector("img")
+        );
+        editCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const copyFetchedCoverItem = document.querySelector('[data-testid="copy-cover-art-menu-item"]');
+        const copyCoverEnabled = copyFetchedCoverItem instanceof HTMLButtonElement && !copyFetchedCoverItem.disabled;
+        copyFetchedCoverItem?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const copyCounts = await window.muro.invoke("test_get_cover_counts");
+        const manualCoverCopyReady = Boolean(
+          copyCoverEnabled &&
+          copyCounts.copiedCoverPaths.length === 1 &&
+          copyCounts.copiedCoverPaths[0]?.endsWith("track-0.wav")
         );
         [...document.querySelectorAll("button")]
           .find((button) => button.textContent?.trim() === "Cancel")
@@ -959,7 +1008,31 @@ app.whenReady().then(async () => {
         const searchMetadataMenuReady = Boolean(
           searchMetadataItem?.textContent?.includes("Search for metadata")
         );
-        searchMetadataItem?.click();
+        const acoustIdMenuItem = document.querySelector('[data-testid="identify-acoustid-menu-item"]');
+        const acoustIdMenuReady = Boolean(
+          acoustIdMenuItem?.textContent?.includes("Identify with AcoustID")
+        );
+        acoustIdMenuItem?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const acoustIdModal = document.querySelector("[data-acoustid-modal]");
+        const acoustIdModalReady = Boolean(
+          acoustIdModal &&
+          document.querySelector("[data-acoustid-row]") &&
+          document.querySelector("[data-acoustid-candidate-select]") &&
+          document.querySelector("[data-apply-acoustid]")
+        );
+        [...(acoustIdModal?.querySelectorAll("button") ?? [])]
+          .find((button) => button.textContent?.trim() === "Cancel")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-testid="search-metadata-menu-item"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 100));
         const metadataSearchReady = Boolean(
           document.querySelector("[data-metadata-search-modal]") &&
@@ -1171,6 +1244,7 @@ app.whenReady().then(async () => {
         const lastFmApiKeyInput = document.querySelector("[data-lastfm-api-key]");
         const theAudioDbApiKeyInput = document.querySelector("[data-theaudiodb-api-key]");
         const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
+        const acoustIdClientKeyInput = document.querySelector("[data-acoustid-client-key]");
         const artistInformationSettingsReady = Boolean(
           document.querySelector("[data-artist-information-settings]") &&
           lastFmApiKeyInput instanceof HTMLInputElement &&
@@ -1179,6 +1253,11 @@ app.whenReady().then(async () => {
           theAudioDbApiKeyInput.type === "password" &&
           fanartApiKeyInput instanceof HTMLInputElement &&
           fanartApiKeyInput.type === "password"
+        );
+        const acoustIdSettingsReady = Boolean(
+          document.querySelector("[data-acoustid-settings]") &&
+          acoustIdClientKeyInput instanceof HTMLInputElement &&
+          acoustIdClientKeyInput.type === "password"
         );
         document.querySelector('[data-settings-tab="dev"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
@@ -1601,6 +1680,7 @@ app.whenReady().then(async () => {
           selectionBarReady,
           manualCoverMenuReady,
           manualCoverFetchReady,
+          manualCoverCopyReady,
           rowThumbnailReady,
           ratingFitsCell,
           tableAlbumMetadataMenuReady,
@@ -1642,6 +1722,7 @@ app.whenReady().then(async () => {
           contextAddToPlaylistReady,
           dragAddToPlaylistReady,
           artistInformationSettingsReady,
+          acoustIdSettingsReady,
           djMixFeatureGateReady,
           djMixManualSurfaceReady,
           mixWithCurrentActionReady,
@@ -1652,6 +1733,8 @@ app.whenReady().then(async () => {
           contextMenuClosedOutside,
           showInFinderReady,
           searchMetadataMenuReady,
+          acoustIdMenuReady,
+          acoustIdModalReady,
           metadataSearchReady,
           metadataFieldSelectionReady,
           albumsViewReady,
@@ -1880,21 +1963,25 @@ app.whenReady().then(async () => {
         );
         return;
       }
-      if (!result.manualCoverMenuReady || !result.manualCoverFetchReady) {
+      if (!result.manualCoverMenuReady || !result.manualCoverFetchReady || !result.manualCoverCopyReady) {
         fail(
           `Manual cover fetch failed: menu=${result.manualCoverMenuReady}, ` +
-          `fetch=${result.manualCoverFetchReady}`
+          `fetch=${result.manualCoverFetchReady}, copy=${result.manualCoverCopyReady}`
         );
         return;
       }
       if (
         !result.searchMetadataMenuReady ||
+        !result.acoustIdMenuReady ||
+        !result.acoustIdModalReady ||
         !result.metadataSearchReady ||
         !result.metadataFieldSelectionReady
       ) {
         fail(
           `Metadata search failed: menu=${result.searchMetadataMenuReady}, ` +
-          `modal=${result.metadataSearchReady}, fields=${result.metadataFieldSelectionReady}`
+          `acoustid=${result.acoustIdMenuReady}, acoustidModal=${result.acoustIdModalReady}, ` +
+          `modal=${result.metadataSearchReady}, ` +
+          `fields=${result.metadataFieldSelectionReady}`
         );
         return;
       }
@@ -1964,6 +2051,10 @@ app.whenReady().then(async () => {
       }
       if (!result.artistInformationSettingsReady) {
         fail("Artist information provider settings are not visible in the Application settings tab");
+        return;
+      }
+      if (!result.acoustIdSettingsReady) {
+        fail("AcoustID client key settings are not visible in the Application settings tab");
         return;
       }
       if (!result.djMixFeatureGateReady) {

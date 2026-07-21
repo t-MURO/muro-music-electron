@@ -8,6 +8,7 @@ export type MuroBridge = {
   appDataDir(): Promise<string>;
   clipboardHasImage(): Promise<boolean>;
   cacheClipboardCoverArt(): Promise<{ fullPath: string; thumbPath: string } | null>;
+  copyImageToClipboard(filePath: string): Promise<boolean>;
   windowControl(action: WindowControlAction): Promise<boolean>;
   isWindowMaximized(): Promise<boolean>;
   openDialog(options: Record<string, unknown>): Promise<string | string[] | null>;

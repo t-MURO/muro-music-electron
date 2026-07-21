@@ -135,6 +135,29 @@ export const searchTrackMetadata = (
   metadata: { title: string; artist: string; album?: string },
 ) => invoke<MetadataSearchCandidate[]>("search_track_metadata", metadata);
 
+export type AcoustIdCandidate = MetadataSearchCandidate & {
+  acoustidId: string;
+};
+
+export type AcoustIdIdentificationResult = {
+  trackId: string;
+  cached: boolean;
+  duration: number;
+  candidates: AcoustIdCandidate[];
+};
+
+export const identifyTrackWithAcoustId = (
+  dbPath: string,
+  trackId: string,
+  clientKey: string,
+  force = false,
+) => invoke<AcoustIdIdentificationResult>("identify_track_acoustid", {
+  dbPath,
+  trackId,
+  clientKey,
+  force,
+});
+
 export type AlbumMetadataCandidate = {
   id: string;
   score: number;

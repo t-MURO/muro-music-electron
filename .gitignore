@@ -2,6 +2,7 @@ node_modules/
 dist/
 release/
 build/keyfinder/
+build/fpcalc/
 *.log
 .idea/
 .DS_Store

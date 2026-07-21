@@ -10,14 +10,16 @@
     "postinstall": "electron-builder install-app-deps",
     "keyfinder:build": "node scripts/build-keyfinder.cjs --release",
     "keyfinder:build:release": "node scripts/build-keyfinder.cjs --release",
-    "predev:electron": "npm run keyfinder:build",
+    "fpcalc:prepare": "node scripts/prepare-fpcalc.cjs",
+    "predev:electron": "npm run fpcalc:prepare && npm run keyfinder:build",
     "dev:renderer": "vite",
     "dev:electron": "node scripts/dev-electron.cjs",
     "icons:build": "node scripts/generate-app-icons.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:node": "node --check electron/main.mjs && node --check electron/albumCovers.mjs && node --check electron/artistProfiles.mjs && node --check electron/backend.mjs && node --check electron/database.mjs && node --check electron/fileProtocol.mjs && node --check electron/keyfinder.mjs && node --check electron/mediaShortcuts.mjs && node --check electron/metadata.mjs && node --check electron/waveformCache.mjs && node --check electron/preload.cjs && node --check electron/cast/castProtocol.mjs && node --check electron/cast/castDiscovery.mjs && node --check electron/lanMediaServer.mjs && node --check electron/cast/castState.mjs && node --check electron/cast/castClientAdapter.mjs && node --check electron/cast/castService.mjs && node --check scripts/build-keyfinder.cjs && node --check scripts/dev-electron.cjs && node --check scripts/generate-app-icons.mjs && node --check tests/audio-seek-smoke.mjs && node --check tests/file-protocol-smoke.mjs && node --check tests/keyfinder-smoke.mjs && node --check tests/playback-guard-smoke.mjs && node --check tests/run-audio-seek-smoke.cjs && node --check tests/run-smoke.cjs && node --check tests/run-renderer-smoke.cjs && node --check tests/run-renderer-dev-smoke.cjs && node --check tests/renderer-smoke.mjs && node --check tests/beatgrid-smoke.mjs && node --check tests/mixplan-smoke.mjs && node --check tests/cast-protocol-smoke.mjs && node --check tests/cast-media-server-smoke.mjs && node --check tests/cast-service-smoke.mjs && node --check tests/cast-adapter-smoke.mjs && node --check electron/dlna/dlnaState.mjs && node --check electron/dlna/dlnaClient.mjs && node --check electron/dlna/dlnaDiscovery.mjs && node --check electron/dlna/dlnaService.mjs && node --check tests/dlna-smoke.mjs && node --check tests/dlna-service-smoke.mjs",
+    "check:node": "node --check electron/main.mjs && node --check electron/acoustid.mjs && node --check electron/albumCovers.mjs && node --check electron/artistProfiles.mjs && node --check electron/backend.mjs && node --check electron/database.mjs && node --check electron/fileProtocol.mjs && node --check electron/keyfinder.mjs && node --check electron/mediaShortcuts.mjs && node --check electron/metadata.mjs && node --check electron/waveformCache.mjs && node --check electron/preload.cjs && node --check electron/cast/castProtocol.mjs && node --check electron/cast/castDiscovery.mjs && node --check electron/lanMediaServer.mjs && node --check electron/cast/castState.mjs && node --check electron/cast/castClientAdapter.mjs && node --check electron/cast/castService.mjs && node --check scripts/build-keyfinder.cjs && node --check scripts/prepare-fpcalc.cjs && node --check scripts/dev-electron.cjs && node --check scripts/generate-app-icons.mjs && node --check tests/acoustid-smoke.mjs && node --check tests/run-acoustid-smoke.cjs && node --check tests/audio-seek-smoke.mjs && node --check tests/file-protocol-smoke.mjs && node --check tests/keyfinder-smoke.mjs && node --check tests/playback-guard-smoke.mjs && node --check tests/run-audio-seek-smoke.cjs && node --check tests/run-smoke.cjs && node --check tests/run-renderer-smoke.cjs && node --check tests/run-renderer-dev-smoke.cjs && node --check tests/renderer-smoke.mjs && node --check tests/beatgrid-smoke.mjs && node --check tests/mixplan-smoke.mjs && node --check tests/cast-protocol-smoke.mjs && node --check tests/cast-media-server-smoke.mjs && node --check tests/cast-service-smoke.mjs && node --check tests/cast-adapter-smoke.mjs && node --check electron/dlna/dlnaState.mjs && node --check electron/dlna/dlnaClient.mjs && node --check electron/dlna/dlnaDiscovery.mjs && node --check electron/dlna/dlnaService.mjs && node --check tests/dlna-smoke.mjs && node --check tests/dlna-service-smoke.mjs",
     "check": "npm run typecheck && npm run check:node",
     "test:smoke": "node tests/run-smoke.cjs",
+    "test:acoustid": "node tests/run-acoustid-smoke.cjs",
     "test:protocol": "node tests/file-protocol-smoke.mjs",
     "pretest:keyfinder": "npm run keyfinder:build",
     "test:keyfinder": "node tests/keyfinder-smoke.mjs",
@@ -30,16 +32,17 @@
     "test:renderer": "node tests/run-renderer-smoke.cjs",
     "test:renderer-dev": "node tests/run-renderer-dev-smoke.cjs",
     "build": "npm run check && vite build",
+    "prestart": "npm run fpcalc:prepare",
     "start": "electron .",
-    "prepackage": "npm run keyfinder:build",
+    "prepackage": "npm run fpcalc:prepare && npm run keyfinder:build",
     "package": "npm run build && electron-builder --dir",
-    "predist": "npm run keyfinder:build:release",
+    "predist": "npm run fpcalc:prepare && npm run keyfinder:build:release",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@neo-keyfinder/engine-client": "file:packages/engine-client",
     "@tanstack/react-virtual": "^3.11.2",
     "better-sqlite3": "^12.10.0",
-    "@neo-keyfinder/engine-client": "file:packages/engine-client",
     "lucide-react": "^0.542.0",
     "music-metadata": "^11.13.0",
     "react": "19.2.3",
@@ -80,6 +83,13 @@
         "filter": [
           "keyfinder-native-*"
         ]
+      },
+      {
+        "from": "build/fpcalc",
+        "to": "fpcalc",
+        "filter": [
+          "fpcalc*"
+        ]
       }
     ],
     "mac": {
@@ -91,7 +101,9 @@
       "icon": "build/icons/icon.ico"
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Audio",
       "icon": "build/icons/icon.png"
     }

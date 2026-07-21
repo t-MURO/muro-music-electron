@@ -36,6 +36,7 @@ export type Track = {
   musicBrainzTrackId?: string;
   musicBrainzAlbumId?: string;
   musicBrainzReleaseGroupId?: string;
+  acoustIdId?: string;
 };
 
 export type TrackMetadataUpdates = {
@@ -59,6 +60,7 @@ export type TrackMetadataUpdates = {
   musicBrainzTrackId?: string;
   musicBrainzAlbumId?: string;
   musicBrainzReleaseGroupId?: string;
+  acoustIdId?: string;
 };
 
 export type Playlist = {

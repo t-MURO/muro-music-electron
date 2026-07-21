@@ -24,6 +24,7 @@ import { createArtistProfileService } from "./artistProfiles.mjs";
 import { createAlbumCoverService } from "./albumCovers.mjs";
 import { createCastService } from "./cast/castService.mjs";
 import { createDlnaService } from "./dlna/dlnaService.mjs";
+import { createAcoustIdService } from "./acoustid.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -46,6 +47,7 @@ const allowedUpdates = {
   musicBrainzTrackId: "musicbrainz_trackid",
   musicBrainzAlbumId: "musicbrainz_albumid",
   musicBrainzReleaseGroupId: "musicbrainz_releasegroupid",
+  acoustIdId: "acoustid_id",
 };
 
 const MUSICBRAINZ_RECORDING_SEARCH = "https://musicbrainz.org/ws/2/recording/";
@@ -450,9 +452,14 @@ export const createBackend = ({
   musicBrainzIntervalMs,
   castService: castServiceOverride,
   dlnaService: dlnaServiceOverride,
+  acoustIdService: acoustIdServiceOverride,
+  fpcalcBinaryDirectories = [],
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
+  const acoustId = acoustIdServiceOverride ?? createAcoustIdService({
+    binaryDirectories: fpcalcBinaryDirectories,
+  });
   const albumCovers = createAlbumCoverService({ cacheDir });
   const fetchMusicBrainz = createMusicBrainzFetcher({
     fetchImpl: metadataFetchImpl,
@@ -533,6 +540,8 @@ export const createBackend = ({
       searchAlbumMetadata({ album, artist }, fetchMusicBrainz),
     load_album_metadata: ({ releaseId }) =>
       loadAlbumMetadata({ releaseId }, fetchMusicBrainz),
+    identify_track_acoustid: ({ dbPath, trackId, clientKey, force }) =>
+      acoustId.identifyTrack(openDatabase(dbPath), { trackId, clientKey, force }),
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);

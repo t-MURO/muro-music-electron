@@ -167,6 +167,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     musicbrainz_releasetrackid: first(common.musicbrainz_releasetrackid) ?? null,
     musicbrainz_albumstatus: first(common.musicbrainz_albumstatus) ?? null,
     musicbrainz_albumtype: first(common.musicbrainz_albumtype) ?? null,
+    acoustid_id: first(common.acoustid_id) ?? null,
     source_path: filePath,
     search_text: searchText,
     import_status: "staged",
@@ -187,7 +188,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
       filename, year, date, track_number, track_total, disc_number, disc_total,
       key, bpm, rating, raw_tags_json, musicbrainz_albumid, musicbrainz_artistid,
       musicbrainz_albumartistid, musicbrainz_releasegroupid, musicbrainz_trackid,
-      musicbrainz_releasetrackid, musicbrainz_albumstatus, musicbrainz_albumtype,
+      musicbrainz_releasetrackid, musicbrainz_albumstatus, musicbrainz_albumtype, acoustid_id,
       source_path, search_text, import_status,
       duration_seconds, bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
       added_at, updated_at, is_missing,
@@ -197,7 +198,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
       @filename, @year, @date, @track_number, @track_total, @disc_number, @disc_total,
       @key, @bpm, @rating, @raw_tags_json, @musicbrainz_albumid, @musicbrainz_artistid,
       @musicbrainz_albumartistid, @musicbrainz_releasegroupid, @musicbrainz_trackid,
-      @musicbrainz_releasetrackid, @musicbrainz_albumstatus, @musicbrainz_albumtype,
+      @musicbrainz_releasetrackid, @musicbrainz_albumstatus, @musicbrainz_albumtype, @acoustid_id,
       @source_path, @search_text, @import_status,
       @duration_seconds, @bitrate_kbps, @sample_rate_hz, @bit_depth, @file_size_bytes,
       @added_at, @updated_at, 0,
@@ -220,6 +221,7 @@ const propertyMap = {
   musicBrainzTrackId: "MUSICBRAINZ_TRACKID",
   musicBrainzAlbumId: "MUSICBRAINZ_ALBUMID",
   musicBrainzReleaseGroupId: "MUSICBRAINZ_RELEASEGROUPID",
+  acoustIdId: "ACOUSTID_ID",
 };
 
 export const writeMetadataToFile = async (sourcePath, updates) => {
