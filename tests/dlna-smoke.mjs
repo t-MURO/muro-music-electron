@@ -6,12 +6,14 @@ import {
   escapeXml,
   extractXmlValue,
   hmsToSeconds,
+  readDlnaXmlResponse,
   secondsToHms,
 } from "../electron/dlna/dlnaClient.mjs";
 import {
   buildMSearch,
   parseSsdpResponse,
   parseDeviceDescription,
+  isTrustedDescriptionLocation,
   usnUuid,
   MEDIA_RENDERER_TARGET,
 } from "../electron/dlna/dlnaDiscovery.mjs";
@@ -105,6 +107,10 @@ const failingClient = createDlnaClient({
 });
 await assert.rejects(() => failingClient.play(), /UPnP 701.*Transition not available/);
 await assert.rejects(() => failingClient.setVolume(1), /does not expose/);
+await assert.rejects(
+  () => readDlnaXmlResponse({ text: async () => "x".repeat(32) }, 16),
+  /exceeds the allowed size/,
+);
 
 // --- SSDP -------------------------------------------------------------------
 
@@ -126,6 +132,18 @@ const parsed = parseSsdpResponse(ssdpResponse);
 assert.equal(parsed.location, "http://192.168.1.9:60006/upnp/desc/aios_device/aios_device.xml");
 assert.equal(usnUuid(parsed.usn), "0e92156d-1949-1446-0080-000678a5ec5a");
 assert.equal(parseSsdpResponse("NOTIFY * HTTP/1.1\r\nNT: upnp:rootdevice\r\n\r\n"), null);
+assert.equal(
+  isTrustedDescriptionLocation("http://192.168.1.9:60006/device.xml", "192.168.1.9"),
+  true,
+);
+assert.equal(
+  isTrustedDescriptionLocation("http://127.0.0.1:8080/private", "192.168.1.9"),
+  false,
+);
+assert.equal(
+  isTrustedDescriptionLocation("file:///C:/Windows/win.ini", "192.168.1.9"),
+  false,
+);
 
 // --- device description with embedded renderer (HEOS-style) -----------------
 
@@ -159,6 +177,15 @@ assert.equal(parsedDescription.friendlyName, "Denon");
 assert.equal(parsedDescription.modelName, "Denon AVR-S760H");
 assert.equal(parsedDescription.avTransportUrl, "http://192.168.1.9:60006/upnp/control/renderer_dvc/AVTransport");
 assert.equal(parsedDescription.renderingControlUrl, "http://192.168.1.9:60006/upnp/control/renderer_dvc/RenderingControl");
+
+const hostileDescription = description.replace(
+  "/upnp/control/renderer_dvc/AVTransport",
+  "http://127.0.0.1:8080/private",
+);
+assert.equal(
+  parseDeviceDescription(hostileDescription, "http://192.168.1.9:60006/device.xml").avTransportUrl,
+  null,
+);
 
 // --- state normalization and finish detection -------------------------------
 

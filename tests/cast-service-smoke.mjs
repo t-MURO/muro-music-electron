@@ -44,14 +44,19 @@ const makeMocks = () => {
   const calls = [];
   const adapterHandlers = new Map();
   const adapter = {
+    loadGate: null,
     connect: async (target) => calls.push(["connect", target]),
     launchDefaultReceiver: async () => calls.push(["launch"]),
     loadMedia: async (payload) => {
       calls.push(["loadMedia", payload]);
+      if (adapter.loadGate) await adapter.loadGate;
       return { mediaSessionId: 1, playerState: "PLAYING", currentTime: payload.currentTime, media: { duration: 180 } };
     },
     play: async () => ({ mediaSessionId: 1, playerState: "PLAYING", currentTime: 5, media: { duration: 180 } }),
-    pause: async () => ({ mediaSessionId: 1, playerState: "PAUSED", currentTime: 5, media: { duration: 180 } }),
+    pause: async () => {
+      calls.push(["pause"]);
+      return { mediaSessionId: 1, playerState: "PAUSED", currentTime: 5, media: { duration: 180 } };
+    },
     seek: async (position) => ({ mediaSessionId: 1, playerState: "PLAYING", currentTime: position, media: { duration: 180 } }),
     getMediaStatus: async () => null,
     setVolume: async (level) => calls.push(["setVolume", level]),
@@ -162,6 +167,33 @@ try {
   assert.equal(loadCall.contentType, "audio/mpeg");
   assert.equal(loadCall.currentTime, 30);
   assert.ok(mocks.calls.some(([name]) => name === "revoke"));
+
+  // Transport commands received while a track is loading must run afterward.
+  // This is the media-key case: Pause during LOAD should leave the receiver
+  // paused, not be overwritten by LOAD's eventual autoplay.
+  let releaseLoad;
+  mocks.adapter.loadGate = new Promise((resolve) => {
+    releaseLoad = resolve;
+  });
+  const loadCallCount = mocks.calls.filter(([name]) => name === "loadMedia").length;
+  const queuedLoad = service.commands.cast_load_track({
+    trackId: "track-serialized",
+    sourcePath: audioPath,
+    title: "Serialized",
+    durationSeconds: 180,
+  });
+  while (mocks.calls.filter(([name]) => name === "loadMedia").length === loadCallCount) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  const pauseCallCount = mocks.calls.filter(([name]) => name === "pause").length;
+  const queuedPause = service.commands.cast_pause();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(mocks.calls.filter(([name]) => name === "pause").length, pauseCallCount);
+  releaseLoad();
+  await queuedLoad;
+  mocks.adapter.loadGate = null;
+  await queuedPause;
+  assert.equal(mocks.calls.filter(([name]) => name === "pause").length, pauseCallCount + 1);
 
   // Remote pause via command.
   const paused = await service.commands.cast_pause();

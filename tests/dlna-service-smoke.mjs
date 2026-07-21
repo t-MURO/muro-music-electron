@@ -10,7 +10,13 @@ fs.writeFileSync(audioPath, Buffer.from([1, 2, 3]));
 
 const makeMocks = () => {
   const calls = [];
-  const clientState = { transportState: "STOPPED", position: 0, duration: 368, uriSet: false };
+  const clientState = {
+    transportState: "STOPPED",
+    position: 0,
+    duration: 368,
+    uriSet: false,
+    pauseAsStopped: false,
+  };
   const client = {
     setUri: async (payload) => {
       calls.push(["setUri", payload]);
@@ -22,7 +28,7 @@ const makeMocks = () => {
     },
     pause: async () => {
       calls.push(["pause"]);
-      clientState.transportState = "PAUSED_PLAYBACK";
+      clientState.transportState = clientState.pauseAsStopped ? "STOPPED" : "PAUSED_PLAYBACK";
     },
     stop: async () => {
       calls.push(["stop"]);
@@ -141,6 +147,19 @@ try {
   assert.equal(paused.state, "paused");
   const resumed = await service.commands.dlna_play();
   assert.equal(resumed.state, "playing");
+
+  // A renderer that implements Pause as STOPPED must not look like a natural
+  // end-of-track, even when the current position is inside the finish window.
+  await service.commands.dlna_seek({ positionSecs: 367 });
+  mocks.clientState.pauseAsStopped = true;
+  const finishedBeforeExplicitPause = events.filter(
+    ([name, payload]) => name === "muro://dlna-media-status" && payload.finished,
+  ).length;
+  await service.commands.dlna_pause();
+  const finishedAfterExplicitPause = events.filter(
+    ([name, payload]) => name === "muro://dlna-media-status" && payload.finished,
+  ).length;
+  assert.equal(finishedAfterExplicitPause, finishedBeforeExplicitPause);
 
   await service.commands.dlna_set_volume({ volume: 0.4 });
   assert.deepEqual(mocks.calls.at(-1), ["setVolume", 0.4]);

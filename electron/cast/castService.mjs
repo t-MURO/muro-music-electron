@@ -137,9 +137,12 @@ export const createCastService = ({
     stopStatusPolling();
     const activeSession = session;
     activeSession.statusTimer = setInterval(() => {
-      if (!activeSession.adapter.hasMediaSession()) return;
+      if (!activeSession.adapter.hasMediaSession() || activeSession.polling) return;
+      activeSession.polling = true;
       activeSession.adapter.getMediaStatus().catch(() => {
         // Poll failures are transient; a dead session surfaces via "close".
+      }).finally(() => {
+        activeSession.polling = false;
       });
     }, STATUS_POLL_INTERVAL_MS);
   };
@@ -229,6 +232,7 @@ export const createCastService = ({
           lastStatus: null,
           loadedTrack: null,
           statusTimer: null,
+          polling: false,
           unsubscribes: [
             adapter.on("mediaStatus", handleMediaStatus),
             adapter.on("close", () => handleSessionLost()),
@@ -245,7 +249,7 @@ export const createCastService = ({
       return runSessionOp(() => doDisconnect());
     },
 
-    async cast_load_track({
+    cast_load_track({
       trackId,
       sourcePath,
       title,
@@ -256,6 +260,7 @@ export const createCastService = ({
       startPositionSecs,
       autoplay,
     }) {
+      return runSessionOp(async () => {
       const activeSession = requireSession();
 
       const contentType = castContentTypeFor(sourcePath);
@@ -322,24 +327,31 @@ export const createCastService = ({
           ? error
           : createCastError(CAST_ERROR_CODES.loadFailed, String(error?.message ?? error));
       }
+      });
     },
 
-    async cast_play() {
-      const status = await requireSession().adapter.play();
-      handleMediaStatus(status);
-      return publicState();
+    cast_play() {
+      return runSessionOp(async () => {
+        const status = await requireSession().adapter.play();
+        handleMediaStatus(status);
+        return publicState();
+      });
     },
 
-    async cast_pause() {
-      const status = await requireSession().adapter.pause();
-      handleMediaStatus(status);
-      return publicState();
+    cast_pause() {
+      return runSessionOp(async () => {
+        const status = await requireSession().adapter.pause();
+        handleMediaStatus(status);
+        return publicState();
+      });
     },
 
-    async cast_seek({ positionSecs }) {
-      const status = await requireSession().adapter.seek(positionSecs);
-      handleMediaStatus(status);
-      return publicState();
+    cast_seek({ positionSecs }) {
+      return runSessionOp(async () => {
+        const status = await requireSession().adapter.seek(positionSecs);
+        handleMediaStatus(status);
+        return publicState();
+      });
     },
 
     async cast_set_volume({ volume }) {

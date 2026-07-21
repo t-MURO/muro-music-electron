@@ -162,13 +162,12 @@ const AlbumDetail = ({
 
   useEffect(() => {
     if (!revealRequest || !album.tracks.some((track) => track.id === revealRequest.trackId)) return;
-    const frame = requestAnimationFrame(() => {
-      const row = Array.from(document.querySelectorAll<HTMLElement>("[data-album-track]"))
-        .find((element) => element.dataset.albumTrack === revealRequest.trackId);
-      row?.scrollIntoView({ block: "center", behavior: "smooth" });
-      row?.focus({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(frame);
+    // Run synchronously: rAF callbacks can starve indefinitely while the
+    // window is hidden or occluded, so the reveal must not wait on a frame.
+    const row = Array.from(document.querySelectorAll<HTMLElement>("[data-album-track]"))
+      .find((element) => element.dataset.albumTrack === revealRequest.trackId);
+    row?.scrollIntoView({ block: "center", behavior: "smooth" });
+    row?.focus({ preventScroll: true });
   }, [album.tracks, revealRequest]);
 
   return (

@@ -17,6 +17,7 @@ import { EventEmitter } from "node:events";
 
 const WIRE_VARINT = 0;
 const WIRE_LENGTH_DELIMITED = 2;
+export const MAX_CAST_FRAME_BYTES = 1024 * 1024;
 
 const encodeVarint = (value) => {
   const bytes = [];
@@ -121,7 +122,7 @@ export const createFrameReader = (onMessage) => {
     pending = pending.length === 0 ? chunk : Buffer.concat([pending, chunk]);
     while (pending.length >= 4) {
       const messageLength = pending.readUInt32BE(0);
-      if (messageLength > 64 * 1024 * 1024) {
+      if (messageLength > MAX_CAST_FRAME_BYTES) {
         throw new Error("Cast message frame exceeds sane size");
       }
       if (pending.length < 4 + messageLength) return;

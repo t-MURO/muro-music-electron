@@ -4,6 +4,7 @@ import {
   decodeCastMessage,
   frameCastMessage,
   createFrameReader,
+  MAX_CAST_FRAME_BYTES,
 } from "../electron/cast/castProtocol.mjs";
 import {
   buildPtrQuery,
@@ -40,6 +41,10 @@ readFrames(first.subarray(0, 3));
 assert.equal(received.length, 0);
 readFrames(Buffer.concat([first.subarray(3), second]));
 assert.deepEqual(received, ["{\"n\":1}", "{\"n\":2}"]);
+
+const oversizedFrame = Buffer.alloc(4);
+oversizedFrame.writeUInt32BE(MAX_CAST_FRAME_BYTES + 1);
+assert.throws(() => readFrames(oversizedFrame), /exceeds sane size/);
 
 // --- mDNS query shape -------------------------------------------------------
 
@@ -140,5 +145,13 @@ const withoutAddress = parseDnsMessage(
   ]),
 );
 assert.equal(collectCastRecords(withoutAddress).length, 0);
+
+const abusiveRecordCount = Buffer.alloc(12);
+abusiveRecordCount.writeUInt16BE(4097, 6);
+assert.throws(() => parseDnsMessage(abusiveRecordCount), /record count exceeds sane limit/);
+
+const truncatedQuestion = Buffer.alloc(13);
+truncatedQuestion.writeUInt16BE(1, 4);
+assert.throws(() => parseDnsMessage(truncatedQuestion), /Truncated DNS question/);
 
 console.log("Cast protocol smoke test passed.");

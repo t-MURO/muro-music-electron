@@ -22,15 +22,49 @@ import {
 // output plays at a time, and switching never silently drops the listening
 // position.
 
+const restoreLocalTrackPaused = async (
+  track: ReturnType<typeof usePlaybackStore.getState>["currentTrack"],
+  positionSecs: number,
+) => {
+  if (!track) return;
+  await playbackPlayFile(
+    track.id,
+    track.title,
+    track.artist,
+    track.album,
+    track.sourcePath,
+    track.durationSeconds,
+    track.coverArtPath,
+    track.coverArtThumbPath,
+  );
+  await playbackPause();
+  if (positionSecs > 0) await playbackSeek(positionSecs);
+};
+
 // Connect to a device and hand the current local track over to it. Local
 // playback is paused first; if the remote load fails the local track stays
 // paused at the captured position so nothing plays twice.
 export const connectToRemoteDevice = async (device: RemoteDevice): Promise<void> => {
   const playback = usePlaybackStore.getState();
   const handoffTrack = playback.currentTrack;
-  const handoffPosition = playback.currentPosition;
+  let handoffPosition = playback.currentPosition;
+  const currentRemote = useRemoteOutputStore.getState();
 
-  if (playback.isPlaying) {
+  // A Cast and a DLNA service can each own a session, so switching protocols
+  // must explicitly tear the old one down before opening the new one. Keep the
+  // local backend synchronized as a paused fallback while no remote owns it.
+  if (currentRemote.protocol) {
+    const disconnected = await remoteDisconnect(currentRemote.protocol);
+    if (disconnected.lastPositionSecs != null) {
+      handoffPosition = disconnected.lastPositionSecs;
+      playback.setCurrentPosition(handoffPosition);
+    }
+    useRemoteOutputStore.getState().reset();
+    await restoreLocalTrackPaused(handoffTrack, handoffPosition);
+    playback.setIsPlaying(false);
+  }
+
+  if (playback.isPlaying && !currentRemote.protocol) {
     await playbackPause();
     playback.setIsPlaying(false);
   }
@@ -66,7 +100,8 @@ export const connectToRemoteDevice = async (device: RemoteDevice): Promise<void>
 export const disconnectFromRemote = async (): Promise<void> => {
   const remoteState = useRemoteOutputStore.getState();
   const protocol = remoteState.protocol;
-  const remoteTrackId = remoteState.remoteTrack?.trackId ?? null;
+  const playbackBeforeDisconnect = usePlaybackStore.getState();
+  const remoteTrackId = remoteState.remoteTrack?.trackId ?? playbackBeforeDisconnect.currentTrack?.id ?? null;
   if (!protocol) return;
 
   const { lastPositionSecs } = await remoteDisconnect(protocol);
@@ -80,7 +115,10 @@ export const disconnectFromRemote = async (): Promise<void> => {
     if (remoteTrackId && localTrackId !== remoteTrackId) {
       const library = useLibraryStore.getState();
       const track = [...library.tracks, ...library.inboxTracks]
-        .find((entry) => entry.id === remoteTrackId);
+        .find((entry) => entry.id === remoteTrackId)
+        ?? (playbackBeforeDisconnect.currentTrack?.id === remoteTrackId
+          ? playbackBeforeDisconnect.currentTrack
+          : null);
       if (track) {
         await playbackPlayFile(
           track.id,
@@ -103,8 +141,10 @@ export const disconnectFromRemote = async (): Promise<void> => {
     playback.setIsPlaying(false);
     playback.setVolume(refreshed.volume);
     playback.setDuration(refreshed.duration);
+    useRemoteOutputStore.getState().reset();
   } catch {
     // Returning to local output must never fail the disconnect itself.
     playback.setIsPlaying(false);
+    useRemoteOutputStore.getState().reset();
   }
 };

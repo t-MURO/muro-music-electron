@@ -1,6 +1,6 @@
 import dgram from "node:dgram";
 import os from "node:os";
-import { extractXmlValue } from "./dlnaClient.mjs";
+import { extractXmlValue, readDlnaXmlResponse } from "./dlnaClient.mjs";
 
 // SSDP discovery of UPnP MediaRenderer devices. M-SEARCH queries go out of
 // every IPv4 interface (multi-homed machines route multicast arbitrarily
@@ -45,17 +45,44 @@ export const parseSsdpResponse = (text) => {
 // The stable device identity is the uuid portion of the USN.
 export const usnUuid = (usn) => /uuid:([^:\s]+)/i.exec(String(usn ?? ""))?.[1] ?? null;
 
+const normalizedHostname = (value) => String(value ?? "").replace(/^\[|\]$/g, "").toLowerCase();
+
+// An SSDP response is unauthenticated UDP. Only follow a description URL
+// hosted by the machine that sent the packet, otherwise any LAN peer could
+// turn discovery into a request to localhost, a router, or an internet host.
+export const isTrustedDescriptionLocation = (location, remoteAddress) => {
+  try {
+    const url = new URL(location);
+    return (url.protocol === "http:" || url.protocol === "https:")
+      && !url.username
+      && !url.password
+      && normalizedHostname(url.hostname) === normalizedHostname(remoteAddress);
+  } catch {
+    return false;
+  }
+};
+
 // Pull the AVTransport / RenderingControl control URLs out of a device
 // description. Renderers are often embedded devices (the HEOS MediaRenderer
 // lives inside a Denon AiosDevice), so services are matched document-wide.
 export const parseDeviceDescription = (xml, locationUrl) => {
   const source = String(xml ?? "");
   const base = extractXmlValue(source, "URLBase") ?? locationUrl;
+  const location = new URL(locationUrl);
 
   const resolveUrl = (value) => {
     if (!value) return null;
     try {
-      return new URL(value, base).toString();
+      const resolved = new URL(value, base);
+      if (
+        (resolved.protocol !== "http:" && resolved.protocol !== "https:")
+        || resolved.username
+        || resolved.password
+        || normalizedHostname(resolved.hostname) !== normalizedHostname(location.hostname)
+      ) {
+        return null;
+      }
+      return resolved.toString();
     } catch {
       return null;
     }
@@ -97,7 +124,8 @@ export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, no
 
   const notify = () => onUpdate?.(snapshot());
 
-  const describeDevice = async (response) => {
+  const describeDevice = async (response, remoteAddress) => {
+    if (!isTrustedDescriptionLocation(response.location, remoteAddress)) return;
     if (describedLocations.has(response.location)) {
       const knownUuid = describedLocations.get(response.location);
       const known = knownUuid ? devices.get(knownUuid) : null;
@@ -107,6 +135,7 @@ export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, no
     describedLocations.set(response.location, null);
     try {
       const descriptionResponse = await fetchImpl(response.location, {
+        redirect: "error",
         signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
           ? AbortSignal.timeout(DESCRIPTION_TIMEOUT_MS)
           : undefined,
@@ -119,7 +148,10 @@ export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, no
         describedLocations.delete(response.location);
         return;
       }
-      const description = parseDeviceDescription(await descriptionResponse.text(), response.location);
+      const description = parseDeviceDescription(
+        await readDlnaXmlResponse(descriptionResponse),
+        response.location,
+      );
       // A device that parsed cleanly but exposes no AVTransport is genuinely
       // not a renderer we can drive; keep the permanent negative cache so we
       // do not re-fetch its description on every SSDP burst.
@@ -143,12 +175,12 @@ export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, no
     }
   };
 
-  const handleMessage = (message) => {
+  const handleMessage = (message, remoteInfo) => {
     const response = parseSsdpResponse(message.toString("utf8"));
     if (!response) return;
     const target = `${response.st ?? ""} ${response.usn ?? ""}`;
     if (!target.includes("MediaRenderer")) return;
-    void describeDevice(response);
+    void describeDevice(response, remoteInfo?.address);
   };
 
   const localIPv4Addresses = () => {

@@ -10,6 +10,50 @@ const XML_ESCAPES = new Map([
   ["'", "&apos;"],
 ]);
 
+export const MAX_DLNA_XML_BYTES = 1024 * 1024;
+
+// Device descriptions and SOAP replies are untrusted network input. Avoid
+// buffering an unbounded response from a malformed or hostile LAN endpoint.
+export const readDlnaXmlResponse = async (response, maxBytes = MAX_DLNA_XML_BYTES) => {
+  const declaredLength = Number(response.headers?.get?.("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error("DLNA response exceeds the allowed size");
+  }
+
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          await reader.cancel();
+          throw new Error("DLNA response exceeds the allowed size");
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(bytes);
+  }
+
+  const text = await response.text();
+  if (Buffer.byteLength(text, "utf8") > maxBytes) {
+    throw new Error("DLNA response exceeds the allowed size");
+  }
+  return text;
+};
+
 export const escapeXml = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (character) => XML_ESCAPES.get(character));
 
@@ -101,6 +145,7 @@ export const createDlnaClient = ({
     if (!controlUrl) throw new Error(`Renderer does not expose ${serviceType}`);
     const response = await fetchImpl(controlUrl, {
       method: "POST",
+      redirect: "error",
       headers: {
         "Content-Type": 'text/xml; charset="utf-8"',
         SOAPACTION: `"${serviceType}#${action}"`,
@@ -110,7 +155,7 @@ export const createDlnaClient = ({
         ? AbortSignal.timeout(SOAP_TIMEOUT_MS)
         : undefined,
     });
-    const text = await response.text();
+    const text = await readDlnaXmlResponse(response);
     if (!response.ok) {
       const upnpError = extractXmlValue(text, "errorCode");
       const description = extractXmlValue(text, "errorDescription");

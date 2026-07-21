@@ -14,6 +14,7 @@ import {
 type RemoteOutputState = {
   devices: RemoteDevice[];
   scanningByProtocol: Record<RemoteOutputProtocol, boolean>;
+  discoveryErrorsByProtocol: Record<RemoteOutputProtocol, string | null>;
   discoveryError: string | null;
   protocol: RemoteOutputProtocol | null;
   sessionState: RemoteSessionStateName;
@@ -36,6 +37,7 @@ export type RemoteOutputStore = RemoteOutputState & RemoteOutputActions;
 const initialState: RemoteOutputState = {
   devices: [],
   scanningByProtocol: { cast: false, dlna: false },
+  discoveryErrorsByProtocol: { cast: null, dlna: null },
   discoveryError: null,
   protocol: null,
   sessionState: "idle",
@@ -53,14 +55,21 @@ export const useRemoteOutputStore = create<RemoteOutputStore>()((set) => ({
   ...initialState,
 
   applyDiscovery: (protocol, snapshot) =>
-    set((state) => ({
-      devices: [
-        ...state.devices.filter((device) => device.protocol !== protocol),
-        ...toRemoteDevices(protocol, snapshot.devices),
-      ].sort((left, right) => left.name.localeCompare(right.name)),
-      scanningByProtocol: { ...state.scanningByProtocol, [protocol]: snapshot.scanning },
-      discoveryError: snapshot.error ?? state.discoveryError,
-    })),
+    set((state) => {
+      const discoveryErrorsByProtocol = {
+        ...state.discoveryErrorsByProtocol,
+        [protocol]: snapshot.error,
+      };
+      return {
+        devices: [
+          ...state.devices.filter((device) => device.protocol !== protocol),
+          ...toRemoteDevices(protocol, snapshot.devices),
+        ].sort((left, right) => left.name.localeCompare(right.name)),
+        scanningByProtocol: { ...state.scanningByProtocol, [protocol]: snapshot.scanning },
+        discoveryErrorsByProtocol,
+        discoveryError: discoveryErrorsByProtocol.cast ?? discoveryErrorsByProtocol.dlna,
+      };
+    }),
 
   // Each protocol service reports its own session state; the store keeps the
   // one that owns the active session and ignores stale idle reports from the

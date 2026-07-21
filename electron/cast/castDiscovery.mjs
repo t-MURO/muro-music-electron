@@ -59,6 +59,7 @@ const readDnsName = (buffer, offset) => {
       if (hops > 32) throw new Error("DNS name pointer loop");
       continue;
     }
+    if (length > 63) throw new Error("Invalid DNS label length");
     if (cursor + 1 + length > buffer.length) throw new Error("Truncated DNS label");
     labels.push(buffer.subarray(cursor + 1, cursor + 1 + length).toString("utf8"));
     cursor += 1 + length;
@@ -68,15 +69,19 @@ const readDnsName = (buffer, offset) => {
 
 const parseRecordData = (buffer, type, dataOffset, dataLength) => {
   if (type === DNS_TYPE_PTR) {
-    return { domain: readDnsName(buffer, dataOffset).name };
+    const parsed = readDnsName(buffer, dataOffset);
+    if (parsed.next > dataOffset + dataLength) throw new Error("PTR name exceeds record data");
+    return { domain: parsed.name };
   }
   if (type === DNS_TYPE_SRV) {
     if (dataLength < 6) throw new Error("Truncated SRV record");
+    const parsedTarget = readDnsName(buffer, dataOffset + 6);
+    if (parsedTarget.next > dataOffset + dataLength) throw new Error("SRV name exceeds record data");
     return {
       priority: buffer.readUInt16BE(dataOffset),
       weight: buffer.readUInt16BE(dataOffset + 2),
       port: buffer.readUInt16BE(dataOffset + 4),
-      target: readDnsName(buffer, dataOffset + 6).name,
+      target: parsedTarget.name,
     };
   }
   if (type === DNS_TYPE_TXT) {
@@ -110,11 +115,14 @@ export const parseDnsMessage = (buffer) => {
 
   let offset = 12;
   for (let index = 0; index < questionCount; index += 1) {
-    offset = readDnsName(buffer, offset).next + 4;
+    const questionEnd = readDnsName(buffer, offset).next + 4;
+    if (questionEnd > buffer.length) throw new Error("Truncated DNS question");
+    offset = questionEnd;
   }
 
   const records = [];
   const totalRecords = answerCount + authorityCount + additionalCount;
+  if (totalRecords > 4096) throw new Error("DNS record count exceeds sane limit");
   for (let index = 0; index < totalRecords; index += 1) {
     const { name, next } = readDnsName(buffer, offset);
     if (next + 10 > buffer.length) throw new Error("Truncated DNS record");

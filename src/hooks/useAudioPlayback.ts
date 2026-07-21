@@ -21,6 +21,7 @@ import {
   type PlaybackState,
 } from "../utils";
 import type { TransitionStatePayload } from "../utils/playbackApi";
+import { disconnectFromRemote } from "../utils/remoteOutputController";
 import {
   isRemoteUnsupportedFormat,
   remoteGetStates,
@@ -157,10 +158,20 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
           useRemoteOutputStore.getState().applyDiscovery("dlna", event.payload);
         }),
         listen<RemoteSessionState>("muro://cast-state", (event) => {
+          const wasActive = activeRemoteProtocol() === "cast";
           useRemoteOutputStore.getState().applySessionState("cast", event.payload);
+          if (wasActive && event.payload.state === "error") {
+            setIsPlaying(false);
+            void disconnectFromRemote().catch(() => undefined);
+          }
         }),
         listen<RemoteSessionState>("muro://dlna-state", (event) => {
+          const wasActive = activeRemoteProtocol() === "dlna";
           useRemoteOutputStore.getState().applySessionState("dlna", event.payload);
+          if (wasActive && event.payload.state === "error") {
+            setIsPlaying(false);
+            void disconnectFromRemote().catch(() => undefined);
+          }
         }),
         listen<RemoteMediaStatusEvent>("muro://cast-media-status", (event) => {
           handleRemoteMediaStatus("cast", event.payload);

@@ -322,6 +322,15 @@ app.whenReady().then(async () => {
       volume: 1,
       current_track: null,
     };
+    if (command === "cast_get_state" || command === "dlna_get_state") return {
+      state: "idle",
+      deviceId: null,
+      deviceName: null,
+      media: null,
+      track: null,
+      lastError: null,
+      discovery: { devices: [], scanning: false, error: null },
+    };
     if (
       command === "playback_play_file" ||
       command === "playback_set_seek_mode" ||
@@ -355,6 +364,12 @@ app.whenReady().then(async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Render offscreen so Chromium keeps producing compositor frames for
+      // this never-shown window. Without frames, requestAnimationFrame
+      // callbacks and ResizeObserver deliveries starve mid-run, which stalls
+      // rAF-deferred app work and stops the virtualizer from rendering rows.
+      offscreen: true,
+      backgroundThrottling: false,
     },
   });
 
@@ -1516,11 +1531,24 @@ app.whenReady().then(async () => {
         const revealedPlayingTrack = document.querySelector(
           '[data-track-index="1"][data-track-playing="true"][data-track-selected="true"]',
         );
-        const nowPlayingReturnsToSource = Boolean(
-          window.location.hash.includes("/playlists/smoke-next-playlist") &&
-          revealedPlayingTrack?.textContent?.includes("Smoke Track 010") &&
-          document.activeElement?.matches('[data-track-table-scroll]')
-        );
+        const nowPlayingHashOk = window.location.hash.includes("/playlists/smoke-next-playlist");
+        const nowPlayingRowOk = Boolean(revealedPlayingTrack?.textContent?.includes("Smoke Track 010"));
+        const nowPlayingFocusOk = Boolean(document.activeElement?.matches('[data-track-table-scroll]'));
+        const nowPlayingDebugRow = document.querySelector('[data-track-index="1"]');
+        const nowPlayingDebug = JSON.stringify({
+          hash: window.location.hash,
+          rowExists: Boolean(nowPlayingDebugRow),
+          rowPlaying: nowPlayingDebugRow?.getAttribute("data-track-playing") ?? null,
+          rowSelected: nowPlayingDebugRow?.getAttribute("data-track-selected") ?? null,
+          rowTitle: nowPlayingDebugRow?.textContent?.slice(0, 24) ?? null,
+          activeElement: document.activeElement
+            ? document.activeElement.tagName + "#" +
+              (document.activeElement.hasAttribute("data-track-table-scroll")
+                ? "track-table-scroll"
+                : (document.activeElement.getAttribute("class") ?? "").slice(0, 60))
+            : null,
+        });
+        const nowPlayingReturnsToSource = nowPlayingHashOk && nowPlayingRowOk && nowPlayingFocusOk;
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -1658,6 +1686,10 @@ app.whenReady().then(async () => {
           persistedSmartCrateCount,
           nextUsesCurrentList,
           nowPlayingReturnsToSource,
+          nowPlayingHashOk,
+          nowPlayingRowOk,
+          nowPlayingFocusOk,
+          nowPlayingDebug,
         };
       }
       return {
@@ -1820,7 +1852,11 @@ app.whenReady().then(async () => {
         return;
       }
       if (!result.nowPlayingReturnsToSource) {
-        fail("Now-playing link did not return to and reveal the current track's source list");
+        fail(
+          "Now-playing link did not return to and reveal the current track's source list " +
+          `(hash=${result.nowPlayingHashOk}, row=${result.nowPlayingRowOk}, ` +
+          `focus=${result.nowPlayingFocusOk}, debug=${result.nowPlayingDebug})`
+        );
         return;
       }
       if (!result.showInFinderReady || shownItemPaths.at(-1) !== smokeTracks[0].source_path) {

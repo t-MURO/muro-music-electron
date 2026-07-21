@@ -2,15 +2,22 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 const listeners = new Map();
 
+// Keep exactly one Electron listener regardless of how many app-level events
+// React subscribes to. Besides avoiding EventEmitter warnings, this makes the
+// bridge's cleanup correct when the same callback is used for multiple names.
+ipcRenderer.on("muro:event", (_event, eventName, payload) => {
+  for (const listener of listeners.get(eventName) ?? []) {
+    listener(payload);
+  }
+});
+
 const on = (name, listener) => {
-  const wrapped = (_event, eventName, payload) => {
-    if (eventName === name) listener(payload);
-  };
-  ipcRenderer.on("muro:event", wrapped);
-  listeners.set(listener, wrapped);
+  const namedListeners = listeners.get(name) ?? new Set();
+  namedListeners.add(listener);
+  listeners.set(name, namedListeners);
   return () => {
-    ipcRenderer.removeListener("muro:event", wrapped);
-    listeners.delete(listener);
+    namedListeners.delete(listener);
+    if (namedListeners.size === 0) listeners.delete(name);
   };
 };
 

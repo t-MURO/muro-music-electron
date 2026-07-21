@@ -142,9 +142,11 @@ export const TrackTable = memo(
 
       onRowSelect(index, revealRequest.trackId);
       rowVirtualizer.scrollToIndex(index, { align: "center" });
+      // Focus synchronously: rAF callbacks can starve indefinitely while the
+      // window is hidden or occluded, so focus must not wait on a frame.
+      tableContainerRef.current?.focus({ preventScroll: true });
       const frame = requestAnimationFrame(() => {
         rowVirtualizer.scrollToIndex(index, { align: "center" });
-        tableContainerRef.current?.focus({ preventScroll: true });
       });
       return () => cancelAnimationFrame(frame);
     }, [onRowSelect, revealRequest, rowVirtualizer, tracks]);

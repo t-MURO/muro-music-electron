@@ -103,7 +103,7 @@ export const createDlnaService = ({
     // SetAVTransportURI and Play, and the synthetic post-load status is pushed
     // here too. Neither is a real end-of-track, so never advance the queue
     // from a sample taken during a load.
-    const finished = sessionState === "loading"
+    const finished = sessionState === "loading" || session.suppressFinished
       ? false
       : isDlnaFinishedTransition(previous, nextStatus);
     session.lastStatus = nextStatus;
@@ -251,6 +251,7 @@ export const createDlnaService = ({
           loadedTrack: null,
           statusTimer: null,
           pollFailures: 0,
+          suppressFinished: false,
         };
         startStatusPolling();
         setState("connected");
@@ -373,22 +374,46 @@ export const createDlnaService = ({
       });
     },
 
-    async dlna_play() {
-      await requireSession().client.play();
-      await pollStatusOnce();
-      return publicState();
+    dlna_play() {
+      return runSessionOp(async () => {
+        const activeSession = requireSession();
+        activeSession.suppressFinished = true;
+        try {
+          await activeSession.client.play();
+          await pollStatusOnce();
+          return publicState();
+        } finally {
+          activeSession.suppressFinished = false;
+        }
+      });
     },
 
-    async dlna_pause() {
-      await requireSession().client.pause();
-      await pollStatusOnce();
-      return publicState();
+    dlna_pause() {
+      return runSessionOp(async () => {
+        const activeSession = requireSession();
+        activeSession.suppressFinished = true;
+        try {
+          await activeSession.client.pause();
+          await pollStatusOnce();
+          return publicState();
+        } finally {
+          activeSession.suppressFinished = false;
+        }
+      });
     },
 
-    async dlna_seek({ positionSecs }) {
-      await requireSession().client.seek(positionSecs);
-      await pollStatusOnce();
-      return publicState();
+    dlna_seek({ positionSecs }) {
+      return runSessionOp(async () => {
+        const activeSession = requireSession();
+        activeSession.suppressFinished = true;
+        try {
+          await activeSession.client.seek(positionSecs);
+          await pollStatusOnce();
+          return publicState();
+        } finally {
+          activeSession.suppressFinished = false;
+        }
+      });
     },
 
     async dlna_set_volume({ volume }) {

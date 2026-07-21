@@ -69,7 +69,7 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
   const handleSelectLocal = useCallback(async (targetDeviceId: string, label: string) => {
     setBusyKey(`local:${targetDeviceId}`);
     try {
-      if (selectRemoteOutputActive(useRemoteOutputStore.getState())) {
+      if (useRemoteOutputStore.getState().protocol) {
         await disconnectFromRemote();
       }
       await playbackSetOutputDevice(targetDeviceId);
@@ -131,7 +131,7 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
             key={key}
             className={rowClass(isSelected)}
             onClick={() => void handleSelectLocal(device.deviceId, device.deviceId === "" ? "" : device.label)}
-            disabled={busyKey === key}
+            disabled={busyKey !== null || isConnecting}
             role="menuitem"
             type="button"
             data-output-local-device={device.deviceId || "default"}
@@ -181,7 +181,7 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
             key={device.key}
             className={rowClass(isConnected)}
             onClick={() => (isConnected ? void handleDisconnect() : void handleSelectNetwork(device.key))}
-            disabled={isBusy || isConnecting}
+            disabled={busyKey !== null || isBusy || isConnecting}
             role="menuitem"
             type="button"
             data-output-device={device.key}
