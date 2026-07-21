@@ -3,7 +3,11 @@ import { listen } from "@muro/desktop/events";
 import { t } from "../i18n";
 import type { Track } from "../types";
 import { usePlaybackStore, trackToCurrentTrack, notify } from "../stores";
-import { useCastStore, isCastOutputActive } from "../stores/castStore";
+import {
+  useRemoteOutputStore,
+  isRemoteOutputActive,
+  activeRemoteProtocol,
+} from "../stores/remoteOutputStore";
 import {
   playbackGetState,
   playbackPause,
@@ -17,17 +21,18 @@ import {
 } from "../utils";
 import type { TransitionStatePayload } from "../utils/playbackApi";
 import {
-  castErrorCode,
-  castGetState,
-  castLoadTrack,
-  castPause,
-  castPlay,
-  castSeek,
-  castSetVolume,
-  type CastDiscoverySnapshot,
-  type CastMediaStatusEvent,
-  type CastSessionState,
-} from "../utils/castApi";
+  isRemoteUnsupportedFormat,
+  remoteGetStates,
+  remoteLoadTrack,
+  remotePause,
+  remotePlay,
+  remoteSeek,
+  remoteSetVolume,
+  type RemoteDiscoverySnapshot,
+  type RemoteMediaStatusEvent,
+  type RemoteOutputProtocol,
+  type RemoteSessionState,
+} from "../utils/remoteOutputApi";
 
 // Keep the playback track type available to hook consumers.
 export type { CurrentTrack } from "../stores";
@@ -117,35 +122,50 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
     let cancelled = false;
     let removeListeners: (() => void) | null = null;
 
+    const handleRemoteMediaStatus = (
+      protocol: RemoteOutputProtocol,
+      { status, finished }: RemoteMediaStatusEvent,
+    ) => {
+      useRemoteOutputStore.getState().applyMediaStatus(protocol, status);
+      if (activeRemoteProtocol() === protocol && isRemoteOutputActive()) {
+        setCurrentPosition(status.position);
+        if (typeof status.duration === "number" && status.duration > 0) {
+          setDuration(status.duration);
+        }
+        setIsPlaying(status.playerState === "playing" || status.playerState === "buffering");
+        if (finished) onTrackEndRef.current?.();
+      }
+    };
+
     const setup = async () => {
       const listeners = await Promise.all([
-        // While the cast output is active the receiver's status drives the
-        // store; events from the (paused) local element are ignored.
+        // While a remote output (Cast or DLNA) is active the device's status
+        // drives the store; events from the (paused) local element are ignored.
         listen<PlaybackState>("muro://playback-state", (event) => {
-          if (isCastOutputActive()) return;
+          if (isRemoteOutputActive()) return;
           updateFromPlaybackState(event.payload);
         }),
         listen<number>("muro://playback-position", (event) => {
-          if (isCastOutputActive()) return;
+          if (isRemoteOutputActive()) return;
           setCurrentPosition(event.payload);
         }),
-        listen<CastDiscoverySnapshot>("muro://cast-devices", (event) => {
-          useCastStore.getState().applyDiscovery(event.payload);
+        listen<RemoteDiscoverySnapshot>("muro://cast-devices", (event) => {
+          useRemoteOutputStore.getState().applyDiscovery("cast", event.payload);
         }),
-        listen<CastSessionState>("muro://cast-state", (event) => {
-          useCastStore.getState().applySessionState(event.payload);
+        listen<RemoteDiscoverySnapshot>("muro://dlna-devices", (event) => {
+          useRemoteOutputStore.getState().applyDiscovery("dlna", event.payload);
         }),
-        listen<CastMediaStatusEvent>("muro://cast-media-status", (event) => {
-          const { status, finished } = event.payload;
-          useCastStore.getState().applyMediaStatus(status);
-          if (isCastOutputActive()) {
-            setCurrentPosition(status.position);
-            if (typeof status.duration === "number" && status.duration > 0) {
-              setDuration(status.duration);
-            }
-            setIsPlaying(status.playerState === "playing" || status.playerState === "buffering");
-          }
-          if (finished) onTrackEndRef.current?.();
+        listen<RemoteSessionState>("muro://cast-state", (event) => {
+          useRemoteOutputStore.getState().applySessionState("cast", event.payload);
+        }),
+        listen<RemoteSessionState>("muro://dlna-state", (event) => {
+          useRemoteOutputStore.getState().applySessionState("dlna", event.payload);
+        }),
+        listen<RemoteMediaStatusEvent>("muro://cast-media-status", (event) => {
+          handleRemoteMediaStatus("cast", event.payload);
+        }),
+        listen<RemoteMediaStatusEvent>("muro://dlna-media-status", (event) => {
+          handleRemoteMediaStatus("dlna", event.payload);
         }),
         listen<MediaControlEvent>("muro://media-control", (event) => {
           const action = typeof event.payload === "string"
@@ -194,7 +214,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
           onMediaControlRef.current?.(action);
         }),
         listen("muro://track-ended", () => {
-          if (isCastOutputActive()) return;
+          if (isRemoteOutputActive()) return;
           onTrackEndRef.current?.();
         }),
         listen<TransitionStatePayload>("muro://transition-state", (event) => {
@@ -220,21 +240,28 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       }
       removeListeners = cleanup;
 
-      // Recover cast session state first (survives a renderer reload).
+      // Recover remote session state first (survives a renderer reload).
       try {
-        const castState = await castGetState();
+        const states = await remoteGetStates();
         if (!cancelled) {
-          useCastStore.getState().applySessionState(castState);
-          useCastStore.getState().applyDiscovery(castState.discovery);
+          const store = useRemoteOutputStore.getState();
+          if (states.cast) {
+            store.applySessionState("cast", states.cast);
+            store.applyDiscovery("cast", states.cast.discovery);
+          }
+          if (states.dlna) {
+            store.applySessionState("dlna", states.dlna);
+            store.applyDiscovery("dlna", states.dlna.discovery);
+          }
         }
       } catch {
-        // The desktop bridge may predate cast support; local playback works.
+        // The desktop bridge may predate remote outputs; local playback works.
       }
 
       // Get initial state
       try {
         const initialState = await playbackGetState();
-        if (!cancelled && !isCastOutputActive()) updateFromPlaybackState(initialState);
+        if (!cancelled && !isRemoteOutputActive()) updateFromPlaybackState(initialState);
       } catch (error) {
         if (!cancelled) notify.error("Failed to get initial playback state");
       }
@@ -261,13 +288,14 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
     });
   }, [seekMode]);
 
-  // Commands below route to exactly one output: the Cast receiver while a
-  // cast session owns playback, the local audio element otherwise.
+  // Commands below route to exactly one output: the remote device while a
+  // Cast/DLNA session owns playback, the local audio element otherwise.
   const playTrack = useCallback(
     async (track: Track) => {
-      if (isCastOutputActive()) {
+      const protocol = activeRemoteProtocol();
+      if (protocol && isRemoteOutputActive()) {
         try {
-          await castLoadTrack({
+          await remoteLoadTrack(protocol, {
             trackId: track.id,
             sourcePath: track.sourcePath,
             title: track.title,
@@ -284,9 +312,9 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
           setCurrentTrack(trackToCurrentTrack(track));
         } catch (error) {
           notify.error(
-            castErrorCode(error) === "CAST_UNSUPPORTED_FORMAT"
-              ? t("player.cast.unsupported")
-              : t("player.cast.loadFailed"),
+            isRemoteUnsupportedFormat(error)
+              ? t("player.output.unsupported")
+              : t("player.output.loadFailed"),
           );
         }
         return;
@@ -314,18 +342,19 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   );
 
   const togglePlay = useCallback(async () => {
-    if (isCastOutputActive()) {
-      const remoteState = useCastStore.getState().remoteMedia?.playerState;
+    const protocol = activeRemoteProtocol();
+    if (protocol && isRemoteOutputActive()) {
+      const remoteState = useRemoteOutputStore.getState().remoteMedia?.playerState;
       try {
         if (remoteState === "playing" || remoteState === "buffering") {
-          await castPause();
+          await remotePause(protocol);
           setIsPlaying(false);
         } else {
-          await castPlay();
+          await remotePlay(protocol);
           setIsPlaying(true);
         }
       } catch (error) {
-        notify.error(t("player.cast.commandFailed"));
+        notify.error(t("player.output.commandFailed"));
       }
       return;
     }
@@ -338,12 +367,13 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   }, [setIsPlaying]);
 
   const play = useCallback(async () => {
-    if (isCastOutputActive()) {
+    const protocol = activeRemoteProtocol();
+    if (protocol && isRemoteOutputActive()) {
       try {
-        await castPlay();
+        await remotePlay(protocol);
         setIsPlaying(true);
       } catch (error) {
-        notify.error(t("player.cast.commandFailed"));
+        notify.error(t("player.output.commandFailed"));
       }
       return;
     }
@@ -356,12 +386,13 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   }, [setIsPlaying]);
 
   const pause = useCallback(async () => {
-    if (isCastOutputActive()) {
+    const protocol = activeRemoteProtocol();
+    if (protocol && isRemoteOutputActive()) {
       try {
-        await castPause();
+        await remotePause(protocol);
         setIsPlaying(false);
       } catch (error) {
-        notify.error(t("player.cast.commandFailed"));
+        notify.error(t("player.output.commandFailed"));
       }
       return;
     }
@@ -375,12 +406,13 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
 
   const seek = useCallback(
     async (positionSecs: number) => {
-      if (isCastOutputActive()) {
+      const protocol = activeRemoteProtocol();
+      if (protocol && isRemoteOutputActive()) {
         try {
-          await castSeek(positionSecs);
+          await remoteSeek(protocol, positionSecs);
           setCurrentPosition(positionSecs);
         } catch (error) {
-          notify.error(t("player.cast.commandFailed"));
+          notify.error(t("player.output.commandFailed"));
         }
         return;
       }
@@ -397,12 +429,13 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   const handleSetVolume = useCallback(
     async (newVolume: number) => {
       const clamped = Math.max(0, Math.min(1, newVolume));
-      if (isCastOutputActive()) {
+      const protocol = activeRemoteProtocol();
+      if (protocol && isRemoteOutputActive()) {
         try {
-          await castSetVolume(clamped);
+          await remoteSetVolume(protocol, clamped);
           setVolume(clamped);
         } catch (error) {
-          notify.error(t("player.cast.commandFailed"));
+          notify.error(t("player.output.commandFailed"));
         }
         return;
       }

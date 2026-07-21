@@ -102,4 +102,29 @@ export {
   type CastErrorPayload,
   type CastLoadedTrack,
 } from "./castApi";
-export { connectToCastDevice, disconnectFromCast } from "./castController";
+export {
+  remoteStartDiscovery,
+  remoteStopDiscovery,
+  remoteConnect,
+  remoteDisconnect,
+  remoteLoadTrack,
+  remotePlay,
+  remotePause,
+  remoteSeek,
+  remoteSetVolume,
+  remoteGetStates,
+  remoteErrorCode,
+  remoteDeviceKey,
+  toRemoteDevices,
+  isRemoteUnsupportedFormat,
+  type RemoteDevice,
+  type RemoteOutputProtocol,
+  type RemoteDiscoverySnapshot,
+  type RemoteSessionState,
+  type RemoteSessionStateName,
+  type RemoteMediaStatus,
+  type RemoteMediaStatusEvent,
+  type RemoteErrorPayload,
+  type RemoteLoadedTrack,
+} from "./remoteOutputApi";
+export { connectToRemoteDevice, disconnectFromRemote } from "./remoteOutputController";
