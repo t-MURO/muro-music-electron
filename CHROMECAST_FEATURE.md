@@ -1,8 +1,33 @@
 # Chromecast Feature Plan
 
-Status: design and implementation handoff only  
-Last reviewed: 2026-07-15  
+Status: MVP implemented on `feature/chromecast-mvp`; physical-device verification pending  
+Last reviewed: 2026-07-21  
 Recommended first target: Windows MVP using a physical Chromecast or Google Cast speaker
+
+## Implementation status (2026-07-21)
+
+Milestones 1–3 are implemented with automated coverage; Milestone 0 (the
+physical-device spike) could not run in the implementation environment because
+no Cast device was available, so its exit criteria move to first manual test:
+
+- `electron/cast/` holds the dependency-free CastV2 stack: `castProtocol.mjs`
+  (protobuf framing over TLS, heartbeat, request correlation),
+  `castDiscovery.mjs` (mDNS/DNS-SD), `castMediaServer.mjs` (tokenized LAN
+  server reusing `fileProtocol.mjs` range logic), `castState.mjs`
+  (status normalization, error codes, format allowlist), `castClientAdapter.mjs`
+  (the only module touching the protocol), and `castService.mjs` (session
+  state machine behind the `cast_*` commands).
+- The renderer routes playback through one active output
+  (`useAudioPlayback` + `castStore` + `castController`), advances the queue on
+  the receiver's FINISHED status exactly once, and adds a Cast button with a
+  device picker to the player bar.
+- `npm run test:cast` covers protocol round-trips, mDNS parsing, token
+  authorization/revocation, and mocked-adapter session flows.
+- The direct-cast allowlist starts at MP3/FLAC/WAV/OGG/Opus; M4A/AAC and
+  AIFF/ALAC report `CAST_UNSUPPORTED_FORMAT` until verified on hardware.
+- Still open before this merges: the physical-device matrix below (discovery,
+  firewall prompt, load/seek/volume on a real receiver), Windows packaging
+  smoke, and any allowlist expansion that testing justifies.
 
 ## Executive summary
 
