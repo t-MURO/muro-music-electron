@@ -268,7 +268,7 @@ export const MixSuggestions = ({
                 <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-secondary)]">{reason}</span>
                 <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 tabular-nums text-[var(--color-text-muted)]">{track.bpm ? `${track.bpm.toFixed(1)} BPM · ${formatBpmDifference(bpmDifference)}` : "BPM unknown"}</span>
                 {genreMatch && <span className="rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-muted)]">Same genre</span>}
-                {track.rating > 0 && <span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-muted)]"><Star className="h-2.5 w-2.5" fill="currentColor" />{track.rating}</span>}
+                {track.rating > 0 && <span className="inline-flex items-center gap-0.5 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[var(--color-text-muted)]"><Star className="h-2.5 w-2.5 text-[var(--color-rating-star)]" fill="currentColor" />{track.rating}</span>}
               </div>
               <div className="mt-1 flex items-center justify-end gap-1 pl-10" data-mix-suggestion-actions>
                 {onMixWithCurrent && (

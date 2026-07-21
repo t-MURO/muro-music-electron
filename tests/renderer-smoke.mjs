@@ -639,6 +639,9 @@ app.whenReady().then(async () => {
         }
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const ratingSetToThree = ratingControl?.getAttribute("aria-valuenow") === "3";
+        const ratingStarsRedReady = getComputedStyle(
+          thirdRatingStar?.querySelector("[data-rating-fill]") ?? document.documentElement
+        ).color === "rgb(239, 51, 64)";
         if (thirdRatingStar && thirdRatingRect) {
           thirdRatingStar.dispatchEvent(new MouseEvent("click", {
             bubbles: true,
@@ -1589,6 +1592,12 @@ app.whenReady().then(async () => {
         window.location.hash = "#/";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const tableArtistLink = document.querySelector('[data-track-index="0"] [data-track-artist-link="true"]');
+        const tableArtistCell = tableArtistLink?.closest('[data-column-key="artist"]');
+        const artistLinkRect = tableArtistLink?.getBoundingClientRect();
+        const artistCellRect = tableArtistCell?.getBoundingClientRect();
+        tableArtistCell?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const artistCellDoesNotNavigate = window.location.hash === "#/";
         tableArtistLink?.click();
         await new Promise((resolve) => setTimeout(resolve, 100));
         const tableArtistNavigationReady =
@@ -1599,6 +1608,18 @@ app.whenReady().then(async () => {
         window.location.hash = "#/";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const tableAlbumLink = document.querySelector('[data-track-index="0"] [data-track-album-link="true"]');
+        const tableAlbumCell = tableAlbumLink?.closest('[data-column-key="album"]');
+        const albumLinkRect = tableAlbumLink?.getBoundingClientRect();
+        const albumCellRect = tableAlbumCell?.getBoundingClientRect();
+        tableAlbumCell?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const albumCellDoesNotNavigate = window.location.hash === "#/";
+        const tableTextOnlyNavigationReady = Boolean(
+          artistCellDoesNotNavigate &&
+          albumCellDoesNotNavigate &&
+          artistLinkRect && artistCellRect && artistLinkRect.width < artistCellRect.width - 8 &&
+          albumLinkRect && albumCellRect && albumLinkRect.width < albumCellRect.width - 8
+        );
         tableAlbumLink?.click();
         await new Promise((resolve) => setTimeout(resolve, 100));
         const tableAlbumNavigationReady =
@@ -1770,6 +1791,7 @@ app.whenReady().then(async () => {
           ratingFitsCell,
           tableAlbumMetadataMenuReady,
           ratingSetToThree,
+          ratingStarsRedReady,
           threeStarRatingClearsToZero,
           selectedRowUsesGreyHighlight,
           keyColumnColorReady,
@@ -1850,6 +1872,7 @@ app.whenReady().then(async () => {
           artistImageApplied,
           tableArtistNavigationReady,
           tableAlbumNavigationReady,
+          tableTextOnlyNavigationReady,
           genreIndexReady,
           genreDrilldownReady,
           genreHistoryReady,
@@ -1987,6 +2010,7 @@ app.whenReady().then(async () => {
         !result.rowThumbnailReady ||
         !result.ratingFitsCell ||
         !result.ratingSetToThree ||
+        !result.ratingStarsRedReady ||
         !result.threeStarRatingClearsToZero ||
         !ratingUpdates.some((update) => update.updates?.rating === 3) ||
         !ratingUpdates.some((update) => update.updates?.rating === 0) ||
@@ -1996,6 +2020,7 @@ app.whenReady().then(async () => {
         fail(
           `Track row selection UI failed: thumbnail=${result.rowThumbnailReady}, ` +
           `ratingFits=${result.ratingFitsCell}, ratingSet=${result.ratingSetToThree}, ` +
+          `ratingRed=${result.ratingStarsRedReady}, ` +
           `ratingCleared=${result.threeStarRatingClearsToZero}, ratingUpdates=${JSON.stringify(ratingUpdates)}, ` +
           `selectedGrey=${result.selectedRowUsesGreyHighlight}, ` +
           `playingRed=${result.playingRowUsesRedHighlight}`
@@ -2042,10 +2067,14 @@ app.whenReady().then(async () => {
         );
         return;
       }
-      if (!result.tableArtistNavigationReady || !result.tableAlbumNavigationReady) {
+      if (
+        !result.tableArtistNavigationReady ||
+        !result.tableAlbumNavigationReady ||
+        !result.tableTextOnlyNavigationReady
+      ) {
         fail(
           `Table metadata navigation failed: artist=${result.tableArtistNavigationReady}, ` +
-          `album=${result.tableAlbumNavigationReady}`
+          `album=${result.tableAlbumNavigationReady}, textOnly=${result.tableTextOnlyNavigationReady}`
         );
         return;
       }

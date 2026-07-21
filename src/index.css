@@ -31,6 +31,7 @@
   --color-row-selected-hover: rgba(148, 163, 184, 0.2);
   --color-row-playing: rgba(239, 51, 64, 0.14);
   --color-row-playing-hover: rgba(239, 51, 64, 0.2);
+  --color-rating-star: #ef3340;
 
   /* Grid layout */
   --sidebar-width: 200px;

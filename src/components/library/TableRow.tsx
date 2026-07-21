@@ -247,7 +247,7 @@ export const TableRow = memo(
               ) : isArtistLink || isAlbumLink ? (
                 <button
                   type="button"
-                  className="min-w-0 flex-1 truncate text-left transition-colors hover:text-[var(--color-accent)] hover:underline focus-visible:text-[var(--color-accent)] focus-visible:underline focus-visible:outline-none"
+                  className="min-w-0 max-w-full truncate text-left transition-colors hover:text-[var(--color-accent)] hover:underline focus-visible:text-[var(--color-accent)] focus-visible:underline focus-visible:outline-none"
                   title={isArtistLink ? `Open artist ${value}` : `Open album ${value}`}
                   onClick={(event) => {
                     event.stopPropagation();
