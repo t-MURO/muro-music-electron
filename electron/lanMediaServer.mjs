@@ -46,7 +46,7 @@ export const selectLanAddress = (interfaces, { preferHost } = {}) => {
   return candidates[0].address;
 };
 
-export const createLanMediaServer = ({ bindHost = "0.0.0.0" } = {}) => {
+export const createLanMediaServer = ({ bindHost = "0.0.0.0", onRequest } = {}) => {
   // token -> { filePath } — the only way a request resolves to a file.
   const authorizedFiles = new Map();
   let sessionToken = null;
@@ -54,6 +54,11 @@ export const createLanMediaServer = ({ bindHost = "0.0.0.0" } = {}) => {
   let port = 0;
 
   const handleRequest = async (request, response) => {
+    onRequest?.({
+      method: request.method,
+      url: request.url,
+      range: request.headers.range ?? null,
+    });
     if (request.method !== "GET" && request.method !== "HEAD") {
       response.writeHead(405, { Allow: "GET, HEAD" });
       response.end();

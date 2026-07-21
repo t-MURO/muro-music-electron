@@ -22,6 +22,7 @@ import { createWaveformCache } from "./waveformCache.mjs";
 import { createArtistProfileService } from "./artistProfiles.mjs";
 import { createAlbumCoverService } from "./albumCovers.mjs";
 import { createCastService } from "./cast/castService.mjs";
+import { createDlnaService } from "./dlna/dlnaService.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -439,6 +440,7 @@ export const createBackend = ({
   metadataFetchImpl,
   musicBrainzIntervalMs,
   castService: castServiceOverride,
+  dlnaService: dlnaServiceOverride,
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
@@ -451,8 +453,10 @@ export const createBackend = ({
     cacheDir: waveformCacheDir ?? path.join(path.dirname(cacheDir), "waveforms"),
   });
   const castService = castServiceOverride ?? createCastService({ emit });
+  const dlnaService = dlnaServiceOverride ?? createDlnaService({ emit });
   const commands = {
     ...castService.commands,
+    ...dlnaService.commands,
     async import_files({ paths, dbPath }, sender) {
       const audioPaths = await collectAudioPaths(Array.isArray(paths) ? paths : []);
       const imported = [];
@@ -884,6 +888,7 @@ export const createBackend = ({
     },
     close() {
       castService.close();
+      dlnaService.close();
       keyFinder.close();
       closeDatabases();
     },
