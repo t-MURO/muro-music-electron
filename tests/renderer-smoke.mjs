@@ -61,6 +61,7 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   key: ["8A", "8A", "9A", "7A", "8B", "2B"][index % 6],
   bpm: index === 1 ? 0 : 120 + (index % 8),
   rating: 0,
+  label: index % 2 === 0 ? "Muro Records" : "Night Shift Music",
   comment: `Smoke comment ${index}`,
   disc_number: (index % 2) + 1,
   last_played_at: `2026-07-${String((index % 19) + 1).padStart(2, "0")}T18:30:00.000Z`,
@@ -677,6 +678,41 @@ app.whenReady().then(async () => {
         );
         document.querySelector('[data-selection-edit]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
+        const autocompleteFieldsReady = [
+          ["artist", "Muro"],
+          ["albumArtist", "Muro"],
+          ["album", "Smoke Album 00"],
+          ["genre", "Electronic"],
+          ["label", "Muro Records"],
+        ].every(([field, expected]) => {
+          const input = document.querySelector('[data-autocomplete-field="' + field + '"]');
+          const listId = input?.getAttribute("list");
+          const list = listId ? document.getElementById(listId) : null;
+          return list instanceof HTMLDataListElement &&
+            [...list.options].some((option) => option.value === expected);
+        });
+        const artistEditInput = document.querySelector('[data-autocomplete-field="artist"]');
+        const albumArtistEditInput = document.querySelector('[data-autocomplete-field="albumArtist"]');
+        const sameAsArtistButton = document.querySelector('[data-testid="same-as-artist"]');
+        const sameAsArtistInitiallyDisabled = sameAsArtistButton instanceof HTMLButtonElement &&
+          sameAsArtistButton.disabled;
+        const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        if (artistEditInput instanceof HTMLInputElement && nativeValueSetter) {
+          nativeValueSetter.call(artistEditInput, "Copied Artist");
+          artistEditInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const enabledSameAsArtistButton = document.querySelector('[data-testid="same-as-artist"]');
+        const sameAsArtistEnabled = enabledSameAsArtistButton instanceof HTMLButtonElement &&
+          !enabledSameAsArtistButton.disabled;
+        enabledSameAsArtistButton?.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const sameAsArtistReady = Boolean(
+          sameAsArtistInitiallyDisabled &&
+          sameAsArtistEnabled &&
+          albumArtistEditInput instanceof HTMLInputElement &&
+          albumArtistEditInput.value === "Copied Artist"
+        );
         const editCoverField = document.querySelector('[data-cover-art-field]');
         editCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -723,6 +759,41 @@ app.whenReady().then(async () => {
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
+        document.querySelector('[aria-label="Select all tracks"]')?.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        document.querySelector('[data-selection-edit]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const batchEditModal = document.querySelector('[data-edit-track-modal]');
+        const batchArtistInput = batchEditModal?.querySelector('[data-autocomplete-field="artist"]');
+        const batchAlbumArtistInput = batchEditModal?.querySelector('[data-autocomplete-field="albumArtist"]');
+        const batchAlbumInput = batchEditModal?.querySelector('[data-autocomplete-field="album"]');
+        const batchGenreInput = batchEditModal?.querySelector('[data-autocomplete-field="genre"]');
+        const batchLabelInput = batchEditModal?.querySelector('[data-autocomplete-field="label"]');
+        const batchCommonValuesReady = Boolean(
+          batchEditModal?.textContent?.includes("250") &&
+          batchArtistInput instanceof HTMLInputElement && batchArtistInput.value === "Muro" &&
+          batchAlbumArtistInput instanceof HTMLInputElement && batchAlbumArtistInput.value === "Muro" &&
+          batchAlbumInput instanceof HTMLInputElement && batchAlbumInput.value === "" &&
+          batchAlbumInput.placeholder === "Mixed values" &&
+          batchGenreInput instanceof HTMLInputElement && batchGenreInput.value === "" &&
+          batchGenreInput.placeholder === "Mixed values" &&
+          batchLabelInput instanceof HTMLInputElement && batchLabelInput.value === "" &&
+          batchLabelInput.placeholder === "Mixed values" &&
+          !batchEditModal.querySelector('[data-mixed-field="rating"]')
+        );
+        [...(batchEditModal?.querySelectorAll("button") ?? [])]
+          .find((button) => button.textContent?.trim() === "Cancel")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const restoreSelectedRow = document.querySelector(
+          '[data-track-index="' + (selectedAfterArrowDown ?? "1") + '"]'
+        );
+        restoreSelectedRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const rowThumbnailReady = Boolean(
           firstTrackRow?.querySelector('[data-track-thumbnail]') &&
           document.querySelector('[aria-label="Select all tracks"]')
@@ -960,11 +1031,22 @@ app.whenReady().then(async () => {
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
-          clientX: 160,
-          clientY: 160,
+          clientX: window.innerWidth - 4,
+          clientY: window.innerHeight - 4,
         }));
         await new Promise((resolve) => setTimeout(resolve, 40));
-        const contextMenuOpened = Boolean(document.querySelector('[data-popover]'));
+        const edgeContextMenu = document.querySelector('[data-popover]');
+        const edgeContextRect = edgeContextMenu?.getBoundingClientRect();
+        const contextMenuOpened = Boolean(edgeContextMenu);
+        const contextMenuViewportReady = Boolean(
+          edgeContextRect &&
+          edgeContextRect.left >= 7 &&
+          edgeContextRect.top >= 7 &&
+          edgeContextRect.right <= window.innerWidth - 7 &&
+          edgeContextRect.bottom <= window.innerHeight - 7 &&
+          edgeContextMenu?.getAttribute("data-popover-horizontal") === "left" &&
+          edgeContextMenu?.getAttribute("data-popover-vertical") === "up"
+        );
         document.querySelector('[data-popover]')?.dispatchEvent(new PointerEvent("pointerdown", {
           bubbles: true,
           cancelable: true,
@@ -1678,6 +1760,9 @@ app.whenReady().then(async () => {
           tableFocusedAfterClick,
           selectedAfterArrowDown,
           selectionBarReady,
+          autocompleteFieldsReady,
+          sameAsArtistReady,
+          batchCommonValuesReady,
           manualCoverMenuReady,
           manualCoverFetchReady,
           manualCoverCopyReady,
@@ -1729,6 +1814,7 @@ app.whenReady().then(async () => {
           mixIndicatorReady,
           analysisNotationSettingsReady,
           contextMenuOpened,
+          contextMenuViewportReady,
           contextMenuStayedOpenInside,
           contextMenuClosedOutside,
           showInFinderReady,
@@ -2053,6 +2139,18 @@ app.whenReady().then(async () => {
         fail("Artist information provider settings are not visible in the Application settings tab");
         return;
       }
+      if (!result.autocompleteFieldsReady) {
+        fail("Edit metadata autocomplete suggestions were not populated from the library");
+        return;
+      }
+      if (!result.sameAsArtistReady) {
+        fail("Album artist could not be copied from the artist field");
+        return;
+      }
+      if (!result.batchCommonValuesReady) {
+        fail("Batch metadata editing did not show common values and mark differing values as mixed");
+        return;
+      }
       if (!result.acoustIdSettingsReady) {
         fail("AcoustID client key settings are not visible in the Application settings tab");
         return;
@@ -2096,6 +2194,7 @@ app.whenReady().then(async () => {
       }
       if (
         !result.contextMenuOpened ||
+        !result.contextMenuViewportReady ||
         !result.contextMenuStayedOpenInside ||
         !result.contextMenuClosedOutside ||
         !result.showInFinderReady ||
@@ -2103,6 +2202,7 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Context-menu dismissal failed: opened=${result.contextMenuOpened}, ` +
+          `viewport=${result.contextMenuViewportReady}, ` +
           `inside=${result.contextMenuStayedOpenInside}, outside=${result.contextMenuClosedOutside}, ` +
           `showInFinder=${result.showInFinderReady}, revealed=${shownItemPaths.at(-1)}`
         );

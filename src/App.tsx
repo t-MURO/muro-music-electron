@@ -1409,6 +1409,7 @@ function App() {
       />
       <EditTrackModal
         isOpen={isEditModalOpen}
+        libraryTracks={allTracks}
         tracks={editTrackIds
           .map((id) => allTracks.find((t) => t.id === id))
           .filter((t): t is Track => t !== undefined)}

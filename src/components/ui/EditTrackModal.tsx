@@ -19,6 +19,7 @@ type FetchedCoverArt = {
 type EditTrackModalProps = {
   isOpen: boolean;
   tracks: Track[];
+  libraryTracks: Track[];
   onClose: () => void;
   onSave: (trackIds: string[], updates: TrackMetadataUpdates) => Promise<void>;
   onFetchCoverArt: (
@@ -87,9 +88,44 @@ const trackToForm = (track: Track): FormState => ({
   coverArtThumbPath: track.coverArtThumbPath ?? null,
 });
 
+const FORM_FIELDS = Object.keys(EMPTY_FORM) as Array<keyof FormState>;
+
+const sharedFormForTracks = (tracks: Track[]) => {
+  const forms = tracks.map(trackToForm);
+  const form = { ...EMPTY_FORM };
+  const mixedFields = new Set<keyof FormState>();
+  if (forms.length === 0) return { form, mixedFields };
+  for (const field of FORM_FIELDS) {
+    const firstValue = forms[0][field];
+    if (forms.every((candidate) => Object.is(candidate[field], firstValue))) {
+      Object.assign(form, { [field]: firstValue });
+    } else {
+      mixedFields.add(field);
+    }
+  }
+  return { form, mixedFields };
+};
+
+const buildSuggestions = (values: Array<string | undefined>) => {
+  const counts = new Map<string, { value: string; count: number }>();
+  for (const candidate of values) {
+    const value = candidate?.trim();
+    if (!value) continue;
+    const key = value.toLocaleLowerCase();
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { value, count: 1 });
+  }
+  return [...counts.values()]
+    .sort((left, right) => right.count - left.count || left.value.localeCompare(right.value))
+    .slice(0, 500)
+    .map(({ value }) => value);
+};
+
 export const EditTrackModal = ({
   isOpen,
   tracks,
+  libraryTracks,
   onClose,
   onSave,
   onFetchCoverArt,
@@ -97,6 +133,7 @@ export const EditTrackModal = ({
   const isBatch = tracks.length > 1;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
+  const [mixedFields, setMixedFields] = useState<Set<keyof FormState>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverMenuPosition, setCoverMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -104,6 +141,16 @@ export const EditTrackModal = ({
   const [isPastingCover, setIsPastingCover] = useState(false);
   const [clipboardImageAvailable, setClipboardImageAvailable] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
+  const suggestions = useMemo(() => {
+    const people = libraryTracks.flatMap((track) => [track.artist, track.artists]);
+    return {
+      artist: buildSuggestions(people),
+      albumArtist: buildSuggestions(people),
+      album: buildSuggestions(libraryTracks.map((track) => track.album)),
+      genre: buildSuggestions(libraryTracks.flatMap((track) => track.genre?.split(/\s*,\s*/g) ?? [])),
+      label: buildSuggestions(libraryTracks.map((track) => track.label)),
+    };
+  }, [libraryTracks]);
 
   // Stable key: only re-init when the modal opens with new track IDs
   const trackIdKey = tracks.map((t) => t.id).join(",");
@@ -113,10 +160,13 @@ export const EditTrackModal = ({
     if (!isOpen || tracks.length === 0) return;
 
     if (isBatch) {
-      setForm(EMPTY_FORM);
+      const shared = sharedFormForTracks(tracks);
+      setForm(shared.form);
+      setMixedFields(shared.mixedFields);
       setDirtyFields(new Set());
     } else {
       setForm(trackToForm(tracks[0]));
+      setMixedFields(new Set());
       setDirtyFields(new Set());
     }
     setCoverPreview(null);
@@ -156,6 +206,14 @@ export const EditTrackModal = ({
       if (isBatch || field === "coverArtPath" || field === "coverArtThumbPath") {
         setDirtyFields((prev) => new Set(prev).add(field));
       }
+      if (isBatch) {
+        setMixedFields((prev) => {
+          if (!prev.has(field)) return prev;
+          const next = new Set(prev);
+          next.delete(field);
+          return next;
+        });
+      }
     },
     [isBatch]
   );
@@ -163,11 +221,9 @@ export const EditTrackModal = ({
   // Cover art from current track(s) for display
   const existingCoverSrc = useMemo(() => {
     if (coverPreview) return coverPreview;
-    if (!isBatch && tracks[0]?.coverArtPath) {
-      return convertFileSrc(tracks[0].coverArtPath);
-    }
+    if (form.coverArtPath) return convertFileSrc(form.coverArtPath);
     return null;
-  }, [coverPreview, isBatch, tracks]);
+  }, [coverPreview, form.coverArtPath]);
 
   const handleCoverArtClick = useCallback(async () => {
     try {
@@ -321,10 +377,15 @@ export const EditTrackModal = ({
   }
 
   const displayRating = form.rating ?? 0;
+  const placeholderFor = (field: keyof FormState, commonFallback = t("edit.placeholder.keep")) => {
+    if (!isBatch) return "";
+    return mixedFields.has(field) ? t("edit.placeholder.mixed") : commonFallback;
+  };
 
   return createPortal(
     <div
       className="modal-overlay-animate fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-[var(--spacing-lg)] backdrop-blur-sm"
+      data-edit-track-modal
       onClick={onClose}
     >
       <div
@@ -374,6 +435,9 @@ export const EditTrackModal = ({
               ) : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-[var(--spacing-sm)] text-[var(--color-text-muted)]">
                   <Disc3 className="h-10 w-10 opacity-30" />
+                  {isBatch && mixedFields.has("coverArtPath") && (
+                    <span className="text-[10px]">{t("edit.placeholder.mixed")}</span>
+                  )}
                 </div>
               )}
               <div className={`absolute inset-0 flex items-center justify-center transition-colors ${isFetchingCover || isPastingCover ? "bg-black/45" : "bg-black/0 group-hover:bg-black/40"}`}>
@@ -390,27 +454,37 @@ export const EditTrackModal = ({
               <Field
                 label={t("edit.field.title")}
                 value={form.title}
-                placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+                placeholder={placeholderFor("title")}
                 onChange={(v) => updateField("title", v)}
                 inputRef={titleRef}
               />
               <Field
                 label={t("edit.field.artist")}
                 value={form.artist}
-                placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+                placeholder={placeholderFor("artist")}
                 onChange={(v) => updateField("artist", v)}
+                autocompleteName="artist"
+                suggestions={suggestions.artist}
               />
               <Field
                 label={t("edit.field.albumArtist")}
                 value={form.artists}
-                placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+                placeholder={placeholderFor("artists")}
                 onChange={(v) => updateField("artists", v)}
+                autocompleteName="albumArtist"
+                suggestions={suggestions.albumArtist}
+                actionLabel={t("edit.sameAsArtist")}
+                actionDisabled={!form.artist.trim() || form.artists.trim() === form.artist.trim()}
+                actionTestId="same-as-artist"
+                onAction={() => updateField("artists", form.artist.trim())}
               />
               <Field
                 label={t("edit.field.album")}
                 value={form.album}
-                placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+                placeholder={placeholderFor("album")}
                 onChange={(v) => updateField("album", v)}
+                autocompleteName="album"
+                suggestions={suggestions.album}
               />
             </div>
           </div>
@@ -421,7 +495,7 @@ export const EditTrackModal = ({
               <Field
                 label={t("edit.field.track")}
                 value={form.trackNumber}
-                placeholder={isBatch ? "--" : ""}
+                placeholder={placeholderFor("trackNumber", "--")}
                 onChange={(v) => updateField("trackNumber", v)}
                 type="number"
                 className="flex-1"
@@ -429,7 +503,7 @@ export const EditTrackModal = ({
               <Field
                 label={t("edit.field.of")}
                 value={form.trackTotal}
-                placeholder={isBatch ? "--" : ""}
+                placeholder={placeholderFor("trackTotal", "--")}
                 onChange={(v) => updateField("trackTotal", v)}
                 type="number"
                 className="flex-1"
@@ -439,7 +513,7 @@ export const EditTrackModal = ({
               <Field
                 label={t("edit.field.disc")}
                 value={form.discNumber}
-                placeholder={isBatch ? "--" : ""}
+                placeholder={placeholderFor("discNumber", "--")}
                 onChange={(v) => updateField("discNumber", v)}
                 type="number"
                 className="flex-1"
@@ -447,7 +521,7 @@ export const EditTrackModal = ({
               <Field
                 label={t("edit.field.of")}
                 value={form.discTotal}
-                placeholder={isBatch ? "--" : ""}
+                placeholder={placeholderFor("discTotal", "--")}
                 onChange={(v) => updateField("discTotal", v)}
                 type="number"
                 className="flex-1"
@@ -456,36 +530,43 @@ export const EditTrackModal = ({
             <Field
               label={t("edit.field.year")}
               value={form.year}
-              placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+              placeholder={placeholderFor("year")}
               onChange={(v) => updateField("year", v)}
               type="number"
             />
             <Field
               label={t("edit.field.genre")}
               value={form.genre}
-              placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+              placeholder={placeholderFor("genre")}
               onChange={(v) => updateField("genre", v)}
+              autocompleteName="genre"
+              suggestions={suggestions.genre}
             />
             <Field
               label={t("edit.field.bpm")}
               value={form.bpm}
-              placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+              placeholder={placeholderFor("bpm")}
               onChange={(v) => updateField("bpm", v)}
               type="number"
             />
             <Field
               label={t("edit.field.key")}
               value={form.key}
-              placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+              placeholder={placeholderFor("key")}
               onChange={(v) => updateField("key", v)}
             />
           </div>
 
           {/* Rating */}
           <div className="mt-[var(--spacing-sm)]">
-            <label className="mb-[var(--spacing-xs)] block text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
-              {t("edit.field.rating")}
-            </label>
+            <div className="mb-[var(--spacing-xs)] flex items-center gap-2 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
+              <span>{t("edit.field.rating")}</span>
+              {isBatch && mixedFields.has("rating") && (
+                <span className="text-[9px] font-normal text-[var(--color-text-muted)]" data-mixed-field="rating">
+                  {t("edit.placeholder.mixed")}
+                </span>
+              )}
+            </div>
             <div
               className="flex items-center gap-1"
               onMouseLeave={() => {}}
@@ -522,8 +603,10 @@ export const EditTrackModal = ({
             <Field
               label={t("edit.field.label")}
               value={form.label}
-              placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+              placeholder={placeholderFor("label")}
               onChange={(v) => updateField("label", v)}
+              autocompleteName="label"
+              suggestions={suggestions.label}
             />
           </div>
 
@@ -532,7 +615,7 @@ export const EditTrackModal = ({
             <Field
               label={t("edit.field.comment")}
               value={form.comment}
-              placeholder={isBatch ? t("edit.placeholder.keep") : ""}
+              placeholder={placeholderFor("comment")}
               onChange={(v) => updateField("comment", v)}
             />
           </div>
@@ -607,6 +690,12 @@ type FieldProps = {
   type?: "text" | "number";
   className?: string;
   inputRef?: React.Ref<HTMLInputElement>;
+  autocompleteName?: "artist" | "albumArtist" | "album" | "genre" | "label";
+  suggestions?: string[];
+  actionLabel?: string;
+  actionDisabled?: boolean;
+  actionTestId?: string;
+  onAction?: () => void;
 };
 
 const Field = ({
@@ -617,21 +706,53 @@ const Field = ({
   type = "text",
   className,
   inputRef,
-}: FieldProps) => (
-  <div className={className}>
-    <label className="mb-[var(--spacing-xs)] block text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
-      {label}
-    </label>
-    <input
-      ref={inputRef}
-      className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-      type={type}
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  </div>
-);
+  autocompleteName,
+  suggestions = [],
+  actionLabel,
+  actionDisabled = false,
+  actionTestId,
+  onAction,
+}: FieldProps) => {
+  const listId = autocompleteName && suggestions.length > 0
+    ? `edit-${autocompleteName}-suggestions`
+    : undefined;
+  return (
+    <div className={className}>
+      <div className="mb-[var(--spacing-xs)] flex min-h-4 items-center justify-between gap-2">
+        <label className="block text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
+          {label}
+        </label>
+        {onAction && actionLabel && (
+          <button
+            className="rounded px-1.5 py-0.5 text-[9px] font-medium text-[var(--color-accent)] transition-colors hover:bg-[var(--color-accent-light)] disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+            data-testid={actionTestId}
+            disabled={actionDisabled}
+            onClick={onAction}
+            type="button"
+          >
+            {actionLabel}
+          </button>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        autoComplete="off"
+        className="w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+        data-autocomplete-field={autocompleteName}
+        list={listId}
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {listId && (
+        <datalist id={listId}>
+          {suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
+        </datalist>
+      )}
+    </div>
+  );
+};
 
 function assignUpdate(
   updates: TrackMetadataUpdates,
