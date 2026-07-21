@@ -69,9 +69,33 @@ let pendingCancelPark: (() => void) | null = null;
 const clampNumber = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
 
+// "" = system default. AudioContext.setSinkId is a Chromium extension not in
+// every TypeScript DOM lib, hence the structural cast.
+let outputDeviceId = "";
+
+const applyContextOutputDevice = async (context: AudioContext): Promise<void> => {
+  const sinkable = context as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
+  if (typeof sinkable.setSinkId !== "function") return;
+  try {
+    await sinkable.setSinkId(outputDeviceId);
+  } catch {
+    // A vanished device falls back to whatever Chromium routes by default.
+  }
+};
+
+// Called by the runtime when the user picks an output device so transition
+// audio (routed through this context) follows the element audio.
+export const setOutputDevice = async (deviceId: string): Promise<void> => {
+  outputDeviceId = deviceId;
+  if (audioContext && audioContext.state !== "closed") {
+    await applyContextOutputDevice(audioContext);
+  }
+};
+
 const ensureAudioContextRunning = async (): Promise<AudioContext> => {
   if (!audioContext || audioContext.state === "closed") {
     audioContext = new AudioContext({ latencyHint: "interactive" });
+    if (outputDeviceId !== "") void applyContextOutputDevice(audioContext);
   }
   const context = audioContext;
   if (context.state !== "running") await context.resume();

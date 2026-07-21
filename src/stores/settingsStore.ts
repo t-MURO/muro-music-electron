@@ -40,6 +40,8 @@ type SettingsState = {
   lastFmApiKey: string;
   theAudioDbApiKey: string;
   fanartApiKey: string;
+  audioOutputDeviceId: string;
+  audioOutputDeviceLabel: string;
 };
 
 type SettingsActions = {
@@ -62,6 +64,7 @@ type SettingsActions = {
   setLastFmApiKey: (lastFmApiKey: string) => void;
   setTheAudioDbApiKey: (theAudioDbApiKey: string) => void;
   setFanartApiKey: (fanartApiKey: string) => void;
+  setAudioOutputDevice: (deviceId: string, label: string) => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -94,6 +97,8 @@ export const useSettingsStore = create<SettingsStore>()(
       lastFmApiKey: "",
       theAudioDbApiKey: "",
       fanartApiKey: "",
+      audioOutputDeviceId: "",
+      audioOutputDeviceLabel: "",
 
       // Actions
       setTheme: (theme) => {
@@ -132,6 +137,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setLastFmApiKey: (lastFmApiKey) => set({ lastFmApiKey }),
       setTheAudioDbApiKey: (theAudioDbApiKey) => set({ theAudioDbApiKey }),
       setFanartApiKey: (fanartApiKey) => set({ fanartApiKey }),
+      setAudioOutputDevice: (audioOutputDeviceId, audioOutputDeviceLabel) =>
+        set({ audioOutputDeviceId, audioOutputDeviceLabel }),
     }),
     {
       name: "muro-settings",
@@ -152,6 +159,8 @@ export const useSettingsStore = create<SettingsStore>()(
         lastFmApiKey: state.lastFmApiKey,
         theAudioDbApiKey: state.theAudioDbApiKey,
         fanartApiKey: state.fanartApiKey,
+        audioOutputDeviceId: state.audioOutputDeviceId,
+        audioOutputDeviceLabel: state.audioOutputDeviceLabel,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@muro/desktop/events";
 import { t } from "../i18n";
 import type { Track } from "../types";
-import { usePlaybackStore, trackToCurrentTrack, notify } from "../stores";
+import { usePlaybackStore, trackToCurrentTrack, notify, useSettingsStore } from "../stores";
 import {
   useRemoteOutputStore,
   isRemoteOutputActive,
@@ -14,6 +14,7 @@ import {
   playbackPlay,
   playbackPlayFile,
   playbackSeek,
+  playbackSetOutputDevice,
   playbackSetSeekMode,
   playbackSetVolume,
   playbackToggle,
@@ -287,6 +288,16 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       notify.error("Failed to set seek mode");
     });
   }, [seekMode]);
+
+  // Restore the persisted local output device once at startup.
+  useEffect(() => {
+    const { audioOutputDeviceId } = useSettingsStore.getState();
+    if (audioOutputDeviceId) {
+      playbackSetOutputDevice(audioOutputDeviceId).catch(() => {
+        // The device may be unplugged; playback falls back to the default.
+      });
+    }
+  }, []);
 
   // Commands below route to exactly one output: the remote device while a
   // Cast/DLNA session owns playback, the local audio element otherwise.

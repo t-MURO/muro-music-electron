@@ -75,6 +75,15 @@ export const playbackSetSeekMode = (mode: "fast" | "accurate") => {
   return invoke<void>("playback_set_seek_mode", { mode });
 };
 
+// deviceId "" selects the system default output.
+export const playbackSetOutputDevice = (deviceId: string) => {
+  return invoke<void>("playback_set_output_device", { deviceId });
+};
+
+export const playbackGetOutputDevice = () => {
+  return invoke<string>("playback_get_output_device");
+};
+
 export const playbackGetState = () => {
   return invoke<PlaybackState>("playback_get_state");
 };

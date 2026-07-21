@@ -30,6 +30,17 @@ export type MediaControlPayload = {
 let audio: HTMLAudioElement | null = null;
 let idleEl: HTMLAudioElement | null = null;
 let masterVolume = 1;
+// "" = system default. Applied to every created element and, once the mix
+// engine's Web Audio graph exists, to its AudioContext as well.
+let outputDeviceId = "";
+const createdElements = new Set<HTMLAudioElement>();
+
+const applyOutputDevice = (element: HTMLAudioElement) => {
+  if (outputDeviceId === "" || typeof element.setSinkId !== "function") return;
+  element.setSinkId(outputDeviceId).catch(() => {
+    // A vanished device falls back to whatever Chromium routes by default.
+  });
+};
 let currentTrack: CurrentTrack | null = null;
 let durationHint = 0;
 let seekMode = "accurate";
@@ -260,6 +271,8 @@ const createAudioElement = (preload: "metadata" | "auto") => {
   element.preload = preload;
   element.volume = masterVolume;
   attachElementListeners(element);
+  applyOutputDevice(element);
+  createdElements.add(element);
   return element;
 };
 
@@ -373,6 +386,21 @@ const playbackInvoke = async <T>(
     case "playback_set_seek_mode":
       seekMode = String(args.mode || "accurate");
       return undefined as T;
+    case "playback_set_output_device": {
+      outputDeviceId = String(args.deviceId ?? "");
+      const sinkId = outputDeviceId; // "" resets to the system default
+      await Promise.allSettled(
+        [...createdElements]
+          .filter((element) => typeof element.setSinkId === "function")
+          .map((element) => element.setSinkId(sinkId)),
+      );
+      // During DJ transitions audio flows through the mix engine's
+      // AudioContext, which has its own output routing.
+      await mix.setOutputDevice(sinkId);
+      return undefined as T;
+    }
+    case "playback_get_output_device":
+      return outputDeviceId as T;
     case "playback_get_state":
       return state() as T;
     case "playback_is_finished":

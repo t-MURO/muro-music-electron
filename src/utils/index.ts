@@ -10,6 +10,8 @@ export {
   playbackSeek,
   playbackSetVolume,
   playbackSetSeekMode,
+  playbackSetOutputDevice,
+  playbackGetOutputDevice,
   playbackGetState,
   playbackIsFinished,
   playbackTransitionTo,

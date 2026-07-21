@@ -9,11 +9,11 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Sparkles,
-  Speaker,
   X,
 } from "lucide-react";
 import { t } from "../../i18n";
 import { useDragSession } from "../../contexts/DragSessionContext";
+import { OutputFooter } from "../player/OutputFooter";
 import { NowPlayingTrack } from "../queue/NowPlayingTrack";
 import { MixSuggestions } from "../queue/MixSuggestions";
 import type { Playlist, Track } from "../../types";
@@ -235,10 +235,7 @@ export const QueuePanel = ({
         </div>
       </div>
 
-      <div className="flex h-14 shrink-0 items-center border-t border-[var(--color-border)] px-4">
-        <Speaker className="h-4 w-4 text-[var(--color-text-muted)]" />
-        <div className="ml-2"><div className="text-[10px] uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("panel.output")}</div><div className="mt-0.5 text-[11px] text-[var(--color-text-primary)]">{t("panel.output.device")}</div></div>
-      </div>
+      <OutputFooter />
 
       {draggedTrack && dragIndex !== null && (
         <div className="pointer-events-none fixed z-50 border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-3 py-2 shadow-[var(--shadow-lg)]" style={{ left: containerRef.current?.getBoundingClientRect().left ?? 0, top: dragY, width: containerRef.current?.getBoundingClientRect().width ?? 240 }}>
