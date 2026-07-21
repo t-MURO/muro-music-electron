@@ -2,11 +2,12 @@ import crypto from "node:crypto";
 import http from "node:http";
 import os from "node:os";
 import { Readable } from "node:stream";
-import { createLocalFileResponse } from "../fileProtocol.mjs";
+import { createLocalFileResponse } from "./fileProtocol.mjs";
 
-// Temporary LAN HTTP server that exposes exactly the files a Cast session has
-// authorized, addressed by random tokens. The request URL is never decoded
-// into a filesystem path: unknown tokens simply do not resolve.
+// Temporary LAN HTTP server that exposes exactly the files a remote-output
+// session (Google Cast or DLNA) has authorized, addressed by random tokens.
+// The request URL is never decoded into a filesystem path: unknown tokens
+// simply do not resolve.
 //
 //   http://<lan-ip>:<port>/media/<session-token>/<media-token>
 //   http://<lan-ip>:<port>/artwork/<session-token>/<artwork-token>
@@ -45,7 +46,7 @@ export const selectLanAddress = (interfaces, { preferHost } = {}) => {
   return candidates[0].address;
 };
 
-export const createCastMediaServer = ({ bindHost = "0.0.0.0" } = {}) => {
+export const createLanMediaServer = ({ bindHost = "0.0.0.0" } = {}) => {
   // token -> { filePath } — the only way a request resolves to a file.
   const authorizedFiles = new Map();
   let sessionToken = null;
@@ -81,7 +82,14 @@ export const createCastMediaServer = ({ bindHost = "0.0.0.0" } = {}) => {
         }),
         entry.filePath,
       );
-      response.writeHead(fileResponse.status, Object.fromEntries(fileResponse.headers.entries()));
+      // DLNA renderers probe these headers to learn that byte-range seeking
+      // is available; Cast receivers ignore them.
+      const headers = {
+        ...Object.fromEntries(fileResponse.headers.entries()),
+        "contentFeatures.dlna.org": "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000",
+        "transferMode.dlna.org": "Streaming",
+      };
+      response.writeHead(fileResponse.status, headers);
       if (request.method === "HEAD" || !fileResponse.body) {
         response.end();
         return;

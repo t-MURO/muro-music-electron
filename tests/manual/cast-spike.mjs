@@ -9,7 +9,7 @@
 
 import { createCastDiscovery } from "../../electron/cast/castDiscovery.mjs";
 import { createCastClientAdapter } from "../../electron/cast/castClientAdapter.mjs";
-import { createCastMediaServer } from "../../electron/cast/castMediaServer.mjs";
+import { createLanMediaServer } from "../../electron/lanMediaServer.mjs";
 
 const audioPath = process.argv[2] ?? "C:/Users/Tadeo/Music/Music/Boston 168/303 Regiment/Rise Again.mp3";
 const DISCOVERY_WINDOW_MS = 8_000;
@@ -24,7 +24,7 @@ const watchdog = setTimeout(() => {
 }, 90_000);
 
 const discovery = createCastDiscovery({});
-const server = createCastMediaServer();
+const server = createLanMediaServer();
 const adapter = createCastClientAdapter();
 let exitCode = 0;
 

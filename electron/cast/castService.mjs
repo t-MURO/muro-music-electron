@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { createCastClientAdapter } from "./castClientAdapter.mjs";
 import { createCastDiscovery } from "./castDiscovery.mjs";
-import { createCastMediaServer } from "./castMediaServer.mjs";
+import { createLanMediaServer } from "../lanMediaServer.mjs";
 import {
   CAST_ERROR_CODES,
   castContentTypeFor,
@@ -30,7 +30,7 @@ export const createCastService = ({
   emit,
   discoveryFactory = createCastDiscovery,
   adapterFactory = createCastClientAdapter,
-  mediaServerFactory = createCastMediaServer,
+  mediaServerFactory = createLanMediaServer,
 } = {}) => {
   const mediaServer = mediaServerFactory();
   let discovery = null;

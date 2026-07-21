@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createCastMediaServer, selectLanAddress } from "../electron/cast/castMediaServer.mjs";
+import { createLanMediaServer, selectLanAddress } from "../electron/lanMediaServer.mjs";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "muro-cast-server-"));
 const audioPath = path.join(tempDir, "sample.mp3");
 fs.writeFileSync(audioPath, Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
 
-const server = createCastMediaServer({ bindHost: "127.0.0.1" });
+const server = createLanMediaServer({ bindHost: "127.0.0.1" });
 
 try {
   // LAN address selection prefers the interface on the receiver's subnet.
