@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { invoke } from "@muro/desktop/runtime";
-import { useLibraryStore, useUIStore } from "../stores";
+import { notify, useLibraryStore, useUIStore } from "../stores";
 import type { Track, TrackMetadataUpdates } from "../types";
 import {
   fetchTrackCoverArt,
@@ -13,6 +13,12 @@ import {
   type AlbumMetadataRelease,
 } from "../utils/database";
 import { useDbPath } from "./useDbPath";
+
+type MetadataWriteResult = {
+  updated: number;
+  filesWritten: number;
+  fileWriteErrors: Array<{ trackId: string; fileName: string; message: string }>;
+};
 
 export const useTrackEdit = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
@@ -37,7 +43,7 @@ export const useTrackEdit = () => {
       }
 
       const dbPath = await resolveDbPath();
-      await invoke("update_track_metadata", {
+      const result = await invoke<MetadataWriteResult | undefined>("update_track_metadata", {
         dbPath,
         trackIds,
         updates: updateMap,
@@ -54,6 +60,26 @@ export const useTrackEdit = () => {
 
       setTracks(updateTrackList);
       setInboxTracks(updateTrackList);
+
+      if (updates.coverArtPath && result) {
+        if (result.fileWriteErrors.length > 0) {
+          const failedNames = result.fileWriteErrors
+            .slice(0, 3)
+            .map((failure) => failure.fileName)
+            .join(", ");
+          const remaining = result.fileWriteErrors.length - 3;
+          throw new Error(
+            `Cover art was embedded in ${result.filesWritten} of ${trackIds.length} files. `
+            + `Could not write ${failedNames}${remaining > 0 ? ` and ${remaining} more` : ""}. `
+            + "Check that the files are writable.",
+          );
+        }
+        notify.success(
+          trackIds.length === 1
+            ? "Cover art embedded in the music file"
+            : `Cover art embedded in all ${result.filesWritten} music files`,
+        );
+      }
     },
     [resolveDbPath, setTracks, setInboxTracks]
   );

@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { invoke } from "@muro/desktop/runtime";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
-import { Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
+import { ClipboardPaste, Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
 import { t } from "../../i18n";
 import { notify } from "../../stores";
 import type { Track, TrackMetadataUpdates } from "../../types";
+import { cacheClipboardCoverArt, clipboardHasImage } from "../../desktop/clipboard";
 import { Popover, PopoverHeader, PopoverItem } from "./Popover";
 
 type FetchedCoverArt = {
@@ -100,6 +101,8 @@ export const EditTrackModal = ({
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverMenuPosition, setCoverMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [isFetchingCover, setIsFetchingCover] = useState(false);
+  const [isPastingCover, setIsPastingCover] = useState(false);
+  const [clipboardImageAvailable, setClipboardImageAvailable] = useState(false);
   const titleRef = useRef<HTMLInputElement | null>(null);
 
   // Stable key: only re-init when the modal opens with new track IDs
@@ -150,7 +153,7 @@ export const EditTrackModal = ({
   const updateField = useCallback(
     (field: keyof FormState, value: string | number | null) => {
       setForm((prev) => ({ ...prev, [field]: value }));
-      if (isBatch) {
+      if (isBatch || field === "coverArtPath" || field === "coverArtThumbPath") {
         setDirtyFields((prev) => new Set(prev).add(field));
       }
     },
@@ -219,6 +222,28 @@ export const EditTrackModal = ({
     }
   }, [form.album, form.artist, form.artists, isFetchingCover, onFetchCoverArt, tracks, updateField]);
 
+  const handlePasteCoverArt = useCallback(async () => {
+    if (isPastingCover) return;
+    setCoverMenuPosition(null);
+    setIsPastingCover(true);
+    try {
+      const cached = await cacheClipboardCoverArt();
+      if (!cached) {
+        setClipboardImageAvailable(false);
+        notify.info(t("edit.coverArtClipboardEmpty"));
+        return;
+      }
+      updateField("coverArtPath", cached.fullPath);
+      updateField("coverArtThumbPath", cached.thumbPath);
+      setCoverPreview(convertFileSrc(cached.fullPath));
+      notify.success(t("edit.coverArtPasted"));
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("edit.coverArtPasteFailed"));
+    } finally {
+      setIsPastingCover(false);
+    }
+  }, [isPastingCover, updateField]);
+
   const handleRatingClick = useCallback(
     (event: React.MouseEvent, star: number) => {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -259,16 +284,11 @@ export const EditTrackModal = ({
         assignUpdate(updates, "rating", form);
         assignUpdate(updates, "comment", form);
         assignUpdate(updates, "label", form);
-        if (form.coverArtPath !== null) {
-          updates.coverArtPath = form.coverArtPath;
-        }
-        if (form.coverArtThumbPath !== null) {
-          updates.coverArtThumbPath = form.coverArtThumbPath;
-        }
       }
 
-      // For batch, always include cover art if changed
-      if (isBatch && dirtyFields.has("coverArtPath") && form.coverArtPath !== null) {
+      // Cover art is embedded only when it was explicitly changed. This avoids
+      // rewriting a large image when saving an unrelated text-field edit.
+      if (dirtyFields.has("coverArtPath") && form.coverArtPath !== null) {
         updates.coverArtPath = form.coverArtPath;
         updates.coverArtThumbPath = form.coverArtThumbPath ?? undefined;
       }
@@ -278,6 +298,7 @@ export const EditTrackModal = ({
       onClose();
     } catch (error) {
       console.error("Failed to save metadata:", error);
+      notify.error(error instanceof Error ? error.message : "Could not save track metadata");
     } finally {
       setIsSaving(false);
     }
@@ -324,6 +345,10 @@ export const EditTrackModal = ({
                 event.preventDefault();
                 event.stopPropagation();
                 setCoverMenuPosition({ x: event.clientX, y: event.clientY });
+                setClipboardImageAvailable(false);
+                void clipboardHasImage()
+                  .then(setClipboardImageAvailable)
+                  .catch(() => setClipboardImageAvailable(false));
               }}
               title={t("edit.coverArt")}
               data-cover-art-field
@@ -339,8 +364,8 @@ export const EditTrackModal = ({
                   <Disc3 className="h-10 w-10 opacity-30" />
                 </div>
               )}
-              <div className={`absolute inset-0 flex items-center justify-center transition-colors ${isFetchingCover ? "bg-black/45" : "bg-black/0 group-hover:bg-black/40"}`}>
-                {isFetchingCover ? (
+              <div className={`absolute inset-0 flex items-center justify-center transition-colors ${isFetchingCover || isPastingCover ? "bg-black/45" : "bg-black/0 group-hover:bg-black/40"}`}>
+                {isFetchingCover || isPastingCover ? (
                   <LoaderCircle className="h-6 w-6 animate-spin text-white" aria-label={t("edit.coverArtFetching")} />
                 ) : (
                   <ImagePlus className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -528,6 +553,15 @@ export const EditTrackModal = ({
           onClose={() => setCoverMenuPosition(null)}
         >
           <PopoverHeader>{t("edit.coverArtMenu")}</PopoverHeader>
+          <PopoverItem
+            onClick={() => { void handlePasteCoverArt(); }}
+            disabled={!clipboardImageAvailable || isPastingCover}
+            className="disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            dataTestId="paste-cover-art-menu-item"
+          >
+            <ClipboardPaste className="h-4 w-4 opacity-60" />
+            {t("edit.pasteCoverArt")}
+          </PopoverItem>
           <PopoverItem
             onClick={() => { void handleFetchCoverArt(); }}
             dataTestId="fetch-cover-art-menu-item"

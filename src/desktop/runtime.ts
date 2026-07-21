@@ -167,7 +167,7 @@ const setMediaSessionMetadata = (track: CurrentTrack | null) => {
     return;
   }
 
-  const coverPath = track.cover_art_thumb_path || track.cover_art_path;
+  const coverPath = track.cover_art_path || track.cover_art_thumb_path;
   navigator.mediaSession.metadata = new MediaMetadata({
     title: track.title,
     artist: track.artist,

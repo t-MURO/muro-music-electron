@@ -6,6 +6,8 @@ export type MuroBridge = {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
   on(event: string, listener: (payload: unknown) => void): () => void;
   appDataDir(): Promise<string>;
+  clipboardHasImage(): Promise<boolean>;
+  cacheClipboardCoverArt(): Promise<{ fullPath: string; thumbPath: string } | null>;
   windowControl(action: WindowControlAction): Promise<boolean>;
   isWindowMaximized(): Promise<boolean>;
   openDialog(options: Record<string, unknown>): Promise<string | string[] | null>;

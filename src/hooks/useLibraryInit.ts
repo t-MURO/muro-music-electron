@@ -167,9 +167,9 @@ export const useLibraryInit = () => {
 
     try {
       setCoverArtBackfillPending(true);
-      setCoverArtBackfillStatus("Extracting embedded cover art...");
+      setCoverArtBackfillStatus("Rebuilding high-resolution cover cache...");
       const updated = await backfillCoverArt(dbPath.trim());
-      setCoverArtBackfillStatus(`Extracted embedded cover art for ${updated} tracks.`);
+      setCoverArtBackfillStatus(`Rebuilt high-resolution cover art for ${updated} tracks.`);
       // Reload tracks to get the new cover art paths
       const resolvedPath = await resolveDbPath();
       const snapshot = await loadTracks(resolvedPath);
@@ -177,7 +177,7 @@ export const useLibraryInit = () => {
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Embedded cover art extraction failed.";
+        error instanceof Error ? error.message : "Cover art cache rebuild failed.";
       setCoverArtBackfillStatus(message);
     } finally {
       setCoverArtBackfillPending(false);

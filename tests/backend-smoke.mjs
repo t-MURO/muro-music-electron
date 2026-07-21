@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { parseFile } from "music-metadata";
+import sharp from "sharp";
 import { createAlbumCoverService } from "../electron/albumCovers.mjs";
 import { createArtistProfileService } from "../electron/artistProfiles.mjs";
 import { createBackend } from "../electron/backend.mjs";
@@ -215,6 +217,7 @@ try {
             thumbnails: {
               250: `http://coverartarchive.org/release/${releaseId}/front-250.jpg`,
               500: `http://coverartarchive.org/release/${releaseId}/front-500.jpg`,
+              1200: `http://coverartarchive.org/release/${releaseId}/front-1200.jpg`,
             },
           }],
         }), { headers: { "content-type": "application/json" } });
@@ -222,7 +225,7 @@ try {
       if (String(url) === `https://coverartarchive.org/release-group/${missingReleaseGroupId}`) {
         return new Response("not found", { status: 404 });
       }
-      if (String(url) === `https://coverartarchive.org/release/${releaseId}/front-500.jpg`) {
+      if (String(url) === `https://coverartarchive.org/release/${releaseId}/front-1200.jpg`) {
         return new Response(Buffer.from("cover art archive image"), {
           headers: { "content-type": "image/jpeg" },
         });
@@ -247,8 +250,8 @@ try {
     "release-group artwork should be preferred when both MusicBrainz IDs exist",
   );
   assert.ok(
-    coverFetchCalls.includes(`https://coverartarchive.org/release/${releaseId}/front-500.jpg`),
-    "the 500px Cover Art Archive thumbnail should be downloaded",
+    coverFetchCalls.includes(`https://coverartarchive.org/release/${releaseId}/front-1200.jpg`),
+    "the 1200px Cover Art Archive image should be downloaded",
   );
   assert.ok(fs.existsSync(fetchedCover.fullPath));
   assert.ok(fs.existsSync(fetchedCover.thumbPath));
@@ -360,6 +363,69 @@ try {
   assert.equal(validImport.imported[0].file_size_bytes, fs.statSync(validImportPath).size);
   assert.equal(validImport.scanned, 1);
   assert.deepEqual(validImport.failures, []);
+  const secondValidImportPath = path.join(directory, "valid-import-2.wav");
+  writeSilentWav(secondValidImportPath);
+  const secondValidImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [secondValidImportPath],
+  });
+  assert.equal(secondValidImport.imported.length, 1);
+  const selectedCoverPath = path.join(directory, "selected-cover.png");
+  const highResolutionCover = await sharp({
+    create: { width: 2000, height: 1500, channels: 3, background: "#c92f49" },
+  }).png().toBuffer();
+  fs.writeFileSync(selectedCoverPath, highResolutionCover);
+  const cachedClipboardCover = await backend.invoke("cache_cover_art_from_bytes", {
+    bytes: highResolutionCover,
+  });
+  assert.ok(fs.existsSync(cachedClipboardCover.fullPath));
+  assert.ok(fs.existsSync(cachedClipboardCover.thumbPath));
+  assert.deepEqual(
+    await sharp(cachedClipboardCover.fullPath).metadata().then(({ width, height }) => ({ width, height })),
+    { width: 1600, height: 1200 },
+  );
+  assert.deepEqual(
+    await sharp(cachedClipboardCover.thumbPath).metadata().then(({ width, height }) => ({ width, height })),
+    { width: 192, height: 192 },
+  );
+  const cachedSelectedCover = await backend.invoke("cache_cover_art_from_file", {
+    filePath: selectedCoverPath,
+  });
+  const coverWriteResult = await backend.invoke("update_track_metadata", {
+    dbPath,
+    trackIds: [validImport.imported[0].id, secondValidImport.imported[0].id],
+    updates: {
+      coverArtPath: cachedSelectedCover.fullPath,
+      coverArtThumbPath: cachedSelectedCover.thumbPath,
+    },
+  });
+  assert.deepEqual(coverWriteResult, {
+    updated: 2,
+    filesWritten: 2,
+    fileWriteErrors: [],
+  });
+  for (const sourcePath of [validImportPath, secondValidImportPath]) {
+    const embeddedMetadata = await parseFile(sourcePath, { skipCovers: false });
+    assert.equal(embeddedMetadata.common.picture?.length, 1);
+    assert.equal(embeddedMetadata.common.picture?.[0]?.type, "Cover (front)");
+    assert.ok(embeddedMetadata.common.picture?.[0]?.data.length);
+    assert.deepEqual(
+      await sharp(embeddedMetadata.common.picture[0].data)
+        .metadata()
+        .then(({ width, height }) => ({ width, height })),
+      { width: 1600, height: 1200 },
+    );
+  }
+  assert.deepEqual(
+    db.prepare(`
+      SELECT cover_art_path, cover_art_thumb_path FROM tracks
+      WHERE id IN (?, ?) ORDER BY id
+    `).all(validImport.imported[0].id, secondValidImport.imported[0].id),
+    [
+      { cover_art_path: cachedSelectedCover.fullPath, cover_art_thumb_path: cachedSelectedCover.thumbPath },
+      { cover_art_path: cachedSelectedCover.fullPath, cover_art_thumb_path: cachedSelectedCover.thumbPath },
+    ],
+  );
   db.prepare(`
     UPDATE tracks SET sample_rate_hz = NULL, bit_depth = NULL, file_size_bytes = NULL
     WHERE id = ?
@@ -378,8 +444,12 @@ try {
     bit_depth: 16,
     file_size_bytes: fs.statSync(validImportPath).size,
   });
-  await backend.invoke("reject_tracks", { dbPath, trackIds: [validImport.imported[0].id] });
+  await backend.invoke("reject_tracks", {
+    dbPath,
+    trackIds: [validImport.imported[0].id, secondValidImport.imported[0].id],
+  });
   fs.unlinkSync(validImportPath);
+  fs.unlinkSync(secondValidImportPath);
 
   const firstSourcePath = path.join(directory, "smoke.mp3");
   const secondSourcePath = path.join(directory, "smoke-2.mp3");

@@ -11,6 +11,7 @@ import {
 } from "./database.mjs";
 import {
   AUDIO_EXTENSIONS,
+  cacheCoverBytes,
   cacheCoverFile,
   collectAudioPaths,
   extractCoverMetadata,
@@ -397,7 +398,9 @@ const bulkTrackOperation = (dbPath, trackIds, sqlPrefix) => {
 };
 
 const updateTrackMetadata = async (dbPath, trackIds, updates) => {
-  if (!trackIds.length || Object.keys(updates).length === 0) return;
+  if (!trackIds.length || Object.keys(updates).length === 0) {
+    return { updated: 0, filesWritten: 0, fileWriteErrors: [] };
+  }
   const db = openDatabase(dbPath);
   const entries = Object.entries(updates)
     .filter(([key]) => allowedUpdates[key])
@@ -405,7 +408,7 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
       allowedUpdates[key],
       key === "genre" || key === "comment" ? listJson(value) : value,
     ]);
-  if (!entries.length) return;
+  if (!entries.length) return { updated: 0, filesWritten: 0, fileWriteErrors: [] };
 
   const updateDatabase = db.transaction(() => {
     const set = entries.map(([column]) => `${column} = ?`).join(", ");
@@ -418,17 +421,23 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
 
   const sourceQuery = db.prepare("SELECT source_path FROM tracks WHERE id = ?");
   const errorUpdate = db.prepare("UPDATE tracks SET last_write_error = ? WHERE id = ?");
+  let filesWritten = 0;
+  const fileWriteErrors = [];
   for (const id of trackIds) {
     const sourcePath = sourceQuery.get(id)?.source_path;
     if (!sourcePath) continue;
     try {
       await writeMetadataToFile(sourcePath, updates);
       errorUpdate.run(null, id);
+      filesWritten += 1;
     } catch (error) {
-      errorUpdate.run(error instanceof Error ? error.message : String(error), id);
+      const message = error instanceof Error ? error.message : String(error);
+      errorUpdate.run(message, id);
+      fileWriteErrors.push({ trackId: id, fileName: path.basename(sourcePath), message });
       console.warn(`Failed to write metadata to ${sourcePath}:`, error);
     }
   }
+  return { updated: trackIds.length, filesWritten, fileWriteErrors };
 };
 
 export const createBackend = ({
@@ -811,12 +820,11 @@ export const createBackend = ({
       const db = openDatabase(dbPath);
       const rows = db.prepare(`
         SELECT id, source_path, musicbrainz_albumid, musicbrainz_releasegroupid FROM tracks
-        WHERE cover_art_path IS NULL OR cover_art_path = ''
       `).all();
       const update = db.prepare(
         `UPDATE tracks SET
-          cover_art_path = ?,
-          cover_art_thumb_path = ?,
+          cover_art_path = COALESCE(?, cover_art_path),
+          cover_art_thumb_path = COALESCE(?, cover_art_thumb_path),
           musicbrainz_albumid = COALESCE(NULLIF(musicbrainz_albumid, ''), ?),
           musicbrainz_releasegroupid = COALESCE(NULLIF(musicbrainz_releasegroupid, ''), ?)
         WHERE id = ?`
@@ -878,6 +886,13 @@ export const createBackend = ({
       return { checked: rows.length, updated, failed, remaining };
     },
     cache_cover_art_from_file: ({ filePath }) => cacheCoverFile(filePath, cacheDir),
+    cache_cover_art_from_bytes: ({ bytes }) => {
+      const data = Buffer.from(bytes ?? []);
+      if (data.length === 0 || data.length > 50 * 1024 * 1024) {
+        throw new Error("Clipboard image is empty or too large");
+      }
+      return cacheCoverBytes(data, cacheDir);
+    },
   };
 
   return {

@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld("muro", {
   invoke: (command, args = {}) => ipcRenderer.invoke("muro:invoke", command, args),
   on,
   appDataDir: () => ipcRenderer.invoke("muro:app-data-dir"),
+  clipboardHasImage: () => ipcRenderer.invoke("muro:clipboard-has-image"),
+  cacheClipboardCoverArt: () => ipcRenderer.invoke("muro:cache-clipboard-cover-art"),
   windowControl: (action) => ipcRenderer.invoke("muro:window-control", action),
   isWindowMaximized: () => ipcRenderer.invoke("muro:window-is-maximized"),
   openDialog: (options = {}) => ipcRenderer.invoke("muro:open-dialog", options),

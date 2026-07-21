@@ -50,9 +50,8 @@ export const groupTracksIntoAlbums = (tracks: Track[]): Album[] => {
   return Array.from(groups, ([id, albumTracks]) => {
     const orderedTracks = [...albumTracks].sort(compareAlbumTracks);
     const representative = orderedTracks[0];
-    const coverTrack = orderedTracks.find(
-      (track) => track.coverArtThumbPath || track.coverArtPath
-    );
+    const coverTrack = orderedTracks.find((track) => track.coverArtPath)
+      ?? orderedTracks.find((track) => track.coverArtThumbPath);
     const years = orderedTracks
       .map((track) => track.year)
       .filter((year): year is number => typeof year === "number");

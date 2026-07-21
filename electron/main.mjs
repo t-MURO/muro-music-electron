@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -133,6 +133,12 @@ const startApplication = async () => {
     backend.invoke(command, args ?? {}, event.sender)
   );
   ipcMain.handle("muro:app-data-dir", () => app.getPath("userData"));
+  ipcMain.handle("muro:clipboard-has-image", () => !clipboard.readImage().isEmpty());
+  ipcMain.handle("muro:cache-clipboard-cover-art", () => {
+    const image = clipboard.readImage();
+    if (image.isEmpty()) return null;
+    return backend.invoke("cache_cover_art_from_bytes", { bytes: image.toPNG() });
+  });
   ipcMain.handle("muro:window-is-maximized", (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     return window?.isMaximized() ?? false;

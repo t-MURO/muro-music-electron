@@ -6,6 +6,7 @@ const MUSICBRAINZ_RELEASE_GROUP_ROOT = "https://musicbrainz.org/ws/2/release-gro
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 const NOT_FOUND_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
+const COVER_CACHE_VERSION = "v2";
 
 const musicBrainzId = (value) => String(value ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null;
 
@@ -19,7 +20,7 @@ const coverIdentity = (row) => {
   const releaseGroupId = musicBrainzId(row.musicbrainz_releasegroupid);
   if (releaseGroupId) {
     return {
-      key: `release-group:${releaseGroupId.toLocaleLowerCase()}`,
+      key: `${COVER_CACHE_VERSION}:release-group:${releaseGroupId.toLocaleLowerCase()}`,
       kind: "release-group",
       musicBrainzId: releaseGroupId,
     };
@@ -27,7 +28,7 @@ const coverIdentity = (row) => {
   const releaseId = musicBrainzId(row.musicbrainz_albumid);
   if (!releaseId) return null;
   return {
-    key: `release:${releaseId.toLocaleLowerCase()}`,
+    key: `${COVER_CACHE_VERSION}:release:${releaseId.toLocaleLowerCase()}`,
     kind: "release",
     musicBrainzId: releaseId,
   };
@@ -54,10 +55,11 @@ const pickCoverUrl = (payload) => {
     || Number(Boolean(right?.approved)) - Number(Boolean(left?.approved))
   ))[0];
   return [
-    selected?.thumbnails?.["500"],
+    selected?.thumbnails?.["1200"],
     selected?.thumbnails?.large,
-    selected?.thumbnails?.["250"],
+    selected?.thumbnails?.["500"],
     selected?.image,
+    selected?.thumbnails?.["250"],
   ].map(secureCoverUrl).find(Boolean) ?? null;
 };
 
@@ -154,7 +156,7 @@ export const createAlbumCoverService = ({
     const selected = exact ?? candidates.find((candidate) => Number(candidate?.score ?? 0) >= 90);
     const releaseGroupId = musicBrainzId(selected?.id);
     return releaseGroupId ? {
-      key: `release-group:${releaseGroupId.toLocaleLowerCase()}`,
+      key: `${COVER_CACHE_VERSION}:release-group:${releaseGroupId.toLocaleLowerCase()}`,
       kind: "release-group",
       musicBrainzId: releaseGroupId,
     } : null;

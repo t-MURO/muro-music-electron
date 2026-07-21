@@ -127,6 +127,8 @@ app.whenReady().then(async () => {
     return createLocalFileResponse(request, decodeURIComponent(url.pathname.slice(1)));
   });
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
+  ipcMain.handle("muro:clipboard-has-image", () => false);
+  ipcMain.handle("muro:cache-clipboard-cover-art", () => null);
   ipcMain.handle("muro:window-is-maximized", (event) =>
     BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
   );
@@ -655,7 +657,12 @@ app.whenReady().then(async () => {
         }));
         await new Promise((resolve) => setTimeout(resolve, 80));
         const fetchCoverMenuItem = document.querySelector('[data-testid="fetch-cover-art-menu-item"]');
-        const manualCoverMenuReady = Boolean(fetchCoverMenuItem);
+        const pasteCoverMenuItem = document.querySelector('[data-testid="paste-cover-art-menu-item"]');
+        const manualCoverMenuReady = Boolean(
+          fetchCoverMenuItem &&
+          pasteCoverMenuItem instanceof HTMLButtonElement &&
+          pasteCoverMenuItem.disabled
+        );
         fetchCoverMenuItem?.click();
         await new Promise((resolve) => setTimeout(resolve, 100));
         const coverCounts = await window.muro.invoke("test_get_cover_counts");

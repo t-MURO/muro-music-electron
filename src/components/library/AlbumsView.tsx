@@ -63,7 +63,7 @@ const getArtworkStyle = (album: Album) => {
 };
 
 const AlbumArtwork = ({ album, className = "" }: { album: Album; className?: string }) => {
-  const path = album.coverArtThumbPath || album.coverArtPath;
+  const path = album.coverArtPath || album.coverArtThumbPath;
   return (
     <div className={`album-artwork ${className}`} style={path ? undefined : getArtworkStyle(album)}>
       {path ? (

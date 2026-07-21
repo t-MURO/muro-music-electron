@@ -49,14 +49,23 @@ export const collectAudioPaths = async (inputPaths) => {
 
 export const cacheCoverBytes = async (bytes, cacheDir) => {
   const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-  const fullPath = path.join(cacheDir, `${hash}_full.jpg`);
-  const thumbPath = path.join(cacheDir, `${hash}_thumb.jpg`);
+  const fullPath = path.join(cacheDir, `${hash}_v2_full.jpg`);
+  const thumbPath = path.join(cacheDir, `${hash}_v2_thumb.jpg`);
   await fs.promises.mkdir(cacheDir, { recursive: true });
+  const image = sharp(bytes).rotate();
   if (!fs.existsSync(fullPath)) {
-    await sharp(bytes).resize(512, 512, { fit: "cover" }).jpeg({ quality: 88 }).toFile(fullPath);
+    await image.clone()
+      .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+      .flatten({ background: "#000000" })
+      .jpeg({ quality: 92, chromaSubsampling: "4:4:4", progressive: true })
+      .toFile(fullPath);
   }
   if (!fs.existsSync(thumbPath)) {
-    await sharp(bytes).resize(128, 128, { fit: "cover" }).jpeg({ quality: 84 }).toFile(thumbPath);
+    await image.clone()
+      .resize(192, 192, { fit: "cover" })
+      .flatten({ background: "#000000" })
+      .jpeg({ quality: 86, progressive: true })
+      .toFile(thumbPath);
   }
   return { fullPath, thumbPath };
 };
@@ -215,6 +224,9 @@ const propertyMap = {
 
 export const writeMetadataToFile = async (sourcePath, updates) => {
   const taglib = await getTagLib();
+  const coverBytes = updates.coverArtPath
+    ? await fs.promises.readFile(updates.coverArtPath)
+    : null;
   await taglib.edit(sourcePath, async (file) => {
     const tag = file.tag();
     if (updates.title !== undefined) tag.setTitle(String(updates.title));
@@ -227,11 +239,31 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
     for (const [key, property] of Object.entries(propertyMap)) {
       if (updates[key] !== undefined) file.setProperty(property, String(updates[key] ?? ""));
     }
-    if (updates.coverArtPath) {
-      const data = await fs.promises.readFile(updates.coverArtPath);
-      file.setPictures([{ mimeType: "image/jpeg", data, type: "Cover (front)" }]);
+    if (coverBytes) {
+      file.setPictures([{
+        mimeType: "image/jpeg",
+        data: coverBytes,
+        type: "FrontCover",
+        description: "Front Cover",
+      }]);
     }
   });
+
+  // Saving artwork is materially different from caching it for the UI. Verify
+  // that TagLib can read a real front-cover frame back from the audio file so a
+  // failed or unsupported write is never reported as a successful embed.
+  if (coverBytes) {
+    const file = await taglib.open(sourcePath);
+    try {
+      const embeddedCover = file.getPictures()
+        .find((picture) => picture.type === "FrontCover" && picture.data.length > 0);
+      if (!embeddedCover) {
+        throw new Error("The audio format did not retain the embedded front cover");
+      }
+    } finally {
+      file.dispose();
+    }
+  }
 };
 
 export const extractCoverMetadata = async (sourcePath, cacheDir) => {
