@@ -1,4 +1,5 @@
 import dgram from "node:dgram";
+import os from "node:os";
 
 // mDNS/DNS-SD discovery for Google Cast devices (_googlecast._tcp.local).
 // Implements the small slice of DNS wire format the feature needs: encoding
@@ -247,7 +248,19 @@ export const createCastDiscovery = ({ onUpdate, now = Date.now } = {}) => {
     if (changed) notify();
   };
 
-  const openSocket = ({ bindPort, multicast }) =>
+  const localIPv4Addresses = () => {
+    const addresses = [];
+    for (const entries of Object.values(os.networkInterfaces() ?? {})) {
+      for (const entry of entries ?? []) {
+        if ((entry.family === "IPv4" || entry.family === 4) && !entry.internal) {
+          addresses.push(entry.address);
+        }
+      }
+    }
+    return addresses;
+  };
+
+  const openSocket = ({ bindPort, bindAddress, multicastMemberships, multicastInterface }) =>
     new Promise((resolve) => {
       const socket = dgram.createSocket({ type: "udp4", reuseAddr: true });
       socket.on("error", () => {
@@ -259,12 +272,17 @@ export const createCastDiscovery = ({ onUpdate, now = Date.now } = {}) => {
         resolve(null);
       });
       socket.on("message", handleResponse);
-      socket.bind(bindPort, () => {
+      socket.bind(bindPort, bindAddress, () => {
         try {
-          if (multicast) {
-            socket.addMembership(MDNS_ADDRESS);
-            socket.setMulticastTTL(255);
+          for (const membershipAddress of multicastMemberships ?? []) {
+            try {
+              socket.addMembership(MDNS_ADDRESS, membershipAddress);
+            } catch {
+              // Membership per interface is best effort.
+            }
           }
+          if (multicastInterface) socket.setMulticastInterface(multicastInterface);
+          socket.setMulticastTTL(255);
           resolve(socket);
         } catch {
           try {
@@ -296,13 +314,22 @@ export const createCastDiscovery = ({ onUpdate, now = Date.now } = {}) => {
     running = true;
     failureMessage = null;
 
-    const [multicastSocket, unicastSocket] = await Promise.all([
-      openSocket({ bindPort: MDNS_PORT, multicast: true }),
-      openSocket({ bindPort: 0, multicast: false }),
-    ]);
+    // Multi-homed machines (VPN adapters, virtual switches) must query out of
+    // every interface: the OS would otherwise route the multicast query out of
+    // a single arbitrary one, which may not be the LAN the receiver is on.
+    const interfaceAddresses = localIPv4Addresses();
+    const listener = await openSocket({
+      bindPort: MDNS_PORT,
+      multicastMemberships: interfaceAddresses.length > 0 ? interfaceAddresses : [undefined],
+    });
+    const querySockets = await Promise.all(
+      interfaceAddresses.map((address) =>
+        openSocket({ bindPort: 0, bindAddress: address, multicastInterface: address }),
+      ),
+    );
     sockets = [
-      multicastSocket ? { socket: multicastSocket, unicastResponse: false } : null,
-      unicastSocket ? { socket: unicastSocket, unicastResponse: true } : null,
+      listener ? { socket: listener, unicastResponse: false } : null,
+      ...querySockets.map((socket) => (socket ? { socket, unicastResponse: true } : null)),
     ].filter(Boolean);
 
     if (sockets.length === 0) {
