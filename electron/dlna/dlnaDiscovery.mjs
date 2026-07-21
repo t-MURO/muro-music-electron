@@ -111,8 +111,18 @@ export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, no
           ? AbortSignal.timeout(DESCRIPTION_TIMEOUT_MS)
           : undefined,
       });
-      if (!descriptionResponse.ok) return;
+      if (!descriptionResponse.ok) {
+        // A transient HTTP failure (e.g. the device answered SSDP but its
+        // description endpoint is still booting and returns 503) must not
+        // permanently hide the device. Drop the negative-cache entry so the
+        // next SSDP response re-fetches, matching the network-error path below.
+        describedLocations.delete(response.location);
+        return;
+      }
       const description = parseDeviceDescription(await descriptionResponse.text(), response.location);
+      // A device that parsed cleanly but exposes no AVTransport is genuinely
+      // not a renderer we can drive; keep the permanent negative cache so we
+      // do not re-fetch its description on every SSDP burst.
       if (!description.avTransportUrl) return;
       const locationUrl = new URL(response.location);
       const id = usnUuid(response.usn) ?? response.location;

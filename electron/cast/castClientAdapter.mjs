@@ -58,7 +58,15 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
     connection.on("close", () => {
       if (!closed) emitter.emit("close");
     });
-    connection.on("error", (error) => emitter.emit("error", error));
+    // A connection error before the service has attached its own "error"
+    // listener (i.e. still inside this connect/launch call) would, if
+    // re-emitted on a listener-less emitter, throw ERR_UNHANDLED_ERROR and
+    // crash the Electron main process. Such errors already surface through
+    // the rejected open()/request promise, so only forward when someone is
+    // actually listening.
+    connection.on("error", (error) => {
+      if (emitter.listenerCount("error") > 0) emitter.emit("error", error);
+    });
     await connection.open();
   };
 
@@ -142,9 +150,11 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
     loadMedia,
     play: () => mediaCommand("PLAY"),
     pause: () => mediaCommand("PAUSE"),
+    // resumeState is intentionally omitted: PLAYBACK_START would force a
+    // paused receiver to resume on every scrub. Omitting it preserves the
+    // current play/pause state across the seek.
     seek: (positionSecs) => mediaCommand("SEEK", {
       currentTime: Math.max(0, Number(positionSecs) || 0),
-      resumeState: "PLAYBACK_START",
     }),
     getMediaStatus: async () => {
       const response = await requireConnection().request(

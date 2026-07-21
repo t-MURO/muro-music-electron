@@ -128,6 +128,15 @@ try {
   assert.ok(setUriCall.metadata.includes("audio/flac"));
   assert.deepEqual(mocks.calls.find(([name]) => name === "seek"), ["seek", 30]);
 
+  // #4: a load must never emit a finished transition. The synthetic post-load
+  // status is pushed while sessionState is "loading", and real renderers pass
+  // through STOPPED between SetAVTransportURI and Play — none of which is a
+  // real end-of-track, so none may advance the queue.
+  const finishedDuringLoad = events.filter(
+    ([name, payload]) => name === "muro://dlna-media-status" && payload.finished,
+  );
+  assert.equal(finishedDuringLoad.length, 0, "load must not emit finished:true");
+
   const paused = await service.commands.dlna_pause();
   assert.equal(paused.state, "paused");
   const resumed = await service.commands.dlna_play();

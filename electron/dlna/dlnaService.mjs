@@ -31,6 +31,18 @@ export const createDlnaService = ({
   let sessionState = "idle";
   let lastError = null;
 
+  // Connect, disconnect, and load each mutate the session across several SOAP
+  // round-trips. Serializing them keeps concurrent IPC invocations from
+  // interleaving — e.g. a disconnect landing mid-load, or two loads racing on
+  // the shared media server. (A poll-failure teardown is not on this chain, so
+  // load's success path still re-checks the session below.)
+  let sessionOpChain = Promise.resolve();
+  const runSessionOp = (operation) => {
+    const result = sessionOpChain.then(operation, operation);
+    sessionOpChain = result.then(() => undefined, () => undefined);
+    return result;
+  };
+
   const emitEvent = (name, payload) => {
     if (!sender || sender.isDestroyed?.()) return;
     try {
@@ -87,7 +99,13 @@ export const createDlnaService = ({
   const handleStatus = (nextStatus) => {
     if (!session) return;
     const previous = session.lastStatus;
-    const finished = isDlnaFinishedTransition(previous, nextStatus);
+    // While loading, the renderer legitimately passes through STOPPED between
+    // SetAVTransportURI and Play, and the synthetic post-load status is pushed
+    // here too. Neither is a real end-of-track, so never advance the queue
+    // from a sample taken during a load.
+    const finished = sessionState === "loading"
+      ? false
+      : isDlnaFinishedTransition(previous, nextStatus);
     session.lastStatus = nextStatus;
     if (!["connecting", "loading", "disconnecting", "error"].includes(sessionState)) {
       const derived = dlnaSessionStateForStatus(nextStatus);
@@ -112,6 +130,12 @@ export const createDlnaService = ({
   const pollStatusOnce = async () => {
     const activeSession = session;
     if (!activeSession) return;
+    // Each poll is two sequential SOAP round-trips; a slow renderer can make
+    // one outlast the 1 s tick. Without this guard, overlapping polls can
+    // complete out of order and re-apply a stale sample — which can re-arm and
+    // double-fire the finished transition, skipping a queued track.
+    if (activeSession.polling) return;
+    activeSession.polling = true;
     try {
       const position = await activeSession.client.getPositionInfo();
       const transport = await activeSession.client.getTransportInfo();
@@ -131,6 +155,8 @@ export const createDlnaService = ({
       if (activeSession.pollFailures >= MAX_CONSECUTIVE_POLL_FAILURES) {
         handleSessionLost(error);
       }
+    } finally {
+      activeSession.polling = false;
     }
   };
 
@@ -186,55 +212,57 @@ export const createDlnaService = ({
       return discoverySnapshot();
     },
 
-    async dlna_connect({ deviceId }, invokeSender) {
+    dlna_connect({ deviceId }, invokeSender) {
       sender = invokeSender ?? sender;
-      const record = ensureDiscovery().getDeviceRecord(deviceId);
-      if (!record) {
-        throw createDlnaError(
-          DLNA_ERROR_CODES.deviceNotFound,
-          "The selected device is no longer visible on this network",
-        );
-      }
-      if (session) await doDisconnect();
+      return runSessionOp(async () => {
+        const record = ensureDiscovery().getDeviceRecord(deviceId);
+        if (!record) {
+          throw createDlnaError(
+            DLNA_ERROR_CODES.deviceNotFound,
+            "The selected device is no longer visible on this network",
+          );
+        }
+        if (session) await doDisconnect();
 
-      setState("connecting");
-      const client = clientFactory({
-        avTransportUrl: record.avTransportUrl,
-        renderingControlUrl: record.renderingControlUrl,
-      });
-      try {
-        await client.getTransportInfo(); // proves the control endpoint answers
-        await mediaServer.start();
-        mediaServer.beginSession();
-      } catch (error) {
-        const payload = {
-          code: DLNA_ERROR_CODES.connectFailed,
-          message: error instanceof Error ? error.message : String(error),
+        setState("connecting");
+        const client = clientFactory({
+          avTransportUrl: record.avTransportUrl,
+          renderingControlUrl: record.renderingControlUrl,
+        });
+        try {
+          await client.getTransportInfo(); // proves the control endpoint answers
+          await mediaServer.start();
+          mediaServer.beginSession();
+        } catch (error) {
+          const payload = {
+            code: DLNA_ERROR_CODES.connectFailed,
+            message: error instanceof Error ? error.message : String(error),
+          };
+          setState("error", payload);
+          throw createDlnaError(payload.code, payload.message);
+        }
+
+        session = {
+          deviceId: record.id,
+          deviceName: record.name,
+          host: record.host,
+          client,
+          lastStatus: null,
+          loadedTrack: null,
+          statusTimer: null,
+          pollFailures: 0,
         };
-        setState("error", payload);
-        throw createDlnaError(payload.code, payload.message);
-      }
-
-      session = {
-        deviceId: record.id,
-        deviceName: record.name,
-        host: record.host,
-        client,
-        lastStatus: null,
-        loadedTrack: null,
-        statusTimer: null,
-        pollFailures: 0,
-      };
-      startStatusPolling();
-      setState("connected");
-      return publicState();
+        startStatusPolling();
+        setState("connected");
+        return publicState();
+      });
     },
 
-    async dlna_disconnect() {
-      return doDisconnect();
+    dlna_disconnect() {
+      return runSessionOp(() => doDisconnect());
     },
 
-    async dlna_load_track({
+    dlna_load_track({
       trackId,
       sourcePath,
       title,
@@ -244,6 +272,7 @@ export const createDlnaService = ({
       coverArtPath,
       startPositionSecs,
     }) {
+      return runSessionOp(async () => {
       const activeSession = requireSession();
 
       const contentType = dlnaContentTypeFor(sourcePath);
@@ -308,6 +337,15 @@ export const createDlnaService = ({
             // track then simply starts from the beginning.
           });
         }
+        if (session !== activeSession) {
+          // A concurrent teardown (poll-failure or a superseding op) ended
+          // this session while the SOAP calls were in flight. Do not resurrect
+          // it with a "playing" state that has no device behind it.
+          throw createDlnaError(
+            DLNA_ERROR_CODES.sessionEnded,
+            "The playback session ended during load",
+          );
+        }
         activeSession.loadedTrack = {
           trackId: trackId ?? null,
           title: title ?? "",
@@ -332,6 +370,7 @@ export const createDlnaService = ({
           ? error
           : createDlnaError(DLNA_ERROR_CODES.loadFailed, String(error?.message ?? error));
       }
+      });
     },
 
     async dlna_play() {

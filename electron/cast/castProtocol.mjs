@@ -142,6 +142,12 @@ export const NAMESPACES = {
 export const PLATFORM_RECEIVER_ID = "receiver-0";
 const SENDER_ID = "sender-0";
 const HEARTBEAT_INTERVAL_MS = 5_000;
+// If nothing at all arrives from the device for this long the connection is
+// considered dead. A healthy receiver answers each 5 s PING with a PONG, so
+// three silent intervals means the peer (or the network path) is gone. Without
+// this, a black-holed connection (device power loss, Wi-Fi drop) is detected
+// only when the OS abandons TCP retransmission — up to ~15 min on Linux.
+const LIVENESS_TIMEOUT_MS = 3 * HEARTBEAT_INTERVAL_MS;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
 // A single authenticated TLS channel to one Cast device. Handles framing,
@@ -160,6 +166,7 @@ export const createCastConnection = ({
   let heartbeatTimer = null;
   let nextRequestId = 1;
   let closed = false;
+  let lastInboundAt = 0;
 
   const teardown = (error) => {
     if (closed) return;
@@ -243,8 +250,10 @@ export const createCastConnection = ({
       // authenticated at the protocol layer, not the CA layer.
       socket = tls.connect({ host, port, rejectUnauthorized: false }, () => {
         clearTimeout(connectTimer);
+        lastInboundAt = Date.now();
         const readFrames = createFrameReader(handleMessage);
         socket.on("data", (chunk) => {
+          lastInboundAt = Date.now();
           try {
             readFrames(chunk);
           } catch (error) {
@@ -253,6 +262,14 @@ export const createCastConnection = ({
         });
         sendRaw(NAMESPACES.connection, { type: "CONNECT" }, PLATFORM_RECEIVER_ID);
         heartbeatTimer = setInterval(() => {
+          // A black-holed peer still accepts writes into the kernel buffer, so
+          // silence — not a write failure — is what reveals a dead device.
+          if (Date.now() - lastInboundAt > LIVENESS_TIMEOUT_MS) {
+            const deadError = new Error(`Cast device at ${host}:${port} stopped responding`);
+            deadError.code = "CAST_CONNECT_TIMEOUT";
+            teardown(deadError);
+            return;
+          }
           try {
             sendRaw(NAMESPACES.heartbeat, { type: "PING" }, PLATFORM_RECEIVER_ID);
           } catch {

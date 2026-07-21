@@ -39,6 +39,19 @@ export const createCastService = ({
   let sessionState = "idle";
   let lastError = null;
 
+  // Connect and disconnect mutate the single session slot across multiple
+  // awaits (TLS handshake, receiver launch). Running them on one chain keeps
+  // concurrent IPC invocations from interleaving — without it two overlapping
+  // connects race to own `session`, orphaning the loser's live socket, timer,
+  // and receiver app, and a disconnect issued mid-connect no-ops on the
+  // not-yet-assigned session.
+  let sessionOpChain = Promise.resolve();
+  const runSessionOp = (operation) => {
+    const result = sessionOpChain.then(operation, operation);
+    sessionOpChain = result.then(() => undefined, () => undefined);
+    return result;
+  };
+
   const emitEvent = (name, payload) => {
     if (!sender || sender.isDestroyed?.()) return;
     try {
@@ -177,57 +190,59 @@ export const createCastService = ({
       return discoverySnapshot();
     },
 
-    async cast_connect({ deviceId }, invokeSender) {
+    cast_connect({ deviceId }, invokeSender) {
       sender = invokeSender ?? sender;
-      const device = discoverySnapshot().devices.find((entry) => entry.id === deviceId);
-      if (!device) {
-        throw createCastError(
-          CAST_ERROR_CODES.deviceNotFound,
-          "The selected cast device is no longer visible on this network",
-        );
-      }
-      if (session) await doDisconnect();
+      return runSessionOp(async () => {
+        const device = discoverySnapshot().devices.find((entry) => entry.id === deviceId);
+        if (!device) {
+          throw createCastError(
+            CAST_ERROR_CODES.deviceNotFound,
+            "The selected cast device is no longer visible on this network",
+          );
+        }
+        if (session) await doDisconnect();
 
-      setState("connecting");
-      const adapter = adapterFactory();
-      try {
-        await adapter.connect({ host: device.host, port: device.port });
-        await adapter.launchDefaultReceiver();
-        await mediaServer.start();
-        mediaServer.beginSession();
-      } catch (error) {
-        adapter.close();
-        const payload = {
-          code: error?.code === CAST_ERROR_CODES.connectTimeout
-            ? CAST_ERROR_CODES.connectTimeout
-            : CAST_ERROR_CODES.connectFailed,
-          message: error instanceof Error ? error.message : String(error),
+        setState("connecting");
+        const adapter = adapterFactory();
+        try {
+          await adapter.connect({ host: device.host, port: device.port });
+          await adapter.launchDefaultReceiver();
+          await mediaServer.start();
+          mediaServer.beginSession();
+        } catch (error) {
+          adapter.close();
+          const payload = {
+            code: error?.code === CAST_ERROR_CODES.connectTimeout
+              ? CAST_ERROR_CODES.connectTimeout
+              : CAST_ERROR_CODES.connectFailed,
+            message: error instanceof Error ? error.message : String(error),
+          };
+          setState("error", payload);
+          throw createCastError(payload.code, payload.message);
+        }
+
+        session = {
+          deviceId: device.id,
+          deviceName: device.name,
+          host: device.host,
+          adapter,
+          lastStatus: null,
+          loadedTrack: null,
+          statusTimer: null,
+          unsubscribes: [
+            adapter.on("mediaStatus", handleMediaStatus),
+            adapter.on("close", () => handleSessionLost()),
+            adapter.on("error", (error) => handleSessionLost(error)),
+          ],
         };
-        setState("error", payload);
-        throw createCastError(payload.code, payload.message);
-      }
-
-      session = {
-        deviceId: device.id,
-        deviceName: device.name,
-        host: device.host,
-        adapter,
-        lastStatus: null,
-        loadedTrack: null,
-        statusTimer: null,
-        unsubscribes: [
-          adapter.on("mediaStatus", handleMediaStatus),
-          adapter.on("close", () => handleSessionLost()),
-          adapter.on("error", (error) => handleSessionLost(error)),
-        ],
-      };
-      startStatusPolling();
-      setState("connected");
-      return publicState();
+        startStatusPolling();
+        setState("connected");
+        return publicState();
+      });
     },
 
-    async cast_disconnect() {
-      return doDisconnect();
+    cast_disconnect() {
+      return runSessionOp(() => doDisconnect());
     },
 
     async cast_load_track({
