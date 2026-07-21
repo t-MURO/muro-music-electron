@@ -5,7 +5,9 @@ export {
   type AnalysisNotationMode,
   type AnalysisOutputs,
   type DeleteMode,
+  type ThemeMode,
   type MixBars,
+  applyThemeMode,
 } from "./settingsStore";
 export {
   useLibraryStore,

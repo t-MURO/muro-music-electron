@@ -73,6 +73,7 @@ import {
   useSmartCrateStore,
   selectAllTracks,
   notify,
+  applyThemeMode,
 } from "./stores";
 import {
   getPathForView,
@@ -142,6 +143,16 @@ function App() {
   const setDbPath = useSettingsStore((s) => s.setDbPath);
   const setDbFileName = useSettingsStore((s) => s.setDbFileName);
   const setUseAutoDbPath = useSettingsStore((s) => s.setUseAutoDbPath);
+
+  useEffect(() => {
+    applyThemeMode(theme);
+    if (theme !== "system" || typeof window.matchMedia !== "function") return;
+
+    const colorScheme = window.matchMedia("(prefers-color-scheme: light)");
+    const handleColorSchemeChange = () => applyThemeMode("system");
+    colorScheme.addEventListener("change", handleColorSchemeChange);
+    return () => colorScheme.removeEventListener("change", handleColorSchemeChange);
+  }, [theme]);
 
   const shuffleEnabled = usePlaybackStore((s) => s.shuffleEnabled);
   const repeatMode = usePlaybackStore((s) => s.repeatMode);

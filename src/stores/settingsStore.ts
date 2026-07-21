@@ -7,6 +7,7 @@ export type AnalysisOutputMode = "none" | "prepend" | "append" | "overwrite";
 export type AnalysisNotationMode = "standard" | "custom" | "combined" | "djCombined";
 export type AnalysisPerformanceMode = "stable" | "fast" | "maximum";
 export type DeleteMode = "library" | "disk";
+export type ThemeMode = "system" | "dark" | "light";
 export type { MixBars } from "../lib/mix/config";
 export type AnalysisOutputs = {
   comment: AnalysisOutputMode;
@@ -27,8 +28,27 @@ const DEFAULT_ANALYSIS_OUTPUTS: AnalysisOutputs = {
   bpm: "none",
 };
 
+const normalizeThemeMode = (theme: unknown): ThemeMode => {
+  if (theme === "system" || theme === "light") return theme;
+  return "dark";
+};
+
+export const applyThemeMode = (theme: ThemeMode) => {
+  if (typeof document === "undefined") return;
+
+  const resolvedTheme = theme === "system"
+    && typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
+
+  document.documentElement.dataset.theme = theme === "system" ? resolvedTheme : theme;
+  document.documentElement.style.colorScheme = resolvedTheme;
+};
+
 type SettingsState = {
-  theme: string;
+  theme: ThemeMode;
   locale: Locale;
   seekMode: "fast" | "accurate";
   dbPath: string;
@@ -52,7 +72,7 @@ type SettingsState = {
 };
 
 type SettingsActions = {
-  setTheme: (theme: string) => void;
+  setTheme: (theme: ThemeMode) => void;
   setLocale: (locale: Locale) => void;
   setSeekMode: (mode: "fast" | "accurate") => void;
   setDbPath: (path: string) => void;
@@ -80,7 +100,7 @@ export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
       // State
-      theme: "studio",
+      theme: "dark",
       locale: "en",
       seekMode: "fast",
       dbPath: "",
@@ -105,9 +125,7 @@ export const useSettingsStore = create<SettingsStore>()(
       // Actions
       setTheme: (theme) => {
         set({ theme });
-        if (typeof document !== "undefined") {
-          document.documentElement.dataset.theme = theme;
-        }
+        applyThemeMode(theme);
       },
       setLocale: (locale) => {
         set({ locale });
@@ -144,7 +162,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "muro-settings",
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
@@ -168,7 +186,11 @@ export const useSettingsStore = create<SettingsStore>()(
         audioOutputDeviceId: state.audioOutputDeviceId,
         audioOutputDeviceLabel: state.audioOutputDeviceLabel,
       }),
-      migrate: (persistedState) => persistedState,
+      migrate: (persistedState) => {
+        if (!persistedState || typeof persistedState !== "object") return persistedState;
+        const persisted = persistedState as Partial<SettingsState>;
+        return { ...persisted, theme: normalizeThemeMode(persisted.theme) };
+      },
       merge: (persistedState, currentState) => {
         const persisted = persistedState && typeof persistedState === "object"
           ? persistedState as Partial<SettingsState>
@@ -180,6 +202,7 @@ export const useSettingsStore = create<SettingsStore>()(
         return {
           ...currentState,
           ...persisted,
+          theme: normalizeThemeMode(persisted.theme),
           // Analysis settings are a nested group. Merge them with their defaults so
           // settings written by older versions cannot discard newer Key/BPM fields.
           analysisCustomCodes: DEFAULT_CUSTOM_CODES.map((fallback, index) =>
@@ -197,7 +220,7 @@ export const useSettingsStore = create<SettingsStore>()(
         if (state) {
           // Apply theme on rehydrate
           if (typeof document !== "undefined") {
-            document.documentElement.dataset.theme = state.theme;
+            applyThemeMode(state.theme);
           }
           // Apply locale on rehydrate
           if (isLocale(state.locale)) {

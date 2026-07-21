@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, Monitor, Moon, Sun } from "lucide-react";
 import { t, type Locale } from "../../i18n";
 import { openExternal } from "../../desktop/shell";
 import { MIX_BAR_OPTIONS } from "../../lib/mix/config";
@@ -9,12 +9,13 @@ import {
   type AnalysisOutputMode,
   type AnalysisOutputs,
   type MixBars,
+  type ThemeMode,
 } from "../../stores";
 
 type SettingsPanelProps = {
-  theme: string;
+  theme: ThemeMode;
   locale: Locale;
-  themes: ReadonlyArray<{ id: string; label: string }>;
+  themes: ReadonlyArray<{ id: ThemeMode; label: string }>;
   localeOptions: ReadonlyArray<{ id: string; label: string }>;
   dbPath: string;
   dbFileName: string;
@@ -24,7 +25,7 @@ type SettingsPanelProps = {
   coverArtBackfillStatus: string | null;
   clearSongsPending: boolean;
   seekMode: "fast" | "accurate";
-  onThemeChange: (theme: string) => void;
+  onThemeChange: (theme: ThemeMode) => void;
   onLocaleChange: (locale: Locale) => void;
   onSeekModeChange: (mode: "fast" | "accurate") => void;
   onDbPathChange: (value: string) => void;
@@ -38,14 +39,15 @@ type SettingsPanelProps = {
 type Tab = "dev" | "application" | "analysis" | "theme";
 
 const themeDescriptions: Record<string, { label: string; description: string }> = {
+  "system": { label: "System", description: "Follow your computer's light or dark preference" },
   "light": { label: "Light", description: "Polished, spacious design with light colors" },
-  "dark": { label: "Dark", description: "Polished, spacious design with dark colors" },
-  "compact-light": { label: "Compact Light", description: "Dense layout for power users, light mode" },
-  "compact-dark": { label: "Compact Dark", description: "Dense layout for power users, dark mode" },
-  "terminal": { label: "Terminal", description: "Monospace terminal theme" },
-  "compact-terminal": { label: "Compact Terminal", description: "Dense monospace terminal theme" },
-  "bw-terminal": { label: "B&W Terminal", description: "Monospace black and white terminal" },
-  "compact-bw-terminal": { label: "Compact B&W Terminal", description: "Dense black and white terminal" },
+  "dark": { label: "Dark", description: "The original Studio appearance" },
+};
+
+const themeIcons = {
+  system: Monitor,
+  dark: Moon,
+  light: Sun,
 };
 
 const KEY_NAMES = [
@@ -618,67 +620,61 @@ export const SettingsPanel = ({
         )}
 
         {activeTab === "theme" && (
-          <div className="space-y-6">
-            {/* Theme Selection */}
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <label className="mb-1 block text-[var(--font-size-md)] font-medium text-[var(--color-text-primary)]">
-                  Theme
-                </label>
-                <p className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
-                  Choose a theme that suits your workflow
-                </p>
-              </div>
-              <div className="relative">
-                <select
-                  value={theme}
-                  onChange={(e) => onThemeChange(e.target.value)}
-                  className="h-[var(--input-height)] w-40 appearance-none rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] pr-10 text-[var(--font-size-sm)] text-[var(--color-text-primary)] transition-all duration-[var(--transition-fast)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
-                >
-                  {themes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              </div>
-            </div>
-
-            {/* Theme Preview Grid */}
-            <div className="border-t border-[var(--color-border-light)] pt-6">
-              <h4 className="mb-4 text-[var(--font-size-sm)] font-medium text-[var(--color-text-secondary)]">
-                Theme Preview
-              </h4>
-              <div className="grid grid-cols-2 gap-4">
-                {themes.map((t) => {
-                  const themeInfo = themeDescriptions[t.id] || { label: t.label, description: "" };
-                  return (
-                    <button
-                      key={t.id}
-                      className={`flex flex-col items-center gap-2 rounded-[var(--radius-lg)] border-2 p-4 transition-all duration-[var(--transition-fast)] ${
-                        theme === t.id
-                          ? "border-[var(--color-accent)] bg-[var(--color-accent-light)]"
-                          : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-accent-light)] hover:bg-[var(--color-bg-tertiary)]"
-                      }`}
-                      onClick={() => onThemeChange(t.id)}
-                      type="button"
-                    >
-                      <div
-                        className={`grid aspect-[16/10] w-full grid-cols-[1fr_2fr_1fr] gap-0.5 overflow-hidden rounded-[var(--radius-md)]`}
-                        data-theme-preview={t.id}
-                      >
-                        <div className="rounded-sm bg-[var(--color-bg-primary)]" />
-                        <div className="rounded-sm bg-[var(--color-bg-primary)]" />
-                        <div className="rounded-sm bg-[var(--color-bg-primary)]" />
+          <div>
+            <h3 className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)]">
+              Appearance
+            </h3>
+            <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
+              Choose a theme or follow your computer automatically.
+            </p>
+            <div className="mt-4 grid max-w-2xl grid-cols-3 gap-2">
+              {themes.map((item) => {
+                const themeInfo = themeDescriptions[item.id];
+                const ThemeIcon = themeIcons[item.id];
+                const isSelected = theme === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={`group min-w-0 rounded-[var(--radius-md)] border p-2 text-left transition-all duration-[var(--transition-fast)] ${
+                      isSelected
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] shadow-[0_0_0_1px_var(--color-accent)]"
+                        : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:-translate-y-px hover:border-[var(--color-text-muted)] hover:shadow-[var(--shadow-sm)]"
+                    }`}
+                    onClick={() => onThemeChange(item.id)}
+                    title={themeInfo.description}
+                    aria-pressed={isSelected}
+                    type="button"
+                  >
+                    <div className="theme-preview" data-theme-preview={item.id} aria-hidden="true">
+                      <div className="theme-preview__sidebar">
+                        <span className="theme-preview__logo" />
+                        <span className="theme-preview__nav theme-preview__nav--active" />
+                        <span className="theme-preview__nav" />
+                        <span className="theme-preview__nav" />
                       </div>
-                      <span className="text-[var(--font-size-xs)] font-medium text-[var(--color-text-primary)]">
+                      <div className="theme-preview__content">
+                        <div className="theme-preview__toolbar"><span /><span /></div>
+                        <div className="theme-preview__track">
+                          <span className="theme-preview__cover" />
+                          <span className="theme-preview__lines"><i /><i /></span>
+                        </div>
+                        <div className="theme-preview__track">
+                          <span className="theme-preview__cover theme-preview__cover--alt" />
+                          <span className="theme-preview__lines"><i /><i /></span>
+                        </div>
+                        <div className="theme-preview__waveform" />
+                      </div>
+                    </div>
+                    <span className="mt-1.5 flex items-center gap-1.5 px-0.5">
+                      <ThemeIcon className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                      <span className="truncate text-[11px] font-semibold text-[var(--color-text-primary)]">
                         {themeInfo.label}
                       </span>
-                    </button>
-                  );
-                })}
-              </div>
+                      <span className={`ml-auto h-1.5 w-1.5 rounded-full ${isSelected ? "bg-[var(--color-accent)]" : "bg-transparent"}`} />
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

@@ -1,16 +1,10 @@
 import type { ColumnConfig, Track } from "../types";
 
 export const themes = [
-  { id: "studio", label: "Studio" },
-  { id: "light", label: "Light" },
+  { id: "system", label: "System" },
   { id: "dark", label: "Dark" },
-  { id: "compact-light", label: "Compact Light" },
-  { id: "compact-dark", label: "Compact Dark" },
-  { id: "terminal", label: "Terminal" },
-  { id: "compact-terminal", label: "Compact Terminal" },
-  { id: "bw-terminal", label: "B&W Terminal" },
-  { id: "compact-bw-terminal", label: "Compact B&W Terminal" },
-];
+  { id: "light", label: "Light" },
+] as const;
 
 export const baseColumns: ColumnConfig[] = [
   { key: "title", labelKey: "columns.title", visible: true, width: 180 },
