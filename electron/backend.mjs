@@ -25,6 +25,7 @@ import { createAlbumCoverService } from "./albumCovers.mjs";
 import { createCastService } from "./cast/castService.mjs";
 import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
+import { exportOrganizedLibrary } from "./libraryExport.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -723,6 +724,13 @@ export const createBackend = ({
     import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
     export_playlist_file: ({ dbPath, playlistId, filePath }) =>
       exportPlaylistFile(dbPath, playlistId, filePath),
+    export_organized_library: ({ dbPath, destinationPath, useAsCurrentLibrary }, sender) =>
+      exportOrganizedLibrary({
+        dbPath,
+        destinationPath,
+        useAsCurrentLibrary: Boolean(useAsCurrentLibrary),
+        onProgress: (progress) => emit(sender, "muro://library-export-progress", progress),
+      }),
     add_tracks_to_playlist: ({ dbPath, playlistId, trackIds }) => {
       if (!trackIds.length) return;
       const db = openDatabase(dbPath);

@@ -29,6 +29,7 @@ import {
   AlbumMetadataSearchModal,
   AcoustIdModal,
   ArtistImageModal,
+  ArtistSeparatorReviewModal,
   PlaylistCreateModal,
   PlaylistEditModal,
   SmartCrateModal,
@@ -57,6 +58,7 @@ import {
   useTrackEdit,
   useTrackDeletion,
   useLibraryInit,
+  useOrganizedLibraryExport,
   usePlayTracking,
   useKeyboardShortcuts,
   useArtistProfiles,
@@ -90,7 +92,18 @@ import {
 import { confirm, open, save } from "@muro/desktop/dialogs";
 import { openExternal, showItemInFolder } from "./desktop/shell";
 import { isDjMixFeatureAvailable } from "./lib/mix/config";
+import {
+  findArtistSeparatorCandidates,
+  type ArtistSeparatorCandidate,
+} from "./lib/metadata/artistSeparators";
 import type { ArtistImageCandidate, ColumnConfig, SmartCrate, Track, TrackMetadataUpdates } from "./types";
+
+type ArtistSeparatorReviewSession = {
+  candidates: ArtistSeparatorCandidate[];
+  total: number;
+  completed: number;
+  applied: number;
+};
 
 function App() {
   const location = useLocation();
@@ -107,6 +120,10 @@ function App() {
   const allTracks = useLibraryStore(selectAllTracks);
   const allTracksById = useMemo(
     () => new Map(allTracks.map((track) => [track.id, track])),
+    [allTracks],
+  );
+  const artistSeparatorCandidates = useMemo(
+    () => findArtistSeparatorCandidates(allTracks),
     [allTracks],
   );
 
@@ -126,6 +143,9 @@ function App() {
   const [albumMetadataTrackIds, setAlbumMetadataTrackIds] = useState<string[]>([]);
   const [acoustIdTrackIds, setAcoustIdTrackIds] = useState<string[]>([]);
   const [artistImageArtistName, setArtistImageArtistName] = useState<string | null>(null);
+  const [artistSeparatorReview, setArtistSeparatorReview] =
+    useState<ArtistSeparatorReviewSession | null>(null);
+  const [artistSeparatorApplying, setArtistSeparatorApplying] = useState(false);
   const [revealTrackRequest, setRevealTrackRequest] = useState<{
     trackId: string;
     requestId: number;
@@ -856,6 +876,62 @@ function App() {
     notify.success(`Applied AcoustID metadata to ${entries.length} ${entries.length === 1 ? "track" : "tracks"}`);
   }, [handleSaveMetadata]);
 
+  const handleOpenArtistSeparatorReview = useCallback(() => {
+    if (artistSeparatorCandidates.length === 0) {
+      notify.info("No artist fields containing “ & ” or “feat.” were found");
+      return;
+    }
+    setArtistSeparatorReview({
+      candidates: artistSeparatorCandidates,
+      total: artistSeparatorCandidates.length,
+      completed: 0,
+      applied: 0,
+    });
+  }, [artistSeparatorCandidates]);
+
+  const advanceArtistSeparatorReview = useCallback((didApply: boolean) => {
+    if (!artistSeparatorReview) return;
+    const candidates = artistSeparatorReview.candidates.slice(1);
+    const applied = artistSeparatorReview.applied + (didApply ? 1 : 0);
+    if (candidates.length === 0) {
+      setArtistSeparatorReview(null);
+      notify.success(
+        `Artist separator review complete: updated ${applied} of ${artistSeparatorReview.total} ${
+          artistSeparatorReview.total === 1 ? "field" : "fields"
+        }`,
+      );
+      return;
+    }
+    setArtistSeparatorReview({
+      ...artistSeparatorReview,
+      candidates,
+      completed: artistSeparatorReview.completed + 1,
+      applied,
+    });
+  }, [artistSeparatorReview]);
+
+  const handleApplyArtistSeparator = useCallback(async (value: string) => {
+    const candidate = artistSeparatorReview?.candidates[0];
+    if (!candidate || artistSeparatorApplying) return;
+    setArtistSeparatorApplying(true);
+    try {
+      await handleSaveMetadata(
+        [candidate.trackId],
+        candidate.field === "albumArtist" ? { artists: value } : { artist: value },
+      );
+      advanceArtistSeparatorReview(true);
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : "Could not update the artist");
+    } finally {
+      setArtistSeparatorApplying(false);
+    }
+  }, [
+    advanceArtistSeparatorReview,
+    artistSeparatorApplying,
+    artistSeparatorReview,
+    handleSaveMetadata,
+  ]);
+
   const {
     pendingTracks: pendingDeleteTracks,
     isDeleting: isDeletingTracks,
@@ -893,6 +969,23 @@ function App() {
     handleBackfillCoverArt,
     handleClearSongs,
   } = useLibraryInit();
+  const {
+    organizedLibraryExportPending,
+    organizedLibraryExportStatus,
+    exportOrganizedLibrary,
+  } = useOrganizedLibraryExport();
+
+  const handleExportOrganizedLibrary = useCallback(async (useAsCurrentLibrary: boolean) => {
+    try {
+      const result = await open({ directory: true });
+      const destinationPath = Array.isArray(result) ? result[0] : result;
+      if (destinationPath) {
+        await exportOrganizedLibrary(destinationPath, useAsCurrentLibrary);
+      }
+    } catch {
+      notify.error("Library export folder picker failed");
+    }
+  }, [exportOrganizedLibrary]);
 
   const editingSmartCrate = useMemo(
     () => smartCrates.find((crate) => crate.id === editingSmartCrateId) ?? null,
@@ -1443,6 +1536,15 @@ function App() {
         onApply={handleSelectArtistImage}
         onOpenSource={handleOpenArtistSource}
       />
+      <ArtistSeparatorReviewModal
+        candidate={artistSeparatorReview?.candidates[0] ?? null}
+        position={(artistSeparatorReview?.completed ?? 0) + 1}
+        total={artistSeparatorReview?.total ?? 0}
+        isApplying={artistSeparatorApplying}
+        onApply={handleApplyArtistSeparator}
+        onSkip={() => advanceArtistSeparatorReview(false)}
+        onClose={() => setArtistSeparatorReview(null)}
+      />
       <WindowChrome />
       <div
         className="app-shell-grid grid min-h-0 flex-1 grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
@@ -1594,6 +1696,9 @@ function App() {
                       backfillStatus={backfillStatus}
                       coverArtBackfillPending={coverArtBackfillPending}
                       coverArtBackfillStatus={coverArtBackfillStatus}
+                      artistSeparatorCandidateCount={artistSeparatorCandidates.length}
+                      organizedLibraryExportPending={organizedLibraryExportPending}
+                      organizedLibraryExportStatus={organizedLibraryExportStatus}
                       clearSongsPending={clearSongsPending}
                       seekMode={seekMode}
                       onThemeChange={setTheme}
@@ -1603,6 +1708,8 @@ function App() {
                       onDbFileNameChange={setDbFileName}
                       onBackfillSearchText={handleBackfillSearchText}
                       onBackfillCoverArt={handleBackfillCoverArt}
+                      onReviewArtistSeparators={handleOpenArtistSeparatorReview}
+                      onExportOrganizedLibrary={handleExportOrganizedLibrary}
                       onClearSongs={handleClearSongs}
                       onUseDefaultLocation={() => setUseAutoDbPath(true)}
                     />

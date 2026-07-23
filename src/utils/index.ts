@@ -74,6 +74,7 @@ export {
   listPlaylistFiles,
   importPlaylistFile,
   exportPlaylistFile,
+  exportOrganizedLibrary,
   backfillSearchText,
   backfillCoverArt,
   loadRecentlyPlayed,
@@ -87,6 +88,7 @@ export {
   type AlbumMetadataCandidate,
   type AlbumMetadataRelease,
   type AlbumMetadataTrack,
+  type OrganizedLibraryExportResult,
 } from "./database";
 export {
   importFiles,

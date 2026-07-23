@@ -35,6 +35,7 @@ export {
   AlbumMetadataSearchModal,
   AcoustIdModal,
   ArtistImageModal,
+  ArtistSeparatorReviewModal,
   PlaylistContextMenu,
   PlaylistCreateModal,
   PlaylistEditModal,

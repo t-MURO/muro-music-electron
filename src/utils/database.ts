@@ -340,6 +340,30 @@ export const exportPlaylistFile = (
   filePath,
 });
 
+export type OrganizedLibraryExportResult = {
+  exportRoot: string;
+  tracks: number;
+  filesCopied: number;
+  tracksFailed: number;
+  playlistsExported: number;
+  playlistEntriesExported: number;
+  playlistEntriesMissing: number;
+  librarySwitchRequested: boolean;
+  librarySwitched: boolean;
+  librarySwitchError: string | null;
+  failures: Array<{ trackId: string; sourcePath: string; message: string }>;
+};
+
+export const exportOrganizedLibrary = (
+  dbPath: string,
+  destinationPath: string,
+  useAsCurrentLibrary: boolean,
+) => invoke<OrganizedLibraryExportResult>("export_organized_library", {
+  dbPath,
+  destinationPath,
+  useAsCurrentLibrary,
+});
+
 // ============================================================================
 // Backfill Operations
 // ============================================================================

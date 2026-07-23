@@ -8,6 +8,7 @@ export { MetadataSearchModal } from "./MetadataSearchModal";
 export { AlbumMetadataSearchModal } from "./AlbumMetadataSearchModal";
 export { AcoustIdModal } from "./AcoustIdModal";
 export { ArtistImageModal } from "./ArtistImageModal";
+export { ArtistSeparatorReviewModal } from "./ArtistSeparatorReviewModal";
 export { PlaylistContextMenu } from "./PlaylistContextMenu";
 export { PlaylistCreateModal } from "./PlaylistCreateModal";
 export { PlaylistEditModal } from "./PlaylistEditModal";

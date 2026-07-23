@@ -19,6 +19,9 @@ protocol.registerSchemesAsPrivileged([{
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
 const rendererSmokeUrl = process.env.MURO_RENDERER_SMOKE_URL?.trim() || null;
+const autoMixQueueSmokeOnly = process.env.MURO_AUTO_MIX_QUEUE_SMOKE === "1";
+const artistSeparatorSmokeOnly = process.env.MURO_ARTIST_SEPARATOR_SMOKE === "1";
+const libraryExportSmokeOnly = process.env.MURO_LIBRARY_EXPORT_SMOKE === "1";
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-renderer-smoke-"));
 const writeSilentWave = (filePath, durationSeconds = 5) => {
   const sampleRate = 8_000;
@@ -44,8 +47,12 @@ const writeSilentWave = (filePath, durationSeconds = 5) => {
 const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   id: `smoke-track-${index}`,
   title: `Smoke Track ${String(index).padStart(3, "0")}`,
-  artist: "Muro",
-  artists: "Muro",
+  artist: artistSeparatorSmokeOnly && index === 249
+    ? "Muro & Guest feat. DJ Test"
+    : "Muro",
+  artists: artistSeparatorSmokeOnly && index === 249
+    ? "Various Artists & Muro"
+    : "Muro",
   album: `Smoke Album ${String(Math.floor(index / 10)).padStart(2, "0")}`,
   track_number: (index % 10) + 1,
   track_total: 10,
@@ -60,6 +67,16 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   file_size_bytes: 10 * 1024 * 1024,
   key: ["8A", "8A", "9A", "7A", "8B", "2B"][index % 6],
   bpm: index === 1 ? 0 : 120 + (index % 8),
+  beat_grid_json: autoMixQueueSmokeOnly
+    ? JSON.stringify({
+        version: 1,
+        bpm: 120 + (index % 8),
+        firstBeatSec: 0,
+        firstDownbeatSec: 0,
+        confidence: 0.95,
+        analyzedAt: 1_753_228_800,
+      })
+    : null,
   rating: 0,
   label: index % 2 === 0 ? "Muro Records" : "Night Shift Music",
   comment: `Smoke comment ${index}`,
@@ -107,6 +124,8 @@ const smokeArtistProfile = {
 let artistProfileScanCount = 0;
 let manualCoverFetchCount = 0;
 let artistImageSaveCount = 0;
+let organizedLibraryExportArgs = null;
+let organizedLibraryReloaded = false;
 const shownItemPaths = [];
 const copiedCoverPaths = [];
 const ratingUpdates = [];
@@ -121,7 +140,18 @@ const fail = (message) => {
   app.exit(1);
 };
 
-const timeout = setTimeout(() => fail("Renderer smoke test timed out"), 60_000);
+const timeout = setTimeout(
+  () => fail(
+    autoMixQueueSmokeOnly
+      ? "Auto-mix queue smoke test timed out because the renderer became unresponsive"
+      : artistSeparatorSmokeOnly
+        ? "Artist separator renderer smoke test timed out"
+        : libraryExportSmokeOnly
+          ? "Organized library export renderer smoke test timed out"
+      : "Renderer smoke test timed out"
+  ),
+  autoMixQueueSmokeOnly || artistSeparatorSmokeOnly || libraryExportSmokeOnly ? 5_000 : 60_000,
+);
 
 app.whenReady().then(async () => {
   protocol.handle("muro-file", (request) => {
@@ -129,6 +159,9 @@ app.whenReady().then(async () => {
     return createLocalFileResponse(request, decodeURIComponent(url.pathname.slice(1)));
   });
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
+  ipcMain.handle("muro:open-dialog", () =>
+    libraryExportSmokeOnly ? temporaryDirectory : null
+  );
   ipcMain.handle("muro:clipboard-has-image", () => false);
   ipcMain.handle("muro:cache-clipboard-cover-art", () => null);
   ipcMain.handle("muro:copy-image-to-clipboard", (_event, filePath) => {
@@ -154,7 +187,19 @@ app.whenReady().then(async () => {
     shownItemPaths.push(filePath);
   });
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
-    if (command === "load_tracks") return { library: smokeTracks, inbox: [] };
+    if (command === "load_tracks") {
+      const useExportedPaths = organizedLibraryExportArgs?.useAsCurrentLibrary === true;
+      if (useExportedPaths) organizedLibraryReloaded = true;
+      return {
+        library: useExportedPaths
+          ? smokeTracks.map((track) => ({
+              ...track,
+              source_path: path.join(temporaryDirectory, "Muro Library", path.basename(track.source_path)),
+            }))
+          : smokeTracks,
+        inbox: [],
+      };
+    }
     if (command === "load_playlists") return {
       playlists: [
         {
@@ -339,6 +384,45 @@ app.whenReady().then(async () => {
     if (command === "test_get_cover_counts") {
       return { manualCoverFetchCount, artistImageSaveCount, copiedCoverPaths: [...copiedCoverPaths] };
     }
+    if (command === "test_get_artist_separator_updates") {
+      return ratingUpdates.filter((update) =>
+        typeof update.updates?.artist === "string" ||
+        typeof update.updates?.artists === "string"
+      );
+    }
+    if (command === "export_organized_library") {
+      organizedLibraryExportArgs = args;
+      event.sender.send("muro:event", "muro://library-export-progress", {
+        phase: "music",
+        current: smokeTracks.length,
+        total: smokeTracks.length,
+        name: smokeTracks.at(-1)?.title,
+      });
+      event.sender.send("muro:event", "muro://library-export-progress", {
+        phase: "playlists",
+        current: 5,
+        total: 5,
+        name: "Nested Playlist",
+      });
+      return {
+        exportRoot: path.join(temporaryDirectory, "Muro Library"),
+        tracks: smokeTracks.length,
+        filesCopied: smokeTracks.length,
+        tracksFailed: 0,
+        playlistsExported: 5,
+        playlistEntriesExported: smokeTracks.length,
+        playlistEntriesMissing: 0,
+        librarySwitchRequested: Boolean(args.useAsCurrentLibrary),
+        librarySwitched: Boolean(args.useAsCurrentLibrary),
+        librarySwitchError: null,
+        failures: [],
+      };
+    }
+    if (command === "test_get_organized_library_export_args") {
+      return organizedLibraryExportArgs
+        ? { ...organizedLibraryExportArgs, rendererReloaded: organizedLibraryReloaded }
+        : null;
+    }
     if (command === "scan_technical_metadata") {
       return { checked: 0, updated: 0, failed: 0, remaining: 0 };
     }
@@ -433,6 +517,177 @@ app.whenReady().then(async () => {
       const scroller = document.querySelector('[data-track-table-scroll]');
       const headerScroller = document.querySelector('[data-track-table-header-scroll]');
       const searchShortcutHint = document.querySelector('[data-search-shortcut-hint]');
+      if (${libraryExportSmokeOnly ? "true" : "false"}) {
+        if (!root?.childElementCount || !scroller) {
+          return {
+            childCount: root?.childElementCount ?? 0,
+            textLength: root?.textContent?.trim().length ?? 0,
+            stickyHeaderReady: false,
+          };
+        }
+
+        window.location.hash = "#/settings";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const useAsLibraryCheckbox = document.querySelector(
+          "[data-use-export-as-current-library]"
+        );
+        useAsLibraryCheckbox?.click();
+        const exportButton = document.querySelector("[data-export-organized-library]");
+        exportButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const exportArgs = await window.muro.invoke("test_get_organized_library_export_args");
+        const exportStatus = document.querySelector("[data-organized-library-export-status]");
+
+        return {
+          childCount: root.childElementCount,
+          textLength: root.textContent?.trim().length ?? 0,
+          stickyHeaderReady: true,
+          organizedLibraryExportReady: Boolean(
+            exportButton &&
+            useAsLibraryCheckbox instanceof HTMLInputElement &&
+            useAsLibraryCheckbox.checked &&
+            !exportButton.hasAttribute("disabled") &&
+            exportArgs?.destinationPath === ${JSON.stringify(temporaryDirectory)} &&
+            typeof exportArgs?.dbPath === "string" &&
+            exportArgs?.useAsCurrentLibrary === true &&
+            exportArgs?.rendererReloaded === true &&
+            exportStatus?.textContent?.includes("Copied 250 music files") &&
+            exportStatus?.textContent?.includes("exported 5 playlists") &&
+            exportStatus?.textContent?.includes("Muro is now using the exported files")
+          ),
+          organizedLibraryExportDebug: {
+            buttonFound: Boolean(exportButton),
+            buttonDisabled: exportButton?.hasAttribute("disabled") ?? null,
+            useAsLibraryChecked: useAsLibraryCheckbox instanceof HTMLInputElement
+              ? useAsLibraryCheckbox.checked
+              : null,
+            exportArgs,
+            status: exportStatus?.textContent?.trim() ?? null,
+          },
+        };
+      }
+      if (${artistSeparatorSmokeOnly ? "true" : "false"}) {
+        if (!root?.childElementCount || !scroller) {
+          return {
+            childCount: root?.childElementCount ?? 0,
+            textLength: root?.textContent?.trim().length ?? 0,
+            stickyHeaderReady: false,
+          };
+        }
+
+        window.location.hash = "#/settings";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const reviewButton = document.querySelector("[data-review-artist-separators]");
+        const reviewCountReady = reviewButton?.textContent?.trim() === "Review 2 matches";
+        reviewButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        const modal = document.querySelector("[data-artist-separator-modal]");
+        const firstField = document.querySelector("[data-artist-separator-field]");
+        const currentArtist = document.querySelector("[data-artist-separator-current]");
+        const proposedArtist = document.querySelector("[data-artist-separator-proposed]");
+        const artistProposalReady = (
+          firstField?.textContent?.trim() === "Artist" &&
+          currentArtist?.textContent?.trim() === "Muro & Guest feat. DJ Test" &&
+          proposedArtist instanceof HTMLInputElement &&
+          proposedArtist.value === "Muro, Guest, DJ Test"
+        );
+
+        document.querySelector("[data-artist-separator-apply]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const secondField = document.querySelector("[data-artist-separator-field]");
+        const currentAlbumArtist = document.querySelector("[data-artist-separator-current]");
+        const proposedAlbumArtist = document.querySelector("[data-artist-separator-proposed]");
+        const albumArtistProposalReady = (
+          secondField?.textContent?.trim() === "Album artist" &&
+          currentAlbumArtist?.textContent?.trim() === "Various Artists & Muro" &&
+          proposedAlbumArtist instanceof HTMLInputElement &&
+          proposedAlbumArtist.value === "Various Artists, Muro"
+        );
+
+        document.querySelector("[data-artist-separator-apply]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const updates = await window.muro.invoke("test_get_artist_separator_updates");
+        const savedArtistUpdate = updates[0];
+        const savedAlbumArtistUpdate = updates[1];
+        const reviewCompleted = (
+          !document.querySelector("[data-artist-separator-modal]") &&
+          document.querySelector("[data-review-artist-separators]")?.hasAttribute("disabled")
+        );
+
+        return {
+          childCount: root.childElementCount,
+          textLength: root.textContent?.trim().length ?? 0,
+          stickyHeaderReady: true,
+          artistSeparatorReviewReady: Boolean(
+            reviewCountReady &&
+            modal &&
+            artistProposalReady &&
+            albumArtistProposalReady &&
+            reviewCompleted &&
+            updates.length === 2 &&
+            savedArtistUpdate?.trackIds?.length === 1 &&
+            savedArtistUpdate.trackIds[0] === "smoke-track-249" &&
+            savedArtistUpdate.updates?.artist === "Muro, Guest, DJ Test" &&
+            savedAlbumArtistUpdate?.trackIds?.length === 1 &&
+            savedAlbumArtistUpdate.trackIds[0] === "smoke-track-249" &&
+            savedAlbumArtistUpdate.updates?.artists === "Various Artists, Muro"
+          ),
+        };
+      }
+      if (${autoMixQueueSmokeOnly ? "true" : "false"}) {
+        if (!root?.childElementCount || !scroller) {
+          return {
+            childCount: root?.childElementCount ?? 0,
+            textLength: root?.textContent?.trim().length ?? 0,
+            stickyHeaderReady: false,
+          };
+        }
+
+        window.location.hash = "#/settings";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-settings-tab="dev"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
+        if (featureToggle instanceof HTMLInputElement && !featureToggle.checked) {
+          featureToggle.click();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const autoMixToggle = document.querySelector("[data-mix-auto]");
+        if (autoMixToggle instanceof HTMLInputElement && !autoMixToggle.checked) {
+          autoMixToggle.click();
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+
+        window.location.hash = "#/";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-track-index="0"]')?.dispatchEvent(new MouseEvent("dblclick", {
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-track-index="1"]')?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 300,
+          clientY: 240,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const addToQueueButton = [...document.querySelectorAll('[data-popover] button')]
+          .find((button) => button.textContent?.trim() === "Add to queue");
+        addToQueueButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        return {
+          childCount: root.childElementCount,
+          textLength: root.textContent?.trim().length ?? 0,
+          stickyHeaderReady: true,
+          autoMixQueueResponsive: Boolean(
+            addToQueueButton &&
+            document.querySelector('[data-queue-track]') &&
+            document.querySelector('[data-track-playing="true"]')
+          ),
+        };
+      }
       const appShellGrid = document.querySelector('[data-app-shell-grid]');
       const appShellTransition = appShellGrid ? getComputedStyle(appShellGrid) : null;
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1907,6 +2162,42 @@ app.whenReady().then(async () => {
       };
     })()`);
     if (result.childCount > 0 && result.textLength > 0 && result.stickyHeaderReady) {
+      if (libraryExportSmokeOnly) {
+        if (!result.organizedLibraryExportReady) {
+          fail(
+            `Organized library export regression failed: ${JSON.stringify(
+              result.organizedLibraryExportDebug
+            )}`
+          );
+          return;
+        }
+        clearTimeout(timeout);
+        console.log("Organized library export renderer smoke test passed.");
+        app.exit(0);
+        return;
+      }
+      if (artistSeparatorSmokeOnly) {
+        if (!result.artistSeparatorReviewReady) {
+          fail(
+            `Artist separator review regression failed: ready=${result.artistSeparatorReviewReady}`
+          );
+          return;
+        }
+        clearTimeout(timeout);
+        console.log("Artist separator renderer smoke test passed.");
+        app.exit(0);
+        return;
+      }
+      if (autoMixQueueSmokeOnly) {
+        if (!result.autoMixQueueResponsive) {
+          fail(`Auto-mix queue regression failed: responsive=${result.autoMixQueueResponsive}`);
+          return;
+        }
+        clearTimeout(timeout);
+        console.log("Auto-mix queue smoke test passed.");
+        app.exit(0);
+        return;
+      }
       if (!result.analysisNotationSettingsReady) {
         fail("Key notation and analysis performance settings are not working");
         return;

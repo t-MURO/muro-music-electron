@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { ChevronDown, ExternalLink, Monitor, Moon, Sun } from "lucide-react";
+import {
+  ChevronDown,
+  ExternalLink,
+  FolderOutput,
+  Monitor,
+  Moon,
+  Replace,
+  Sun,
+} from "lucide-react";
 import { t, type Locale } from "../../i18n";
 import { openExternal } from "../../desktop/shell";
 import { MIX_BAR_OPTIONS } from "../../lib/mix/config";
@@ -23,6 +31,9 @@ type SettingsPanelProps = {
   backfillStatus: string | null;
   coverArtBackfillPending: boolean;
   coverArtBackfillStatus: string | null;
+  artistSeparatorCandidateCount: number;
+  organizedLibraryExportPending: boolean;
+  organizedLibraryExportStatus: string | null;
   clearSongsPending: boolean;
   seekMode: "fast" | "accurate";
   onThemeChange: (theme: ThemeMode) => void;
@@ -32,6 +43,8 @@ type SettingsPanelProps = {
   onDbFileNameChange: (value: string) => void;
   onBackfillSearchText: () => void;
   onBackfillCoverArt: () => void;
+  onReviewArtistSeparators: () => void;
+  onExportOrganizedLibrary: (useAsCurrentLibrary: boolean) => void;
   onClearSongs: () => void;
   onUseDefaultLocation: () => void;
 };
@@ -77,6 +90,9 @@ export const SettingsPanel = ({
   backfillStatus,
   coverArtBackfillPending,
   coverArtBackfillStatus,
+  artistSeparatorCandidateCount,
+  organizedLibraryExportPending,
+  organizedLibraryExportStatus,
   clearSongsPending,
   seekMode,
   onThemeChange,
@@ -86,10 +102,13 @@ export const SettingsPanel = ({
   onDbFileNameChange,
   onBackfillSearchText,
   onBackfillCoverArt,
+  onReviewArtistSeparators,
+  onExportOrganizedLibrary,
   onClearSongs,
   onUseDefaultLocation,
 }: SettingsPanelProps) => {
   const [activeTab, setActiveTab] = useState<Tab>("application");
+  const [useExportAsCurrentLibrary, setUseExportAsCurrentLibrary] = useState(false);
   const analysisNotation = useSettingsStore((state) => state.analysisNotation);
   const analysisCustomCodes = useSettingsStore((state) => state.analysisCustomCodes);
   const analysisDelimiter = useSettingsStore((state) => state.analysisDelimiter);
@@ -616,6 +635,91 @@ export const SettingsPanel = ({
                   >
                     Use default location
                   </button>
+                </div>
+
+                <div>
+                  <div
+                    className="max-w-xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4"
+                    data-artist-separator-tool
+                  >
+                    <div className="flex items-start gap-3">
+                      <Replace className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-accent)]" />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">
+                          Artist separator cleanup
+                        </h4>
+                        <p className="mt-1 text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                          Reviews artist and album-artist fields containing “ &amp; ” or “feat.”
+                          and proposes comma-separated names. Every change requires approval.
+                        </p>
+                        <button
+                          className="mt-3 flex h-[var(--button-height)] items-center gap-[var(--spacing-sm)] rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--spacing-md)] text-[var(--font-size-sm)] font-medium text-white transition-all duration-[var(--transition-fast)] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={artistSeparatorCandidateCount === 0}
+                          onClick={onReviewArtistSeparators}
+                          data-review-artist-separators
+                        >
+                          {artistSeparatorCandidateCount === 0
+                            ? "No matching artist fields"
+                            : `Review ${artistSeparatorCandidateCount.toLocaleString()} ${
+                                artistSeparatorCandidateCount === 1 ? "match" : "matches"
+                              }`}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    className="max-w-xl rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-4"
+                    data-organized-library-export
+                  >
+                    <div className="flex items-start gap-3">
+                      <FolderOutput className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-accent)]" />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">
+                          Export organized library
+                        </h4>
+                        <p className="mt-1 text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                          Copies music into Album Artist (or Artist) / Album / Disc / Song folders
+                          and exports every root and nested playlist as a portable M3U8 file. Disc
+                          folders are only added for multi-disc albums. Your originals are untouched.
+                        </p>
+                        <label className="mt-3 flex cursor-pointer items-start gap-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                          <input
+                            type="checkbox"
+                            className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]"
+                            checked={useExportAsCurrentLibrary}
+                            disabled={organizedLibraryExportPending}
+                            onChange={(event) => setUseExportAsCurrentLibrary(event.target.checked)}
+                            data-use-export-as-current-library
+                          />
+                          <span>
+                            Use exported files as the current library after export. Muro only
+                            switches when every music file is copied successfully.
+                          </span>
+                        </label>
+                        <button
+                          className="mt-3 flex h-[var(--button-height)] items-center gap-[var(--spacing-sm)] rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--spacing-md)] text-[var(--font-size-sm)] font-medium text-white transition-all duration-[var(--transition-fast)] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                          type="button"
+                          disabled={organizedLibraryExportPending}
+                          onClick={() => onExportOrganizedLibrary(useExportAsCurrentLibrary)}
+                          data-export-organized-library
+                        >
+                          {organizedLibraryExportPending ? "Exporting…" : "Choose export folder"}
+                        </button>
+                        {organizedLibraryExportStatus && (
+                          <p
+                            className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]"
+                            data-organized-library-export-status
+                          >
+                            {organizedLibraryExportStatus}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div>

@@ -247,6 +247,7 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
     // Only auto-arm when nothing (manual or auto) is armed or active.
     if (transition !== null) return;
     if (manualMixInFlightRef.current) return;
+    if (autoArmedRef.current || autoArmPendingRef.current) return;
     if (!isPlaying || !currentTrackId || !nextQueuedId) return;
 
     const current = allTracks.find((track) => track.id === currentTrackId);
@@ -254,35 +255,37 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
     if (!current || !next) return;
 
     const generation = autoMixGenRef.current;
+    autoArmPendingRef.current = true;
     void (async () => {
-      const gridA = await resolveGrid(current);
-      if (generation !== autoMixGenRef.current) return;
-      const gridB = await resolveGrid(next);
-      if (generation !== autoMixGenRef.current) return;
-      if (manualMixInFlightRef.current) return;
-      if (usePlaybackStore.getState().transition !== null) return;
-
-      const plan = planTransition({
-        gridA,
-        gridB,
-        durationASec: current.durationSeconds,
-        durationBSec: next.durationSeconds,
-        bars: mixBars,
-      });
-      autoArmPendingRef.current = true;
       try {
+        const gridA = await resolveGrid(current);
+        if (generation !== autoMixGenRef.current) return;
+        const gridB = await resolveGrid(next);
+        if (generation !== autoMixGenRef.current) return;
+        if (manualMixInFlightRef.current) return;
+        if (usePlaybackStore.getState().transition !== null) return;
+
+        const plan = planTransition({
+          gridA,
+          gridB,
+          durationASec: current.durationSeconds,
+          durationBSec: next.durationSeconds,
+          bars: mixBars,
+        });
         await playbackTransitionTo(toTransitionTarget(next), plan, mixPreservePitch);
+        if (generation !== autoMixGenRef.current || !enabled || !autoMix) {
+          await playbackCancelTransition().catch(() => undefined);
+          return;
+        }
+        autoArmedRef.current = true;
+      } catch {
+        // Auto-mix arming is best effort; the natural track end still advances.
       } finally {
-        autoArmPendingRef.current = false;
+        if (generation === autoMixGenRef.current) {
+          autoArmPendingRef.current = false;
+        }
       }
-      if (generation !== autoMixGenRef.current || !enabled || !autoMix) {
-        await playbackCancelTransition().catch(() => undefined);
-        return;
-      }
-      autoArmedRef.current = true;
-    })().catch(() => {
-      // Auto-mix arming is best effort; the natural track end still advances.
-    });
+    })();
   }, [
     allTracks,
     autoMix,

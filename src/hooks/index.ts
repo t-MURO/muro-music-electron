@@ -44,4 +44,5 @@ export {
   type ViewConfig,
 } from "./useLibraryView";
 export { useLibraryInit } from "./useLibraryInit";
+export { useOrganizedLibraryExport } from "./useOrganizedLibraryExport";
 export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
