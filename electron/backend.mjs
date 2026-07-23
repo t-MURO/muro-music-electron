@@ -514,8 +514,16 @@ export const createBackend = ({
         lastFmApiKey,
         theAudioDbApiKey,
       }),
-    search_artist_images: ({ dbPath, artistName, fanartApiKey, lastFmApiKey, theAudioDbApiKey }) =>
+    search_artist_images: ({
+      dbPath,
+      artistName,
+      braveSearchApiKey,
+      fanartApiKey,
+      lastFmApiKey,
+      theAudioDbApiKey,
+    }) =>
       artistProfiles.searchImages(openDatabase(dbPath), artistName, {
+        braveSearchApiKey,
         fanartApiKey,
         lastFmApiKey,
         theAudioDbApiKey,

@@ -14,6 +14,7 @@ type FetchedCoverArt = {
   fullPath: string;
   thumbPath: string;
   sourceUrl?: string | null;
+  provider?: "cover-art-archive" | "deezer" | null;
 };
 
 type EditTrackModalProps = {
@@ -270,7 +271,9 @@ export const EditTrackModal = ({
       updateField("coverArtPath", cached.fullPath);
       updateField("coverArtThumbPath", cached.thumbPath);
       setCoverPreview(convertFileSrc(cached.fullPath));
-      notify.success(t("edit.coverArtFetched"));
+      notify.success(cached.provider === "deezer"
+        ? t("edit.coverArtFetchedFromDeezer")
+        : t("edit.coverArtFetched"));
     } catch (error) {
       notify.error(error instanceof Error ? error.message : t("edit.coverArtFetchFailed"));
     } finally {

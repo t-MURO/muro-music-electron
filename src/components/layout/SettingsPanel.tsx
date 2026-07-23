@@ -133,6 +133,8 @@ export const SettingsPanel = ({
   const setTheAudioDbApiKey = useSettingsStore((state) => state.setTheAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
   const setFanartApiKey = useSettingsStore((state) => state.setFanartApiKey);
+  const braveSearchApiKey = useSettingsStore((state) => state.braveSearchApiKey);
+  const setBraveSearchApiKey = useSettingsStore((state) => state.setBraveSearchApiKey);
   const acoustIdClientKey = useSettingsStore((state) => state.acoustIdClientKey);
   const setAcoustIdClientKey = useSettingsStore((state) => state.setAcoustIdClientKey);
   const writesAudioTags = Object.values(analysisOutputs).some((mode) => mode !== "none");
@@ -476,6 +478,35 @@ export const SettingsPanel = ({
                     type="button"
                   >
                     Get a Fanart.tv API key <ExternalLink className="h-3 w-3" />
+                  </button>
+                </div>
+
+                <div className="space-y-3 border-t border-[var(--color-border)] pt-5">
+                  <label className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]" htmlFor="brave-search-api-key">
+                    Brave Search API key
+                  </label>
+                  <input
+                    autoComplete="off"
+                    className="h-[var(--input-height)] w-full max-w-md rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]"
+                    data-brave-search-api-key
+                    id="brave-search-api-key"
+                    onChange={(event) => setBraveSearchApiKey(event.target.value.trim())}
+                    placeholder="Optional web image search"
+                    spellCheck={false}
+                    type="password"
+                    value={braveSearchApiKey}
+                  />
+                  <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                    Adds broader web results when the artist-picture dialog opens. Results use
+                    strict SafeSearch and are never applied until you choose one. The key stays in
+                    this app's local settings.
+                  </p>
+                  <button
+                    className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
+                    onClick={() => { void openExternal("https://api.search.brave.com/"); }}
+                    type="button"
+                  >
+                    Get a Brave Search API key <ExternalLink className="h-3 w-3" />
                   </button>
                 </div>
               </div>

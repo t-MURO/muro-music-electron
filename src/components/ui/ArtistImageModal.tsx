@@ -16,6 +16,8 @@ const providerLabel = (provider: ArtistImageCandidate["provider"]) => ({
   wikipedia: "Wikipedia",
   "fanart.tv": "Fanart.tv",
   theaudiodb: "TheAudioDB",
+  deezer: "Deezer",
+  "brave-search": "Brave Image Search",
 })[provider];
 
 export const ArtistImageModal = ({
@@ -115,67 +117,78 @@ export const ArtistImageModal = ({
             <div className="flex min-h-72 flex-col items-center justify-center gap-3 px-8 text-center text-[var(--color-text-muted)]">
               <SearchX className="h-7 w-7" />
               <strong className="text-[13px] text-[var(--color-text-primary)]">No artist pictures found</strong>
-              <p className="max-w-md text-[11px] leading-relaxed">Wikimedia Commons is searched without a key. Add Fanart.tv or TheAudioDB keys in Settings → Metadata for more results.</p>
+              <p className="max-w-md text-[11px] leading-relaxed">Wikimedia Commons and Deezer are searched without a key. Add Brave Search, Fanart.tv, or TheAudioDB keys in Settings → Metadata for more results.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Artist picture candidates">
-              {candidates.map((candidate) => {
-                const isSelected = candidate.id === selectedId;
-                const dimensions = candidate.width && candidate.height
-                  ? `${candidate.width} × ${candidate.height}`
-                  : null;
-                return (
-                  <article
-                    key={candidate.id}
-                    className={`relative overflow-hidden rounded-[var(--radius-md)] border transition-colors ${isSelected ? "border-[var(--color-accent)] bg-[var(--color-accent-light)]" : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]"}`}
-                    data-artist-image-candidate={candidate.provider}
-                  >
-                    <button
-                      className="block w-full text-left"
-                      type="button"
-                      role="radio"
-                      aria-checked={isSelected}
-                      onClick={() => setSelectedId(candidate.id)}
+            <div>
+              {candidates.some((candidate) => (
+                candidate.provider === "brave-search" || candidate.provider === "deezer"
+              )) && (
+                <p className="mb-3 rounded-[var(--radius-md)] bg-amber-500/10 px-3 py-2 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300">
+                  Online image results may be copyrighted. Check the source and usage rights before using them.
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Artist picture candidates">
+                {candidates.map((candidate) => {
+                  const isSelected = candidate.id === selectedId;
+                  const dimensions = candidate.width && candidate.height
+                    ? `${candidate.width} × ${candidate.height}`
+                    : null;
+                  return (
+                    <article
+                      key={candidate.id}
+                      className={`relative overflow-hidden rounded-[var(--radius-md)] border transition-colors ${isSelected ? "border-[var(--color-accent)] bg-[var(--color-accent-light)]" : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]"}`}
+                      data-artist-image-candidate={candidate.provider}
                     >
-                      <span className="relative block aspect-square overflow-hidden bg-[var(--color-bg-tertiary)]">
-                        {!failedImages.has(candidate.id) ? (
-                          <img
-                            alt={`${artistName} from ${providerLabel(candidate.provider)}`}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                            onError={() => setFailedImages((current) => new Set(current).add(candidate.id))}
-                            src={candidate.imageUrl}
-                          />
-                        ) : (
-                          <span className="flex h-full items-center justify-center text-[var(--color-text-muted)]"><ImageIcon className="h-8 w-8" /></span>
-                        )}
-                        {isSelected && (
-                          <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[var(--color-accent)] text-white shadow-md"><Check className="h-4 w-4" /></span>
-                        )}
-                        {candidate.current && (
-                          <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-semibold text-white">Current</span>
-                        )}
-                      </span>
-                      <span className="block p-2.5">
-                        <strong className="block truncate text-[11px] text-[var(--color-text-primary)]">{providerLabel(candidate.provider)}</strong>
-                        <span className="mt-0.5 block truncate text-[9px] text-[var(--color-text-muted)]">
-                          {[dimensions, candidate.license, candidate.attribution].filter(Boolean).join(" · ") || "Online artwork"}
-                        </span>
-                      </span>
-                    </button>
-                    {candidate.sourceUrl && (
                       <button
-                        className="absolute bottom-2.5 right-2.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
-                        onClick={() => onOpenSource(candidate.sourceUrl!)}
-                        title={`Open ${providerLabel(candidate.provider)}`}
+                        className="block w-full text-left"
                         type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        onClick={() => setSelectedId(candidate.id)}
                       >
-                        <ExternalLink className="h-3 w-3" />
+                        <span className="relative block aspect-square overflow-hidden bg-[var(--color-bg-tertiary)]">
+                          {!failedImages.has(candidate.id) ? (
+                            <img
+                              alt={`${artistName} from ${providerLabel(candidate.provider)}`}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                              onError={() => setFailedImages((current) => new Set(current).add(candidate.id))}
+                              src={candidate.imageUrl}
+                            />
+                          ) : (
+                            <span className="flex h-full items-center justify-center text-[var(--color-text-muted)]"><ImageIcon className="h-8 w-8" /></span>
+                          )}
+                          {isSelected && (
+                            <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-[var(--color-accent)] text-white shadow-md"><Check className="h-4 w-4" /></span>
+                          )}
+                          {candidate.current && (
+                            <span className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-semibold text-white">Current</span>
+                          )}
+                        </span>
+                        <span className="block p-2.5">
+                          <strong className="block truncate text-[11px] text-[var(--color-text-primary)]">{providerLabel(candidate.provider)}</strong>
+                          <span className="mt-0.5 block truncate pr-4 text-[9px] text-[var(--color-text-muted)]" title={candidate.title ?? undefined}>
+                            {[dimensions, candidate.sourceName, candidate.license, candidate.attribution]
+                              .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
+                              .join(" · ") || "Online artwork"}
+                          </span>
+                        </span>
                       </button>
-                    )}
-                  </article>
-                );
-              })}
+                      {candidate.sourceUrl && (
+                        <button
+                          className="absolute bottom-2.5 right-2.5 text-[var(--color-text-muted)] hover:text-[var(--color-accent)]"
+                          onClick={() => onOpenSource(candidate.sourceUrl!)}
+                          title={`Open ${providerLabel(candidate.provider)}`}
+                          type="button"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           )}
           {error && <p className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-[11px] text-red-500">{error}</p>}

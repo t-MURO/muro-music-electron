@@ -78,6 +78,7 @@ export const setArtistImage = (
 ) => invoke<ArtistProfile>("set_artist_image", { dbPath, artistName, candidate });
 
 export type ArtistProfileProviderKeys = {
+  braveSearchApiKey?: string;
   fanartApiKey?: string;
   lastFmApiKey?: string;
   theAudioDbApiKey?: string;
@@ -102,6 +103,7 @@ export type FetchedCoverArt = {
   fullPath: string;
   thumbPath: string;
   sourceUrl?: string | null;
+  provider?: "cover-art-archive" | "deezer" | null;
 };
 
 export const fetchTrackCoverArt = (

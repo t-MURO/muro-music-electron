@@ -167,6 +167,7 @@
   "edit.fetchCoverArt": "Cover-Art abrufen",
   "edit.coverArtFetching": "Cover-Art wird abgerufen",
   "edit.coverArtFetched": "Cover-Art abgerufen. Zum Ubernehmen speichern.",
+  "edit.coverArtFetchedFromDeezer": "Cover-Art von Deezer abgerufen. Zum Ubernehmen speichern.",
   "edit.coverArtFetchNotFound": "Keine passende Cover-Art gefunden.",
   "edit.coverArtFetchFailed": "Cover-Art konnte nicht abgerufen werden.",
   "edit.placeholder.keep": "Leer lassen um beizubehalten",

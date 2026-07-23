@@ -26,6 +26,7 @@ export const useArtistProfiles = () => {
   const lastFmApiKey = useSettingsStore((state) => state.lastFmApiKey);
   const theAudioDbApiKey = useSettingsStore((state) => state.theAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
+  const braveSearchApiKey = useSettingsStore((state) => state.braveSearchApiKey);
   const [profiles, setProfiles] = useState<Record<string, ArtistProfile>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -114,11 +115,12 @@ export const useArtistProfiles = () => {
   const searchImages = useCallback(async (artistName: string) => {
     const dbPath = await resolveDbPath();
     return searchArtistImages(dbPath, artistName, {
+      braveSearchApiKey,
       fanartApiKey,
       lastFmApiKey,
       theAudioDbApiKey,
     });
-  }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
+  }, [braveSearchApiKey, fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
   const selectImage = useCallback(async (artistName: string, candidate: ArtistImageCandidate) => {
     const artistKey = normalizeArtistProfileKey(artistName);

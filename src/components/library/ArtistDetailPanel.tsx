@@ -108,7 +108,7 @@ export const ArtistDetailPanel = ({
             {profile.imageLicense && ` · ${profile.imageLicense}`}
           </p>
         )}
-        {(profile?.wikipediaUrl || profile?.wikimediaCommonsUrl || profile?.musicBrainzUrl || profile?.lastFmUrl || profile?.theAudioDbUrl || profile?.fanartUrl) && (
+        {(profile?.wikipediaUrl || profile?.wikimediaCommonsUrl || profile?.musicBrainzUrl || profile?.lastFmUrl || profile?.theAudioDbUrl || profile?.fanartUrl || profile?.imageSourceUrl) && (
           <div className="artist-detail-sources">
             <span>Information from</span>
             {profile.wikipediaUrl && <button onClick={() => onOpenSource(profile.wikipediaUrl!)} type="button">Wikipedia <ExternalLink /></button>}
@@ -117,6 +117,8 @@ export const ArtistDetailPanel = ({
             {profile.lastFmUrl && <button onClick={() => onOpenSource(profile.lastFmUrl!)} type="button">Last.fm <ExternalLink /></button>}
             {profile.theAudioDbUrl && <button onClick={() => onOpenSource(profile.theAudioDbUrl!)} type="button">TheAudioDB <ExternalLink /></button>}
             {profile.fanartUrl && <button onClick={() => onOpenSource(profile.fanartUrl!)} type="button">Fanart.tv <ExternalLink /></button>}
+            {profile.imageProvider === "deezer" && profile.imageSourceUrl && <button onClick={() => onOpenSource(profile.imageSourceUrl!)} type="button">Deezer <ExternalLink /></button>}
+            {profile.imageProvider === "brave-search" && profile.imageSourceUrl && <button onClick={() => onOpenSource(profile.imageSourceUrl!)} type="button">Brave Image Search <ExternalLink /></button>}
             {profile.cacheState === "stale" && <em>cached copy</em>}
           </div>
         )}

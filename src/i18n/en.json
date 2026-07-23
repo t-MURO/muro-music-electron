@@ -167,6 +167,7 @@
   "edit.fetchCoverArt": "Fetch cover art",
   "edit.coverArtFetching": "Fetching cover art",
   "edit.coverArtFetched": "Cover art fetched. Save to apply it.",
+  "edit.coverArtFetchedFromDeezer": "Cover art fetched from Deezer. Save to apply it.",
   "edit.coverArtFetchNotFound": "No matching cover art was found.",
   "edit.coverArtFetchFailed": "Could not fetch cover art.",
   "edit.placeholder.keep": "Leave blank to keep current",

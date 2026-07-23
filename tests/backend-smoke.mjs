@@ -204,8 +204,40 @@ try {
     fetchImpl: async (url) => {
       coverFetchCalls.push(String(url));
       if (String(url).startsWith("https://musicbrainz.org/ws/2/release-group/")) {
+        const query = new URL(String(url)).searchParams.get("query") ?? "";
+        if (query.includes("Deezer Album")) {
+          return new Response(JSON.stringify({ "release-groups": [] }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify({
           "release-groups": [{ id: releaseGroupId, title: "Cover Album", score: 100 }],
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url).startsWith("https://api.deezer.com/search/album?")) {
+        const requestUrl = new URL(String(url));
+        assert.equal(requestUrl.searchParams.get("limit"), "15");
+        if (requestUrl.searchParams.get("q") !== "Deezer Album Deezer Artist") {
+          return new Response(JSON.stringify({ data: [], total: 0 }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({
+          data: [
+            {
+              id: 123,
+              title: "Deezer Album",
+              artist: { name: "Wrong Artist" },
+              cover_xl: "https://cdn-images.dzcdn.net/images/cover/wrong/1000x1000.jpg",
+            },
+            {
+              id: 456,
+              title: "Deezer Album",
+              artist: { name: "Deezer Artist" },
+              cover_xl: "https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg",
+            },
+          ],
+          total: 2,
         }), { headers: { "content-type": "application/json" } });
       }
       if (String(url) === `https://coverartarchive.org/release-group/${releaseGroupId}`) {
@@ -230,13 +262,26 @@ try {
           headers: { "content-type": "image/jpeg" },
         });
       }
+      if (
+        String(url)
+        === "https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg"
+      ) {
+        return new Response(Buffer.from("deezer cover image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
       throw new Error(`Unexpected Cover Art Archive URL: ${url}`);
     },
     cacheCoverBytesImpl: async (bytes, cacheDir) => {
-      assert.equal(Buffer.from(bytes).toString(), "cover art archive image");
+      const content = Buffer.from(bytes).toString();
+      assert.ok(
+        content === "cover art archive image" || content === "deezer cover image",
+        "only expected cover providers should be cached",
+      );
       await fs.promises.mkdir(cacheDir, { recursive: true });
-      const fullPath = path.join(cacheDir, "archive-full.jpg");
-      const thumbPath = path.join(cacheDir, "archive-thumb.jpg");
+      const prefix = content === "deezer cover image" ? "deezer" : "archive";
+      const fullPath = path.join(cacheDir, `${prefix}-full.jpg`);
+      const thumbPath = path.join(cacheDir, `${prefix}-thumb.jpg`);
       await fs.promises.writeFile(fullPath, bytes);
       await fs.promises.writeFile(thumbPath, bytes);
       return { fullPath, thumbPath };
@@ -303,6 +348,43 @@ try {
   `).get();
   assert.equal(manualTrackCover.cover_art_path, null);
   assert.equal(manualTrackCover.cover_art_thumb_path, null);
+
+  insertCoverTrack.run(
+    "cover-track-deezer",
+    "Deezer Cover",
+    "cover-deezer.mp3",
+    path.join(directory, "cover-deezer.mp3"),
+    now,
+    now,
+    null,
+    null,
+  );
+  coverDb.prepare(`
+    UPDATE tracks
+    SET artist = 'Deezer Artist', album = 'Deezer Album'
+    WHERE id = 'cover-track-deezer'
+  `).run();
+  const deezerCover = await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-deezer",
+  });
+  assert.equal(deezerCover?.provider, "deezer");
+  assert.equal(deezerCover?.sourceUrl, "https://www.deezer.com/album/456");
+  assert.ok(fs.existsSync(deezerCover.fullPath));
+  assert.ok(
+    coverFetchCalls.includes("https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg"),
+    "the exact Deezer album-and-artist match should be downloaded",
+  );
+  assert.ok(
+    !coverFetchCalls.includes("https://cdn-images.dzcdn.net/images/cover/wrong/1000x1000.jpg"),
+    "a same-title Deezer album by another artist must not be downloaded",
+  );
+  const fetchCountBeforeDeezerCache = coverFetchCalls.length;
+  const reusedDeezerCover = await albumCoverService.fetchCoverForTrack(coverDb, {
+    trackId: "cover-track-deezer",
+  });
+  assert.equal(reusedDeezerCover?.provider, "deezer");
+  assert.equal(reusedDeezerCover?.fullPath, deezerCover.fullPath);
+  assert.equal(coverFetchCalls.length, fetchCountBeforeDeezerCache);
 
   insertCoverTrack.run(
     "cover-track-missing",
@@ -642,6 +724,7 @@ try {
   let fanartAuthorization = null;
   let lastFmAuthorization = null;
   let theAudioDbAuthorization = null;
+  let braveAuthorization = null;
   const artistProfileService = createArtistProfileService({
     cacheDir: path.join(directory, "artist-profile-cache"),
     musicBrainzIntervalMs: 0,
@@ -649,6 +732,11 @@ try {
       artistFetchCalls.push(String(url));
       if (String(url).startsWith("https://musicbrainz.org/ws/2/artist/?")) {
         const requestedArtist = new URL(String(url)).searchParams.get("query");
+        if (requestedArtist === "Unknown Underground Artist") {
+          return new Response(JSON.stringify({ artists: [] }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
         const isFallbackArtist = requestedArtist === "Fallback Muro";
         const isPremiumArtist = requestedArtist === "Premium Muro";
         const isLastFmArtist = requestedArtist === "LastFm Muro";
@@ -795,6 +883,57 @@ try {
           },
         }), { headers: { "content-type": "application/json" } });
       }
+      if (String(url).startsWith("https://api.search.brave.com/res/v1/images/search?")) {
+        const requestUrl = new URL(String(url));
+        braveAuthorization = options.headers?.["X-Subscription-Token"] ?? null;
+        assert.equal(
+          requestUrl.searchParams.get("q"),
+          "\"Unknown Underground Artist\" musician DJ artist portrait",
+        );
+        assert.equal(requestUrl.searchParams.get("country"), "ALL");
+        assert.equal(requestUrl.searchParams.get("search_lang"), "en");
+        assert.equal(requestUrl.searchParams.get("count"), "15");
+        assert.equal(requestUrl.searchParams.get("safesearch"), "strict");
+        return new Response(JSON.stringify({
+          type: "images",
+          results: [{
+            type: "image_result",
+            title: "Unknown Underground Artist press portrait",
+            url: "https://label.example/artists/unknown-underground-artist",
+            source: "label.example",
+            thumbnail: {
+              src: "https://imgs.search.brave.com/muro-brave.jpg",
+              width: 500,
+              height: 500,
+            },
+            properties: {
+              url: "https://label.example/images/unknown-underground-artist.jpg",
+              width: 1600,
+              height: 1600,
+            },
+            meta_url: { hostname: "label.example" },
+            confidence: "high",
+          }],
+          extra: { might_be_offensive: false },
+        }), { headers: { "content-type": "application/json" } });
+      }
+      if (String(url).startsWith("https://api.deezer.com/search/artist?")) {
+        const requestUrl = new URL(String(url));
+        assert.equal(requestUrl.searchParams.get("limit"), "8");
+        if (requestUrl.searchParams.get("q") !== "Fallback Muro") {
+          return new Response(JSON.stringify({ data: [], total: 0 }), {
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({
+          data: [{
+            id: 987654,
+            name: "Fallback Muro",
+            picture_xl: "https://cdn-images.dzcdn.net/images/artist/fallback/1000x1000.jpg",
+          }],
+          total: 1,
+        }), { headers: { "content-type": "application/json" } });
+      }
       if (String(url) === `https://www.theaudiodb.com/api/v2/json/lookup/artist_mb/${premiumArtistId}`) {
         theAudioDbAuthorization = options.headers?.["X-API-KEY"] ?? null;
         return new Response(JSON.stringify({
@@ -860,6 +999,19 @@ try {
           headers: { "content-type": "image/jpeg" },
         });
       }
+      if (String(url) === "https://imgs.search.brave.com/muro-brave.jpg") {
+        return new Response(Buffer.from("brave artist image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
+      if (
+        String(url)
+        === "https://cdn-images.dzcdn.net/images/artist/fallback/1000x1000.jpg"
+      ) {
+        return new Response(Buffer.from("deezer artist image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
       throw new Error(`Unexpected artist profile URL: ${url}`);
     },
   });
@@ -917,9 +1069,14 @@ try {
   const fallbackImageCandidates = await artistProfileService.searchImages(db, "Fallback Muro", {
     fanartApiKey: "smoke-fanart-key",
   });
-  assert.equal(fallbackImageCandidates.length, 2);
+  assert.equal(fallbackImageCandidates.length, 3);
   assert.equal(fallbackImageCandidates[0].current, true);
-  assert.ok(fallbackImageCandidates.every((candidate) => candidate.provider === "fanart.tv"));
+  const deezerArtistImage = fallbackImageCandidates.find(
+    (candidate) => candidate.provider === "deezer",
+  );
+  assert.ok(deezerArtistImage, "Deezer should add an exact artist-picture candidate");
+  assert.equal(deezerArtistImage.sourceName, "Fallback Muro");
+  assert.equal(deezerArtistImage.sourceUrl, "https://www.deezer.com/artist/987654");
   const alternateFanart = fallbackImageCandidates.find(
     (candidate) => candidate.imageUrl === "https://assets.fanart.tv/fallback-low.jpg",
   );
@@ -941,6 +1098,54 @@ try {
     "https://assets.fanart.tv/fallback-low.jpg",
     "profile refreshes should preserve manually selected artist pictures",
   );
+  const deezerSelectedProfile = await artistProfileService.setImage(
+    db,
+    "Fallback Muro",
+    deezerArtistImage,
+  );
+  assert.equal(deezerSelectedProfile.imageProvider, "deezer");
+  assert.equal(deezerSelectedProfile.imageAttribution, "Deezer");
+  assert.equal(deezerSelectedProfile.imageSourceUrl, "https://www.deezer.com/artist/987654");
+  const braveImageCandidates = await artistProfileService.searchImages(
+    db,
+    "Unknown Underground Artist",
+    {
+      braveSearchApiKey: "smoke-brave-key",
+    },
+  );
+  assert.equal(braveAuthorization, "smoke-brave-key");
+  assert.ok(
+    artistFetchCalls.every((url) => !url.includes("smoke-brave-key")),
+    "Brave credentials should never appear in request URLs",
+  );
+  const braveImage = braveImageCandidates.find(
+    (candidate) => candidate.provider === "brave-search",
+  );
+  assert.ok(braveImage, "Brave Image Search should add web image candidates");
+  assert.equal(braveImage.imageUrl, "https://imgs.search.brave.com/muro-brave.jpg");
+  assert.equal(braveImage.sourceName, "label.example");
+  assert.equal(braveImage.title, "Unknown Underground Artist press portrait");
+  assert.equal(braveImage.width, 1600);
+  assert.equal(braveImage.height, 1600);
+  assert.ok(braveImage.sourceUrl.startsWith("https://search.brave.com/images?"));
+  await assert.rejects(
+    artistProfileService.setImage(db, "Unknown Underground Artist", {
+      ...braveImage,
+      imageUrl: "https://label.example/images/unknown-underground-artist.jpg",
+    }),
+    /not allowed/,
+    "only Brave-proxied image URLs should be accepted",
+  );
+  const braveSelectedProfile = await artistProfileService.setImage(
+    db,
+    "Unknown Underground Artist",
+    braveImage,
+  );
+  assert.equal(braveSelectedProfile.status, "not-found");
+  assert.equal(braveSelectedProfile.imageProvider, "brave-search");
+  assert.equal(braveSelectedProfile.imageAttribution, "label.example");
+  assert.equal(braveSelectedProfile.imageSourceUrl, braveImage.sourceUrl);
+  assert.ok(fs.existsSync(braveSelectedProfile.imagePath));
   const fallbackFetchCount = artistFetchCalls.length;
   await artistProfileService.getProfile(db, "Fallback Muro", { fanartApiKey: "smoke-fanart-key" });
   assert.equal(artistFetchCalls.length, fallbackFetchCount, "cached Fanart.tv images should not be fetched again");
@@ -1022,7 +1227,7 @@ try {
   );
   assert.deepEqual(
     artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
-    ["fallback muro", "lastfm muro", "muro", "premium muro"],
+    ["fallback muro", "lastfm muro", "muro", "premium muro", "unknown underground artist"],
   );
   db.prepare("UPDATE artist_profiles SET fetched_at = 0 WHERE artist_key = ?").run("muro");
   const fetchCountBeforeStaleBackgroundScan = artistFetchCalls.length;

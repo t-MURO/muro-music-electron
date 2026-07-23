@@ -199,6 +199,10 @@ const startApplication = async () => {
       || url.hostname === "www.last.fm"
       || url.hostname === "www.theaudiodb.com"
       || url.hostname === "fanart.tv"
+      || url.hostname === "www.deezer.com"
+      || url.hostname === "search.brave.com"
+      || url.hostname === "api.search.brave.com"
+      || url.hostname === "api-dashboard.search.brave.com"
       || url.hostname === "acoustid.org"
       || url.hostname.endsWith(".acoustid.org")
       || url.hostname.endsWith(".fanart.tv");

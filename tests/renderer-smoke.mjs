@@ -275,6 +275,28 @@ app.whenReady().then(async () => {
         width: 1000,
         height: 1000,
       },
+      {
+        id: "brave-search-result",
+        provider: "brave-search",
+        imageUrl: "https://imgs.search.brave.com/muro-search-result.jpg",
+        sourceUrl: "https://search.brave.com/images?q=Muro+musician",
+        sourceName: "label.example",
+        title: "Muro artist press portrait",
+        attribution: "label.example",
+        width: 1600,
+        height: 1600,
+      },
+      {
+        id: "deezer-result",
+        provider: "deezer",
+        imageUrl: "https://cdn-images.dzcdn.net/images/artist/muro/1000x1000.jpg",
+        sourceUrl: "https://www.deezer.com/artist/987654",
+        sourceName: "Muro",
+        title: "Muro on Deezer",
+        attribution: "Deezer",
+        width: 1000,
+        height: 1000,
+      },
     ];
     if (command === "set_artist_image") {
       artistImageSaveCount += 1;
@@ -1590,6 +1612,7 @@ app.whenReady().then(async () => {
         const lastFmApiKeyInput = document.querySelector("[data-lastfm-api-key]");
         const theAudioDbApiKeyInput = document.querySelector("[data-theaudiodb-api-key]");
         const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
+        const braveSearchApiKeyInput = document.querySelector("[data-brave-search-api-key]");
         const acoustIdClientKeyInput = document.querySelector("[data-acoustid-client-key]");
         const artistInformationSettingsReady = Boolean(
           document.querySelector("[data-artist-information-settings]") &&
@@ -1598,7 +1621,9 @@ app.whenReady().then(async () => {
           theAudioDbApiKeyInput instanceof HTMLInputElement &&
           theAudioDbApiKeyInput.type === "password" &&
           fanartApiKeyInput instanceof HTMLInputElement &&
-          fanartApiKeyInput.type === "password"
+          fanartApiKeyInput.type === "password" &&
+          braveSearchApiKeyInput instanceof HTMLInputElement &&
+          braveSearchApiKeyInput.type === "password"
         );
         const acoustIdSettingsReady = Boolean(
           document.querySelector("[data-acoustid-settings]") &&
@@ -1836,9 +1861,12 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         const artistImageChooserReady = Boolean(
           document.querySelector("[data-artist-image-modal]") &&
-          document.querySelectorAll("[data-artist-image-candidate]").length === 2 &&
+          document.querySelectorAll("[data-artist-image-candidate]").length === 4 &&
           document.querySelector('[data-artist-image-candidate="wikimedia-commons"]') &&
-          document.querySelector('[data-artist-image-candidate="fanart.tv"]')
+          document.querySelector('[data-artist-image-candidate="fanart.tv"]') &&
+          document.querySelector('[data-artist-image-candidate="deezer"]') &&
+          document.querySelector('[data-artist-image-candidate="brave-search"]') &&
+          document.querySelector("[data-artist-image-modal]")?.textContent?.includes("usage rights")
         );
         document.querySelector('[data-artist-image-candidate="fanart.tv"] [role="radio"]')?.click();
         document.querySelector("[data-apply-artist-image]")?.click();

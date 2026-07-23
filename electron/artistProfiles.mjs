@@ -12,6 +12,9 @@ const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{
 const FANART_API_ROOT = "https://webservice.fanart.tv/v3.2/music/";
 const THEAUDIODB_API_ROOT = "https://www.theaudiodb.com/api/v2/json";
 const LASTFM_API_ROOT = "https://ws.audioscrobbler.com/2.0/";
+const DEEZER_API_ROOT = "https://api.deezer.com";
+const BRAVE_IMAGE_SEARCH_ROOT = "https://api.search.brave.com/res/v1/images/search";
+const BRAVE_IMAGE_RESULT_COUNT = 15;
 
 export const normalizeArtistKey = (artistName) => String(artistName ?? "")
   .normalize("NFKC")
@@ -357,13 +360,13 @@ const profileArtistImage = (profile) => {
   const imageUrl = secureImageUrl(profile?.imageUrl);
   const provider = profile?.imageProvider;
   if (!imageUrl || !provider) return null;
-  const sourceUrl = provider === "wikimedia-commons"
+  const sourceUrl = profile.imageSourceUrl || (provider === "wikimedia-commons"
     ? profile.wikimediaCommonsUrl
     : provider === "wikipedia"
       ? profile.wikipediaUrl
       : provider === "fanart.tv"
         ? profile.fanartUrl
-        : profile.theAudioDbUrl;
+        : profile.theAudioDbUrl);
   return {
     id: artistImageCandidateId(provider, imageUrl),
     provider,
@@ -413,6 +416,76 @@ const wikipediaArtistImage = (summary) => {
   };
 };
 
+const braveArtistImages = (payload, searchUrl) => (Array.isArray(payload?.results)
+  ? payload.results
+  : [])
+  .flatMap((result, index) => {
+    const imageUrl = secureImageUrl(result?.thumbnail?.src);
+    if (!imageUrl || new URL(imageUrl).hostname.toLocaleLowerCase() !== "imgs.search.brave.com") {
+      return [];
+    }
+    const sourceName = cleanHtmlText(
+      nonEmptyString(result?.source, result?.meta_url?.hostname),
+      200,
+    );
+    const confidenceScore = {
+      high: 3,
+      medium: 2,
+      low: 1,
+    }[String(result?.confidence ?? "").toLocaleLowerCase()] ?? 0;
+    return [{
+      id: artistImageCandidateId("brave-search", imageUrl),
+      provider: "brave-search",
+      imageUrl,
+      sourceUrl: searchUrl,
+      sourceName,
+      title: cleanHtmlText(result?.title, 500),
+      attribution: sourceName,
+      license: null,
+      licenseUrl: null,
+      width: Number(result?.properties?.width ?? 0) || null,
+      height: Number(result?.properties?.height ?? 0) || null,
+      score: confidenceScore * 1_000 - index,
+    }];
+  });
+
+const deezerArtistImages = (payload, requestedName) => (Array.isArray(payload?.data)
+  ? payload.data
+  : [])
+  .flatMap((artist, index) => {
+    const artistId = Number(artist?.id);
+    const artistName = cleanHtmlText(artist?.name, 200);
+    const imageUrl = secureImageUrl(
+      artist?.picture_xl || artist?.picture_big || artist?.picture_medium,
+    );
+    if (
+      !Number.isSafeInteger(artistId)
+      || artistId <= 0
+      || !artistName
+      || !imageUrl
+      || new URL(imageUrl).hostname.toLocaleLowerCase() !== "cdn-images.dzcdn.net"
+      || new URL(imageUrl).pathname.includes("/images/artist//")
+    ) {
+      return [];
+    }
+    const exactMatch = normalizeArtistKey(artistName) === normalizeArtistKey(requestedName);
+    return [{
+      id: artistImageCandidateId("deezer", imageUrl),
+      provider: "deezer",
+      imageUrl,
+      sourceUrl: `https://www.deezer.com/artist/${artistId}`,
+      sourceName: artistName,
+      title: `${artistName} on Deezer`,
+      attribution: "Deezer",
+      license: null,
+      licenseUrl: null,
+      width: artist?.picture_xl ? 1_000 : null,
+      height: artist?.picture_xl ? 1_000 : null,
+      score: (exactMatch ? 10_000 : 1_000) - index,
+    }];
+  })
+  .sort((left, right) => right.score - left.score);
+
 const validateCandidateImageUrl = (provider, value) => {
   const imageUrl = secureImageUrl(value);
   if (!imageUrl) return null;
@@ -430,6 +503,12 @@ const validateCandidateImageUrl = (provider, value) => {
       ? imageUrl
       : null;
   }
+  if (provider === "brave-search") {
+    return hostname === "imgs.search.brave.com" ? imageUrl : null;
+  }
+  if (provider === "deezer") {
+    return hostname === "cdn-images.dzcdn.net" ? imageUrl : null;
+  }
   return null;
 };
 
@@ -443,6 +522,7 @@ const preserveManualImage = (profile, cachedProfile) => {
     imageAttribution: cachedProfile.imageAttribution ?? null,
     imageLicense: cachedProfile.imageLicense ?? null,
     imageLicenseUrl: cachedProfile.imageLicenseUrl ?? null,
+    imageSourceUrl: cachedProfile.imageSourceUrl ?? null,
     imageSelection: "manual",
     wikimediaCommonsUrl: cachedProfile.wikimediaCommonsUrl ?? profile.wikimediaCommonsUrl,
     wikipediaUrl: cachedProfile.wikipediaUrl ?? profile.wikipediaUrl,
@@ -627,6 +707,61 @@ export const createArtistProfileService = ({
     if (Number(payload?.error) === 6 || !payload?.artist) return null;
     if (payload?.error) throw new Error(`Last.fm request failed (${payload.error})`);
     return payload.artist;
+  };
+
+  const fetchBraveArtistImages = async (artistName, apiKey) => {
+    const normalizedArtistName = String(artistName ?? "").replaceAll('"', " ").trim();
+    const query = `"${normalizedArtistName}" musician DJ artist portrait`;
+    const requestUrl = new URL(BRAVE_IMAGE_SEARCH_ROOT);
+    requestUrl.search = new URLSearchParams({
+      q: query,
+      country: "ALL",
+      search_lang: "en",
+      count: String(BRAVE_IMAGE_RESULT_COUNT),
+      safesearch: "strict",
+    }).toString();
+    const response = await fetchImpl(requestUrl, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": userAgent,
+        "X-Subscription-Token": String(apiKey).trim(),
+      },
+      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(15_000)
+        : undefined,
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("The Brave Search API key was rejected");
+    }
+    if (response.status === 429) {
+      throw new Error("The Brave Image Search rate limit was reached");
+    }
+    if (!response.ok) throw new Error(`Brave Image Search failed (${response.status})`);
+    const payload = await response.json();
+    const publicSearchUrl = new URL("https://search.brave.com/images");
+    publicSearchUrl.searchParams.set("q", query);
+    return braveArtistImages(payload, publicSearchUrl.toString());
+  };
+
+  const fetchDeezerArtistImages = async (artistName) => {
+    const requestUrl = new URL(`${DEEZER_API_ROOT}/search/artist`);
+    requestUrl.search = new URLSearchParams({
+      q: String(artistName ?? "").trim(),
+      limit: "8",
+    }).toString();
+    const response = await fetchImpl(requestUrl, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": userAgent,
+      },
+      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(15_000)
+        : undefined,
+    });
+    if (!response.ok) throw new Error(`Deezer artist search failed (${response.status})`);
+    const payload = await response.json();
+    if (payload?.error) throw new Error("Deezer artist search failed");
+    return deezerArtistImages(payload, artistName);
   };
 
   const cacheArtistImage = async (artistKey, imageUrl) => {
@@ -918,70 +1053,101 @@ export const createArtistProfileService = ({
   const searchImages = async (
     db,
     artistName,
-    { fanartApiKey = "", lastFmApiKey = "", theAudioDbApiKey = "" } = {},
+    {
+      braveSearchApiKey = "",
+      fanartApiKey = "",
+      lastFmApiKey = "",
+      theAudioDbApiKey = "",
+    } = {},
   ) => {
     const requestedName = String(artistName ?? "").trim();
-    const profile = await getProfile(db, requestedName, {
-      fanartApiKey,
-      lastFmApiKey,
-      theAudioDbApiKey,
-    });
-    if (profile.status !== "ready" || !profile.musicBrainzId) {
-      throw new Error("No reliable MusicBrainz artist match was found");
+    let profile = null;
+    let profileError = null;
+    try {
+      profile = await getProfile(db, requestedName, {
+        fanartApiKey,
+        lastFmApiKey,
+        theAudioDbApiKey,
+      });
+    } catch (error) {
+      profileError = error;
     }
 
     const candidates = [];
     const current = profileArtistImage(profile);
     if (current) candidates.push(current);
 
+    if (profile?.status === "ready" && profile.musicBrainzId) {
+      try {
+        const lookupUrl = new URL(`https://musicbrainz.org/ws/2/artist/${profile.musicBrainzId}`);
+        lookupUrl.search = new URLSearchParams({ inc: "url-rels", fmt: "json" }).toString();
+        const artist = await fetchMusicBrainzJson(lookupUrl.toString());
+        const relations = Array.isArray(artist?.relations) ? artist.relations : [];
+        let wikipediaTarget = parseWikipediaTarget(wikipediaRelation(relations));
+        let wikidata = null;
+        const wikidataResource = wikidataRelation(relations);
+        if (wikidataResource) {
+          wikidata = await getWikidataProfile(wikidataResource);
+          wikipediaTarget ||= wikidata?.wikipediaTarget ?? null;
+        }
+        const wikipedia = await fetchWikipediaSummary(wikipediaTarget).catch(() => null);
+        if (!wikidata && wikipedia?.wikibaseItem) {
+          wikidata = await getWikidataProfile(wikipedia.wikibaseItem).catch(() => null);
+        }
+        const commons = wikidata?.imageFileName
+          ? await fetchWikimediaCommonsImage(wikidata.imageFileName).catch(() => null)
+          : null;
+        const openImage = commonsArtistImage(commons) || wikipediaArtistImage(wikipedia);
+        if (openImage) candidates.push(openImage);
+      } catch (error) {
+        console.warn(`Could not search Wikimedia images for ${requestedName}:`, error);
+      }
+
+      if (String(fanartApiKey).trim()) {
+        try {
+          const payload = await fetchFanartArtist(profile.musicBrainzId, fanartApiKey);
+          candidates.push(...fanartArtistImages(payload, profile.musicBrainzId));
+        } catch (error) {
+          console.warn(`Could not search Fanart.tv images for ${requestedName}:`, error);
+        }
+      }
+
+      if (String(theAudioDbApiKey).trim()) {
+        try {
+          const artist = await fetchTheAudioDbArtist(profile.musicBrainzId, theAudioDbApiKey);
+          candidates.push(...theAudioDbArtistImages(artist));
+        } catch (error) {
+          console.warn(`Could not search TheAudioDB images for ${requestedName}:`, error);
+        }
+      }
+    }
+
     try {
-      const lookupUrl = new URL(`https://musicbrainz.org/ws/2/artist/${profile.musicBrainzId}`);
-      lookupUrl.search = new URLSearchParams({ inc: "url-rels", fmt: "json" }).toString();
-      const artist = await fetchMusicBrainzJson(lookupUrl.toString());
-      const relations = Array.isArray(artist?.relations) ? artist.relations : [];
-      let wikipediaTarget = parseWikipediaTarget(wikipediaRelation(relations));
-      let wikidata = null;
-      const wikidataResource = wikidataRelation(relations);
-      if (wikidataResource) {
-        wikidata = await getWikidataProfile(wikidataResource);
-        wikipediaTarget ||= wikidata?.wikipediaTarget ?? null;
-      }
-      const wikipedia = await fetchWikipediaSummary(wikipediaTarget).catch(() => null);
-      if (!wikidata && wikipedia?.wikibaseItem) {
-        wikidata = await getWikidataProfile(wikipedia.wikibaseItem).catch(() => null);
-      }
-      const commons = wikidata?.imageFileName
-        ? await fetchWikimediaCommonsImage(wikidata.imageFileName).catch(() => null)
-        : null;
-      const openImage = commonsArtistImage(commons) || wikipediaArtistImage(wikipedia);
-      if (openImage) candidates.push(openImage);
+      candidates.push(...await fetchDeezerArtistImages(requestedName));
     } catch (error) {
-      console.warn(`Could not search Wikimedia images for ${requestedName}:`, error);
+      console.warn(`Could not search Deezer images for ${requestedName}:`, error);
     }
 
-    if (String(fanartApiKey).trim()) {
+    let braveError = null;
+    if (String(braveSearchApiKey).trim()) {
       try {
-        const payload = await fetchFanartArtist(profile.musicBrainzId, fanartApiKey);
-        candidates.push(...fanartArtistImages(payload, profile.musicBrainzId));
+        candidates.push(...await fetchBraveArtistImages(requestedName, braveSearchApiKey));
       } catch (error) {
-        console.warn(`Could not search Fanart.tv images for ${requestedName}:`, error);
+        braveError = error;
+        console.warn(`Could not search Brave images for ${requestedName}:`, error);
       }
     }
 
-    if (String(theAudioDbApiKey).trim()) {
-      try {
-        const artist = await fetchTheAudioDbArtist(profile.musicBrainzId, theAudioDbApiKey);
-        candidates.push(...theAudioDbArtistImages(artist));
-      } catch (error) {
-        console.warn(`Could not search TheAudioDB images for ${requestedName}:`, error);
-      }
-    }
+    if (candidates.length === 0 && braveError) throw braveError;
+    if (candidates.length === 0 && profileError) throw profileError;
 
     const providerRank = {
       "wikimedia-commons": 0,
       wikipedia: 1,
       "fanart.tv": 2,
       theaudiodb: 3,
+      deezer: 4,
+      "brave-search": 5,
     };
     const seen = new Set();
     return candidates
@@ -1002,7 +1168,7 @@ export const createArtistProfileService = ({
     const artistKey = normalizeArtistKey(requestedName);
     if (!artistKey) throw new Error("Artist name is required");
     const cached = readCachedProfile(db, artistKey);
-    if (!cached?.profile || cached.profile.status !== "ready") {
+    if (!cached?.profile) {
       throw new Error("Load the artist profile before selecting a picture");
     }
 
@@ -1021,6 +1187,7 @@ export const createArtistProfileService = ({
       imageAttribution: cleanHtmlText(candidate?.attribution, 500),
       imageLicense: cleanHtmlText(candidate?.license, 200),
       imageLicenseUrl: secureUrl(candidate?.licenseUrl),
+      imageSourceUrl: sourceUrl,
       imageSelection: "manual",
       wikimediaCommonsUrl: provider === "wikimedia-commons"
         ? sourceUrl
