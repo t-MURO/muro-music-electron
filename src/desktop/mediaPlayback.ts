@@ -3,6 +3,18 @@ export type PlayableMedia = {
   pause(): void;
 };
 
+export const retryMediaLoadOnce = async <T>(
+  load: () => Promise<T>,
+  reset: () => Promise<void> | void,
+): Promise<T> => {
+  try {
+    return await load();
+  } catch {
+    await reset();
+    return load();
+  }
+};
+
 export const playWithTimeout = async (
   media: PlayableMedia,
   timeoutMs: number,

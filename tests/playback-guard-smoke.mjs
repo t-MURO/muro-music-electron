@@ -1,5 +1,36 @@
 import assert from "node:assert/strict";
-import { playWithTimeout } from "../src/desktop/mediaPlayback.ts";
+import { playWithTimeout, retryMediaLoadOnce } from "../src/desktop/mediaPlayback.ts";
+
+{
+  let attempts = 0;
+  let resets = 0;
+  const result = await retryMediaLoadOnce(
+    async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient media error");
+      return "loaded";
+    },
+    () => { resets += 1; },
+  );
+  assert.equal(result, "loaded");
+  assert.equal(attempts, 2);
+  assert.equal(resets, 1);
+}
+
+{
+  let attempts = 0;
+  await assert.rejects(
+    retryMediaLoadOnce(
+      async () => {
+        attempts += 1;
+        throw new Error(`media error ${attempts}`);
+      },
+      () => undefined,
+    ),
+    /media error 2/,
+  );
+  assert.equal(attempts, 2);
+}
 
 {
   let paused = 0;

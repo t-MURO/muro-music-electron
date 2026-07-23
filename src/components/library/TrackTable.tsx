@@ -265,8 +265,9 @@ export const TrackTable = memo(
         >
           <div
             ref={tableHeaderScrollRef}
-            className="min-w-0 shrink-0 overflow-hidden"
+            className="min-w-0 shrink-0 overflow-x-hidden overflow-y-scroll"
             data-track-table-header-scroll
+            style={{ scrollbarGutter: "stable" }}
           >
             <TableHeader
               columns={visibleColumns}
@@ -290,6 +291,7 @@ export const TrackTable = memo(
             ref={tableContainerRef}
             className="relative min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto"
             data-track-table-scroll
+            style={{ scrollbarGutter: "stable" }}
             tabIndex={0}
             onKeyDown={handleKeyDown}
             onMouseDownCapture={(event) => {

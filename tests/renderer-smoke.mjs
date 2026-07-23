@@ -577,7 +577,7 @@ app.whenReady().then(async () => {
         collectionSection.contains(playlistSection)
       );
       document.querySelector('[aria-label="Collapse queue"]')?.click();
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => setTimeout(resolve, 320));
       const expandQueueButton = document.querySelector('[aria-label="Expand queue"]');
       const collapsedQueuePanel = expandQueueButton?.closest('aside');
       const collapsedQueueControlsReady = Boolean(
@@ -585,8 +585,9 @@ app.whenReady().then(async () => {
         collapsedQueuePanel?.querySelectorAll('button').length === 1 &&
         collapsedQueuePanel?.querySelectorAll('svg').length === 1
       );
+      const collapsedQueueWidth = collapsedQueuePanel?.getBoundingClientRect().width ?? 0;
       expandQueueButton?.click();
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => setTimeout(resolve, 320));
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
         scroller.scrollHeight > scroller.clientHeight
@@ -600,6 +601,11 @@ app.whenReady().then(async () => {
         const scrolledTop = scroller.scrollTop;
         const scrolledLeft = scroller.scrollLeft;
         const synchronizedHeaderLeft = headerScroller.scrollLeft;
+        scroller.scrollLeft = scroller.scrollWidth;
+        scroller.dispatchEvent(new Event("scroll"));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const farRightScrollLeft = scroller.scrollLeft;
+        const farRightHeaderScrollLeft = headerScroller.scrollLeft;
         scroller.scrollTop = 0;
         scroller.dispatchEvent(new Event("scroll"));
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -1747,6 +1753,8 @@ app.whenReady().then(async () => {
           scrollTop: scrolledTop,
           scrollLeft: scrolledLeft,
           headerScrollLeft: synchronizedHeaderLeft,
+          farRightScrollLeft,
+          farRightHeaderScrollLeft,
           platform: window.muro?.platform,
           searchShortcut: searchShortcutHint.textContent?.trim(),
           sidebarAnimationReady,
@@ -1767,6 +1775,7 @@ app.whenReady().then(async () => {
           playlistTransferControlsReady,
           playlistsUnderCollection,
           collapsedQueueControlsReady,
+          collapsedQueueWidth,
           playlistExportMoveMenuReady,
           playlistReorderReady,
           bulkPlaylistMenuReady,
@@ -1925,6 +1934,13 @@ app.whenReady().then(async () => {
         fail(`Header horizontal scroll was not synchronized: ${result.headerScrollLeft} != ${result.scrollLeft}`);
         return;
       }
+      if (Math.abs(result.farRightHeaderScrollLeft - result.farRightScrollLeft) > 1) {
+        fail(
+          `Header and rows diverged at the far-right edge: ` +
+          `${result.farRightHeaderScrollLeft} != ${result.farRightScrollLeft}`
+        );
+        return;
+      }
       const expectedSearchShortcut = result.platform === "darwin" ? "⌘F" : "Ctrl F";
       if (result.searchShortcut !== expectedSearchShortcut) {
         fail(`Unexpected search shortcut hint: ${result.searchShortcut} != ${expectedSearchShortcut}`);
@@ -1962,6 +1978,10 @@ app.whenReady().then(async () => {
       }
       if (!result.collapsedQueueControlsReady) {
         fail("Collapsed queue sidebar still shows an extra control under Expand");
+        return;
+      }
+      if (result.collapsedQueueWidth > 40 || result.collapsedQueueWidth < 32) {
+        fail(`Collapsed queue sidebar is not compact: ${result.collapsedQueueWidth}px`);
         return;
       }
       if (!result.deleteModalReady) {

@@ -6,6 +6,7 @@ import {
   type AutomationPoint,
 } from "../lib/mix/automation";
 import { getTransitionSeekPhase } from "../lib/mix/seek";
+import { retryMediaLoadOnce } from "./mediaPlayback";
 
 export type DeckHandle = {
   el: HTMLAudioElement;
@@ -170,6 +171,28 @@ const waitForLoadedMetadata = (player: HTMLAudioElement, timeoutMs: number) =>
     player.addEventListener("loadedmetadata", handleSuccess, { once: true });
     player.addEventListener("error", handleError, { once: true });
   });
+
+const loadIncomingMetadata = async (
+  player: HTMLAudioElement,
+  srcUrl: string,
+): Promise<void> => {
+  const load = async () => {
+    const metadataLoaded = waitForLoadedMetadata(player, METADATA_TIMEOUT_MS);
+    player.src = srcUrl;
+    player.load();
+    await metadataLoaded;
+  };
+
+  await retryMediaLoadOnce(load, async () => {
+    // Chromium can deliver a transient media error while an idle deck is
+    // being reused after cancellation. Clear it and let those stale events
+    // settle before making one fresh request for the same source.
+    player.pause();
+    player.removeAttribute("src");
+    player.load();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+  });
+};
 
 const scheduleParam = (
   param: AudioParam,
@@ -424,10 +447,8 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
   transition = t;
 
   try {
-    const metadataLoaded = waitForLoadedMetadata(incomingEl, METADATA_TIMEOUT_MS);
-    incomingEl.src = req.incoming.srcUrl;
-    incomingEl.load();
-    await metadataLoaded;
+    await loadIncomingMetadata(incomingEl, req.incoming.srcUrl);
+    incomingEl.playbackRate = req.plan.rate;
     incomingEl.currentTime = Math.max(0, req.plan.cueInSec);
     incomingEl.pause();
   } catch (error) {
