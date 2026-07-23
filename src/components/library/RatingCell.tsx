@@ -6,23 +6,27 @@ type RatingCellProps = {
   title: string;
   rating: number;
   onRate: (id: string, rating: number) => void;
+  compact?: boolean;
 };
 
 export const RatingCell = memo(
-  ({ trackId, title, rating, onRate }: RatingCellProps) => {
+  ({ trackId, title, rating, onRate, compact = false }: RatingCellProps) => {
     const [hoverValue, setHoverValue] = useState<number | null>(null);
     const displayRating = hoverValue ?? rating;
 
     return (
       <div
-        className="flex h-[var(--table-row-height)] min-w-0 items-center overflow-hidden border-l border-[var(--color-border-light)] px-1"
-        title={`${rating} / 5`}
+        className={compact
+          ? "flex min-w-0 items-center"
+          : "flex h-[var(--table-row-height)] min-w-0 items-center overflow-hidden border-l border-[var(--color-border-light)] px-1"}
+        title={`Rating: ${rating} / 5`}
         onMouseLeave={() => setHoverValue(null)}
-        data-rating-cell
-        role="cell"
+        data-rating-cell={compact ? undefined : true}
+        data-player-rating={compact ? true : undefined}
+        role={compact ? undefined : "cell"}
       >
         <div
-          className="flex w-full min-w-0 items-center justify-center rounded-[var(--radius-sm)]"
+          className={`flex min-w-0 items-center rounded-[var(--radius-sm)] ${compact ? "justify-start" : "w-full justify-center"}`}
           aria-label={`Rating for ${title}`}
           role="slider"
           tabIndex={0}

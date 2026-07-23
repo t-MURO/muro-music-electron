@@ -1109,6 +1109,38 @@ app.whenReady().then(async () => {
           navigator.mediaSession?.metadata?.title === "Smoke Track 001" &&
           navigator.mediaSession.playbackState === "playing"
         );
+        const playerMetadata = document.querySelector("[data-player-track-metadata]");
+        const playerRatingControl = playerMetadata?.querySelector('[role="slider"]');
+        const fourthPlayerRatingStar = playerMetadata?.querySelector('[data-rating-star="4"]');
+        const fourthPlayerRatingRect = fourthPlayerRatingStar?.getBoundingClientRect();
+        const playerMetadataReady = Boolean(
+          playerMetadata?.textContent?.includes("— BPM") &&
+          playerMetadata.textContent.includes("8A") &&
+          playerRatingControl?.getAttribute("aria-valuenow") === "0"
+        );
+        const volumeControlGroup = document.querySelector(".player-volume-control")?.parentElement;
+        const playerVolumeEndSpacingReady = volumeControlGroup
+          ? Number.parseFloat(getComputedStyle(volumeControlGroup).paddingRight) >= 8
+          : false;
+        const queueOutputRemoved = !document.querySelector("[data-output-footer]");
+        if (fourthPlayerRatingStar && fourthPlayerRatingRect) {
+          fourthPlayerRatingStar.dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            clientX: fourthPlayerRatingRect.right - 1,
+          }));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const playerRatingSetToFour = playerRatingControl?.getAttribute("aria-valuenow") === "4";
+        if (fourthPlayerRatingStar && fourthPlayerRatingRect) {
+          fourthPlayerRatingStar.dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            clientX: fourthPlayerRatingRect.left + 1,
+          }));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const playerRatingClearsToZero = playerRatingControl?.getAttribute("aria-valuenow") === "0";
         scroller.dispatchEvent(new KeyboardEvent("keydown", {
           key: " ",
           code: "Space",
@@ -2093,6 +2125,11 @@ app.whenReady().then(async () => {
           pausedRowUsesGreyHighlight,
           mediaSessionPlayingReady,
           mediaSessionPausedReady,
+          playerMetadataReady,
+          playerRatingSetToFour,
+          playerRatingClearsToZero,
+          playerVolumeEndSpacingReady,
+          queueOutputRemoved,
           mediaNextTrackIndex,
           mediaPreviousTrackIndex,
           mediaPausedAfterSkip,
@@ -2363,6 +2400,20 @@ app.whenReady().then(async () => {
           `ratingCleared=${result.threeStarRatingClearsToZero}, ratingUpdates=${JSON.stringify(ratingUpdates)}, ` +
           `selectedGrey=${result.selectedRowUsesGreyHighlight}, ` +
           `playingRed=${result.playingRowUsesRedHighlight}`
+        );
+        return;
+      }
+      if (
+        !result.playerMetadataReady ||
+        !result.playerRatingSetToFour ||
+        !result.playerRatingClearsToZero ||
+        !result.playerVolumeEndSpacingReady ||
+        !result.queueOutputRemoved
+      ) {
+        fail(
+          `Player metadata layout failed: metadata=${result.playerMetadataReady}, ` +
+          `ratingSet=${result.playerRatingSetToFour}, ratingCleared=${result.playerRatingClearsToZero}, ` +
+          `volumeSpacing=${result.playerVolumeEndSpacingReady}, outputRemoved=${result.queueOutputRemoved}`
         );
         return;
       }

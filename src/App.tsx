@@ -1877,6 +1877,7 @@ function App() {
           onVolumeChange={setVolume}
           onSkipPrevious={handleSkipPrevious}
           onSkipNext={handleSkipNext}
+          onRatingChange={handleRatingChange}
           transition={djMixEnabled ? transition : null}
         />
       </div>

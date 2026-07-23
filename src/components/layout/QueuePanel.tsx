@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { t } from "../../i18n";
 import { useDragSession } from "../../contexts/DragSessionContext";
-import { OutputFooter } from "../player/OutputFooter";
 import { NowPlayingTrack } from "../queue/NowPlayingTrack";
 import { MixSuggestions } from "../queue/MixSuggestions";
 import type { Playlist, Track } from "../../types";
@@ -234,8 +233,6 @@ export const QueuePanel = ({
           )}
         </div>
       </div>
-
-      <OutputFooter />
 
       {draggedTrack && dragIndex !== null && (
         <div className="pointer-events-none fixed z-50 border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-3 py-2 shadow-[var(--shadow-lg)]" style={{ left: containerRef.current?.getBoundingClientRect().left ?? 0, top: dragY, width: containerRef.current?.getBoundingClientRect().width ?? 240 }}>

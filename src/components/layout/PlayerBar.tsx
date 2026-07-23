@@ -17,6 +17,7 @@ import { convertFileSrc } from "@muro/desktop/runtime";
 import { t } from "../../i18n";
 import { getAudioWaveform } from "../../lib/keyfinder";
 import { useLibraryStore, usePlaybackStore } from "../../stores";
+import { RatingCell } from "../library/RatingCell";
 import { OutputMenu } from "../player/OutputMenu";
 import { WaveformSeekBar } from "../player/WaveformSeekBar";
 
@@ -33,6 +34,7 @@ type PlayerBarProps = {
   onVolumeChange: (value: number) => void;
   onSkipPrevious: () => void;
   onSkipNext: () => void;
+  onRatingChange: (id: string, rating: number) => void;
   transition?: { status: string; toTitle: string; progress: number } | null;
 };
 
@@ -43,6 +45,7 @@ export const PlayerBar = ({
   onVolumeChange,
   onSkipPrevious,
   onSkipNext,
+  onRatingChange,
   transition,
 }: PlayerBarProps) => {
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
@@ -139,7 +142,7 @@ export const PlayerBar = ({
     : 0;
 
   return (
-    <footer className="player-bar relative col-span-3 col-start-1 row-start-3 grid h-[var(--media-controls-height)] grid-cols-[minmax(230px,300px)_minmax(360px,1fr)_minmax(190px,300px)] items-center gap-5 border-t border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3">
+    <footer className="player-bar relative col-span-3 col-start-1 row-start-3 grid h-[var(--media-controls-height)] grid-cols-[minmax(320px,420px)_minmax(360px,1fr)_minmax(190px,270px)] items-center gap-5 border-t border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3">
       {isMixing && transition && (
         <div
           className="absolute inset-x-0 top-0 h-[3px] overflow-hidden bg-[var(--color-bg-tertiary)]"
@@ -158,47 +161,64 @@ export const PlayerBar = ({
           </span>
         </div>
       )}
-      <button
-        className="group flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
-        onClick={onOpenCurrentTrack}
-        disabled={!currentTrack}
-        title={currentTrack ? "Show current track in its list" : undefined}
-        type="button"
-        data-now-playing-link
-      >
-        {currentTrack?.coverArtThumbPath ? (
-          <img src={convertFileSrc(currentTrack.coverArtThumbPath)} alt={`${currentTrack.title} cover`} className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-colors group-hover:border-[var(--color-accent)]" />
-        ) : (
-          <div className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] transition-colors group-hover:border-[var(--color-accent)]"><Music2 className="h-5 w-5" /></div>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTrack ? currentTrack.title : t("player.empty.title")}</p>
-          {showTransitionBadge && transition ? (
-            <div
-              className="mt-1 flex max-w-full items-center gap-1.5 rounded-[var(--radius-full)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)] shadow-[0_0_14px_var(--color-accent-light)]"
-              data-transition-badge={transition.status}
-              data-mix-indicator={transition.status}
-              role="status"
-              aria-live="polite"
-            >
-              <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-                {isMixing && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-accent)] opacity-60" />}
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-accent)]" />
-              </span>
-              <Blend className="h-3 w-3 shrink-0" aria-hidden="true" />
-              <span className="shrink-0 uppercase tracking-[0.08em]">
-                {isMixing ? "Mixing" : "Mix ready"}
-              </span>
-              {isMixing && <span className="shrink-0 tabular-nums" data-mix-percent>{transitionPercent}%</span>}
-              <ArrowRight className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
-              <span className="truncate text-[var(--color-text-primary)]">{transition.toTitle}</span>
-            </div>
+      <div className="flex min-w-0 items-center gap-3">
+        <button
+          className="group flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+          onClick={onOpenCurrentTrack}
+          disabled={!currentTrack}
+          title={currentTrack ? "Show current track in its list" : undefined}
+          type="button"
+          data-now-playing-link
+        >
+          {currentTrack?.coverArtThumbPath ? (
+            <img src={convertFileSrc(currentTrack.coverArtThumbPath)} alt={`${currentTrack.title} cover`} className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-colors group-hover:border-[var(--color-accent)]" />
           ) : (
-            <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">{currentTrack ? currentTrack.artist : t("player.empty.subtitle")}</p>
+            <div className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] transition-colors group-hover:border-[var(--color-accent)]"><Music2 className="h-5 w-5" /></div>
           )}
-          {currentTrack?.album && <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{currentTrack.album}</p>}
-        </div>
-      </button>
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTrack ? currentTrack.title : t("player.empty.title")}</p>
+            {showTransitionBadge && transition ? (
+              <div
+                className="mt-1 flex max-w-full items-center gap-1.5 rounded-[var(--radius-full)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)] shadow-[0_0_14px_var(--color-accent-light)]"
+                data-transition-badge={transition.status}
+                data-mix-indicator={transition.status}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+                  {isMixing && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-accent)] opacity-60" />}
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-accent)]" />
+                </span>
+                <Blend className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="shrink-0 uppercase tracking-[0.08em]">
+                  {isMixing ? "Mixing" : "Mix ready"}
+                </span>
+                {isMixing && <span className="shrink-0 tabular-nums" data-mix-percent>{transitionPercent}%</span>}
+                <ArrowRight className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
+                <span className="truncate text-[var(--color-text-primary)]">{transition.toTitle}</span>
+              </div>
+            ) : (
+              <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">{currentTrack ? currentTrack.artist : t("player.empty.subtitle")}</p>
+            )}
+            {currentTrack?.album && <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{currentTrack.album}</p>}
+          </div>
+        </button>
+        {currentTrack && trackDetails && (
+          <div className="flex shrink-0 flex-col gap-1.5 border-l border-[var(--color-border-light)] pl-3" data-player-track-metadata>
+            <div className="flex items-center gap-2 text-[10px] tabular-nums text-[var(--color-text-muted)]">
+              {trackDetails.bpm ? <span>{trackDetails.bpm.toFixed(1)} BPM</span> : <span>— BPM</span>}
+              <span className="font-semibold text-[var(--color-accent)]">{trackDetails.key || "—"}</span>
+            </div>
+            <RatingCell
+              compact
+              trackId={trackDetails.id}
+              title={trackDetails.title}
+              rating={trackDetails.rating}
+              onRate={onRatingChange}
+            />
+          </div>
+        )}
+      </div>
 
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center justify-center gap-2">
@@ -230,13 +250,7 @@ export const PlayerBar = ({
         {waveformLoading && <span className="sr-only" role="status">Generating waveform</span>}
       </div>
 
-      <div className="flex items-center justify-end gap-3">
-        {(trackDetails?.bpm || trackDetails?.key) && (
-          <div className="mr-1 text-right text-[10px] tabular-nums text-[var(--color-text-muted)]">
-            {trackDetails?.bpm && <div>{trackDetails.bpm.toFixed(1)} BPM</div>}
-            {trackDetails?.key && <div className="font-semibold text-[var(--color-accent)]">{trackDetails.key}</div>}
-          </div>
-        )}
+      <div className="flex items-center justify-end gap-3 pr-2">
         <OutputMenu />
         <button className={controlButtonClass} onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)} title={volume > 0 ? "Mute" : "Unmute"} type="button">
           {volume > 0 ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
