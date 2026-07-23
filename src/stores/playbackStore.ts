@@ -60,6 +60,7 @@ type PlaybackActions = {
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   setPlayingNext: (trackIds: string[] | ((prev: string[]) => string[])) => void;
   reorderPlayingNext: (fromIndex: number, toIndex: number) => void;
+  movePlayingNextToQueue: (fromIndex: number, toIndex: number) => void;
 
   // Reset
   reset: () => void;
@@ -142,6 +143,17 @@ export const usePlaybackStore = create<PlaybackStore>()(
         const [removed] = nextTracks.splice(fromIndex, 1);
         nextTracks.splice(toIndex, 0, removed);
         return { playingNext: nextTracks };
+      }),
+
+    movePlayingNextToQueue: (fromIndex, toIndex) =>
+      set((state) => {
+        if (fromIndex < 0 || fromIndex >= state.playingNext.length) return state;
+        const nextTracks = [...state.playingNext];
+        const [movedTrackId] = nextTracks.splice(fromIndex, 1);
+        const nextQueue = [...state.queue];
+        const resolvedIndex = Math.max(0, Math.min(toIndex, nextQueue.length));
+        nextQueue.splice(resolvedIndex, 0, movedTrackId);
+        return { playingNext: nextTracks, queue: nextQueue };
       }),
 
     // Reset

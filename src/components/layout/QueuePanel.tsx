@@ -33,6 +33,7 @@ type QueuePanelProps = {
   onRemoveFromQueue: (index: number) => void;
   onReorderQueue: (fromIndex: number, toIndex: number) => void;
   onReorderPlayingNext: (fromIndex: number, toIndex: number) => void;
+  onMovePlayingNextToQueue: (fromIndex: number, toIndex: number) => void;
   onClearQueue: () => void;
   onPlayTrack: (trackId: string) => void;
   onPlayNext: (trackId: string) => void;
@@ -55,6 +56,9 @@ type QueueListItem =
   | { kind: "empty"; list: "playing-next" }
   | { kind: "track"; list: PlaybackListKind; track: Track; trackIndex: number };
 
+const SECTION_HEADER_HEIGHT = 54;
+const TRACK_ROW_HEIGHT = 49;
+
 export const QueuePanel = ({
   collapsed,
   expanded,
@@ -69,6 +73,7 @@ export const QueuePanel = ({
   onRemoveFromQueue,
   onReorderQueue,
   onReorderPlayingNext,
+  onMovePlayingNextToQueue,
   onClearQueue,
   onPlayTrack,
   onPlayNext,
@@ -79,6 +84,7 @@ export const QueuePanel = ({
   const [dragY, setDragY] = useState(0);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [dragList, setDragList] = useState<PlaybackListKind | null>(null);
+  const [dropList, setDropList] = useState<PlaybackListKind | null>(null);
   const [panelView, setPanelView] = useState<"queue" | "mix">("queue");
   const dragStartRef = useRef<{
     list: PlaybackListKind;
@@ -87,6 +93,7 @@ export const QueuePanel = ({
     itemY: number;
   } | null>(null);
   const itemRefsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const sectionRefsRef = useRef<Map<PlaybackListKind, HTMLDivElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
   const queueDuration = useMemo(
     () => queueTracks.reduce((total, track) => total + (track.durationSeconds || 0), 0),
@@ -126,9 +133,9 @@ export const QueuePanel = ({
     getScrollElement: () => containerRef.current,
     estimateSize: (index) => {
       const item = listItems[index];
-      if (item?.kind === "header") return 54;
+      if (item?.kind === "header") return SECTION_HEADER_HEIGHT;
       if (item?.kind === "empty") return 96;
-      return 49;
+      return TRACK_ROW_HEIGHT;
     },
     overscan: 12,
   });
@@ -166,10 +173,33 @@ export const QueuePanel = ({
       }
       if (dragIndex === null) return;
       setDragY(itemY + deltaY);
-      const tracks = list === "queue" ? queueTracks : playingNextTracks;
+
+      const container = containerRef.current;
+      if (container) {
+        const containerRect = container.getBoundingClientRect();
+        if (event.clientY < containerRect.top + 36) {
+          container.scrollTop -= 20;
+        } else if (event.clientY > containerRect.bottom - 36) {
+          container.scrollTop += 20;
+        }
+      }
+
+      const pointerOffset = container
+        ? event.clientY - container.getBoundingClientRect().top + container.scrollTop
+        : Number.POSITIVE_INFINITY;
+      const playingNextRowsStart =
+        SECTION_HEADER_HEIGHT +
+        queueTracks.length * TRACK_ROW_HEIGHT +
+        SECTION_HEADER_HEIGHT;
+      const targetList: PlaybackListKind =
+        list === "playing-next" &&
+        pointerOffset < playingNextRowsStart
+          ? "queue"
+          : list;
+      const tracks = targetList === "queue" ? queueTracks : playingNextTracks;
       let nextDropIndex: number | null = null;
       for (let itemIndex = 0; itemIndex < tracks.length; itemIndex += 1) {
-        const item = itemRefsRef.current.get(`${list}:${itemIndex}`);
+        const item = itemRefsRef.current.get(`${targetList}:${itemIndex}`);
         if (!item) continue;
         const rect = item.getBoundingClientRect();
         if (event.clientY < rect.top + rect.height / 2) {
@@ -178,16 +208,25 @@ export const QueuePanel = ({
         }
         nextDropIndex = itemIndex + 1;
       }
-      if (nextDropIndex === index || nextDropIndex === index + 1) nextDropIndex = null;
+      if (targetList === "queue" && tracks.length === 0) nextDropIndex = 0;
+      if (
+        targetList === list &&
+        (nextDropIndex === index || nextDropIndex === index + 1)
+      ) {
+        nextDropIndex = null;
+      }
+      setDropList(nextDropIndex === null ? null : targetList);
       setDropIndex(nextDropIndex);
     };
 
     const handleMouseUp = () => {
-      const list = dragStartRef.current?.list;
-      if (list && dragIndex !== null && dropIndex !== null) {
+      const sourceList = dragStartRef.current?.list;
+      if (sourceList && dropList && dragIndex !== null && dropIndex !== null) {
         const targetIndex = dropIndex > dragIndex ? dropIndex - 1 : dropIndex;
-        if (targetIndex !== dragIndex) {
-          if (list === "queue") {
+        if (sourceList === "playing-next" && dropList === "queue") {
+          onMovePlayingNextToQueue(dragIndex, dropIndex);
+        } else if (targetIndex !== dragIndex) {
+          if (sourceList === "queue") {
             onReorderQueue(dragIndex, targetIndex);
           } else {
             onReorderPlayingNext(dragIndex, targetIndex);
@@ -199,6 +238,7 @@ export const QueuePanel = ({
       setDragY(0);
       setDropIndex(null);
       setDragList(null);
+      setDropList(null);
       endInternalDrag();
     };
     window.addEventListener("mousemove", handleMouseMove);
@@ -211,6 +251,8 @@ export const QueuePanel = ({
     dragIndex,
     dropIndex,
     endInternalDrag,
+    dropList,
+    onMovePlayingNextToQueue,
     onReorderPlayingNext,
     onReorderQueue,
     playingNextTracks,
@@ -303,9 +345,22 @@ export const QueuePanel = ({
               return (
                 <div
                   key={`header-${item.list}`}
-                  className="absolute left-0 top-0 flex w-full items-center border-b border-[var(--color-border-light)] px-4"
+                  ref={(element) => {
+                    if (element) sectionRefsRef.current.set(item.list, element);
+                    else sectionRefsRef.current.delete(item.list);
+                  }}
+                  className={`absolute left-0 top-0 flex w-full items-center border-b border-[var(--color-border-light)] px-4 transition-colors ${
+                    item.list === "queue" && dragList === "playing-next" && dropList === "queue"
+                      ? "bg-[var(--color-accent-light)]"
+                      : ""
+                  }`}
                   style={wrapperStyle}
                   data-queue-section={item.list}
+                  data-queue-drop-target={
+                    item.list === "queue" && dragList === "playing-next"
+                      ? (dropList === "queue" ? "active" : "available")
+                      : undefined
+                  }
                 >
                   <div className="min-w-0">
                     <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-primary)]">
@@ -326,6 +381,9 @@ export const QueuePanel = ({
                     >
                       Clear
                     </button>
+                  )}
+                  {isQueue && queueTracks.length === 0 && dropList === "queue" && (
+                    <span className="absolute inset-x-3 bottom-0 h-px bg-[var(--color-accent)]" />
                   )}
                 </div>
               );
@@ -351,9 +409,9 @@ export const QueuePanel = ({
             const isDragging = dragList === list && dragIndex === trackIndex;
             const isCurrentQueueTrack = currentTrack?.id === track.id;
             const showDropBefore =
-              dragList === list && dropIndex === trackIndex;
+              dropList === list && dropIndex === trackIndex;
             const showDropAfter =
-              dragList === list &&
+              dropList === list &&
               dropIndex === tracks.length &&
               trackIndex === tracks.length - 1;
             const itemKey = `${list}:${trackIndex}`;

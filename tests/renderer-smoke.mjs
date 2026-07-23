@@ -2092,19 +2092,47 @@ app.whenReady().then(async () => {
           reorderedPlayingNextRows[0]?.textContent?.includes("Smoke Track 020") &&
           reorderedPlayingNextRows[1]?.textContent?.includes("Smoke Track 010")
         );
-        document.querySelector('[data-track-index="1"]')?.dispatchEvent(new MouseEvent("contextmenu", {
-          bubbles: true,
-          cancelable: true,
-          clientX: 300,
-          clientY: 240,
-        }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        const addPriorityQueueButton = [...document.querySelectorAll('[data-popover] button')]
-          .find((button) => button.textContent?.trim() === "Add to queue");
-        addPriorityQueueButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        const trackToQueue = reorderedPlayingNextRows[1];
+        const queueDropSection = document.querySelector('[data-queue-section="queue"]');
+        let crossSectionDropTargetReady = false;
+        if (trackToQueue && queueDropSection) {
+          const trackBounds = trackToQueue.getBoundingClientRect();
+          const queueBounds = queueDropSection.getBoundingClientRect();
+          trackToQueue.dispatchEvent(new MouseEvent("mousedown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            clientX: trackBounds.left + 20,
+            clientY: trackBounds.top + trackBounds.height / 2,
+          }));
+          window.dispatchEvent(new MouseEvent("mousemove", {
+            bubbles: true,
+            buttons: 1,
+            clientX: trackBounds.left + 20,
+            clientY: trackBounds.top + trackBounds.height / 2 - 8,
+          }));
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          window.dispatchEvent(new MouseEvent("mousemove", {
+            bubbles: true,
+            buttons: 1,
+            clientX: queueBounds.left + 30,
+            clientY: queueBounds.top + queueBounds.height / 2,
+          }));
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          crossSectionDropTargetReady =
+            document.querySelector('[data-queue-drop-target="active"]') !== null;
+          window.dispatchEvent(new MouseEvent("mouseup", {
+            bubbles: true,
+            button: 0,
+            clientX: queueBounds.left + 30,
+            clientY: queueBounds.top + queueBounds.height / 2,
+          }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80));
         const priorityQueueVisible = Boolean(
-          document.querySelector("[data-queue-track]")?.textContent?.includes("Smoke Track 010")
+          document.querySelector("[data-queue-track]")?.textContent?.includes("Smoke Track 010") &&
+          document.querySelectorAll("[data-playing-next-track]").length === 1 &&
+          document.querySelector("[data-playing-next-track]")?.textContent?.includes("Smoke Track 020")
         );
         document.querySelector('button[title="Next"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
@@ -2299,6 +2327,7 @@ app.whenReady().then(async () => {
           playingNextViewReady,
           playingNextReorderReady,
           playingNextDebug,
+          crossSectionDropTargetReady,
           priorityQueueVisible,
           queueHasPriority,
           playingNextFollowsQueue,
@@ -2530,13 +2559,15 @@ app.whenReady().then(async () => {
       if (
         !result.playingNextViewReady ||
         !result.playingNextReorderReady ||
+        !result.crossSectionDropTargetReady ||
         !result.priorityQueueVisible ||
         !result.queueHasPriority ||
         !result.playingNextFollowsQueue
       ) {
         fail(
           `Playing-next order failed: view=${result.playingNextViewReady}, ` +
-          `reorder=${result.playingNextReorderReady}, queueVisible=${result.priorityQueueVisible}, ` +
+          `reorder=${result.playingNextReorderReady}, crossDrop=${result.crossSectionDropTargetReady}, ` +
+          `queueVisible=${result.priorityQueueVisible}, ` +
           `queuePriority=${result.queueHasPriority}, resumesNext=${result.playingNextFollowsQueue}, ` +
           `debug=${result.playingNextDebug}`
         );

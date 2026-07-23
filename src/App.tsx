@@ -199,6 +199,7 @@ function App() {
   const reorderQueue = usePlaybackStore((s) => s.reorderQueue);
   const setQueue = usePlaybackStore((s) => s.setQueue);
   const reorderPlayingNext = usePlaybackStore((s) => s.reorderPlayingNext);
+  const movePlayingNextToQueue = usePlaybackStore((s) => s.movePlayingNextToQueue);
   const setPlayingNext = usePlaybackStore((s) => s.setPlayingNext);
 
   const selectedIds = useUIStore((s) => s.selectedIds);
@@ -1937,6 +1938,7 @@ function App() {
               onRemoveFromQueue={removeFromQueue}
               onReorderQueue={reorderQueue}
               onReorderPlayingNext={reorderPlayingNext}
+              onMovePlayingNextToQueue={movePlayingNextToQueue}
               onClearQueue={clearQueue}
               onPlayTrack={(trackId) => playTrackById(trackId)}
               onPlayNext={(trackId) => playNext([trackId])}
