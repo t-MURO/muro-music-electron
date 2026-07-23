@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
   GripVertical,
@@ -24,12 +25,14 @@ type QueuePanelProps = {
   onToggleCollapsed: () => void;
   onToggleExpanded: () => void;
   queueTracks: Track[];
+  playingNextTracks: Track[];
   allTracks: Track[];
   currentTrack: CurrentTrack | null;
   currentTrackDetails?: Track | null;
   currentPlaylist?: Playlist | null;
   onRemoveFromQueue: (index: number) => void;
   onReorderQueue: (fromIndex: number, toIndex: number) => void;
+  onReorderPlayingNext: (fromIndex: number, toIndex: number) => void;
   onClearQueue: () => void;
   onPlayTrack: (trackId: string) => void;
   onPlayNext: (trackId: string) => void;
@@ -45,18 +48,27 @@ const formatDuration = (seconds: number) => {
     : `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
+type PlaybackListKind = "queue" | "playing-next";
+
+type QueueListItem =
+  | { kind: "header"; list: PlaybackListKind }
+  | { kind: "empty"; list: "playing-next" }
+  | { kind: "track"; list: PlaybackListKind; track: Track; trackIndex: number };
+
 export const QueuePanel = ({
   collapsed,
   expanded,
   onToggleCollapsed,
   onToggleExpanded,
   queueTracks,
+  playingNextTracks,
   allTracks,
   currentTrack,
   currentTrackDetails,
   currentPlaylist,
   onRemoveFromQueue,
   onReorderQueue,
+  onReorderPlayingNext,
   onClearQueue,
   onPlayTrack,
   onPlayNext,
@@ -66,37 +78,98 @@ export const QueuePanel = ({
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragY, setDragY] = useState(0);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [dragList, setDragList] = useState<PlaybackListKind | null>(null);
   const [panelView, setPanelView] = useState<"queue" | "mix">("queue");
-  const dragStartRef = useRef<{ index: number; y: number; itemY: number } | null>(null);
-  const itemRefsRef = useRef<Map<number, HTMLDivElement>>(new Map());
+  const dragStartRef = useRef<{
+    list: PlaybackListKind;
+    index: number;
+    y: number;
+    itemY: number;
+  } | null>(null);
+  const itemRefsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
-  const totalDuration = useMemo(
+  const queueDuration = useMemo(
     () => queueTracks.reduce((total, track) => total + (track.durationSeconds || 0), 0),
     [queueTracks],
   );
+  const playingNextDuration = useMemo(
+    () => playingNextTracks.reduce((total, track) => total + (track.durationSeconds || 0), 0),
+    [playingNextTracks],
+  );
+  const listItems = useMemo<QueueListItem[]>(
+    () => [
+      { kind: "header", list: "queue" },
+      ...queueTracks.map(
+        (track, trackIndex): QueueListItem => ({
+          kind: "track",
+          list: "queue",
+          track,
+          trackIndex,
+        })
+      ),
+      { kind: "header", list: "playing-next" },
+      ...(playingNextTracks.length > 0
+        ? playingNextTracks.map(
+            (track, trackIndex): QueueListItem => ({
+              kind: "track",
+              list: "playing-next",
+              track,
+              trackIndex,
+            })
+          )
+        : [{ kind: "empty", list: "playing-next" } satisfies QueueListItem]),
+    ],
+    [playingNextTracks, queueTracks],
+  );
+  const listVirtualizer = useVirtualizer({
+    count: listItems.length,
+    getScrollElement: () => containerRef.current,
+    estimateSize: (index) => {
+      const item = listItems[index];
+      if (item?.kind === "header") return 54;
+      if (item?.kind === "empty") return 96;
+      return 49;
+    },
+    overscan: 12,
+  });
 
-  const handleMouseDown = useCallback((event: React.MouseEvent, index: number) => {
+  useLayoutEffect(() => {
+    listVirtualizer.measure();
+  }, [listVirtualizer, playingNextTracks.length, queueTracks.length]);
+
+  const handleMouseDown = useCallback((
+    event: React.MouseEvent,
+    list: PlaybackListKind,
+    index: number,
+  ) => {
     if ((event.target as HTMLElement).closest("[data-no-drag]")) return;
     event.preventDefault();
-    const item = itemRefsRef.current.get(index);
+    const item = itemRefsRef.current.get(`${list}:${index}`);
     if (!item) return;
-    dragStartRef.current = { index, y: event.clientY, itemY: item.getBoundingClientRect().top };
+    dragStartRef.current = {
+      list,
+      index,
+      y: event.clientY,
+      itemY: item.getBoundingClientRect().top,
+    };
   }, []);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (!dragStartRef.current) return;
-      const { index, y: startY, itemY } = dragStartRef.current;
+      const { list, index, y: startY, itemY } = dragStartRef.current;
       const deltaY = event.clientY - startY;
       if (dragIndex === null && Math.abs(deltaY) > 4) {
         setDragIndex(index);
+        setDragList(list);
         startInternalDrag("queue");
       }
       if (dragIndex === null) return;
       setDragY(itemY + deltaY);
+      const tracks = list === "queue" ? queueTracks : playingNextTracks;
       let nextDropIndex: number | null = null;
-      for (let itemIndex = 0; itemIndex < queueTracks.length; itemIndex += 1) {
-        const item = itemRefsRef.current.get(itemIndex);
+      for (let itemIndex = 0; itemIndex < tracks.length; itemIndex += 1) {
+        const item = itemRefsRef.current.get(`${list}:${itemIndex}`);
         if (!item) continue;
         const rect = item.getBoundingClientRect();
         if (event.clientY < rect.top + rect.height / 2) {
@@ -110,14 +183,22 @@ export const QueuePanel = ({
     };
 
     const handleMouseUp = () => {
-      if (dragIndex !== null && dropIndex !== null) {
+      const list = dragStartRef.current?.list;
+      if (list && dragIndex !== null && dropIndex !== null) {
         const targetIndex = dropIndex > dragIndex ? dropIndex - 1 : dropIndex;
-        if (targetIndex !== dragIndex) onReorderQueue(dragIndex, targetIndex);
+        if (targetIndex !== dragIndex) {
+          if (list === "queue") {
+            onReorderQueue(dragIndex, targetIndex);
+          } else {
+            onReorderPlayingNext(dragIndex, targetIndex);
+          }
+        }
       }
       dragStartRef.current = null;
       setDragIndex(null);
       setDragY(0);
       setDropIndex(null);
+      setDragList(null);
       endInternalDrag();
     };
     window.addEventListener("mousemove", handleMouseMove);
@@ -126,15 +207,30 @@ export const QueuePanel = ({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragIndex, dropIndex, endInternalDrag, onReorderQueue, queueTracks.length, startInternalDrag]);
+  }, [
+    dragIndex,
+    dropIndex,
+    endInternalDrag,
+    onReorderPlayingNext,
+    onReorderQueue,
+    playingNextTracks,
+    queueTracks,
+    startInternalDrag,
+  ]);
 
-  const draggedTrack = dragIndex !== null ? queueTracks[dragIndex] : null;
+  const draggedTrack = dragIndex !== null && dragList
+    ? (dragList === "queue" ? queueTracks : playingNextTracks)[dragIndex]
+    : null;
 
   if (collapsed) {
     return (
       <aside className="flex h-full flex-col items-center border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)] py-5">
         <button className="toolbar-icon-button" onClick={onToggleCollapsed} title="Expand queue" aria-label="Expand queue" type="button"><PanelRightOpen className="h-4 w-4" /></button>
-        {queueTracks.length > 0 && <span className="mt-6 text-[10px] tabular-nums text-[var(--color-accent)]">{queueTracks.length}</span>}
+        {(queueTracks.length > 0 || playingNextTracks.length > 0) && (
+          <span className="mt-6 text-[10px] tabular-nums text-[var(--color-accent)]">
+            {queueTracks.length + playingNextTracks.length}
+          </span>
+        )}
       </aside>
     );
   }
@@ -188,49 +284,114 @@ export const QueuePanel = ({
         <NowPlayingTrack currentTrack={currentTrack} trackDetails={currentTrackDetails} />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex h-14 shrink-0 items-center border-b border-[var(--color-border-light)] px-4">
-          <div>
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-primary)]">{t("panel.queue")}</h3>
-            <p className="mt-1 text-[10px] tabular-nums text-[var(--color-text-muted)]">{queueTracks.length} tracks · {formatDuration(totalDuration)}</p>
-          </div>
-          {queueTracks.length > 0 && <button className="ml-auto text-[11px] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]" onClick={onClearQueue} title="Clear queue" aria-label="Clear queue" type="button">Clear</button>}
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto" ref={containerRef}>
+        <div
+          className="relative"
+          style={{ height: `${listVirtualizer.getTotalSize()}px` }}
+        >
+          {listVirtualizer.getVirtualItems().map((virtualRow) => {
+            const item = listItems[virtualRow.index];
+            const wrapperStyle = {
+              height: `${virtualRow.size}px`,
+              transform: `translateY(${virtualRow.start}px)`,
+            };
 
-        <div className="min-h-0 flex-1 overflow-y-auto" ref={containerRef}>
-          {queueTracks.length === 0 ? (
-            <div className="flex h-full min-h-28 flex-col items-center justify-center px-6 text-center text-[var(--color-text-muted)]"><Music2 className="mb-3 h-5 w-5" /><p className="text-xs">Queue is empty</p><p className="mt-1 text-[10px]">Right-click tracks to add them here.</p></div>
-          ) : (
-            <div className="relative py-1">
-              {queueTracks.map((track, index) => {
-                const isDragging = dragIndex === index;
-                const isCurrentQueueTrack = currentTrack?.id === track.id;
-                const showDropBefore = dropIndex === index;
-                const showDropAfter = dropIndex === queueTracks.length && index === queueTracks.length - 1;
-                return (
-                  <div key={`${track.id}-queue-${index}`} className="relative">
-                    {showDropBefore && <div className="absolute -top-px left-3 right-3 z-10 h-px bg-[var(--color-accent)]" />}
-                    <div
-                      ref={(element) => { if (element) itemRefsRef.current.set(index, element); else itemRefsRef.current.delete(index); }}
-                      onMouseDown={(event) => handleMouseDown(event, index)}
-                      className={`group grid min-h-[49px] cursor-grab grid-cols-[16px_20px_minmax(0,1fr)_44px_38px_24px] items-center gap-1.5 border-b border-[var(--color-border-light)] px-3 text-[10px] active:cursor-grabbing ${isDragging ? "opacity-25" : "hover:bg-[var(--color-bg-hover)]"}`}
-                      data-queue-track
-                    >
-                      {isCurrentQueueTrack
-                        ? <AudioLines className="h-3.5 w-3.5 text-[var(--color-accent)]" />
-                        : <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] opacity-60" />}
-                      <span className="text-center tabular-nums text-[var(--color-text-muted)]">{index + 1}</span>
-                      <div className="min-w-0"><div className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">{track.title}</div><div className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{track.artist}</div></div>
-                      <div className="text-right tabular-nums"><div className="font-semibold text-[var(--color-accent)]">{track.key || "—"}</div><div className="mt-0.5 text-[var(--color-text-muted)]">{track.bpm ? track.bpm.toFixed(1) : "—"}</div></div>
-                      <span className="text-right tabular-nums text-[var(--color-text-secondary)]">{track.duration}</span>
-                      <button data-no-drag onClick={() => onRemoveFromQueue(index)} className="toolbar-icon-button h-6 w-6 opacity-0 group-hover:opacity-100" title="Remove from queue" aria-label={`Remove ${track.title} from queue`} type="button"><X className="h-3.5 w-3.5" /></button>
-                    </div>
-                    {showDropAfter && <div className="absolute -bottom-px left-3 right-3 z-10 h-px bg-[var(--color-accent)]" />}
+            if (item.kind === "header") {
+              const isQueue = item.list === "queue";
+              const tracks = isQueue ? queueTracks : playingNextTracks;
+              const duration = isQueue ? queueDuration : playingNextDuration;
+              return (
+                <div
+                  key={`header-${item.list}`}
+                  className="absolute left-0 top-0 flex w-full items-center border-b border-[var(--color-border-light)] px-4"
+                  style={wrapperStyle}
+                  data-queue-section={item.list}
+                >
+                  <div className="min-w-0">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-primary)]">
+                      {isQueue ? t("panel.queue") : t("panel.playingNext")}
+                    </h3>
+                    <p className="mt-1 text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                      {tracks.length} tracks · {formatDuration(duration)}
+                      {!isQueue && queueTracks.length > 0 ? ` · after ${queueTracks.length} queued` : ""}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  {isQueue && queueTracks.length > 0 && (
+                    <button
+                      className="ml-auto text-[11px] text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
+                      onClick={onClearQueue}
+                      title="Clear queue"
+                      aria-label="Clear queue"
+                      type="button"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              );
+            }
+
+            if (item.kind === "empty") {
+              return (
+                <div
+                  key="playing-next-empty"
+                  className="absolute left-0 top-0 flex w-full flex-col items-center justify-center px-6 text-center text-[var(--color-text-muted)]"
+                  style={wrapperStyle}
+                  data-playing-next-empty
+                >
+                  <Music2 className="mb-2 h-4 w-4" />
+                  <p className="text-xs">Nothing is playing next</p>
+                  <p className="mt-1 text-[10px]">Start a track from a list to see what follows.</p>
+                </div>
+              );
+            }
+
+            const { list, track, trackIndex } = item;
+            const tracks = list === "queue" ? queueTracks : playingNextTracks;
+            const isDragging = dragList === list && dragIndex === trackIndex;
+            const isCurrentQueueTrack = currentTrack?.id === track.id;
+            const showDropBefore =
+              dragList === list && dropIndex === trackIndex;
+            const showDropAfter =
+              dragList === list &&
+              dropIndex === tracks.length &&
+              trackIndex === tracks.length - 1;
+            const itemKey = `${list}:${trackIndex}`;
+
+            return (
+              <div
+                key={`${list}-${track.id}-${trackIndex}`}
+                className="absolute left-0 top-0 w-full"
+                style={wrapperStyle}
+              >
+                {showDropBefore && <div className="absolute -top-px left-3 right-3 z-10 h-px bg-[var(--color-accent)]" />}
+                <div
+                  ref={(element) => {
+                    if (element) itemRefsRef.current.set(itemKey, element);
+                    else itemRefsRef.current.delete(itemKey);
+                  }}
+                  onMouseDown={(event) => handleMouseDown(event, list, trackIndex)}
+                  className={`group grid min-h-[49px] cursor-grab grid-cols-[16px_20px_minmax(0,1fr)_44px_38px_24px] items-center gap-1.5 border-b border-[var(--color-border-light)] px-3 text-[10px] active:cursor-grabbing ${isDragging ? "opacity-25" : "hover:bg-[var(--color-bg-hover)]"}`}
+                  data-queue-track={list === "queue" ? true : undefined}
+                  data-playing-next-track={list === "playing-next" ? true : undefined}
+                >
+                  {isCurrentQueueTrack
+                    ? <AudioLines className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+                    : <GripVertical className="h-3.5 w-3.5 text-[var(--color-text-muted)] opacity-60" />}
+                  <span className="text-center tabular-nums text-[var(--color-text-muted)]">{trackIndex + 1}</span>
+                  <div className="min-w-0"><div className="truncate text-[12px] font-medium text-[var(--color-text-primary)]">{track.title}</div><div className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{track.artist}</div></div>
+                  <div className="text-right tabular-nums"><div className="font-semibold text-[var(--color-accent)]">{track.key || "—"}</div><div className="mt-0.5 text-[var(--color-text-muted)]">{track.bpm ? track.bpm.toFixed(1) : "—"}</div></div>
+                  <span className="text-right tabular-nums text-[var(--color-text-secondary)]">{track.duration}</span>
+                  {list === "queue" ? (
+                    <button data-no-drag onClick={() => onRemoveFromQueue(trackIndex)} className="toolbar-icon-button h-6 w-6 opacity-0 group-hover:opacity-100" title="Remove from queue" aria-label={`Remove ${track.title} from queue`} type="button"><X className="h-3.5 w-3.5" /></button>
+                  ) : (
+                    <span aria-hidden="true" />
+                  )}
+                </div>
+                {showDropAfter && <div className="absolute -bottom-px left-3 right-3 z-10 h-px bg-[var(--color-accent)]" />}
+              </div>
+            );
+          })}
         </div>
       </div>
 

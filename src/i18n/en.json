@@ -35,6 +35,7 @@
   "settings.dev.clearSongs.confirm.body": "This will delete all songs from the database. Continue?",
   "panel.nowPlaying": "Now Playing",
   "panel.queue": "Queue",
+  "panel.playingNext": "Playing next",
   "panel.output": "Output",
   "output.section.local": "This computer",
   "output.section.network": "Network",

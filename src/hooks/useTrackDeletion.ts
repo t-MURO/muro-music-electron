@@ -21,6 +21,7 @@ export const useTrackDeletion = () => {
   const setRecentlyPlayedTracks = useRecentlyPlayedStore((state) => state.setRecentlyPlayedTracks);
   const currentTrack = usePlaybackStore((state) => state.currentTrack);
   const setQueue = usePlaybackStore((state) => state.setQueue);
+  const setPlayingNext = usePlaybackStore((state) => state.setPlayingNext);
   const clearSelection = useUIStore((state) => state.clearSelection);
   const lastDeleteMode = useSettingsStore((state) => state.lastDeleteMode);
   const setLastDeleteMode = useSettingsStore((state) => state.setLastDeleteMode);
@@ -66,6 +67,7 @@ export const useTrackDeletion = () => {
           recentlyPlayedTracks.filter((track) => !deleted.has(track.id))
         );
         setQueue((current) => current.filter((trackId) => !deleted.has(trackId)));
+        setPlayingNext((current) => current.filter((trackId) => !deleted.has(trackId)));
         notify.success(t("delete.toast.removed", { count: String(deleted.size) }));
       }
 
@@ -89,6 +91,7 @@ export const useTrackDeletion = () => {
     resolveDbPath,
     setInboxTracks,
     setPlaylists,
+    setPlayingNext,
     setQueue,
     setRecentlyPlayedTracks,
     setTracks,

@@ -35,6 +35,7 @@
   "settings.dev.clearSongs.confirm.body": "Dadurch werden alle Songs aus der Datenbank entfernt. Fortfahren?",
   "panel.nowPlaying": "Gerade spielt",
   "panel.queue": "Warteschlange",
+  "panel.playingNext": "Als Nächstes",
   "panel.output": "Ausgabe",
   "output.section.local": "Dieser Computer",
   "output.section.network": "Netzwerk",

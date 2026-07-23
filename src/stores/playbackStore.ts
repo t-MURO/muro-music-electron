@@ -32,6 +32,7 @@ type PlaybackState = {
   shuffleEnabled: boolean;
   repeatMode: RepeatMode;
   queue: string[];
+  playingNext: string[];
   transition: TransitionUiState | null;
 };
 
@@ -57,6 +58,8 @@ type PlaybackActions = {
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
+  setPlayingNext: (trackIds: string[] | ((prev: string[]) => string[])) => void;
+  reorderPlayingNext: (fromIndex: number, toIndex: number) => void;
 
   // Reset
   reset: () => void;
@@ -73,6 +76,7 @@ const initialState: PlaybackState = {
   shuffleEnabled: false,
   repeatMode: "off",
   queue: [],
+  playingNext: [],
   transition: null,
 };
 
@@ -125,6 +129,19 @@ export const usePlaybackStore = create<PlaybackStore>()(
         const [removed] = newQueue.splice(fromIndex, 1);
         newQueue.splice(toIndex, 0, removed);
         return { queue: newQueue };
+      }),
+
+    setPlayingNext: (trackIds) =>
+      set((state) => ({
+        playingNext: typeof trackIds === "function" ? trackIds(state.playingNext) : trackIds,
+      })),
+
+    reorderPlayingNext: (fromIndex, toIndex) =>
+      set((state) => {
+        const nextTracks = [...state.playingNext];
+        const [removed] = nextTracks.splice(fromIndex, 1);
+        nextTracks.splice(toIndex, 0, removed);
+        return { playingNext: nextTracks };
       }),
 
     // Reset

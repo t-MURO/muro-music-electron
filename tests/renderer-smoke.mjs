@@ -2028,23 +2028,107 @@ app.whenReady().then(async () => {
           cancelable: true,
         }));
         await new Promise((resolve) => setTimeout(resolve, 80));
+        const queueSection = document.querySelector('[data-queue-section="queue"]');
+        const playingNextSection = document.querySelector('[data-queue-section="playing-next"]');
+        const stackedQueueSectionsReady = Boolean(
+          queueSection &&
+          playingNextSection &&
+          (queueSection.compareDocumentPosition(playingNextSection) & Node.DOCUMENT_POSITION_FOLLOWING)
+        );
+        const initialPlayingNextRows = Array.from(
+          document.querySelectorAll("[data-playing-next-track]")
+        );
+        const playingNextViewReady = Boolean(
+          stackedQueueSectionsReady &&
+          initialPlayingNextRows.length === 2 &&
+          initialPlayingNextRows[0]?.textContent?.includes("Smoke Track 010") &&
+          initialPlayingNextRows[1]?.textContent?.includes("Smoke Track 020")
+        );
+        const playingNextDebug = JSON.stringify({
+          queueSectionFound: Boolean(queueSection),
+          playingNextSectionFound: Boolean(playingNextSection),
+          stacked: stackedQueueSectionsReady,
+          rowCount: initialPlayingNextRows.length,
+          rows: initialPlayingNextRows.map((row) => row.textContent?.trim().slice(0, 48)),
+        });
+        const firstPlayingNextRow = initialPlayingNextRows[0];
+        const secondPlayingNextRow = initialPlayingNextRows[1];
+        if (firstPlayingNextRow && secondPlayingNextRow) {
+          const firstBounds = firstPlayingNextRow.getBoundingClientRect();
+          const secondBounds = secondPlayingNextRow.getBoundingClientRect();
+          firstPlayingNextRow.dispatchEvent(new MouseEvent("mousedown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+            clientX: firstBounds.left + 20,
+            clientY: firstBounds.top + firstBounds.height / 2,
+          }));
+          window.dispatchEvent(new MouseEvent("mousemove", {
+            bubbles: true,
+            buttons: 1,
+            clientX: firstBounds.left + 20,
+            clientY: firstBounds.top + firstBounds.height / 2 + 8,
+          }));
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          window.dispatchEvent(new MouseEvent("mousemove", {
+            bubbles: true,
+            buttons: 1,
+            clientX: secondBounds.left + 20,
+            clientY: secondBounds.bottom + 4,
+          }));
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          window.dispatchEvent(new MouseEvent("mouseup", {
+            bubbles: true,
+            button: 0,
+            clientX: secondBounds.left + 20,
+            clientY: secondBounds.bottom + 4,
+          }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const reorderedPlayingNextRows = Array.from(
+          document.querySelectorAll("[data-playing-next-track]")
+        );
+        const playingNextReorderReady = Boolean(
+          reorderedPlayingNextRows[0]?.textContent?.includes("Smoke Track 020") &&
+          reorderedPlayingNextRows[1]?.textContent?.includes("Smoke Track 010")
+        );
+        document.querySelector('[data-track-index="1"]')?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 300,
+          clientY: 240,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const addPriorityQueueButton = [...document.querySelectorAll('[data-popover] button')]
+          .find((button) => button.textContent?.trim() === "Add to queue");
+        addPriorityQueueButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const priorityQueueVisible = Boolean(
+          document.querySelector("[data-queue-track]")?.textContent?.includes("Smoke Track 010")
+        );
         document.querySelector('button[title="Next"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
-        const nextUsesCurrentList = Boolean(
+        const queueHasPriority = Boolean(
           document.querySelector('[data-track-index="1"][data-track-playing="true"]') &&
           document.querySelector('[data-track-index="1"]')?.textContent?.includes("Smoke Track 010")
+        );
+        document.querySelector('button[title="Next"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const playingNextFollowsQueue = Boolean(
+          document.querySelector('[data-track-index="2"][data-track-playing="true"]') &&
+          document.querySelector('[data-track-index="2"]')?.textContent?.includes("Smoke Track 020")
         );
         window.location.hash = "#/";
         await new Promise((resolve) => setTimeout(resolve, 100));
         document.querySelector('[data-now-playing-link]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 140));
         const revealedPlayingTrack = document.querySelector(
-          '[data-track-index="1"][data-track-playing="true"][data-track-selected="true"]',
+          '[data-track-index="2"][data-track-playing="true"][data-track-selected="true"]',
         );
         const nowPlayingHashOk = window.location.hash.includes("/playlists/smoke-next-playlist");
-        const nowPlayingRowOk = Boolean(revealedPlayingTrack?.textContent?.includes("Smoke Track 010"));
+        const nowPlayingRowOk = Boolean(revealedPlayingTrack?.textContent?.includes("Smoke Track 020"));
         const nowPlayingFocusOk = Boolean(document.activeElement?.matches('[data-track-table-scroll]'));
-        const nowPlayingDebugRow = document.querySelector('[data-track-index="1"]');
+        const nowPlayingDebugRow = document.querySelector('[data-track-index="2"]');
         const nowPlayingDebug = JSON.stringify({
           hash: window.location.hash,
           rowExists: Boolean(nowPlayingDebugRow),
@@ -2212,7 +2296,12 @@ app.whenReady().then(async () => {
           smartCrateCreated,
           smartCrateMatchedTracks,
           persistedSmartCrateCount,
-          nextUsesCurrentList,
+          playingNextViewReady,
+          playingNextReorderReady,
+          playingNextDebug,
+          priorityQueueVisible,
+          queueHasPriority,
+          playingNextFollowsQueue,
           nowPlayingReturnsToSource,
           nowPlayingHashOk,
           nowPlayingRowOk,
@@ -2438,8 +2527,19 @@ app.whenReady().then(async () => {
         );
         return;
       }
-      if (!result.nextUsesCurrentList) {
-        fail("Next did not advance within the current playlist when the queue was empty");
+      if (
+        !result.playingNextViewReady ||
+        !result.playingNextReorderReady ||
+        !result.priorityQueueVisible ||
+        !result.queueHasPriority ||
+        !result.playingNextFollowsQueue
+      ) {
+        fail(
+          `Playing-next order failed: view=${result.playingNextViewReady}, ` +
+          `reorder=${result.playingNextReorderReady}, queueVisible=${result.priorityQueueVisible}, ` +
+          `queuePriority=${result.queueHasPriority}, resumesNext=${result.playingNextFollowsQueue}, ` +
+          `debug=${result.playingNextDebug}`
+        );
         return;
       }
       if (!result.nowPlayingReturnsToSource) {
