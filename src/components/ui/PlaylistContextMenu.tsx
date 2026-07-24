@@ -46,7 +46,12 @@ export const PlaylistContextMenu = ({
         </PopoverItem>
       )}
       {onExport && (
-        <PopoverItem onClick={onExport}>
+        <PopoverItem
+          onClick={onExport}
+          title="Export this playlist as an M3U8 file"
+          aria-label="Export playlist as M3U8"
+          data-playlist-export
+        >
           <Download className="h-4 w-4 opacity-60" />
           Export playlist
         </PopoverItem>

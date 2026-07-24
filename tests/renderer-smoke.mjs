@@ -22,6 +22,7 @@ const rendererSmokeUrl = process.env.MURO_RENDERER_SMOKE_URL?.trim() || null;
 const autoMixQueueSmokeOnly = process.env.MURO_AUTO_MIX_QUEUE_SMOKE === "1";
 const artistSeparatorSmokeOnly = process.env.MURO_ARTIST_SEPARATOR_SMOKE === "1";
 const libraryExportSmokeOnly = process.env.MURO_LIBRARY_EXPORT_SMOKE === "1";
+const settingsSmokeOnly = process.env.MURO_SETTINGS_SMOKE === "1";
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-renderer-smoke-"));
 const writeSilentWave = (filePath, durationSeconds = 5) => {
   const sampleRate = 8_000;
@@ -148,9 +149,13 @@ const timeout = setTimeout(
         ? "Artist separator renderer smoke test timed out"
         : libraryExportSmokeOnly
           ? "Organized library export renderer smoke test timed out"
-      : "Renderer smoke test timed out"
+          : settingsSmokeOnly
+            ? "Settings organization renderer smoke test timed out"
+            : "Renderer smoke test timed out"
   ),
-  autoMixQueueSmokeOnly || artistSeparatorSmokeOnly || libraryExportSmokeOnly ? 5_000 : 60_000,
+  autoMixQueueSmokeOnly || artistSeparatorSmokeOnly || libraryExportSmokeOnly || settingsSmokeOnly
+    ? 5_000
+    : 60_000,
 );
 
 app.whenReady().then(async () => {
@@ -539,6 +544,151 @@ app.whenReady().then(async () => {
       const scroller = document.querySelector('[data-track-table-scroll]');
       const headerScroller = document.querySelector('[data-track-table-header-scroll]');
       const searchShortcutHint = document.querySelector('[data-search-shortcut-hint]');
+      if (${settingsSmokeOnly ? "true" : "false"}) {
+        if (!root?.childElementCount || !scroller) {
+          return {
+            childCount: root?.childElementCount ?? 0,
+            textLength: root?.textContent?.trim().length ?? 0,
+            stickyHeaderReady: false,
+          };
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const importButton = document.querySelector("[data-playlist-import]");
+        const folderImportButton = document.querySelector("[data-playlist-folder-import]");
+        const importTooltip = document.getElementById(
+          importButton?.getAttribute("aria-describedby") ?? ""
+        );
+        const folderImportTooltip = document.getElementById(
+          folderImportButton?.getAttribute("aria-describedby") ?? ""
+        );
+        const playlistForExport = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
+        playlistForExport?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 180,
+          clientY: 220,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const exportButton = document.querySelector("[data-playlist-export]");
+        const playlistTooltipsReady = Boolean(
+          importTooltip?.getAttribute("role") === "tooltip" &&
+          importTooltip.textContent?.includes("M3U, M3U8, or PLS") &&
+          folderImportTooltip?.getAttribute("role") === "tooltip" &&
+          folderImportTooltip.textContent?.includes("folder and its subfolders") &&
+          exportButton?.getAttribute("title") === "Export this playlist as an M3U8 file"
+        );
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
+
+        window.location.hash = "#/settings";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const searchInput = document.querySelector("[data-settings-search]");
+        const initialCategoryCount = document.querySelectorAll("[data-settings-section]").length;
+        if (searchInput instanceof HTMLInputElement) {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+            ?.set?.call(searchInput, "AcoustID");
+          searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const filteredToMetadata = Boolean(
+          document.querySelectorAll("[data-settings-section]").length === 1 &&
+          document.querySelector('[data-settings-section="metadata"]') &&
+          document.querySelector('[data-settings-page="metadata"]')
+        );
+
+        if (searchInput instanceof HTMLInputElement) {
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+            ?.set?.call(searchInput, "");
+          searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-settings-tab="metadata"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const providerInputs = [
+          document.querySelector("[data-acoustid-client-key]"),
+          document.querySelector("[data-lastfm-api-key]"),
+          document.querySelector("[data-theaudiodb-api-key]"),
+          document.querySelector("[data-fanart-api-key]"),
+          document.querySelector("[data-brave-search-api-key]"),
+        ];
+        const providersReady = providerInputs.every(
+          (input) => input instanceof HTMLInputElement && input.type === "password"
+        );
+        const acoustIdShowButton = [...document.querySelectorAll("button")]
+          .find((button) => button.getAttribute("aria-label") === "Show AcoustID API key");
+        acoustIdShowButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const showKeyReady =
+          document.querySelector("[data-acoustid-client-key]")?.getAttribute("type") === "text";
+
+        document.querySelector('[data-settings-tab="library"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const libraryReady = Boolean(
+          document.querySelector('[data-settings-page="library"]') &&
+          document.querySelector("[data-artist-separator-tool]") &&
+          document.querySelector("[data-organized-library-export]")
+        );
+
+        document.querySelector('[data-settings-tab="analysis"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const analysisReady = Boolean(
+          document.querySelector("[data-analysis-settings]") &&
+          document.querySelector("[data-analysis-notation]") &&
+          document.querySelector("[data-analysis-performance]")
+        );
+
+        document.querySelector('[data-settings-tab="dj"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
+        featureToggle?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const mixBars = document.querySelector("[data-mix-bars]");
+        const djReady = Boolean(
+          document.querySelector('[data-settings-page="dj"]') &&
+          document.querySelector("[data-dj-mix-settings]") &&
+          mixBars instanceof HTMLSelectElement &&
+          Array.from(mixBars.options, (option) => option.value).join(",") === "4,8,16,32"
+        );
+
+        document.querySelector('[data-settings-tab="advanced"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const advancedReady = Boolean(
+          document.querySelector('[data-settings-page="advanced"]')?.textContent
+            ?.includes("Danger zone")
+        );
+
+        return {
+          childCount: root.childElementCount,
+          textLength: root.textContent?.trim().length ?? 0,
+          stickyHeaderReady: true,
+          settingsOrganizationReady: Boolean(
+            initialCategoryCount === 6 &&
+            filteredToMetadata &&
+            providersReady &&
+            showKeyReady &&
+            libraryReady &&
+            analysisReady &&
+            djReady &&
+            advancedReady &&
+            playlistTooltipsReady
+          ),
+          settingsOrganizationDebug: {
+            initialCategoryCount,
+            filteredToMetadata,
+            providersReady,
+            showKeyReady,
+            libraryReady,
+            analysisReady,
+            djReady,
+            advancedReady,
+            playlistTooltipsReady,
+            importTooltip: importTooltip?.textContent?.trim() ?? null,
+            folderImportTooltip: folderImportTooltip?.textContent?.trim() ?? null,
+            exportTooltip: exportButton?.getAttribute("title") ?? null,
+          },
+        };
+      }
       if (${libraryExportSmokeOnly ? "true" : "false"}) {
         if (!root?.childElementCount || !scroller) {
           return {
@@ -550,6 +700,8 @@ app.whenReady().then(async () => {
 
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-settings-tab="library"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
         const useAsLibraryCheckbox = document.querySelector(
           "[data-use-export-as-current-library]"
         );
@@ -599,6 +751,8 @@ app.whenReady().then(async () => {
 
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-settings-tab="library"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
         const reviewButton = document.querySelector("[data-review-artist-separators]");
         const reviewCountReady = reviewButton?.textContent?.trim() === "Review 2 matches";
         reviewButton?.click();
@@ -668,7 +822,7 @@ app.whenReady().then(async () => {
 
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 100));
-        document.querySelector('[data-settings-tab="dev"]')?.click();
+        document.querySelector('[data-settings-tab="dj"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
         if (featureToggle instanceof HTMLInputElement && !featureToggle.checked) {
@@ -841,10 +995,22 @@ app.whenReady().then(async () => {
       const historyForwardInitiallyDisabled = Boolean(
         document.querySelector("[data-history-forward]")?.disabled
       );
+      const playlistImportButton = document.querySelector('[data-playlist-import]');
+      const playlistFolderImportButton = document.querySelector('[data-playlist-folder-import]');
+      const playlistImportTooltip = document.getElementById(
+        playlistImportButton?.getAttribute("aria-describedby") ?? ""
+      );
+      const playlistFolderImportTooltip = document.getElementById(
+        playlistFolderImportButton?.getAttribute("aria-describedby") ?? ""
+      );
       const playlistTransferControlsReady = Boolean(
-        document.querySelector('[data-playlist-import]') &&
-        document.querySelector('[data-playlist-folder-import]') &&
-        document.querySelector('[data-playlist-folder-create]')
+        playlistImportButton &&
+        playlistFolderImportButton &&
+        document.querySelector('[data-playlist-folder-create]') &&
+        playlistImportTooltip?.getAttribute("role") === "tooltip" &&
+        playlistImportTooltip.textContent?.includes("M3U, M3U8, or PLS") &&
+        playlistFolderImportTooltip?.getAttribute("role") === "tooltip" &&
+        playlistFolderImportTooltip.textContent?.includes("folder and its subfolders")
       );
       const collectionSection = document.querySelector('[data-sidebar-section="collection"]');
       const playlistSection = document.querySelector('[data-sidebar-section="playlists"]');
@@ -1519,11 +1685,12 @@ app.whenReady().then(async () => {
           document.querySelectorAll('[data-popover]'),
           (node) => node.textContent ?? "",
         );
+        const playlistExportButton = document.querySelector("[data-playlist-export]");
         const playlistExportMoveMenuReady = playlistMenuTexts.some((text) =>
           text.includes("Export playlist") &&
           text.includes("Move to") &&
           text.includes("Playlists")
-        );
+        ) && playlistExportButton?.getAttribute("title") === "Export this playlist as an M3U8 file";
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
         await new Promise((resolve) => setTimeout(resolve, 180));
 
@@ -1639,7 +1806,17 @@ app.whenReady().then(async () => {
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
         window.location.hash = "#/settings";
         await new Promise((resolve) => setTimeout(resolve, 60));
-        document.querySelector('[data-settings-tab="application"]')?.click();
+        const settingsNavigationReady = Boolean(
+          document.querySelector("[data-settings-search]") &&
+          document.querySelectorAll("[data-settings-section]").length === 6 &&
+          document.querySelector('[data-settings-section="general"]') &&
+          document.querySelector('[data-settings-section="library"]') &&
+          document.querySelector('[data-settings-section="metadata"]') &&
+          document.querySelector('[data-settings-section="analysis"]') &&
+          document.querySelector('[data-settings-section="dj"]') &&
+          document.querySelector('[data-settings-section="advanced"]')
+        );
+        document.querySelector('[data-settings-tab="metadata"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const lastFmApiKeyInput = document.querySelector("[data-lastfm-api-key]");
         const theAudioDbApiKeyInput = document.querySelector("[data-theaudiodb-api-key]");
@@ -1662,7 +1839,7 @@ app.whenReady().then(async () => {
           acoustIdClientKeyInput instanceof HTMLInputElement &&
           acoustIdClientKeyInput.type === "password"
         );
-        document.querySelector('[data-settings-tab="dev"]')?.click();
+        document.querySelector('[data-settings-tab="dj"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
         const defaultOff = featureToggle instanceof HTMLInputElement && !featureToggle.checked;
@@ -2269,6 +2446,7 @@ app.whenReady().then(async () => {
           playlistDropTargetReady,
           contextAddToPlaylistReady,
           dragAddToPlaylistReady,
+          settingsNavigationReady,
           artistInformationSettingsReady,
           acoustIdSettingsReady,
           djMixFeatureGateReady,
@@ -2345,6 +2523,20 @@ app.whenReady().then(async () => {
       };
     })()`);
     if (result.childCount > 0 && result.textLength > 0 && result.stickyHeaderReady) {
+      if (settingsSmokeOnly) {
+        if (!result.settingsOrganizationReady) {
+          fail(
+            `Settings organization regression failed: ${JSON.stringify(
+              result.settingsOrganizationDebug
+            )}`
+          );
+          return;
+        }
+        clearTimeout(timeout);
+        console.log("Settings organization renderer smoke test passed.");
+        app.exit(0);
+        return;
+      }
       if (libraryExportSmokeOnly) {
         if (!result.organizedLibraryExportReady) {
           fail(
@@ -2685,8 +2877,12 @@ app.whenReady().then(async () => {
         );
         return;
       }
+      if (!result.settingsNavigationReady) {
+        fail("Settings categories or settings search are missing");
+        return;
+      }
       if (!result.artistInformationSettingsReady) {
-        fail("Artist information provider settings are not visible in the Application settings tab");
+        fail("Artist information provider settings are not visible in Metadata & Artwork");
         return;
       }
       if (!result.autocompleteFieldsReady) {
@@ -2702,7 +2898,7 @@ app.whenReady().then(async () => {
         return;
       }
       if (!result.acoustIdSettingsReady) {
-        fail("AcoustID client key settings are not visible in the Application settings tab");
+        fail("AcoustID client key settings are not visible in Metadata & Artwork");
         return;
       }
       if (!result.djMixFeatureGateReady) {

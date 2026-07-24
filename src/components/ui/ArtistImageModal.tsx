@@ -117,7 +117,7 @@ export const ArtistImageModal = ({
             <div className="flex min-h-72 flex-col items-center justify-center gap-3 px-8 text-center text-[var(--color-text-muted)]">
               <SearchX className="h-7 w-7" />
               <strong className="text-[13px] text-[var(--color-text-primary)]">No artist pictures found</strong>
-              <p className="max-w-md text-[11px] leading-relaxed">Wikimedia Commons and Deezer are searched without a key. Add Brave Search, Fanart.tv, or TheAudioDB keys in Settings → Metadata for more results.</p>
+              <p className="max-w-md text-[11px] leading-relaxed">Wikimedia Commons and Deezer are searched without a key. Add Brave Search, Fanart.tv, or TheAudioDB keys in Settings → Metadata &amp; Artwork for more results.</p>
             </div>
           ) : (
             <div>
