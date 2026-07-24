@@ -204,7 +204,9 @@ supplies it.
 
 Last.fm is used for artist biography, tags, links, and similar artists, not
 for artwork. Deezer is useful as an additional artist-image source and as the
-on-demand album-cover fallback.
+on-demand album-cover fallback. When MusicBrainz, Cover Art Archive, and
+Deezer cannot find an album cover, an optional Brave Image Search key adds a
+manual candidate picker; web results are never applied without selection.
 
 ### Analyzes key and BPM
 
@@ -303,7 +305,7 @@ These integrations are optional:
 | Last.fm | Artist biographies, tags, links, and similar artists | API key |
 | TheAudioDB | Artist biography, genre, country, and image fallback | Premium API key |
 | Fanart.tv | Final artist-artwork fallback | Project API key |
-| Brave Image Search | Broader manual artist-image search | API key |
+| Brave Image Search | Selectable artist images and manual album-cover fallback | API key |
 
 API keys are stored in Muro's local application settings. Each external
 service remains subject to its own API terms, availability, attribution

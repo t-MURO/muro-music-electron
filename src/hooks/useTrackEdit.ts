@@ -3,7 +3,9 @@ import { invoke } from "@muro/desktop/runtime";
 import { notify, useLibraryStore, useSettingsStore, useUIStore } from "../stores";
 import type { Track, TrackMetadataUpdates } from "../types";
 import {
+  cacheAlbumCoverCandidate,
   fetchTrackCoverArt,
+  searchAlbumCoverImages,
   searchTrackMetadata,
   searchAlbumMetadata,
   loadAlbumMetadata,
@@ -15,6 +17,7 @@ import {
   type AcoustIdIdentificationResult,
 } from "../utils/database";
 import { useDbPath } from "./useDbPath";
+import type { AlbumCoverCandidate } from "../types";
 
 type MetadataWriteResult = {
   updated: number;
@@ -30,6 +33,7 @@ export const useTrackEdit = () => {
   const closeEditModal = useUIStore((s) => s.closeEditModal);
   const resolveDbPath = useDbPath();
   const acoustIdClientKey = useSettingsStore((state) => state.acoustIdClientKey);
+  const braveSearchApiKey = useSettingsStore((state) => state.braveSearchApiKey);
 
   const handleSaveMetadata = useCallback(
     async (trackIds: string[], updates: TrackMetadataUpdates) => {
@@ -91,11 +95,32 @@ export const useTrackEdit = () => {
     async (
       trackId: string,
       metadata: { album?: string; artist?: string },
-    ): Promise<FetchedCoverArt | null> => {
+    ): Promise<FetchedCoverArt | { candidates: AlbumCoverCandidate[] } | null> => {
       const dbPath = await resolveDbPath();
-      return fetchTrackCoverArt(dbPath, trackId, metadata);
+      let providerError: unknown = null;
+      try {
+        const cover = await fetchTrackCoverArt(dbPath, trackId, metadata);
+        if (cover) return cover;
+      } catch (error) {
+        providerError = error;
+      }
+
+      const candidates = await searchAlbumCoverImages({
+        album: metadata.album ?? "",
+        artist: metadata.artist ?? "",
+      }, braveSearchApiKey);
+      if (candidates.length > 0) return { candidates };
+
+      if (providerError) throw providerError;
+      return null;
     },
-    [resolveDbPath],
+    [braveSearchApiKey, resolveDbPath],
+  );
+
+  const handleCacheCoverCandidate = useCallback(
+    (candidate: AlbumCoverCandidate): Promise<FetchedCoverArt> =>
+      cacheAlbumCoverCandidate(candidate),
+    [],
   );
 
   const handleSearchMetadata = useCallback(
@@ -139,6 +164,7 @@ export const useTrackEdit = () => {
     closeEditModal,
     handleSaveMetadata,
     handleFetchCoverArt,
+    handleCacheCoverCandidate,
     handleSearchMetadata,
     handleSearchAlbumMetadata,
     handleLoadAlbumMetadata,

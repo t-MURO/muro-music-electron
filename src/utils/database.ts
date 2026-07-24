@@ -1,6 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { LibrarySnapshot, PlaylistSnapshot } from "./importApi";
-import type { ArtistImageCandidate, ArtistProfile } from "../types";
+import type { AlbumCoverCandidate, ArtistImageCandidate, ArtistProfile } from "../types";
 
 // ============================================================================
 // Library Operations
@@ -103,7 +103,7 @@ export type FetchedCoverArt = {
   fullPath: string;
   thumbPath: string;
   sourceUrl?: string | null;
-  provider?: "cover-art-archive" | "deezer" | null;
+  provider?: "cover-art-archive" | "deezer" | "brave-search" | null;
 };
 
 export const fetchTrackCoverArt = (
@@ -115,6 +115,18 @@ export const fetchTrackCoverArt = (
   trackId,
   ...metadata,
 });
+
+export const searchAlbumCoverImages = (
+  metadata: { album: string; artist: string },
+  braveSearchApiKey: string,
+) => invoke<AlbumCoverCandidate[]>("search_album_cover_images", {
+  ...metadata,
+  braveSearchApiKey,
+});
+
+export const cacheAlbumCoverCandidate = (
+  candidate: AlbumCoverCandidate,
+) => invoke<FetchedCoverArt>("cache_album_cover_candidate", { candidate });
 
 export type MetadataSearchCandidate = {
   id: string;
@@ -340,6 +352,20 @@ export const exportPlaylistFile = (
   dbPath,
   playlistId,
   filePath,
+});
+
+export type PlaylistCollectionExportResult = {
+  exportRoot: string;
+  playlistsExported: number;
+  playlistEntriesExported: number;
+};
+
+export const exportAllPlaylists = (
+  dbPath: string,
+  destinationPath: string,
+) => invoke<PlaylistCollectionExportResult>("export_all_playlists", {
+  dbPath,
+  destinationPath,
 });
 
 export type OrganizedLibraryExportResult = {

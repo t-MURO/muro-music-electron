@@ -820,7 +820,7 @@ export const SettingsPanel = ({
                     />
                     <ProviderCard
                       name="Brave Image Search"
-                      description="Adds broader artist-image results with strict SafeSearch. Results are applied only after selection."
+                      description="Adds selectable artist-image results and a manual album-cover fallback with strict SafeSearch. Nothing is applied without selection."
                       value={braveSearchApiKey}
                       onChange={setBraveSearchApiKey}
                       inputId="brave-search-api-key"

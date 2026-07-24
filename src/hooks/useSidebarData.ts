@@ -13,6 +13,7 @@ type UseSidebarDataArgs = {
   onCreatePlaylistFolder: () => void;
   onImportPlaylist: () => void;
   onImportPlaylistFolder: () => void;
+  onExportAllPlaylists: () => void;
   selectedPlaylistIds: ReadonlySet<string>;
   onPlaylistSelectionChange: (ids: string[]) => void;
   onPlaylistReorder: (
@@ -39,6 +40,7 @@ export const useSidebarData = ({
   onCreatePlaylistFolder,
   onImportPlaylist,
   onImportPlaylistFolder,
+  onExportAllPlaylists,
   selectedPlaylistIds,
   onPlaylistSelectionChange,
   onPlaylistReorder,
@@ -61,6 +63,7 @@ export const useSidebarData = ({
       onCreatePlaylistFolder,
       onImportPlaylist,
       onImportPlaylistFolder,
+      onExportAllPlaylists,
       selectedPlaylistIds,
       onPlaylistSelectionChange,
       onPlaylistReorder,
@@ -82,6 +85,7 @@ export const useSidebarData = ({
       onCreatePlaylistFolder,
       onImportPlaylist,
       onImportPlaylistFolder,
+      onExportAllPlaylists,
       selectedPlaylistIds,
       onPlaylistSelectionChange,
       onPlaylistReorder,

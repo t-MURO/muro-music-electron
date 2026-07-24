@@ -197,12 +197,28 @@ try {
     releaseGroupId,
   );
   const coverFetchCalls = [];
+  let coverBraveAuthorization = null;
   const coverCacheDir = path.join(directory, "cover-art-archive-cache");
   const albumCoverService = createAlbumCoverService({
     cacheDir: coverCacheDir,
     now: () => 1_750_000_000_000,
-    fetchImpl: async (url) => {
+    fetchImpl: async (url, options = {}) => {
       coverFetchCalls.push(String(url));
+      if (String(url).startsWith("https://api.search.brave.com/res/v1/images/search?")) {
+        coverBraveAuthorization = options.headers?.["X-Subscription-Token"] ?? null;
+        const requestUrl = new URL(String(url));
+        assert.equal(requestUrl.searchParams.get("safesearch"), "strict");
+        assert.ok(requestUrl.searchParams.get("q")?.includes('"Missing Album"'));
+        return new Response(JSON.stringify({
+          results: [{
+            title: "Missing Album cover",
+            source: "label.example",
+            thumbnail: { src: "https://imgs.search.brave.com/missing-album.jpg" },
+            properties: { width: 1400, height: 1400 },
+            confidence: "high",
+          }],
+        }), { headers: { "content-type": "application/json" } });
+      }
       if (String(url).startsWith("https://musicbrainz.org/ws/2/release-group/")) {
         const query = new URL(String(url)).searchParams.get("query") ?? "";
         if (query.includes("Deezer Album")) {
@@ -270,16 +286,27 @@ try {
           headers: { "content-type": "image/jpeg" },
         });
       }
+      if (String(url) === "https://imgs.search.brave.com/missing-album.jpg") {
+        return new Response(Buffer.from("brave cover image"), {
+          headers: { "content-type": "image/jpeg" },
+        });
+      }
       throw new Error(`Unexpected Cover Art Archive URL: ${url}`);
     },
     cacheCoverBytesImpl: async (bytes, cacheDir) => {
       const content = Buffer.from(bytes).toString();
       assert.ok(
-        content === "cover art archive image" || content === "deezer cover image",
+        content === "cover art archive image"
+          || content === "deezer cover image"
+          || content === "brave cover image",
         "only expected cover providers should be cached",
       );
       await fs.promises.mkdir(cacheDir, { recursive: true });
-      const prefix = content === "deezer cover image" ? "deezer" : "archive";
+      const prefix = content === "deezer cover image"
+        ? "deezer"
+        : content === "brave cover image"
+          ? "brave"
+          : "archive";
       const fullPath = path.join(cacheDir, `${prefix}-full.jpg`);
       const thumbPath = path.join(cacheDir, `${prefix}-thumb.jpg`);
       await fs.promises.writeFile(fullPath, bytes);
@@ -407,6 +434,28 @@ try {
     coverFetchCalls.length,
     fetchCountBeforeNegativeCache,
     "missing covers should use the negative cache",
+  );
+  const braveCoverCandidates = await albumCoverService.searchBraveCovers({
+    album: "Missing Album",
+    artist: "Missing Artist",
+    apiKey: "smoke-brave-cover-key",
+  });
+  assert.equal(coverBraveAuthorization, "smoke-brave-cover-key");
+  assert.equal(braveCoverCandidates.length, 1);
+  assert.equal(braveCoverCandidates[0].provider, "brave-search");
+  assert.equal(braveCoverCandidates[0].sourceName, "label.example");
+  assert.equal(braveCoverCandidates[0].width, 1400);
+  assert.ok(braveCoverCandidates[0].sourceUrl.startsWith("https://search.brave.com/images?"));
+  const cachedBraveCover = await albumCoverService.cacheCoverCandidate(braveCoverCandidates[0]);
+  assert.equal(cachedBraveCover.provider, "brave-search");
+  assert.ok(fs.existsSync(cachedBraveCover.fullPath));
+  await assert.rejects(
+    albumCoverService.cacheCoverCandidate({
+      ...braveCoverCandidates[0],
+      imageUrl: "https://label.example/missing-album.jpg",
+    }),
+    /not allowed/,
+    "only Brave-proxied album-cover images should be downloadable",
   );
   assert.equal(
     await cacheEmbeddedCover(
@@ -631,6 +680,22 @@ try {
   });
   playlists = await backend.invoke("load_playlists", { dbPath });
   assert.equal(playlists.folders[1].parent_id, "folder-1");
+  await backend.invoke("create_playlist", {
+    dbPath,
+    id: "playlist-3",
+    name: "Nested Smoke",
+    folderId: "folder-2",
+  });
+  await backend.invoke("add_tracks_to_playlist", {
+    dbPath,
+    playlistId: "playlist-3",
+    trackIds: ["track-1"],
+  });
+  await backend.invoke("create_playlist", {
+    dbPath,
+    id: "playlist-4",
+    name: "Root Smoke",
+  });
 
   const importedPlaylistPath = path.join(directory, "smoke-import.m3u8");
   fs.writeFileSync(
@@ -697,12 +762,49 @@ try {
   assert.ok(exportedPlaylist.startsWith("#EXTM3U\r\n"));
   assert.ok(exportedPlaylist.indexOf(secondSourcePath) < exportedPlaylist.indexOf(firstSourcePath));
 
+  const allPlaylistsDestination = path.join(directory, "all-playlists-export");
+  fs.mkdirSync(allPlaylistsDestination);
+  const allPlaylistsExport = await backend.invoke("export_all_playlists", {
+    dbPath,
+    destinationPath: allPlaylistsDestination,
+  });
+  assert.equal(allPlaylistsExport.playlistsExported, 3);
+  assert.equal(allPlaylistsExport.playlistEntriesExported, 3);
+  assert.equal(allPlaylistsExport.exportRoot, path.join(allPlaylistsDestination, "Muro Playlists"));
+  const rootPlaylistExport = path.join(allPlaylistsExport.exportRoot, "Root Smoke.m3u8");
+  const folderPlaylistExport = path.join(
+    allPlaylistsExport.exportRoot,
+    "Weekend Sets",
+    "Smoke.m3u8",
+  );
+  const nestedPlaylistExport = path.join(
+    allPlaylistsExport.exportRoot,
+    "Weekend Sets",
+    "Nested Sets",
+    "Nested Smoke.m3u8",
+  );
+  assert.ok(fs.existsSync(rootPlaylistExport));
+  assert.ok(fs.existsSync(folderPlaylistExport));
+  assert.ok(fs.existsSync(nestedPlaylistExport));
+  assert.ok(fs.readFileSync(nestedPlaylistExport, "utf8").includes(firstSourcePath));
+  const repeatedPlaylistsExport = await backend.invoke("export_all_playlists", {
+    dbPath,
+    destinationPath: allPlaylistsDestination,
+  });
+  assert.equal(
+    repeatedPlaylistsExport.exportRoot,
+    path.join(allPlaylistsDestination, "Muro Playlists (2)"),
+  );
+
   await backend.invoke("delete_playlist_folder", { dbPath, folderId: "folder-1" });
   playlists = await backend.invoke("load_playlists", { dbPath });
   assert.equal(playlists.folders.length, 1);
   assert.equal(playlists.folders[0].id, "folder-2");
   assert.equal(playlists.folders[0].parent_id, null);
-  assert.equal(playlists.playlists[0].folder_id, null);
+  assert.equal(
+    playlists.playlists.find((playlist) => playlist.id === "playlist-1")?.folder_id,
+    null,
+  );
   await backend.invoke("delete_playlist_folder", { dbPath, folderId: "folder-2" });
 
   await backend.invoke("update_track_analysis", {
@@ -1331,7 +1433,11 @@ try {
   assert.equal(fs.existsSync(firstSourcePath), true);
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 1);
-  assert.deepEqual((await backend.invoke("load_playlists", { dbPath })).playlists[0].track_ids, ["track-2"]);
+  assert.deepEqual(
+    (await backend.invoke("load_playlists", { dbPath }))
+      .playlists.find((playlist) => playlist.id === "playlist-1")?.track_ids,
+    ["track-2"],
+  );
 
   const deleteFromDisk = await backend.invoke("delete_tracks", {
     dbPath,
@@ -1342,7 +1448,11 @@ try {
   assert.equal(fs.existsSync(secondSourcePath), false);
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 0);
-  assert.deepEqual((await backend.invoke("load_playlists", { dbPath })).playlists[0].track_ids, []);
+  assert.deepEqual(
+    (await backend.invoke("load_playlists", { dbPath }))
+      .playlists.find((playlist) => playlist.id === "playlist-1")?.track_ids,
+    [],
+  );
   await backend.invoke("clear_tracks", { dbPath });
   assert.equal(fs.existsSync(path.join(directory, "waveforms")), false);
 } finally {

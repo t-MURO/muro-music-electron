@@ -124,6 +124,9 @@ const smokeArtistProfile = {
 };
 let artistProfileScanCount = 0;
 let manualCoverFetchCount = 0;
+let braveCoverFallbackEnabled = false;
+let braveCoverCacheCount = 0;
+let selectedBraveCoverId = null;
 let artistImageSaveCount = 0;
 let organizedLibraryExportArgs = null;
 let organizedLibraryReloaded = false;
@@ -321,10 +324,48 @@ app.whenReady().then(async () => {
     }
     if (command === "fetch_track_cover_art") {
       manualCoverFetchCount += 1;
+      if (braveCoverFallbackEnabled) return null;
       return {
         fullPath: smokeTracks[0].source_path,
         thumbPath: smokeTracks[0].source_path,
         sourceUrl: "https://coverartarchive.org/release/smoke/front",
+      };
+    }
+    if (command === "search_album_cover_images") {
+      return [
+        {
+          id: "brave-cover-one",
+          provider: "brave-search",
+          imageUrl: "https://imgs.search.brave.com/cover-one.jpg",
+          sourceUrl: "https://search.brave.com/images?q=Smoke+Album",
+          sourceName: "first-label.example",
+          title: "Smoke Album alternate cover",
+          width: 1000,
+          height: 1000,
+          score: 2000,
+        },
+        {
+          id: "brave-cover-two",
+          provider: "brave-search",
+          imageUrl: "https://imgs.search.brave.com/cover-two.jpg",
+          sourceUrl: "https://search.brave.com/images?q=Smoke+Album",
+          sourceName: "second-label.example",
+          title: "Smoke Album official artwork",
+          width: 1400,
+          height: 1400,
+          score: 1000,
+        },
+      ];
+    }
+    if (command === "cache_album_cover_candidate") {
+      braveCoverCacheCount += 1;
+      selectedBraveCoverId = args.candidate?.id ?? null;
+      const imagePath = path.join(appRoot, "src", "assets", "app-logo.png");
+      return {
+        fullPath: imagePath,
+        thumbPath: imagePath,
+        sourceUrl: args.candidate?.sourceUrl ?? null,
+        provider: "brave-search",
       };
     }
     if (command === "search_track_metadata") {
@@ -409,7 +450,20 @@ app.whenReady().then(async () => {
       };
     }
     if (command === "test_get_cover_counts") {
-      return { manualCoverFetchCount, artistImageSaveCount, copiedCoverPaths: [...copiedCoverPaths] };
+      return {
+        manualCoverFetchCount,
+        braveCoverCacheCount,
+        selectedBraveCoverId,
+        artistImageSaveCount,
+        copiedCoverPaths: [...copiedCoverPaths],
+      };
+    }
+    if (command === "test_enable_brave_cover_fallback") {
+      braveCoverFallbackEnabled = true;
+      return undefined;
+    }
+    if (command === "test_get_metadata_updates") {
+      return ratingUpdates;
     }
     if (command === "test_get_artist_separator_updates") {
       return ratingUpdates.filter((update) =>
@@ -554,49 +608,51 @@ app.whenReady().then(async () => {
         }
 
         await new Promise((resolve) => setTimeout(resolve, 100));
-        const importButton = document.querySelector("[data-playlist-import]");
-        const folderImportButton = document.querySelector("[data-playlist-folder-import]");
+        const createPlaylistButton = document.querySelector("[data-playlist-create]");
+        const playlistActionsButton = document.querySelector("[data-playlist-actions-menu]");
         const unlabeledIconButtons = [...document.querySelectorAll("button")].filter(
           (button) =>
             !button.textContent?.trim() &&
             !button.getAttribute("aria-label")?.trim() &&
             !button.getAttribute("title")?.trim()
         );
-        importButton?.dispatchEvent(new PointerEvent("pointerover", {
+        playlistActionsButton?.dispatchEvent(new PointerEvent("pointerover", {
           bubbles: true,
           relatedTarget: document.body,
         }));
         await new Promise((resolve) => setTimeout(resolve, 300));
         await new Promise((resolve) => requestAnimationFrame(resolve));
-        const importTooltip = document.querySelector("[data-global-button-tooltip]");
-        const importTooltipRect = importTooltip?.getBoundingClientRect();
-        const importTooltipReady = Boolean(
-          importTooltip?.getAttribute("role") === "tooltip" &&
-          importTooltip.textContent?.includes("M3U, M3U8, or PLS") &&
-          importTooltipRect &&
-          importTooltipRect.left >= 0 &&
-          importTooltipRect.right <= window.innerWidth &&
-          importTooltipRect.top >= 0 &&
-          importTooltipRect.bottom <= window.innerHeight
+        const playlistActionsTooltip = document.querySelector("[data-global-button-tooltip]");
+        const playlistActionsTooltipRect = playlistActionsTooltip?.getBoundingClientRect();
+        const playlistActionsTooltipReady = Boolean(
+          playlistActionsTooltip?.getAttribute("role") === "tooltip" &&
+          playlistActionsTooltip.textContent?.includes("More playlist actions") &&
+          playlistActionsTooltipRect &&
+          playlistActionsTooltipRect.left >= 0 &&
+          playlistActionsTooltipRect.right <= window.innerWidth &&
+          playlistActionsTooltipRect.top >= 0 &&
+          playlistActionsTooltipRect.bottom <= window.innerHeight
         );
-        importButton?.dispatchEvent(new PointerEvent("pointerout", {
+        playlistActionsButton?.dispatchEvent(new PointerEvent("pointerout", {
           bubbles: true,
           relatedTarget: document.body,
         }));
-        folderImportButton?.dispatchEvent(new PointerEvent("pointerover", {
-          bubbles: true,
-          relatedTarget: document.body,
-        }));
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        const folderImportTooltip = document.querySelector("[data-global-button-tooltip]");
-        const folderImportTooltipReady = Boolean(
-          folderImportTooltip?.getAttribute("role") === "tooltip" &&
-          folderImportTooltip.textContent?.includes("folder and its subfolders")
+        playlistActionsButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const importButton = document.querySelector("[data-playlist-import]");
+        const folderImportButton = document.querySelector("[data-playlist-folder-import]");
+        const exportAllButton = document.querySelector("[data-playlist-export-all]");
+        const folderCreateButton = document.querySelector("[data-playlist-folder-create]");
+        const playlistActionsMenuReady = Boolean(
+          createPlaylistButton &&
+          playlistActionsButton?.getAttribute("aria-expanded") === "true" &&
+          importButton?.textContent?.includes("Import playlist file") &&
+          folderImportButton?.textContent?.includes("Import playlist folder") &&
+          exportAllButton?.textContent?.includes("Export all playlists") &&
+          folderCreateButton?.textContent?.includes("New playlist folder")
         );
-        folderImportButton?.dispatchEvent(new PointerEvent("pointerout", {
-          bubbles: true,
-          relatedTarget: document.body,
-        }));
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 180));
         const playlistForExport = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
         playlistForExport?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -608,8 +664,8 @@ app.whenReady().then(async () => {
         const exportButton = document.querySelector("[data-playlist-export]");
         const playlistTooltipsReady = Boolean(
           unlabeledIconButtons.length === 0 &&
-          importTooltipReady &&
-          folderImportTooltipReady &&
+          playlistActionsTooltipReady &&
+          playlistActionsMenuReady &&
           exportButton?.getAttribute("title") === "Export this playlist as an M3U8 file"
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
@@ -720,8 +776,8 @@ app.whenReady().then(async () => {
             unlabeledIconButtons: unlabeledIconButtons.map(
               (button) => button.outerHTML.slice(0, 180)
             ),
-            importTooltipReady,
-            folderImportTooltipReady,
+            playlistActionsTooltipReady,
+            playlistActionsMenuReady,
             exportTooltip: exportButton?.getAttribute("title") ?? null,
           },
         };
@@ -1032,15 +1088,26 @@ app.whenReady().then(async () => {
       const historyForwardInitiallyDisabled = Boolean(
         document.querySelector("[data-history-forward]")?.disabled
       );
+      const playlistCreateButton = document.querySelector('[data-playlist-create]');
+      const playlistActionsButton = document.querySelector('[data-playlist-actions-menu]');
+      playlistActionsButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 80));
       const playlistImportButton = document.querySelector('[data-playlist-import]');
       const playlistFolderImportButton = document.querySelector('[data-playlist-folder-import]');
+      const playlistExportAllButton = document.querySelector('[data-playlist-export-all]');
       const playlistTransferControlsReady = Boolean(
+        playlistCreateButton &&
+        playlistActionsButton?.getAttribute("aria-expanded") === "true" &&
         playlistImportButton &&
         playlistFolderImportButton &&
+        playlistExportAllButton &&
         document.querySelector('[data-playlist-folder-create]') &&
-        playlistImportButton.getAttribute("aria-label")?.includes("M3U, M3U8, or PLS") &&
-        playlistFolderImportButton.getAttribute("aria-label")?.includes("folder and its subfolders")
+        playlistImportButton.textContent?.includes("Import playlist file") &&
+        playlistFolderImportButton.textContent?.includes("Import playlist folder") &&
+        playlistExportAllButton.textContent?.includes("Export all playlists")
       );
+      document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 180));
       const collectionSection = document.querySelector('[data-sidebar-section="collection"]');
       const playlistSection = document.querySelector('[data-sidebar-section="playlists"]');
       const playlistsUnderCollection = Boolean(
@@ -1237,6 +1304,70 @@ app.whenReady().then(async () => {
           copyCounts.copiedCoverPaths[0]?.endsWith("track-0.wav")
         );
         [...document.querySelectorAll("button")]
+          .find((button) => button.textContent?.trim() === "Cancel")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        document.querySelector('[data-selection-edit]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const albumCoverField = document.querySelector('[data-cover-art-field]');
+        albumCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-testid="fetch-cover-art-menu-item"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        [...(document.querySelector('[data-edit-track-modal]')?.querySelectorAll("button") ?? [])]
+          .find((button) => button.textContent?.trim() === "Save")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 160));
+        const metadataUpdates = await window.muro.invoke("test_get_metadata_updates");
+        const albumCoverUpdate = [...metadataUpdates].reverse().find(
+          (entry) => typeof entry.updates?.coverArtPath === "string"
+        );
+        const expectedAlbumTrackIds = new Set(
+          Array.from({ length: 10 }, (_, index) => "smoke-track-" + index)
+        );
+        const coverAppliedToAlbumReady = Boolean(
+          albumCoverUpdate?.trackIds?.length === expectedAlbumTrackIds.size &&
+          albumCoverUpdate.trackIds.every((trackId) => expectedAlbumTrackIds.has(trackId)) &&
+          Object.keys(albumCoverUpdate.updates).every(
+            (field) => field === "coverArtPath" || field === "coverArtThumbPath"
+          )
+        );
+        await window.muro.invoke("test_enable_brave_cover_fallback");
+        document.querySelector('[data-selection-edit]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const braveFallbackCoverField = document.querySelector('[data-cover-art-field]');
+        braveFallbackCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-testid="fetch-cover-art-menu-item"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const braveCoverCandidates = [...document.querySelectorAll('[data-album-cover-candidate]')];
+        const secondBraveCoverButton = braveCoverCandidates[1]?.querySelector('[role="radio"]');
+        secondBraveCoverButton?.click();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const braveCoverSelectionReady =
+          secondBraveCoverButton?.getAttribute("aria-checked") === "true";
+        document.querySelector('[data-apply-album-cover]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const braveCoverCounts = await window.muro.invoke("test_get_cover_counts");
+        const braveCoverPickerReady = Boolean(
+          braveCoverCandidates.length === 2 &&
+          braveCoverSelectionReady &&
+          !document.querySelector('[data-album-cover-picker]') &&
+          braveCoverCounts.braveCoverCacheCount === 1 &&
+          braveCoverCounts.selectedBraveCoverId === "brave-cover-two" &&
+          document.querySelector('[data-cover-art-field] img')
+        );
+        [...(document.querySelector('[data-edit-track-modal]')?.querySelectorAll("button") ?? [])]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
@@ -2446,6 +2577,8 @@ app.whenReady().then(async () => {
           manualCoverMenuReady,
           manualCoverFetchReady,
           manualCoverCopyReady,
+          coverAppliedToAlbumReady,
+          braveCoverPickerReady,
           rowThumbnailReady,
           ratingFitsCell,
           tableAlbumMetadataMenuReady,
@@ -2839,10 +2972,17 @@ app.whenReady().then(async () => {
         );
         return;
       }
-      if (!result.manualCoverMenuReady || !result.manualCoverFetchReady || !result.manualCoverCopyReady) {
+      if (
+        !result.manualCoverMenuReady ||
+        !result.manualCoverFetchReady ||
+        !result.manualCoverCopyReady ||
+        !result.coverAppliedToAlbumReady ||
+        !result.braveCoverPickerReady
+      ) {
         fail(
           `Manual cover fetch failed: menu=${result.manualCoverMenuReady}, ` +
-          `fetch=${result.manualCoverFetchReady}, copy=${result.manualCoverCopyReady}`
+          `fetch=${result.manualCoverFetchReady}, copy=${result.manualCoverCopyReady}, ` +
+          `album=${result.coverAppliedToAlbumReady}, bravePicker=${result.braveCoverPickerReady}`
         );
         return;
       }

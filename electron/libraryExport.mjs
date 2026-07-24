@@ -30,13 +30,13 @@ const uniqueName = (directory, requestedName, usedPaths) => {
   return candidate;
 };
 
-const createExportRoot = async (destinationPath) => {
+const createNamedExportRoot = async (destinationPath, rootName) => {
   const destination = path.resolve(String(destinationPath ?? ""));
   const stats = await fs.promises.stat(destination);
   if (!stats.isDirectory()) throw new Error("The export destination is not a directory");
 
   for (let suffix = 1; suffix < 10_000; suffix += 1) {
-    const name = suffix === 1 ? "Muro Library" : `Muro Library (${suffix})`;
+    const name = suffix === 1 ? rootName : `${rootName} (${suffix})`;
     const exportRoot = path.join(destination, name);
     try {
       await fs.promises.mkdir(exportRoot);
@@ -45,8 +45,11 @@ const createExportRoot = async (destinationPath) => {
       if (error?.code !== "EEXIST") throw error;
     }
   }
-  throw new Error("Could not create a unique Muro Library export folder");
+  throw new Error(`Could not create a unique ${rootName} export folder`);
 };
+
+const createExportRoot = (destinationPath) =>
+  createNamedExportRoot(destinationPath, "Muro Library");
 
 const albumArtistOrArtist = (track) =>
   String(track.album_artist ?? "").trim()
@@ -119,6 +122,72 @@ const buildPlaylistFolderPaths = (folders) => {
 
 const cleanPlaylistText = (value, fallback) =>
   String(value || fallback).replace(/[\r\n]+/g, " ").trim() || fallback;
+
+export const exportAllPlaylists = async ({ dbPath, destinationPath }) => {
+  const db = openDatabase(dbPath);
+  const folders = db.prepare(`
+    SELECT id, name, parent_id, sort_order
+    FROM playlist_folders
+    ORDER BY parent_id, sort_order, name COLLATE NOCASE
+  `).all();
+  const playlists = db.prepare(`
+    SELECT id, name, folder_id, sort_order
+    FROM playlists
+    ORDER BY folder_id, sort_order, name COLLATE NOCASE
+  `).all();
+  const playlistEntries = db.prepare(`
+    SELECT pt.playlist_id, t.source_path, t.duration_seconds, t.artist, t.title
+    FROM playlist_tracks pt
+    JOIN tracks t ON t.id = pt.track_id
+    ORDER BY pt.playlist_id, pt.position
+  `).all();
+
+  const exportRoot = await createNamedExportRoot(destinationPath, "Muro Playlists");
+  const folderPathById = buildPlaylistFolderPaths(folders);
+  const entriesByPlaylistId = new Map();
+  const usedPlaylistPaths = new Set();
+  let playlistEntriesExported = 0;
+
+  await Promise.all(
+    [...folderPathById.values()].map((relativePath) =>
+      fs.promises.mkdir(path.join(exportRoot, relativePath), { recursive: true })
+    )
+  );
+
+  for (const entry of playlistEntries) {
+    const playlistId = String(entry.playlist_id);
+    const entries = entriesByPlaylistId.get(playlistId) ?? [];
+    entries.push(entry);
+    entriesByPlaylistId.set(playlistId, entries);
+  }
+
+  for (const playlist of playlists) {
+    const folderId = playlist.folder_id == null ? null : String(playlist.folder_id);
+    const relativeDirectory = folderId ? folderPathById.get(folderId) ?? "" : "";
+    const playlistName = `${sanitizeExportSegment(playlist.name, "Playlist")}.m3u8`;
+    const fileName = uniqueName(relativeDirectory, playlistName, usedPlaylistPaths);
+    const playlistPath = path.join(exportRoot, relativeDirectory, fileName);
+    const lines = ["#EXTM3U"];
+
+    for (const entry of entriesByPlaylistId.get(String(playlist.id)) ?? []) {
+      const duration = Math.max(-1, Math.round(Number(entry.duration_seconds) || -1));
+      const artist = cleanPlaylistText(entry.artist, "Unknown Artist");
+      const title = cleanPlaylistText(entry.title, "Unknown Title");
+      lines.push(`#EXTINF:${duration},${artist} - ${title}`);
+      lines.push(String(entry.source_path));
+      playlistEntriesExported += 1;
+    }
+
+    await fs.promises.mkdir(path.dirname(playlistPath), { recursive: true });
+    await fs.promises.writeFile(playlistPath, `${lines.join("\r\n")}\r\n`, "utf8");
+  }
+
+  return {
+    exportRoot,
+    playlistsExported: playlists.length,
+    playlistEntriesExported,
+  };
+};
 
 export const exportOrganizedLibrary = async ({
   dbPath,

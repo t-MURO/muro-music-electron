@@ -6,15 +6,20 @@ import { open } from "@muro/desktop/dialogs";
 import { ClipboardCopy, ClipboardPaste, Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
 import { t } from "../../i18n";
 import { notify } from "../../stores";
-import type { Track, TrackMetadataUpdates } from "../../types";
+import type { AlbumCoverCandidate, Track, TrackMetadataUpdates } from "../../types";
 import { cacheClipboardCoverArt, clipboardHasImage, copyImageToClipboard } from "../../desktop/clipboard";
+import { AlbumCoverPickerModal } from "./AlbumCoverPickerModal";
 import { Popover, PopoverHeader, PopoverItem } from "./Popover";
 
 type FetchedCoverArt = {
   fullPath: string;
   thumbPath: string;
   sourceUrl?: string | null;
-  provider?: "cover-art-archive" | "deezer" | null;
+  provider?: "cover-art-archive" | "deezer" | "brave-search" | null;
+};
+
+type CoverArtLookupResult = FetchedCoverArt | {
+  candidates: AlbumCoverCandidate[];
 };
 
 type EditTrackModalProps = {
@@ -26,7 +31,8 @@ type EditTrackModalProps = {
   onFetchCoverArt: (
     trackId: string,
     metadata: { album?: string; artist?: string },
-  ) => Promise<FetchedCoverArt | null>;
+  ) => Promise<CoverArtLookupResult | null>;
+  onCacheCoverCandidate: (candidate: AlbumCoverCandidate) => Promise<FetchedCoverArt>;
 };
 
 type FormState = {
@@ -130,6 +136,7 @@ export const EditTrackModal = ({
   onClose,
   onSave,
   onFetchCoverArt,
+  onCacheCoverCandidate,
 }: EditTrackModalProps) => {
   const isBatch = tracks.length > 1;
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -141,6 +148,7 @@ export const EditTrackModal = ({
   const [isFetchingCover, setIsFetchingCover] = useState(false);
   const [isPastingCover, setIsPastingCover] = useState(false);
   const [clipboardImageAvailable, setClipboardImageAvailable] = useState(false);
+  const [coverCandidates, setCoverCandidates] = useState<AlbumCoverCandidate[]>([]);
   const titleRef = useRef<HTMLInputElement | null>(null);
   const suggestions = useMemo(() => {
     const people = libraryTracks.flatMap((track) => [track.artist, track.artists]);
@@ -172,6 +180,7 @@ export const EditTrackModal = ({
     }
     setCoverPreview(null);
     setCoverMenuPosition(null);
+    setCoverCandidates([]);
     setIsFetchingCover(false);
     setIsSaving(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,6 +199,10 @@ export const EditTrackModal = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
+        if (coverCandidates.length > 0) {
+          setCoverCandidates([]);
+          return;
+        }
         if (coverMenuPosition) {
           setCoverMenuPosition(null);
           return;
@@ -199,7 +212,7 @@ export const EditTrackModal = ({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [coverMenuPosition, isOpen, onClose]);
+  }, [coverCandidates.length, coverMenuPosition, isOpen, onClose]);
 
   const updateField = useCallback(
     (field: keyof FormState, value: string | number | null) => {
@@ -260,14 +273,19 @@ export const EditTrackModal = ({
     setCoverMenuPosition(null);
     setIsFetchingCover(true);
     try {
-      const cached = await onFetchCoverArt(track.id, {
+      const result = await onFetchCoverArt(track.id, {
         album: form.album.trim() || track.album,
         artist: form.artists.trim() || form.artist.trim() || track.artists || track.artist,
       });
-      if (!cached) {
+      if (!result) {
         notify.info(t("edit.coverArtFetchNotFound"));
         return;
       }
+      if ("candidates" in result) {
+        setCoverCandidates(result.candidates);
+        return;
+      }
+      const cached = result;
       updateField("coverArtPath", cached.fullPath);
       updateField("coverArtThumbPath", cached.thumbPath);
       setCoverPreview(convertFileSrc(cached.fullPath));
@@ -280,6 +298,14 @@ export const EditTrackModal = ({
       setIsFetchingCover(false);
     }
   }, [form.album, form.artist, form.artists, isFetchingCover, onFetchCoverArt, tracks, updateField]);
+
+  const handleCacheCoverCandidate = useCallback(async (candidate: AlbumCoverCandidate) => {
+    const cached = await onCacheCoverCandidate(candidate);
+    updateField("coverArtPath", cached.fullPath);
+    updateField("coverArtThumbPath", cached.thumbPath);
+    setCoverPreview(convertFileSrc(cached.fullPath));
+    notify.success("Cover selected from Brave Image Search");
+  }, [onCacheCoverCandidate, updateField]);
 
   const handlePasteCoverArt = useCallback(async () => {
     if (isPastingCover) return;
@@ -683,6 +709,15 @@ export const EditTrackModal = ({
             {t("edit.fetchCoverArt")}
           </PopoverItem>
         </Popover>
+        {coverCandidates.length > 0 && (
+          <AlbumCoverPickerModal
+            album={form.album.trim() || tracks[0]?.album || ""}
+            artist={form.artists.trim() || form.artist.trim() || tracks[0]?.artists || tracks[0]?.artist || ""}
+            candidates={coverCandidates}
+            onApply={handleCacheCoverCandidate}
+            onClose={() => setCoverCandidates([])}
+          />
+        )}
       </div>
     </div>,
     document.body

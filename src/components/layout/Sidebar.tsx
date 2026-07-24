@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Clock3,
   Disc3,
+  Download,
   Folder,
   FolderInput,
   FolderPlus,
@@ -22,6 +23,7 @@ import {
   Trash2,
   UserRound,
   KeyRound,
+  MoreHorizontal,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { t } from "../../i18n";
@@ -29,6 +31,7 @@ import { useStickyState } from "../../hooks/useStickyState";
 import { useLibraryStore, useSmartCrateStore } from "../../stores";
 import { filterTracksBySmartCrate } from "../../utils";
 import type { CollectionFacet, LibraryView } from "../../hooks";
+import { Popover, PopoverItem } from "../ui/Popover";
 
 type SidebarProps = {
   collapsed: boolean;
@@ -44,6 +47,7 @@ type SidebarProps = {
   onCreatePlaylistFolder: () => void;
   onImportPlaylist: () => void;
   onImportPlaylistFolder: () => void;
+  onExportAllPlaylists: () => void;
   selectedPlaylistIds: ReadonlySet<string>;
   onPlaylistSelectionChange: (ids: string[]) => void;
   onPlaylistReorder: (
@@ -84,6 +88,7 @@ export const Sidebar = ({
   onCreatePlaylistFolder,
   onImportPlaylist,
   onImportPlaylistFolder,
+  onExportAllPlaylists,
   selectedPlaylistIds,
   onPlaylistSelectionChange,
   onPlaylistReorder,
@@ -110,6 +115,10 @@ export const Sidebar = ({
   const [reorderTarget, setReorderTarget] = useState<{
     id: string;
     placement: "before" | "after";
+  } | null>(null);
+  const [playlistActionsPosition, setPlaylistActionsPosition] = useState<{
+    x: number;
+    y: number;
   } | null>(null);
   const smartCrates = useSmartCrateStore((state) => state.smartCrates);
   const smartCrateCounts = useMemo(
@@ -404,27 +413,88 @@ export const Sidebar = ({
                 <span className="flex-1">Playlists</span>
                 <button
                   className="toolbar-icon-button h-6 w-6"
-                  onClick={onImportPlaylist}
-                  title="Import an M3U, M3U8, or PLS playlist file"
-                  aria-label="Import an M3U, M3U8, or PLS playlist file"
-                  data-playlist-import
+                  onClick={onCreatePlaylist}
+                  title="Add playlist"
+                  aria-label="Add playlist"
+                  data-playlist-create
                   type="button"
                 >
-                  <Import className="h-3.5 w-3.5" />
+                  <Plus className="h-3.5 w-3.5" />
                 </button>
                 <button
                   className="toolbar-icon-button h-6 w-6"
-                  onClick={onImportPlaylistFolder}
-                  title="Import every playlist in a folder and its subfolders"
-                  aria-label="Import every playlist in a folder and its subfolders"
-                  data-playlist-folder-import
+                  onClick={(event) => {
+                    if (playlistActionsPosition) {
+                      setPlaylistActionsPosition(null);
+                      return;
+                    }
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setPlaylistActionsPosition({ x: rect.right, y: rect.bottom + 4 });
+                  }}
+                  title="More playlist actions"
+                  aria-label="More playlist actions"
+                  aria-expanded={Boolean(playlistActionsPosition)}
+                  aria-haspopup="menu"
+                  data-playlist-actions-menu
                   type="button"
                 >
-                  <FolderInput className="h-3.5 w-3.5" />
+                  <MoreHorizontal className="h-3.5 w-3.5" />
                 </button>
-                <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylistFolder} title="New playlist folder" aria-label="New playlist folder" data-playlist-folder-create type="button"><FolderPlus className="h-3.5 w-3.5" /></button>
-                <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylist} title="New playlist" aria-label="New playlist" type="button"><Plus className="h-3.5 w-3.5" /></button>
               </div>
+              <Popover
+                isOpen={Boolean(playlistActionsPosition)}
+                position={playlistActionsPosition ?? { x: 0, y: 0 }}
+                className="w-64 py-1"
+                onClose={() => setPlaylistActionsPosition(null)}
+              >
+                <div role="menu" aria-label="Playlist actions">
+                  <PopoverItem
+                    onClick={() => {
+                      setPlaylistActionsPosition(null);
+                      onImportPlaylist();
+                    }}
+                    data-playlist-import
+                    role="menuitem"
+                  >
+                    <Import className="h-4 w-4 opacity-60" />
+                    Import playlist file
+                  </PopoverItem>
+                  <PopoverItem
+                    onClick={() => {
+                      setPlaylistActionsPosition(null);
+                      onImportPlaylistFolder();
+                    }}
+                    data-playlist-folder-import
+                    role="menuitem"
+                  >
+                    <FolderInput className="h-4 w-4 opacity-60" />
+                    Import playlist folder
+                  </PopoverItem>
+                  <PopoverItem
+                    disabled={playlists.length === 0}
+                    onClick={() => {
+                      setPlaylistActionsPosition(null);
+                      onExportAllPlaylists();
+                    }}
+                    data-playlist-export-all
+                    role="menuitem"
+                  >
+                    <Download className="h-4 w-4 opacity-60" />
+                    Export all playlists
+                  </PopoverItem>
+                  <PopoverItem
+                    onClick={() => {
+                      setPlaylistActionsPosition(null);
+                      onCreatePlaylistFolder();
+                    }}
+                    data-playlist-folder-create
+                    role="menuitem"
+                  >
+                    <FolderPlus className="h-4 w-4 opacity-60" />
+                    New playlist folder
+                  </PopoverItem>
+                </div>
+              </Popover>
               <div className="space-y-1">
                 {rootPlaylists.map((playlist) => renderPlaylist(playlist))}
                 {(childFoldersByParent.get("") ?? []).map((folder) => renderFolder(folder))}

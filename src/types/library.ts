@@ -139,6 +139,18 @@ export type ArtistImageCandidate = {
   current?: boolean;
 };
 
+export type AlbumCoverCandidate = {
+  id: string;
+  provider: "brave-search";
+  imageUrl: string;
+  sourceUrl: string;
+  sourceName?: string | null;
+  title?: string | null;
+  width?: number | null;
+  height?: number | null;
+  score?: number;
+};
+
 export type SmartCrateField =
   | "bpm"
   | "key"

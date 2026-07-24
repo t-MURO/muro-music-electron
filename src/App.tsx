@@ -764,7 +764,12 @@ function App() {
     [albums, allTracksById, playTrackById]
   );
 
-  const { importPlaylist, importPlaylistFolder, exportPlaylist } = usePlaylistTransfer();
+  const {
+    importPlaylist,
+    importPlaylistFolder,
+    exportPlaylist,
+    exportAllPlaylists,
+  } = usePlaylistTransfer();
 
   // Track ratings
   const { handleRatingChange } = useTrackRatings();
@@ -908,11 +913,39 @@ function App() {
     closeEditModal,
     handleSaveMetadata,
     handleFetchCoverArt,
+    handleCacheCoverCandidate,
     handleSearchMetadata,
     handleSearchAlbumMetadata,
     handleLoadAlbumMetadata,
     handleIdentifyWithAcoustId,
   } = useTrackEdit();
+
+  const handleSaveEditMetadata = useCallback(async (
+    trackIds: string[],
+    updates: TrackMetadataUpdates,
+  ) => {
+    if (!updates.coverArtPath) {
+      await handleSaveMetadata(trackIds, updates);
+      return;
+    }
+
+    const selectedIds = new Set(trackIds);
+    const albumCoverTrackIds = new Set(trackIds);
+    for (const album of groupTracksIntoAlbums(allTracks)) {
+      if (album.tracks.some((track) => selectedIds.has(track.id))) {
+        album.tracks.forEach((track) => albumCoverTrackIds.add(track.id));
+      }
+    }
+
+    const selectedTrackUpdates = { ...updates };
+    delete selectedTrackUpdates.coverArtPath;
+    delete selectedTrackUpdates.coverArtThumbPath;
+    await handleSaveMetadata(trackIds, selectedTrackUpdates);
+    await handleSaveMetadata([...albumCoverTrackIds], {
+      coverArtPath: updates.coverArtPath,
+      coverArtThumbPath: updates.coverArtThumbPath,
+    });
+  }, [allTracks, handleSaveMetadata]);
 
   const metadataSearchTrack = metadataSearchTrackId
     ? allTracksById.get(metadataSearchTrackId) ?? null
@@ -1177,6 +1210,20 @@ function App() {
     }
   }, [importPlaylistFolder, navigateToView]);
 
+  const handleExportAllPlaylists = useCallback(async () => {
+    if (playlists.length === 0) {
+      notify.info("There are no playlists to export");
+      return;
+    }
+    try {
+      const result = await open({ directory: true });
+      const directoryPath = Array.isArray(result) ? result[0] : result;
+      if (directoryPath) await exportAllPlaylists(directoryPath);
+    } catch {
+      notify.error("Playlist export folder picker failed");
+    }
+  }, [exportAllPlaylists, playlists.length]);
+
   const handleOpenFolderCreate = useCallback(() => {
     setFolderCreateName("");
     setIsFolderCreateOpen(true);
@@ -1204,6 +1251,7 @@ function App() {
     onCreatePlaylistFolder: handleOpenFolderCreate,
     onImportPlaylist: handleImportPlaylistFile,
     onImportPlaylistFolder: handleImportPlaylistFolder,
+    onExportAllPlaylists: handleExportAllPlaylists,
     selectedPlaylistIds,
     onPlaylistSelectionChange: handlePlaylistSelectionChange,
     onPlaylistReorder: handlePlaylistReorder,
@@ -1586,8 +1634,9 @@ function App() {
           .map((id) => allTracks.find((t) => t.id === id))
           .filter((t): t is Track => t !== undefined)}
         onClose={closeEditModal}
-        onSave={handleSaveMetadata}
+        onSave={handleSaveEditMetadata}
         onFetchCoverArt={handleFetchCoverArt}
+        onCacheCoverCandidate={handleCacheCoverCandidate}
       />
       <MetadataSearchModal
         track={metadataSearchTrack}

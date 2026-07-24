@@ -5,6 +5,8 @@ import { cacheCoverBytes } from "./metadata.mjs";
 const COVER_ART_ARCHIVE_ROOT = "https://coverartarchive.org";
 const MUSICBRAINZ_RELEASE_GROUP_ROOT = "https://musicbrainz.org/ws/2/release-group/";
 const DEEZER_ALBUM_SEARCH_ROOT = "https://api.deezer.com/search/album";
+const BRAVE_IMAGE_SEARCH_ROOT = "https://api.search.brave.com/res/v1/images/search";
+const BRAVE_IMAGE_RESULT_COUNT = 15;
 const MUSICBRAINZ_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 const NOT_FOUND_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
@@ -115,6 +117,40 @@ const secureDeezerImageUrl = (value) => {
     return null;
   }
 };
+
+const secureBraveImageUrl = (value) => {
+  try {
+    const url = new URL(String(value ?? ""));
+    return url.protocol === "https:" && url.hostname === "imgs.search.brave.com"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const secureBraveSearchUrl = (value) => {
+  try {
+    const url = new URL(String(value ?? ""));
+    return url.protocol === "https:"
+      && url.hostname === "search.brave.com"
+      && url.pathname === "/images"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const cleanCandidateText = (value, maxLength = 500) => String(value ?? "")
+  .replace(/<br\s*\/?\s*>/gi, " ")
+  .replace(/<[^>]+>/g, " ")
+  .replace(/&amp;/gi, "&")
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;|&apos;/gi, "'")
+  .replace(/\s+/g, " ")
+  .trim()
+  .slice(0, maxLength) || null;
 
 const pickDeezerAlbum = (payload, { album, artist }) => {
   const candidates = Array.isArray(payload?.data) ? payload.data : [];
@@ -238,6 +274,89 @@ export const createAlbumCoverService = ({
     );
   };
 
+  const searchBraveCovers = async ({ album, artist, apiKey }) => {
+    const normalizedAlbum = String(album ?? "").replaceAll('"', " ").trim();
+    const normalizedArtist = String(artist ?? "").replaceAll('"', " ").trim();
+    const normalizedApiKey = String(apiKey ?? "").trim();
+    if (!normalizedAlbum || !normalizedArtist || !normalizedApiKey) return [];
+
+    const query = `"${normalizedArtist}" "${normalizedAlbum}" album cover artwork`;
+    const requestUrl = new URL(BRAVE_IMAGE_SEARCH_ROOT);
+    requestUrl.search = new URLSearchParams({
+      q: query,
+      country: "ALL",
+      search_lang: "en",
+      count: String(BRAVE_IMAGE_RESULT_COUNT),
+      safesearch: "strict",
+    }).toString();
+    const response = await fetchImpl(requestUrl, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": userAgent,
+        "X-Subscription-Token": normalizedApiKey,
+      },
+      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(15_000)
+        : undefined,
+    });
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("The Brave Search API key was rejected");
+    }
+    if (response.status === 429) {
+      throw new Error("The Brave Image Search rate limit was reached");
+    }
+    if (!response.ok) throw new Error(`Brave Image Search failed (${response.status})`);
+
+    const payload = await response.json();
+    const searchUrl = new URL("https://search.brave.com/images");
+    searchUrl.searchParams.set("q", query);
+    const seen = new Set();
+    return (Array.isArray(payload?.results) ? payload.results : [])
+      .flatMap((result, index) => {
+        const imageUrl = secureBraveImageUrl(result?.thumbnail?.src);
+        if (!imageUrl || seen.has(imageUrl)) return [];
+        seen.add(imageUrl);
+        const width = Number(result?.properties?.width ?? 0) || null;
+        const height = Number(result?.properties?.height ?? 0) || null;
+        const confidence = {
+          high: 3,
+          medium: 2,
+          low: 1,
+        }[String(result?.confidence ?? "").toLocaleLowerCase()] ?? 0;
+        const squareScore = width && height
+          ? Math.max(0, 1 - Math.abs(width / height - 1))
+          : 0;
+        const sourceName = cleanCandidateText(
+          result?.source ?? result?.meta_url?.hostname,
+          200,
+        );
+        return [{
+          id: crypto.createHash("sha256").update(`brave-cover:${imageUrl}`).digest("hex"),
+          provider: "brave-search",
+          imageUrl,
+          sourceUrl: searchUrl.toString(),
+          sourceName,
+          title: cleanCandidateText(result?.title),
+          width,
+          height,
+          score: confidence * 10_000 + Math.round(squareScore * 1_000) - index,
+        }];
+      })
+      .sort((left, right) => right.score - left.score);
+  };
+
+  const cacheCoverCandidate = async (candidate) => {
+    if (candidate?.provider !== "brave-search") {
+      throw new Error("The album cover provider is not allowed");
+    }
+    const imageUrl = secureBraveImageUrl(candidate.imageUrl);
+    const sourceUrl = secureBraveSearchUrl(candidate.sourceUrl);
+    if (!imageUrl || !sourceUrl) {
+      throw new Error("The selected album cover URL is not allowed");
+    }
+    return cacheRemoteCover(imageUrl, sourceUrl, "brave-search");
+  };
+
   const searchReleaseGroup = async ({ album, artist }) => {
     if (!String(album ?? "").trim() || !String(artist ?? "").trim()) return null;
     const searchUrl = new URL(MUSICBRAINZ_RELEASE_GROUP_ROOT);
@@ -338,5 +457,5 @@ export const createAlbumCoverService = ({
     return result;
   };
 
-  return { fetchCoverForTrack };
+  return { fetchCoverForTrack, searchBraveCovers, cacheCoverCandidate };
 };

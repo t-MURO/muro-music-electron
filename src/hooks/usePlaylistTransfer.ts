@@ -6,6 +6,7 @@ import {
   createPlaylistFolder,
   deletePlaylist,
   deletePlaylistFolder,
+  exportAllPlaylists as exportAllPlaylistFiles,
   exportPlaylistFile,
   importFiles,
   importedTrackToTrack,
@@ -211,5 +212,20 @@ export const usePlaylistTransfer = () => {
     }
   }, [resolveDbPath]);
 
-  return { importPlaylist, importPlaylistFolder, exportPlaylist };
+  const exportAllPlaylists = useCallback(async (destinationPath: string) => {
+    try {
+      const dbPath = await resolveDbPath();
+      const result = await exportAllPlaylistFiles(dbPath, destinationPath);
+      notify.success(
+        `Exported ${result.playlistsExported} playlists with `
+        + `${result.playlistEntriesExported} track entries`
+      );
+      return result;
+    } catch {
+      notify.error("Failed to export playlists");
+      return null;
+    }
+  }, [resolveDbPath]);
+
+  return { importPlaylist, importPlaylistFolder, exportPlaylist, exportAllPlaylists };
 };

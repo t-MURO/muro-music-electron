@@ -25,7 +25,7 @@ import { createAlbumCoverService } from "./albumCovers.mjs";
 import { createCastService } from "./cast/castService.mjs";
 import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
-import { exportOrganizedLibrary } from "./libraryExport.mjs";
+import { exportAllPlaylists, exportOrganizedLibrary } from "./libraryExport.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -543,6 +543,14 @@ export const createBackend = ({
         album,
         artist,
       }),
+    search_album_cover_images: ({ album, artist, braveSearchApiKey }) =>
+      albumCovers.searchBraveCovers({
+        album,
+        artist,
+        apiKey: braveSearchApiKey,
+      }),
+    cache_album_cover_candidate: ({ candidate }) =>
+      albumCovers.cacheCoverCandidate(candidate),
     search_track_metadata: ({ title, artist, album }) =>
       searchTrackMetadata({ title, artist, album }, fetchMusicBrainz),
     search_album_metadata: ({ album, artist }) =>
@@ -732,6 +740,8 @@ export const createBackend = ({
     import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
     export_playlist_file: ({ dbPath, playlistId, filePath }) =>
       exportPlaylistFile(dbPath, playlistId, filePath),
+    export_all_playlists: ({ dbPath, destinationPath }) =>
+      exportAllPlaylists({ dbPath, destinationPath }),
     export_organized_library: ({ dbPath, destinationPath, useAsCurrentLibrary }, sender) =>
       exportOrganizedLibrary({
         dbPath,
