@@ -2174,6 +2174,23 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         const genreHistoryReady = Boolean(document.querySelector('[data-collection-index="genres"]'));
 
+        window.location.hash = "#/collection/labels";
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const labelItems = document.querySelectorAll('[data-collection-index="labels"] [data-collection-value]');
+        const muroRecordsLabel = document.querySelector(
+          '[data-collection-index="labels"] [data-collection-value="Muro Records"]'
+        );
+        const labelIndexReady =
+          labelItems.length === 2 &&
+          muroRecordsLabel?.getAttribute("data-collection-count") === "125";
+        muroRecordsLabel?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const labelDrilldownReady =
+          window.location.hash.includes("/collection/labels") &&
+          window.location.hash.includes("value=Muro+Records") &&
+          document.querySelector("h2")?.textContent?.trim() === "Muro Records" &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "125";
+
         window.location.hash = "#/collection/keys";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const keyItems = document.querySelectorAll('[data-collection-index="keys"] [data-collection-value]');
@@ -2524,6 +2541,8 @@ app.whenReady().then(async () => {
           genreIndexReady,
           genreDrilldownReady,
           genreHistoryReady,
+          labelIndexReady,
+          labelDrilldownReady,
           keyIndexReady,
           keyDrilldownReady,
           removedCollectionLinksReady,
@@ -3007,6 +3026,8 @@ app.whenReady().then(async () => {
         !result.genreIndexReady ||
         !result.genreDrilldownReady ||
         !result.genreHistoryReady ||
+        !result.labelIndexReady ||
+        !result.labelDrilldownReady ||
         !result.keyIndexReady ||
         !result.keyDrilldownReady ||
         !result.removedCollectionLinksReady
@@ -3014,6 +3035,7 @@ app.whenReady().then(async () => {
         fail(
           `Collection indexes failed: genres=${result.genreIndexReady}, ` +
           `genreDrilldown=${result.genreDrilldownReady}, genreHistory=${result.genreHistoryReady}, ` +
+          `labels=${result.labelIndexReady}, labelDrilldown=${result.labelDrilldownReady}, ` +
           `keys=${result.keyIndexReady}, keyDrilldown=${result.keyDrilldownReady}, ` +
           `removedLinks=${result.removedCollectionLinksReady}`
         );

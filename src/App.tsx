@@ -258,9 +258,11 @@ function App() {
   const isArtistDetail = view === "collection:artists" && Boolean(collectionFilterValue);
   const collectionIndexFacet = !collectionFilterValue && view === "collection:genres"
     ? "genres"
-    : !collectionFilterValue && view === "collection:keys"
-      ? "keys"
-      : null;
+    : !collectionFilterValue && view === "collection:labels"
+      ? "labels"
+      : !collectionFilterValue && view === "collection:keys"
+        ? "keys"
+        : null;
   const selectedAlbumId = isAlbumsView
     ? new URLSearchParams(location.search).get("album")
     : null;
@@ -278,7 +280,7 @@ function App() {
     [navigate]
   );
 
-  const handleOpenCollectionValue = useCallback((facet: "artists" | "genres" | "keys", value: string) => {
+  const handleOpenCollectionValue = useCallback((facet: "artists" | "genres" | "labels" | "keys", value: string) => {
     const params = new URLSearchParams();
     params.set("value", value);
     navigate({ pathname: `/collection/${facet}`, search: params.toString() });

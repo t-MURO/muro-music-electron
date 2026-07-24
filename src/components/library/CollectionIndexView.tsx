@@ -1,9 +1,9 @@
-import { ArrowRight, KeyRound, Tag } from "lucide-react";
+import { ArrowRight, Badge, KeyRound, Tag } from "lucide-react";
 import type { CSSProperties } from "react";
 import type { Track } from "../../types";
 import { getCamelotColor, toCamelotCode } from "../../utils/camelot";
 
-export type CollectionIndexFacet = "genres" | "keys";
+export type CollectionIndexFacet = "genres" | "labels" | "keys";
 
 export type CollectionIndexItem = {
   value: string;
@@ -37,7 +37,11 @@ export const buildCollectionIndexItems = (
   const items = new Map<string, CollectionIndexItem>();
 
   tracks.forEach((track) => {
-    const rawValue = facet === "genres" ? track.genre : track.key;
+    const rawValue = facet === "genres"
+      ? track.genre
+      : facet === "labels"
+        ? track.label
+        : track.key;
     const trimmedValue = rawValue?.trim();
     if (!trimmedValue) return;
 
@@ -66,8 +70,8 @@ type CollectionIndexViewProps = {
 };
 
 export const CollectionIndexView = ({ facet, items, onSelect }: CollectionIndexViewProps) => {
-  const Icon = facet === "keys" ? KeyRound : Tag;
-  const singularLabel = facet === "keys" ? "key" : "genre";
+  const Icon = facet === "keys" ? KeyRound : facet === "labels" ? Badge : Tag;
+  const singularLabel = facet === "keys" ? "key" : facet === "labels" ? "release label" : "genre";
 
   return (
     <div
