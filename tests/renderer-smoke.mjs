@@ -556,12 +556,47 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100));
         const importButton = document.querySelector("[data-playlist-import]");
         const folderImportButton = document.querySelector("[data-playlist-folder-import]");
-        const importTooltip = document.getElementById(
-          importButton?.getAttribute("aria-describedby") ?? ""
+        const unlabeledIconButtons = [...document.querySelectorAll("button")].filter(
+          (button) =>
+            !button.textContent?.trim() &&
+            !button.getAttribute("aria-label")?.trim() &&
+            !button.getAttribute("title")?.trim()
         );
-        const folderImportTooltip = document.getElementById(
-          folderImportButton?.getAttribute("aria-describedby") ?? ""
+        importButton?.dispatchEvent(new PointerEvent("pointerover", {
+          bubbles: true,
+          relatedTarget: document.body,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const importTooltip = document.querySelector("[data-global-button-tooltip]");
+        const importTooltipRect = importTooltip?.getBoundingClientRect();
+        const importTooltipReady = Boolean(
+          importTooltip?.getAttribute("role") === "tooltip" &&
+          importTooltip.textContent?.includes("M3U, M3U8, or PLS") &&
+          importTooltipRect &&
+          importTooltipRect.left >= 0 &&
+          importTooltipRect.right <= window.innerWidth &&
+          importTooltipRect.top >= 0 &&
+          importTooltipRect.bottom <= window.innerHeight
         );
+        importButton?.dispatchEvent(new PointerEvent("pointerout", {
+          bubbles: true,
+          relatedTarget: document.body,
+        }));
+        folderImportButton?.dispatchEvent(new PointerEvent("pointerover", {
+          bubbles: true,
+          relatedTarget: document.body,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const folderImportTooltip = document.querySelector("[data-global-button-tooltip]");
+        const folderImportTooltipReady = Boolean(
+          folderImportTooltip?.getAttribute("role") === "tooltip" &&
+          folderImportTooltip.textContent?.includes("folder and its subfolders")
+        );
+        folderImportButton?.dispatchEvent(new PointerEvent("pointerout", {
+          bubbles: true,
+          relatedTarget: document.body,
+        }));
         const playlistForExport = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
         playlistForExport?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -572,10 +607,9 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
         const exportButton = document.querySelector("[data-playlist-export]");
         const playlistTooltipsReady = Boolean(
-          importTooltip?.getAttribute("role") === "tooltip" &&
-          importTooltip.textContent?.includes("M3U, M3U8, or PLS") &&
-          folderImportTooltip?.getAttribute("role") === "tooltip" &&
-          folderImportTooltip.textContent?.includes("folder and its subfolders") &&
+          unlabeledIconButtons.length === 0 &&
+          importTooltipReady &&
+          folderImportTooltipReady &&
           exportButton?.getAttribute("title") === "Export this playlist as an M3U8 file"
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
@@ -683,8 +717,11 @@ app.whenReady().then(async () => {
             djReady,
             advancedReady,
             playlistTooltipsReady,
-            importTooltip: importTooltip?.textContent?.trim() ?? null,
-            folderImportTooltip: folderImportTooltip?.textContent?.trim() ?? null,
+            unlabeledIconButtons: unlabeledIconButtons.map(
+              (button) => button.outerHTML.slice(0, 180)
+            ),
+            importTooltipReady,
+            folderImportTooltipReady,
             exportTooltip: exportButton?.getAttribute("title") ?? null,
           },
         };
@@ -997,20 +1034,12 @@ app.whenReady().then(async () => {
       );
       const playlistImportButton = document.querySelector('[data-playlist-import]');
       const playlistFolderImportButton = document.querySelector('[data-playlist-folder-import]');
-      const playlistImportTooltip = document.getElementById(
-        playlistImportButton?.getAttribute("aria-describedby") ?? ""
-      );
-      const playlistFolderImportTooltip = document.getElementById(
-        playlistFolderImportButton?.getAttribute("aria-describedby") ?? ""
-      );
       const playlistTransferControlsReady = Boolean(
         playlistImportButton &&
         playlistFolderImportButton &&
         document.querySelector('[data-playlist-folder-create]') &&
-        playlistImportTooltip?.getAttribute("role") === "tooltip" &&
-        playlistImportTooltip.textContent?.includes("M3U, M3U8, or PLS") &&
-        playlistFolderImportTooltip?.getAttribute("role") === "tooltip" &&
-        playlistFolderImportTooltip.textContent?.includes("folder and its subfolders")
+        playlistImportButton.getAttribute("aria-label")?.includes("M3U, M3U8, or PLS") &&
+        playlistFolderImportButton.getAttribute("aria-label")?.includes("folder and its subfolders")
       );
       const collectionSection = document.querySelector('[data-sidebar-section="collection"]');
       const playlistSection = document.querySelector('[data-sidebar-section="playlists"]');

@@ -34,6 +34,7 @@ import {
   PlaylistEditModal,
   SmartCrateModal,
   ToastContainer,
+  GlobalButtonTooltips,
 } from "./components";
 import {
   useFileImport,
@@ -1493,6 +1494,7 @@ function App() {
         setFolderMenu(null);
       }}
     >
+      <GlobalButtonTooltips />
       <ToastContainer />
       <DragOverlay
         isDragging={isDragging}

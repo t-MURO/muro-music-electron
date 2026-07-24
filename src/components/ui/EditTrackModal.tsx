@@ -576,12 +576,17 @@ export const EditTrackModal = ({
             >
               {[1, 2, 3, 4, 5].map((star) => {
                 const fill = Math.max(0, Math.min(1, displayRating - (star - 1)));
+                const ratingActionLabel = displayRating === star
+                  ? "Clear rating"
+                  : `Set rating to ${star} stars`;
                 return (
                   <button
                     key={star}
                     type="button"
                     className="relative h-6 w-6 select-none focus:outline-none"
                     onClick={(e) => handleRatingClick(e, star)}
+                    aria-label={ratingActionLabel}
+                    title={ratingActionLabel}
                   >
                     <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden="true">
                       <path

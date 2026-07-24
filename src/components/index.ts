@@ -45,5 +45,6 @@ export {
   PopoverDivider,
   PopoverHeader,
   ToastContainer,
+  GlobalButtonTooltips,
 } from "./ui";
 export { CamelotWheel, MixSuggestions, NowPlayingTrack, QueueItem } from "./queue";

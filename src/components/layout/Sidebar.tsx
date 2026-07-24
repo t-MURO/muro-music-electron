@@ -23,7 +23,7 @@ import {
   UserRound,
   KeyRound,
 } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { t } from "../../i18n";
 import { useStickyState } from "../../hooks/useStickyState";
 import { useLibraryStore, useSmartCrateStore } from "../../stores";
@@ -69,46 +69,6 @@ const parseCollapsedPlaylistFolders = (raw: string) => {
 
 const serializeCollapsedPlaylistFolders = (folderIds: Set<string>) =>
   JSON.stringify([...folderIds]);
-
-const PlaylistActionButton = ({
-  label,
-  tooltip,
-  onClick,
-  dataAttribute,
-  children,
-}: {
-  label: string;
-  tooltip: string;
-  onClick: () => void;
-  dataAttribute: string;
-  children: ReactNode;
-}) => {
-  const tooltipId = useId();
-  const testAttribute = { [dataAttribute]: "" };
-
-  return (
-    <span className="group relative inline-flex shrink-0">
-      <button
-        {...testAttribute}
-        className="toolbar-icon-button h-6 w-6"
-        onClick={onClick}
-        title={label}
-        aria-label={label}
-        aria-describedby={tooltipId}
-        type="button"
-      >
-        {children}
-      </button>
-      <span
-        className="pointer-events-none absolute bottom-full right-0 z-[60] mb-2 w-max max-w-[210px] translate-y-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2.5 py-1.5 text-left text-[10px] font-normal leading-snug text-[var(--color-text-primary)] opacity-0 shadow-[var(--shadow-md)] transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100"
-        id={tooltipId}
-        role="tooltip"
-      >
-        {tooltip}
-      </span>
-    </span>
-  );
-};
 
 export const Sidebar = ({
   collapsed,
@@ -442,22 +402,26 @@ export const Sidebar = ({
               <div className="sidebar-section-label">
                 <ListMusic className="h-3.5 w-3.5" />
                 <span className="flex-1">Playlists</span>
-                <PlaylistActionButton
-                  label="Import playlist"
-                  tooltip="Import an M3U, M3U8, or PLS playlist file."
+                <button
+                  className="toolbar-icon-button h-6 w-6"
                   onClick={onImportPlaylist}
-                  dataAttribute="data-playlist-import"
+                  title="Import an M3U, M3U8, or PLS playlist file"
+                  aria-label="Import an M3U, M3U8, or PLS playlist file"
+                  data-playlist-import
+                  type="button"
                 >
                   <Import className="h-3.5 w-3.5" />
-                </PlaylistActionButton>
-                <PlaylistActionButton
-                  label="Import playlist folder"
-                  tooltip="Import every playlist in a folder and its subfolders."
+                </button>
+                <button
+                  className="toolbar-icon-button h-6 w-6"
                   onClick={onImportPlaylistFolder}
-                  dataAttribute="data-playlist-folder-import"
+                  title="Import every playlist in a folder and its subfolders"
+                  aria-label="Import every playlist in a folder and its subfolders"
+                  data-playlist-folder-import
+                  type="button"
                 >
                   <FolderInput className="h-3.5 w-3.5" />
-                </PlaylistActionButton>
+                </button>
                 <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylistFolder} title="New playlist folder" aria-label="New playlist folder" data-playlist-folder-create type="button"><FolderPlus className="h-3.5 w-3.5" /></button>
                 <button className="toolbar-icon-button h-6 w-6" onClick={onCreatePlaylist} title="New playlist" aria-label="New playlist" type="button"><Plus className="h-3.5 w-3.5" /></button>
               </div>
