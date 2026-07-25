@@ -7,7 +7,9 @@ import {
   loadRecentlyPlayed,
   loadTracks,
   openDatabase,
+  rebuildSearchIndex,
   refreshSearchText,
+  searchTrackIds,
 } from "./database.mjs";
 import {
   AUDIO_EXTENSIONS,
@@ -17,6 +19,7 @@ import {
   extractCoverMetadata,
   extractTechnicalMetadata,
   importAudioFile,
+  readAudioDuration,
   writeMetadataToFile,
 } from "./metadata.mjs";
 import { createWaveformCache } from "./waveformCache.mjs";
@@ -26,6 +29,7 @@ import { createCastService } from "./cast/castService.mjs";
 import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
 import { exportAllPlaylists, exportOrganizedLibrary } from "./libraryExport.mjs";
+import { createLibraryWatcher } from "./libraryWatcher.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -471,6 +475,14 @@ export const createBackend = ({
   });
   const castService = castServiceOverride ?? createCastService({ emit });
   const dlnaService = dlnaServiceOverride ?? createDlnaService({ emit });
+  // The watcher fires outside any invoke() call, so it keeps a reference to the
+  // most recent sender rather than receiving one per event.
+  let lastSender = null;
+  const libraryWatcher = createLibraryWatcher({
+    cacheDir,
+    emit,
+    getSender: () => lastSender,
+  });
   const commands = {
     ...castService.commands,
     ...dlnaService.commands,
@@ -819,6 +831,256 @@ export const createBackend = ({
         .run(beatGridJson, Math.floor(Date.now() / 1000), trackId);
       return { updated: result.changes > 0 };
     },
+    /**
+     * Stat every library track and record whether its file is still there.
+     * Inbox entries are included because a staged file can vanish too.
+     */
+    verify_library_files: ({ dbPath }) => {
+      const db = openDatabase(dbPath);
+      const rows = db.prepare("SELECT id, source_path, is_missing FROM tracks").all();
+      const mark = db.prepare("UPDATE tracks SET is_missing = ? WHERE id = ?");
+
+      let missing = 0;
+      let restored = 0;
+      let stillMissing = 0;
+      db.transaction(() => {
+        for (const row of rows) {
+          const exists = Boolean(row.source_path) && fs.existsSync(row.source_path);
+          const wasMissing = Number(row.is_missing) === 1;
+          if (!exists) {
+            stillMissing += 1;
+            if (!wasMissing) {
+              mark.run(1, row.id);
+              missing += 1;
+            }
+          } else if (wasMissing) {
+            mark.run(0, row.id);
+            restored += 1;
+          }
+        }
+      })();
+
+      return { checked: rows.length, newlyMissing: missing, restored, missing: stillMissing };
+    },
+
+    list_missing_tracks: ({ dbPath }) =>
+      openDatabase(dbPath).prepare(`
+        SELECT id, title, artist, album, source_path, filename, duration_seconds
+        FROM tracks
+        WHERE is_missing = 1
+        ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, track_number
+      `).all().map((row) => ({
+        id: String(row.id),
+        title: row.title || "",
+        artist: row.artist || "",
+        album: row.album || "",
+        source_path: row.source_path || "",
+        filename: row.filename || "",
+        duration_seconds: row.duration_seconds || 0,
+      })),
+
+    /** Point a track at a new file. The replacement must actually exist. */
+    relink_track: ({ dbPath, trackId, newPath }) => {
+      if (typeof trackId !== "string" || !trackId) throw new Error("A track is required");
+      const resolved = path.resolve(String(newPath ?? ""));
+      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
+        throw new Error("The selected file does not exist");
+      }
+      if (!AUDIO_EXTENSIONS.has(path.extname(resolved).toLowerCase())) {
+        throw new Error("The selected file is not a supported audio format");
+      }
+
+      const db = openDatabase(dbPath);
+      const clash = db
+        .prepare("SELECT id FROM tracks WHERE source_path = ? AND id != ?")
+        .get(resolved, trackId);
+      if (clash) throw new Error("Another track already uses that file");
+
+      db.prepare(`
+        UPDATE tracks
+        SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
+        WHERE id = ?
+      `).run(resolved, path.basename(resolved), Math.floor(Date.now() / 1000), trackId);
+      refreshSearchText(db, trackId);
+      return { relinked: true, sourcePath: resolved };
+    },
+
+    /**
+     * Match missing tracks against the audio files under a directory.
+     *
+     * A file name alone is ambiguous across a large collection, so a candidate
+     * only counts when the duration also matches within a second — enough to
+     * absorb decoder rounding without pairing two different songs.
+     */
+    auto_relink_missing: async ({ dbPath, searchDir, dryRun }) => {
+      const root = path.resolve(String(searchDir ?? ""));
+      if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+        throw new Error("Choose a folder to search");
+      }
+
+      const db = openDatabase(dbPath);
+      const missing = db.prepare(`
+        SELECT id, filename, source_path, duration_seconds
+        FROM tracks WHERE is_missing = 1
+      `).all();
+      if (missing.length === 0) return { matched: 0, relinked: 0, matches: [] };
+
+      const candidatePaths = await collectAudioPaths([root]);
+      const knownPaths = new Set(
+        db.prepare("SELECT source_path FROM tracks WHERE is_missing = 0").all()
+          .map((row) => row.source_path),
+      );
+
+      const byName = new Map();
+      for (const candidate of candidatePaths) {
+        if (knownPaths.has(candidate)) continue;
+        const key = path.basename(candidate).toLowerCase();
+        const bucket = byName.get(key) ?? [];
+        bucket.push(candidate);
+        byName.set(key, bucket);
+      }
+
+      const update = db.prepare(`
+        UPDATE tracks
+        SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
+        WHERE id = ?
+      `);
+      const matches = [];
+      const taken = new Set();
+
+      for (const track of missing) {
+        const name = String(track.filename || path.basename(track.source_path || "")).toLowerCase();
+        if (!name) continue;
+        const bucket = byName.get(name);
+        if (!bucket) continue;
+
+        const expected = Number(track.duration_seconds) || 0;
+        let chosen = null;
+        for (const candidate of bucket) {
+          if (taken.has(candidate)) continue;
+          if (expected > 0) {
+            const probe = await readAudioDuration(candidate);
+            // A zero probe means the file could not be parsed; the name match
+            // alone still stands.
+            if (probe > 0 && Math.abs(probe - expected) > 1) continue;
+          }
+          chosen = candidate;
+          break;
+        }
+        if (!chosen) continue;
+
+        taken.add(chosen);
+        matches.push({ trackId: String(track.id), sourcePath: chosen });
+      }
+
+      if (!dryRun && matches.length > 0) {
+        const now = Math.floor(Date.now() / 1000);
+        db.transaction(() => {
+          for (const match of matches) {
+            update.run(match.sourcePath, path.basename(match.sourcePath), now, match.trackId);
+            refreshSearchText(db, match.trackId);
+          }
+        })();
+      }
+
+      return {
+        matched: matches.length,
+        relinked: dryRun ? 0 : matches.length,
+        matches,
+      };
+    },
+
+    update_track_loudness: ({ dbPath, trackId, integratedLufs, gainDb, peak, source }) => {
+      if (typeof trackId !== "string" || trackId.length === 0) {
+        throw new Error("Invalid loudness payload");
+      }
+      const number = (value) =>
+        typeof value === "number" && Number.isFinite(value) ? value : null;
+      const result = openDatabase(dbPath).prepare(`
+        UPDATE tracks SET
+          loudness_lufs = ?,
+          replaygain_track_gain_db = ?,
+          replaygain_track_peak = ?,
+          loudness_source = ?
+        WHERE id = ?
+      `).run(
+        number(integratedLufs),
+        number(gainDb),
+        number(peak),
+        source === "tag" ? "tag" : "analyzed",
+        trackId,
+      );
+      return { updated: result.changes > 0 };
+    },
+
+    /**
+     * Tracks with no usable gain value yet. Files that arrived with ReplayGain
+     * tags are already covered and are not returned.
+     */
+    list_tracks_needing_loudness: ({ dbPath, limit }) => {
+      const max = Math.max(1, Math.min(Number(limit) || 250, 2000));
+      return openDatabase(dbPath).prepare(`
+        SELECT id, source_path
+        FROM tracks
+        WHERE replaygain_track_gain_db IS NULL
+          AND import_status != 'staged'
+          AND COALESCE(is_missing, 0) = 0
+        ORDER BY added_at DESC
+        LIMIT ?
+      `).all(max).map((row) => ({ id: String(row.id), source_path: row.source_path }));
+    },
+
+    /**
+     * Album gain is the loudness of the release as a whole, so it is derived
+     * from the album's combined loudness rather than by averaging track gains.
+     * Tracks are grouped the way the library groups them: album artist (falling
+     * back to artist) plus album title.
+     */
+    recompute_album_gain: ({ dbPath, referenceLufs }) => {
+      const db = openDatabase(dbPath);
+      const reference =
+        typeof referenceLufs === "number" && Number.isFinite(referenceLufs)
+          ? referenceLufs
+          : -18;
+      const rows = db.prepare(`
+        SELECT id, album, COALESCE(NULLIF(album_artist, ''), artist) AS grouping_artist,
+          loudness_lufs, replaygain_track_peak
+        FROM tracks
+        WHERE loudness_lufs IS NOT NULL AND album IS NOT NULL AND album != ''
+      `).all();
+
+      const albums = new Map();
+      for (const row of rows) {
+        const key = `${String(row.grouping_artist ?? "").toLowerCase()} ${String(row.album).toLowerCase()}`;
+        const bucket = albums.get(key) ?? { ids: [], meanSquares: [], peak: 0 };
+        bucket.ids.push(row.id);
+        // Undo the log so the release's blocks average in the energy domain.
+        bucket.meanSquares.push(Math.pow(10, (Number(row.loudness_lufs) + 0.691) / 10));
+        const peak = Number(row.replaygain_track_peak);
+        if (Number.isFinite(peak) && peak > bucket.peak) bucket.peak = peak;
+        albums.set(key, bucket);
+      }
+
+      const update = db.prepare(
+        "UPDATE tracks SET replaygain_album_gain_db = ?, replaygain_album_peak = ? WHERE id = ?"
+      );
+      let updated = 0;
+      db.transaction(() => {
+        for (const bucket of albums.values()) {
+          const mean =
+            bucket.meanSquares.reduce((sum, value) => sum + value, 0) / bucket.meanSquares.length;
+          if (!(mean > 0)) continue;
+          const albumLufs = -0.691 + 10 * Math.log10(mean);
+          const albumGain = reference - albumLufs;
+          for (const id of bucket.ids) {
+            update.run(albumGain, bucket.peak || null, id);
+            updated += 1;
+          }
+        }
+      })();
+      return { albums: albums.size, updated };
+    },
+
     keyfinder_health: () => keyFinder.health(),
     start_track_analysis: ({ tracks, settings, writeAuthorization }, sender) =>
       keyFinder.startAnalysis(
@@ -849,7 +1111,35 @@ export const createBackend = ({
         for (const row of rows) refreshSearchText(db, row.id);
       });
       update();
+      // The triggers already mirrored each update, but a full rebuild also
+      // clears anything an older version left behind.
+      rebuildSearchIndex(db);
       return rows.length;
+    },
+
+    set_watched_folders: ({ dbPath, folders, isEnabled }) =>
+      libraryWatcher.setFolders({ dbPath, folders, isEnabled }),
+
+    /** Catch up on files added while the watcher was not running. */
+    scan_watched_folders: ({ dbPath, folders }) =>
+      libraryWatcher.scanNow({ dbPath, folders }),
+
+    watched_folders_status: () => libraryWatcher.status(),
+
+    /**
+     * Track ids matching a query, ranked by the full-text index.
+     *
+     * null means the index has no opinion — the query held no searchable terms,
+     * or the expression could not be evaluated. That is distinct from an empty
+     * array, which means "searched, matched nothing", so the caller must not
+     * collapse the two.
+     */
+    search_tracks: ({ dbPath, query, limit }) =>
+      searchTrackIds(dbPath, String(query ?? ""), Number(limit) || 0),
+
+    rebuild_search_index: ({ dbPath }) => {
+      rebuildSearchIndex(openDatabase(dbPath));
+      return { rebuilt: true };
     },
     backfill_cover_art: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
@@ -934,9 +1224,11 @@ export const createBackend = ({
     async invoke(command, args, sender) {
       const handler = commands[command];
       if (!handler) throw new Error(`Unsupported command: ${command}`);
+      if (sender) lastSender = sender;
       return handler(args, sender);
     },
     close() {
+      libraryWatcher.close();
       castService.close();
       dlnaService.close();
       keyFinder.close();

@@ -33,6 +33,17 @@ export type Track = {
   lastPlayedAt?: string;
   playCount: number;
   beatGrid?: BeatGrid;
+  /** Integrated loudness in LUFS, when measured. */
+  loudnessLufs?: number;
+  /** ReplayGain in dB relative to the reference level. */
+  replayGainTrackDb?: number;
+  /** Sample peak as a linear ratio, used to hold back clipping. */
+  replayGainTrackPeak?: number;
+  replayGainAlbumDb?: number;
+  replayGainAlbumPeak?: number;
+  loudnessSource?: "tag" | "analyzed";
+  /** Source file was absent the last time the library was verified. */
+  isMissing?: boolean;
   musicBrainzTrackId?: string;
   musicBrainzAlbumId?: string;
   musicBrainzReleaseGroupId?: string;

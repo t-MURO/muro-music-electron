@@ -1,8 +1,9 @@
-import { ChevronLeft, ChevronRight, Minus, Square, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Minus, Redo2, Square, Undo2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import appLogo from "../../assets/app-logo.png";
 import type { WindowControlAction } from "../../desktop/bridge";
-import { useHistoryNavigation } from "../../hooks";
+import { useCommandHistory, useHistoryNavigation } from "../../hooks";
+import { t } from "../../i18n";
 
 type WindowMaximizedPayload = {
   maximized?: unknown;
@@ -12,6 +13,8 @@ export const WindowChrome = () => {
   const isMac = window.muro?.platform === "darwin";
   const [isMaximized, setIsMaximized] = useState(false);
   const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
+  const { canUndo, canRedo, undoLabel, redoLabel, undo, redo } = useCommandHistory();
+  const modifier = isMac ? "⌘" : "Ctrl+";
 
   useEffect(() => {
     const desktop = window.muro;
@@ -150,6 +153,37 @@ export const WindowChrome = () => {
           type="button"
         >
           <ChevronRight />
+        </button>
+      </nav>
+
+      <nav
+        className="window-history-controls window-no-drag ml-1"
+        aria-label={t("history.undo")}
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <button
+          className="window-history-button"
+          onClick={undo}
+          disabled={!canUndo}
+          aria-label={t("history.undo")}
+          aria-keyshortcuts="Meta+Z Control+Z"
+          title={`${undoLabel ?? t("history.undo")} (${modifier}Z)`}
+          data-history-undo
+          type="button"
+        >
+          <Undo2 />
+        </button>
+        <button
+          className="window-history-button"
+          onClick={redo}
+          disabled={!canRedo}
+          aria-label={t("history.redo")}
+          aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z"
+          title={`${redoLabel ?? t("history.redo")} (${modifier}⇧Z)`}
+          data-history-redo
+          type="button"
+        >
+          <Redo2 />
         </button>
       </nav>
 

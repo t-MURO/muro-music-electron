@@ -21,6 +21,7 @@ import {
   type PlaybackState,
 } from "../utils";
 import type { TransitionStatePayload } from "../utils/playbackApi";
+import { resolveGainFactor } from "../utils/replayGain";
 import { disconnectFromRemote } from "../utils/remoteOutputController";
 import {
   isRemoteUnsupportedFormat,
@@ -275,7 +276,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         const initialState = await playbackGetState();
         if (!cancelled && !isRemoteOutputActive()) updateFromPlaybackState(initialState);
       } catch (error) {
-        if (!cancelled) notify.error("Failed to get initial playback state");
+        if (!cancelled) notify.error(t("toast.playback.stateFailed"));
       }
     };
 
@@ -296,7 +297,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       return;
     }
     playbackSetSeekMode(seekMode).catch(() => {
-      notify.error("Failed to set seek mode");
+      notify.error(t("toast.playback.seekModeFailed"));
     });
   }, [seekMode]);
 
@@ -342,6 +343,11 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         return;
       }
       try {
+        const {
+          replayGainMode,
+          replayGainPreampDb,
+          replayGainPreventClipping,
+        } = useSettingsStore.getState();
         await playbackPlayFile(
           track.id,
           track.title,
@@ -350,14 +356,21 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
           track.sourcePath,
           track.durationSeconds,
           track.coverArtPath,
-          track.coverArtThumbPath
+          track.coverArtThumbPath,
+          // Remote outputs render at the device's own level; loudness
+          // normalization only applies to local playback.
+          resolveGainFactor(track, {
+            mode: replayGainMode,
+            preampDb: replayGainPreampDb,
+            preventClipping: replayGainPreventClipping,
+          })
         );
         setIsPlaying(true);
         setCurrentPosition(0);
         setDuration(track.durationSeconds);
         setCurrentTrack(trackToCurrentTrack(track));
       } catch (error) {
-        notify.error("Failed to play track");
+        notify.error(t("toast.playback.playTrackFailed"));
       }
     },
     [setIsPlaying, setCurrentPosition, setDuration, setCurrentTrack]
@@ -384,7 +397,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       const isNowPlaying = await playbackToggle();
       setIsPlaying(isNowPlaying);
     } catch (error) {
-      notify.error("Failed to toggle playback");
+      notify.error(t("toast.playback.toggleFailed"));
     }
   }, [setIsPlaying]);
 
@@ -403,7 +416,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       await playbackPlay();
       setIsPlaying(true);
     } catch (error) {
-      notify.error("Failed to play");
+      notify.error(t("toast.playback.playFailed"));
     }
   }, [setIsPlaying]);
 
@@ -422,7 +435,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       await playbackPause();
       setIsPlaying(false);
     } catch (error) {
-      notify.error("Failed to pause");
+      notify.error(t("toast.playback.pauseFailed"));
     }
   }, [setIsPlaying]);
 
@@ -442,7 +455,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         await playbackSeek(positionSecs);
         setCurrentPosition(positionSecs);
       } catch (error) {
-        notify.error("Failed to seek");
+        notify.error(t("toast.playback.seekFailed"));
       }
     },
     [setCurrentPosition]
@@ -465,7 +478,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         await playbackSetVolume(clamped);
         setVolume(clamped);
       } catch (error) {
-        notify.error("Failed to set volume");
+        notify.error(t("toast.playback.volumeFailed"));
       }
     },
     [setVolume]

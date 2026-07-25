@@ -551,6 +551,31 @@ app.whenReady().then(async () => {
         message: "Simulated locked file",
       })),
     };
+    // Gapless preload and crossfade configuration: the renderer pushes these
+    // whenever the queue or the transport settings change.
+    if (
+      command === "playback_preload_next" ||
+      command === "playback_clear_preload" ||
+      command === "playback_set_gapless" ||
+      command === "playback_set_crossfade" ||
+      command === "playback_set_track_gain"
+    ) return undefined;
+    // Full-text search: null tells the renderer the index has no opinion, so it
+    // uses its in-memory matcher — which is what the search assertions below
+    // exercise. The index itself is covered by search-index-smoke.
+    if (command === "search_tracks") return null;
+    if (command === "set_watched_folders") return { watching: [] };
+    if (command === "scan_watched_folders") return { imported: 0, scanned: 0 };
+    if (command === "watched_folders_status") {
+      return { enabled: false, watching: [], pending: 0 };
+    }
+    if (command === "verify_library_files") {
+      return { checked: 0, newlyMissing: 0, restored: 0, missing: 0 };
+    }
+    if (command === "list_missing_tracks") return [];
+    if (command === "list_tracks_needing_loudness") return [];
+    if (command === "update_track_loudness") return { updated: true };
+    if (command === "recompute_album_gain") return { albums: 0, updated: 0 };
     throw new Error(`Unexpected renderer smoke command: ${command}`);
   });
 

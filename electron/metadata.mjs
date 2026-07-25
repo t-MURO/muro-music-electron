@@ -111,6 +111,32 @@ const ratingFromMetadata = (common) => {
 const fallbackTitle = (filePath) =>
   path.basename(filePath, path.extname(filePath)).replace(/^\s*\d+[\s._-]+/, "") || "Unknown Title";
 
+const finiteOrNull = (value) =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+/**
+ * ReplayGain values already written into the file by another tool. music-metadata
+ * exposes these as { dB, ratio }; gains are read in dB and peaks as a linear
+ * ratio. Files tagged this way need no analysis pass.
+ */
+export const replayGainFromTags = (common) => {
+  const trackGainDb = finiteOrNull(common.replaygain_track_gain?.dB);
+  const albumGainDb = finiteOrNull(common.replaygain_album_gain?.dB);
+  const trackPeak =
+    finiteOrNull(common.replaygain_track_peak?.ratio) ??
+    finiteOrNull(common.replaygain_track_peak_ratio);
+  const albumPeak = finiteOrNull(common.replaygain_album_peak?.ratio);
+
+  const hasAny = trackGainDb !== null || albumGainDb !== null;
+  return {
+    replaygain_track_gain_db: trackGainDb,
+    replaygain_track_peak: trackPeak,
+    replaygain_album_gain_db: albumGainDb,
+    replaygain_album_peak: albumPeak,
+    loudness_source: hasAny ? "tag" : null,
+  };
+};
+
 export const importAudioFile = async (dbPath, filePath, cacheDir) => {
   const db = openDatabase(dbPath);
   if (db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(filePath)) return null;
@@ -180,6 +206,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     updated_at: Math.floor(stat.mtimeMs / 1000) || now,
     cover_art_path: cached?.fullPath ?? null,
     cover_art_thumb_path: cached?.thumbPath ?? null,
+    ...replayGainFromTags(common),
   };
 
   db.prepare(`
@@ -192,7 +219,9 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
       source_path, search_text, import_status,
       duration_seconds, bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
       added_at, updated_at, is_missing,
-      cover_art_path, cover_art_thumb_path
+      cover_art_path, cover_art_thumb_path,
+      replaygain_track_gain_db, replaygain_track_peak,
+      replaygain_album_gain_db, replaygain_album_peak, loudness_source
     ) VALUES (
       @id, @title, @artist, @album, @album_artist, @genre_json, @comment_json, @label,
       @filename, @year, @date, @track_number, @track_total, @disc_number, @disc_total,
@@ -202,7 +231,9 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
       @source_path, @search_text, @import_status,
       @duration_seconds, @bitrate_kbps, @sample_rate_hz, @bit_depth, @file_size_bytes,
       @added_at, @updated_at, 0,
-      @cover_art_path, @cover_art_thumb_path
+      @cover_art_path, @cover_art_thumb_path,
+      @replaygain_track_gain_db, @replaygain_track_peak,
+      @replaygain_album_gain_db, @replaygain_album_peak, @loudness_source
     )
   `).run(record);
 
@@ -296,3 +327,13 @@ export const extractTechnicalMetadata = async (sourcePath) => {
 export const extractAndCacheCover = async (sourcePath, cacheDir) => (
   await extractCoverMetadata(sourcePath, cacheDir)
 ).cached;
+
+/** Duration in seconds, or 0 when the file cannot be parsed. */
+export const readAudioDuration = async (sourcePath) => {
+  try {
+    const metadata = await parseFile(sourcePath, { duration: true, skipCovers: true });
+    return metadata.format.duration || 0;
+  } catch {
+    return 0;
+  }
+};

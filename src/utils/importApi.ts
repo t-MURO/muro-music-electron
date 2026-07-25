@@ -38,6 +38,13 @@ export type ImportedTrack = {
   last_played_at?: string;
   play_count: number;
   beat_grid_json?: string | null;
+  loudness_lufs?: number;
+  replaygain_track_gain_db?: number;
+  replaygain_track_peak?: number;
+  replaygain_album_gain_db?: number;
+  replaygain_album_peak?: number;
+  loudness_source?: string;
+  is_missing?: number;
   musicbrainz_trackid?: string;
   musicbrainz_albumid?: string;
   musicbrainz_releasegroupid?: string;
@@ -154,6 +161,16 @@ export const importedTrackToTrack = (imported: ImportedTrack): Track => ({
   lastPlayedAt: imported.last_played_at,
   playCount: imported.play_count,
   beatGrid: parseBeatGrid(imported.beat_grid_json),
+  loudnessLufs: imported.loudness_lufs,
+  replayGainTrackDb: imported.replaygain_track_gain_db,
+  replayGainTrackPeak: imported.replaygain_track_peak,
+  replayGainAlbumDb: imported.replaygain_album_gain_db,
+  replayGainAlbumPeak: imported.replaygain_album_peak,
+  loudnessSource:
+    imported.loudness_source === "tag" || imported.loudness_source === "analyzed"
+      ? imported.loudness_source
+      : undefined,
+  isMissing: imported.is_missing === 1,
   musicBrainzTrackId: imported.musicbrainz_trackid,
   musicBrainzAlbumId: imported.musicbrainz_albumid,
   musicBrainzReleaseGroupId: imported.musicbrainz_releasegroupid,

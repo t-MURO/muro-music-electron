@@ -1,6 +1,7 @@
 import { memo } from "react";
-import { Circle, Music2, Play } from "lucide-react";
+import { Circle, FileWarning, Music2, Play } from "lucide-react";
 import { convertFileSrc } from "@muro/desktop/runtime";
+import { t } from "../../i18n";
 import type { ColumnConfig, Track } from "../../types";
 import { getCamelotColor } from "../../utils/camelot";
 import { RatingCell } from "./RatingCell";
@@ -232,9 +233,19 @@ export const TableRow = memo(
                 : undefined}
             >
               {isTitleColumn && (
-                isPlayingTrack
-                  ? <Play className={`mr-2 h-3 w-3 shrink-0 text-[var(--color-accent)] ${isCurrentlyPlaying ? "opacity-100" : "opacity-70"}`} fill="currentColor" />
-                  : <Circle className="mr-2 h-2 w-2 shrink-0 text-[var(--color-text-muted)]" fill="currentColor" strokeWidth={0} />
+                track.isMissing
+                  ? (
+                    <FileWarning
+                      aria-label={t("track.missing")}
+                      className="mr-2 h-3 w-3 shrink-0 text-amber-500"
+                      data-track-missing
+                    >
+                      <title>{t("track.missing")}</title>
+                    </FileWarning>
+                  )
+                  : isPlayingTrack
+                    ? <Play className={`mr-2 h-3 w-3 shrink-0 text-[var(--color-accent)] ${isCurrentlyPlaying ? "opacity-100" : "opacity-70"}`} fill="currentColor" />
+                    : <Circle className="mr-2 h-2 w-2 shrink-0 text-[var(--color-text-muted)]" fill="currentColor" strokeWidth={0} />
               )}
               {camelotColor ? (
                 <span

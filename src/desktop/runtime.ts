@@ -47,6 +47,58 @@ let seekMode = "accurate";
 let mediaSessionConfigured = false;
 let playbackOperationChain: Promise<unknown> = Promise.resolve();
 
+// ---------------------------------------------------------------------------
+// Gapless / crossfade / loudness state
+// ---------------------------------------------------------------------------
+
+type PreloadedTrack = {
+  track: CurrentTrack;
+  durationHint: number;
+  gainFactor: number;
+};
+
+/**
+ * The next track, already decoded into the idle element. The renderer decides
+ * *what* to preload (it owns the queue); the runtime only holds it ready and
+ * reports when it took over, via `muro://track-advanced`.
+ */
+let preloaded: PreloadedTrack | null = null;
+let gaplessEnabled = true;
+/** 0 disables crossfading and falls back to the gapless hand-off. */
+let crossfadeSeconds = 0;
+/** Linear multiplier applied on top of masterVolume for the playing track. */
+let currentGainFactor = 1;
+let crossfadeTimer: number | null = null;
+let crossfadeStartedAt = 0;
+/** Guards against the boundary firing twice for one track. */
+let handoffInFlight = false;
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+/**
+ * HTMLMediaElement.volume is capped at 1, so a positive ReplayGain adjustment
+ * (a track quieter than the reference level) can only be applied up to unity.
+ * Attenuation — which is what most modern masters need — is exact.
+ */
+const applyElementVolume = (element: HTMLAudioElement, gainFactor: number) => {
+  element.volume = clamp01(masterVolume * gainFactor);
+};
+
+const applyCurrentVolume = () => {
+  if (audio) applyElementVolume(audio, currentGainFactor);
+};
+
+const stopCrossfade = () => {
+  if (crossfadeTimer !== null) {
+    window.clearInterval(crossfadeTimer);
+    crossfadeTimer = null;
+  }
+};
+
+const emitTrackAdvanced = (trackId: string, reason: "gapless" | "crossfade") => {
+  emitLocal("muro://track-advanced", { track_id: trackId, reason });
+};
+
 const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
   "play",
   "pause",
@@ -232,6 +284,7 @@ const attachElementListeners = (el: HTMLAudioElement) => {
     if (el !== audio) return;
     emitLocal("muro://playback-position", el.currentTime);
     syncMediaSessionState();
+    maybeStartCrossfade(el);
   });
   el.addEventListener("play", () => {
     if (el !== audio) return;
@@ -253,6 +306,20 @@ const attachElementListeners = (el: HTMLAudioElement) => {
       return;
     }
     if (el !== audio) return;
+
+    // A crossfade already promoted the incoming track; the outgoing element
+    // reaching its end is expected and must not advance the queue again.
+    if (handoffInFlight) return;
+
+    // Gapless: the next track is already decoded, so start it here instead of
+    // asking the renderer to load it. This removes the load-and-decode gap;
+    // the remaining element-swap latency is a few milliseconds.
+    if (gaplessEnabled && preloaded && idleEl) {
+      handoffInFlight = true;
+      void promotePreloaded("gapless");
+      return;
+    }
+
     emitState();
     emitLocal("muro://track-ended", null);
   });
@@ -283,6 +350,155 @@ const ensureAudio = (): HTMLAudioElement => {
   return audio;
 };
 
+const ensureIdleElement = (): HTMLAudioElement => {
+  if (!idleEl) idleEl = createAudioElement("auto");
+  return idleEl;
+};
+
+const discardPreload = () => {
+  stopCrossfade();
+  if (preloaded && idleEl) {
+    idleEl.pause();
+    idleEl.removeAttribute("src");
+    idleEl.load();
+  }
+  preloaded = null;
+  handoffInFlight = false;
+};
+
+/**
+ * Make the preloaded element the playing one. The two elements swap roles
+ * exactly as they do after a DJ transition hand-off, so the retired element
+ * becomes the idle slot for the next preload.
+ */
+const promotePreloaded = async (reason: "gapless" | "crossfade") => {
+  const pending = preloaded;
+  const incoming = idleEl;
+  if (!pending || !incoming || !audio) return;
+
+  const outgoing = audio;
+  preloaded = null;
+
+  audio = incoming;
+  idleEl = outgoing;
+  currentTrack = pending.track;
+  durationHint = pending.durationHint;
+  currentGainFactor = pending.gainFactor;
+
+  setMediaSessionMetadata(currentTrack);
+  // Bring the incoming element to its full level. The crossfade ticker ends at
+  // full gain anyway, but a fade cut short by a pause would not have.
+  applyElementVolume(incoming, pending.gainFactor);
+
+  if (reason === "gapless") {
+    try {
+      await playWithTimeout(incoming, PLAYBACK_START_TIMEOUT_MS, "Gapless playback");
+    } catch {
+      // The buffered element refused to start; fall back to the normal
+      // advance so the renderer can load the track the usual way.
+      emitLocal("muro://track-ended", null);
+      handoffInFlight = false;
+      return;
+    }
+  }
+
+  outgoing.pause();
+  outgoing.removeAttribute("src");
+  outgoing.load();
+
+  emitState();
+  emitTrackAdvanced(currentTrack.id, reason);
+  handoffInFlight = false;
+};
+
+/**
+ * Equal-power crossfade driven by a timer rather than Web Audio ramps, because
+ * normal playback runs straight through the media elements. The mix engine's
+ * AudioContext is reserved for DJ transitions.
+ */
+const beginCrossfade = (durationSeconds: number) => {
+  const pending = preloaded;
+  const incoming = idleEl;
+  const outgoing = audio;
+  if (!pending || !incoming || !outgoing) return;
+
+  handoffInFlight = true;
+  const outgoingGain = currentGainFactor;
+  incoming.currentTime = 0;
+  applyElementVolume(incoming, 0);
+
+  void playWithTimeout(incoming, PLAYBACK_START_TIMEOUT_MS, "Crossfade playback")
+    .then(() => {
+      crossfadeStartedAt = performance.now();
+      stopCrossfade();
+      crossfadeTimer = window.setInterval(() => {
+        const elapsed = (performance.now() - crossfadeStartedAt) / 1000;
+        const progress = clamp01(elapsed / durationSeconds);
+        // sin/cos keeps summed power constant across the fade.
+        const fadeIn = Math.sin((progress * Math.PI) / 2);
+        const fadeOut = Math.cos((progress * Math.PI) / 2);
+        applyElementVolume(incoming, pending.gainFactor * fadeIn);
+        applyElementVolume(outgoing, outgoingGain * fadeOut);
+
+        if (progress >= 1) {
+          stopCrossfade();
+          void promotePreloaded("crossfade");
+        }
+      }, 50);
+    })
+    .catch(() => {
+      // Could not start the incoming deck: leave the outgoing track alone and
+      // let it end normally.
+      handoffInFlight = false;
+      applyElementVolume(outgoing, outgoingGain);
+    });
+};
+
+/**
+ * Abandon an in-progress crossfade and return the outgoing track to full
+ * volume. Used when the user seeks away from the boundary.
+ */
+const cancelCrossfade = () => {
+  stopCrossfade();
+  if (!handoffInFlight) return;
+  handoffInFlight = false;
+  if (idleEl) {
+    idleEl.pause();
+    idleEl.currentTime = 0;
+  }
+  applyCurrentVolume();
+};
+
+/**
+ * Collapse a running crossfade to its end state at once. Pausing mid-fade
+ * would otherwise leave both elements stuck at partial volume, so the incoming
+ * track simply becomes the current one immediately.
+ */
+const finishCrossfadeImmediately = () => {
+  if (!handoffInFlight || crossfadeTimer === null) return;
+  stopCrossfade();
+  void promotePreloaded("crossfade");
+};
+
+/**
+ * Called on every timeupdate of the playing element. Starts a crossfade once
+ * the remaining time reaches the configured length.
+ */
+const maybeStartCrossfade = (element: HTMLAudioElement) => {
+  if (handoffInFlight || crossfadeSeconds <= 0 || !preloaded) return;
+  if (mix.isTransitionEngaged()) return;
+
+  const duration = Number.isFinite(element.duration) ? element.duration : durationHint;
+  if (!Number.isFinite(duration) || duration <= 0) return;
+
+  const remaining = duration - element.currentTime;
+  // A crossfade longer than the track itself would start before playback does.
+  const fade = Math.min(crossfadeSeconds, duration / 2);
+  if (remaining > fade || remaining <= 0) return;
+
+  beginCrossfade(fade);
+};
+
 const resumeTransitionPlayers = async (
   outgoing: HTMLAudioElement,
   incoming: HTMLAudioElement,
@@ -311,6 +527,9 @@ const playbackInvoke = async <T>(
   switch (command) {
     case "playback_play_file": {
       if (mix.isTransitionEngaged()) mix.cancelTransition();
+      // An explicit play request overrides whatever was queued up for the
+      // gapless hand-off.
+      discardPreload();
       // Stop the previous source before changing tracks. This also makes
       // repeated/rapid play requests deterministic on Windows.
       player.pause();
@@ -324,13 +543,72 @@ const playbackInvoke = async <T>(
         cover_art_thumb_path: args.coverArtThumbPath as string | undefined,
       };
       durationHint = Number(args.durationHint) || 0;
+      currentGainFactor = Number(args.gainFactor) > 0 ? Number(args.gainFactor) : 1;
       setMediaSessionMetadata(currentTrack);
       player.src = convertFileSrc(currentTrack.source_path);
       player.currentTime = 0;
+      applyElementVolume(player, currentGainFactor);
       emitState();
       await playWithTimeout(player, PLAYBACK_START_TIMEOUT_MS, "Track playback");
       return undefined as T;
     }
+    case "playback_preload_next": {
+      // The renderer peeks at its own queue and hands the result here. Nothing
+      // is played until the current track reaches its boundary.
+      if (mix.isTransitionEngaged() || handoffInFlight) return undefined as T;
+      const track = args.track as {
+        id: string;
+        title: string;
+        artist: string;
+        album: string;
+        sourcePath: string;
+        durationHint?: number;
+        coverArtPath?: string;
+        coverArtThumbPath?: string;
+        gainFactor?: number;
+      } | null;
+
+      if (!track) {
+        discardPreload();
+        return undefined as T;
+      }
+      if (preloaded?.track.id === track.id) return undefined as T;
+
+      discardPreload();
+      const element = ensureIdleElement();
+      element.src = convertFileSrc(String(track.sourcePath));
+      element.currentTime = 0;
+      element.load();
+      preloaded = {
+        track: {
+          id: String(track.id),
+          title: String(track.title),
+          artist: String(track.artist),
+          album: String(track.album),
+          source_path: String(track.sourcePath),
+          cover_art_path: track.coverArtPath,
+          cover_art_thumb_path: track.coverArtThumbPath,
+        },
+        durationHint: Number(track.durationHint) || 0,
+        gainFactor: Number(track.gainFactor) > 0 ? Number(track.gainFactor) : 1,
+      };
+      return undefined as T;
+    }
+    case "playback_clear_preload":
+      discardPreload();
+      return undefined as T;
+    case "playback_set_gapless":
+      gaplessEnabled = Boolean(args.enabled);
+      if (!gaplessEnabled) discardPreload();
+      return undefined as T;
+    case "playback_set_crossfade":
+      crossfadeSeconds = Math.max(0, Math.min(12, Number(args.seconds) || 0));
+      return undefined as T;
+    case "playback_set_track_gain":
+      currentGainFactor = Number(args.gainFactor) > 0 ? Number(args.gainFactor) : 1;
+      applyCurrentVolume();
+      emitState();
+      return undefined as T;
     case "playback_toggle":
       if (player.paused) {
         if (mix.isTransitionActive() && idleEl) {
@@ -344,10 +622,11 @@ const playbackInvoke = async <T>(
           if (idleEl && !idleEl.paused) idleEl.pause();
           mix.notifyPause();
         } else {
-          player.pause();
+          finishCrossfadeImmediately();
+          (audio ?? player).pause();
         }
       }
-      return (!player.paused) as T;
+      return (!(audio ?? player).paused) as T;
     case "playback_play":
       if (mix.isTransitionActive() && idleEl && player.paused) {
         await resumeTransitionPlayers(player, idleEl);
@@ -357,7 +636,9 @@ const playbackInvoke = async <T>(
       return undefined as T;
     case "playback_pause": {
       const transitionActive = mix.isTransitionActive();
-      if (!player.paused) player.pause();
+      if (!transitionActive) finishCrossfadeImmediately();
+      const active = audio ?? player;
+      if (!active.paused) active.pause();
       if (transitionActive) {
         if (idleEl && !idleEl.paused) idleEl.pause();
         mix.notifyPause();
@@ -367,6 +648,8 @@ const playbackInvoke = async <T>(
     }
     case "playback_stop":
       if (mix.isTransitionEngaged()) mix.cancelTransition();
+      cancelCrossfade();
+      discardPreload();
       player.pause();
       player.currentTime = 0;
       currentTrack = null;
@@ -374,13 +657,19 @@ const playbackInvoke = async <T>(
       emitState();
       return undefined as T;
     case "playback_seek":
-      await seekPlayer(player, Math.max(0, Number(args.positionSecs) || 0));
+      // Seeking away from the boundary abandons a fade that already started.
+      if (crossfadeTimer !== null) cancelCrossfade();
+      await seekPlayer(audio ?? player, Math.max(0, Number(args.positionSecs) || 0));
       if (mix.isTransitionEngaged()) mix.notifySeek();
       return undefined as T;
     case "playback_set_volume":
       masterVolume = Math.max(0, Math.min(1, Number(args.volume)));
-      player.volume = masterVolume;
-      if (idleEl) idleEl.volume = masterVolume;
+      // Track gain rides on top of the master volume, so both elements are
+      // re-derived rather than assigned the raw value.
+      applyCurrentVolume();
+      if (idleEl && preloaded && crossfadeTimer === null) {
+        applyElementVolume(idleEl, preloaded.gainFactor);
+      }
       emitState();
       return undefined as T;
     case "playback_set_seek_mode":
@@ -407,6 +696,10 @@ const playbackInvoke = async <T>(
       return Boolean(player.ended) as T;
     case "playback_transition_to": {
       if (mix.isTransitionEngaged()) mix.cancelTransition();
+      // A DJ transition drives the idle element itself, so any gapless preload
+      // sitting in it is released first.
+      cancelCrossfade();
+      discardPreload();
       if (!currentTrack || player.paused) {
         throw new Error("Nothing playing to transition from");
       }
@@ -544,6 +837,7 @@ if (import.meta.hot) {
       }
       navigator.mediaSession.metadata = null;
     }
+    stopCrossfade();
     audio = null;
     idleEl = null;
     masterVolume = 1;
@@ -551,5 +845,10 @@ if (import.meta.hot) {
     durationHint = 0;
     mediaSessionConfigured = false;
     playbackOperationChain = Promise.resolve();
+    preloaded = null;
+    handoffInFlight = false;
+    currentGainFactor = 1;
+    crossfadeSeconds = 0;
+    gaplessEnabled = true;
   });
 }

@@ -21,6 +21,11 @@ import {
 import { t, type Locale } from "../../i18n";
 import { openExternal } from "../../desktop/shell";
 import { MIX_BAR_OPTIONS } from "../../lib/mix/config";
+import { useLoudnessAnalysis } from "../../hooks/useLoudnessAnalysis";
+import { useLibraryVerification } from "../../hooks/useLibraryVerification";
+import { useWatchedFolders } from "../../hooks/useWatchedFolders";
+import { MissingTracksModal } from "../ui/MissingTracksModal";
+import type { ReplayGainMode } from "../../utils/replayGain";
 import {
   useSettingsStore,
   type AnalysisNotationMode,
@@ -147,6 +152,8 @@ const ANALYSIS_OUTPUT_FIELDS: Array<{
   { field: "initialKey", label: "Initial Key" },
   { field: "bpm", label: "Detected BPM", bpmOnly: true },
 ];
+
+const CROSSFADE_OPTIONS = [2, 3, 4, 6, 8, 12];
 
 const inputClass =
   "h-[var(--input-height)] w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] transition-all duration-[var(--transition-fast)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]";
@@ -345,6 +352,25 @@ export const SettingsPanel = ({
   onClearSongs,
   onUseDefaultLocation,
 }: SettingsPanelProps) => {
+  const gaplessEnabled = useSettingsStore((s) => s.gaplessEnabled);
+  const crossfadeSeconds = useSettingsStore((s) => s.crossfadeSeconds);
+  const replayGainMode = useSettingsStore((s) => s.replayGainMode);
+  const replayGainPreampDb = useSettingsStore((s) => s.replayGainPreampDb);
+  const replayGainPreventClipping = useSettingsStore((s) => s.replayGainPreventClipping);
+  const replayGainReferenceLufs = useSettingsStore((s) => s.replayGainReferenceLufs);
+  const setGaplessEnabled = useSettingsStore((s) => s.setGaplessEnabled);
+  const setCrossfadeSeconds = useSettingsStore((s) => s.setCrossfadeSeconds);
+  const setReplayGainMode = useSettingsStore((s) => s.setReplayGainMode);
+  const setReplayGainPreampDb = useSettingsStore((s) => s.setReplayGainPreampDb);
+  const setReplayGainPreventClipping = useSettingsStore((s) => s.setReplayGainPreventClipping);
+  const setReplayGainReferenceLufs = useSettingsStore((s) => s.setReplayGainReferenceLufs);
+  const loudnessScan = useLoudnessAnalysis();
+  const verification = useLibraryVerification();
+  const watched = useWatchedFolders();
+  const [missingTracksOpen, setMissingTracksOpen] = useState(false);
+
+  const onShowMissingTracks = () => setMissingTracksOpen(true);
+
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
   const [settingsSearch, setSettingsSearch] = useState("");
   const [useExportAsCurrentLibrary, setUseExportAsCurrentLibrary] = useState(false);
@@ -547,23 +573,206 @@ export const SettingsPanel = ({
                   </p>
                 </SettingsGroup>
 
-                <SettingsGroup title="Playback">
-                  <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-                    Seek mode
-                  </label>
-                  <SelectShell>
-                    <select
-                      className={selectClass}
-                      onChange={(event) => onSeekModeChange(event.target.value as "fast" | "accurate")}
-                      value={seekMode}
-                    >
-                      <option value="fast">Fast (Recommended)</option>
-                      <option value="accurate">Accurate</option>
-                    </select>
-                  </SelectShell>
-                  <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
-                    Fast seeking is snappier but can be slightly less precise on some formats.
-                  </p>
+                <SettingsGroup title={t("playback.section")}>
+                  <div className="space-y-5">
+                    <div>
+                      <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                        Seek mode
+                      </label>
+                      <SelectShell>
+                        <select
+                          className={selectClass}
+                          onChange={(event) => onSeekModeChange(event.target.value as "fast" | "accurate")}
+                          value={seekMode}
+                        >
+                          <option value="fast">Fast (Recommended)</option>
+                          <option value="accurate">Accurate</option>
+                        </select>
+                      </SelectShell>
+                      <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                        Fast seeking is snappier but can be slightly less precise on some formats.
+                      </p>
+                    </div>
+
+                    <label className="flex items-start gap-3">
+                      <input
+                        checked={gaplessEnabled}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                        data-gapless-toggle
+                        onChange={(event) => setGaplessEnabled(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                          {t("playback.gapless")}
+                        </span>
+                        <span className="mt-1 block text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                          {t("playback.gapless.description")}
+                        </span>
+                      </span>
+                    </label>
+
+                    <div>
+                      <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                        {t("playback.crossfade")}
+                      </label>
+                      <SelectShell>
+                        <select
+                          className={selectClass}
+                          data-crossfade-select
+                          disabled={!gaplessEnabled}
+                          onChange={(event) => setCrossfadeSeconds(Number(event.target.value))}
+                          value={crossfadeSeconds}
+                        >
+                          <option value={0}>{t("playback.crossfade.off")}</option>
+                          {CROSSFADE_OPTIONS.map((seconds) => (
+                            <option key={seconds} value={seconds}>
+                              {t("playback.crossfade.seconds", { seconds: String(seconds) })}
+                            </option>
+                          ))}
+                        </select>
+                      </SelectShell>
+                      <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                        {t("playback.crossfade.description")}
+                      </p>
+                    </div>
+                  </div>
+                </SettingsGroup>
+
+                <SettingsGroup
+                  title={t("loudness.section")}
+                  description={t("loudness.mode.description")}
+                >
+                  <div className="space-y-5">
+                    <div>
+                      <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                        {t("loudness.mode")}
+                      </label>
+                      <SelectShell>
+                        <select
+                          className={selectClass}
+                          data-replaygain-mode
+                          onChange={(event) =>
+                            setReplayGainMode(event.target.value as ReplayGainMode)
+                          }
+                          value={replayGainMode}
+                        >
+                          <option value="off">{t("loudness.mode.off")}</option>
+                          <option value="track">{t("loudness.mode.track")}</option>
+                          <option value="album">{t("loudness.mode.album")}</option>
+                        </select>
+                      </SelectShell>
+                      <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                        {t("loudness.boostNote")}
+                      </p>
+                    </div>
+
+                    {replayGainMode !== "off" && (
+                      <>
+                        <div>
+                          <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                            {t("loudness.preamp")}
+                            <span className="ml-2 tabular-nums text-[var(--color-text-muted)]">
+                              {replayGainPreampDb > 0 ? "+" : ""}
+                              {replayGainPreampDb.toFixed(1)} dB
+                            </span>
+                          </label>
+                          <input
+                            className="w-64 accent-[var(--color-accent)]"
+                            data-replaygain-preamp
+                            max={15}
+                            min={-15}
+                            onChange={(event) =>
+                              setReplayGainPreampDb(Number(event.target.value))
+                            }
+                            step={0.5}
+                            type="range"
+                            value={replayGainPreampDb}
+                          />
+                          <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                            {t("loudness.preamp.description")}
+                          </p>
+                        </div>
+
+                        <label className="flex items-start gap-3">
+                          <input
+                            checked={replayGainPreventClipping}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                            data-replaygain-clipping
+                            onChange={(event) =>
+                              setReplayGainPreventClipping(event.target.checked)
+                            }
+                            type="checkbox"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                              {t("loudness.preventClipping")}
+                            </span>
+                            <span className="mt-1 block text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                              {t("loudness.preventClipping.description")}
+                            </span>
+                          </span>
+                        </label>
+
+                        <div>
+                          <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                            {t("loudness.reference")}
+                          </label>
+                          <SelectShell>
+                            <select
+                              className={selectClass}
+                              data-replaygain-reference
+                              onChange={(event) =>
+                                setReplayGainReferenceLufs(Number(event.target.value))
+                              }
+                              value={replayGainReferenceLufs}
+                            >
+                              <option value={-18}>-18 LUFS (ReplayGain 2.0)</option>
+                              <option value={-16}>-16 LUFS</option>
+                              <option value={-14}>-14 LUFS (streaming)</option>
+                            </select>
+                          </SelectShell>
+                          <p className="mt-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                            {t("loudness.reference.description")}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="border-t border-[var(--color-border-light)] pt-5">
+                      <p className="mb-3 text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                        {t("loudness.scan.description")}
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <button
+                          className={primaryButtonClass}
+                          data-loudness-scan
+                          disabled={loudnessScan.running}
+                          onClick={() => { void loudnessScan.run(); }}
+                          type="button"
+                        >
+                          {t("loudness.scan.start")}
+                        </button>
+                        {loudnessScan.running && (
+                          <>
+                            <button
+                              className={secondaryButtonClass}
+                              onClick={loudnessScan.cancel}
+                              type="button"
+                            >
+                              {t("loudness.scan.cancel")}
+                            </button>
+                            <span className="text-[var(--font-size-xs)] tabular-nums text-[var(--color-text-secondary)]">
+                              {t("loudness.scan.progress", {
+                                analyzed: String(loudnessScan.analyzed),
+                                total: String(loudnessScan.total),
+                              })}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </SettingsGroup>
               </div>
             </div>
@@ -739,6 +948,116 @@ export const SettingsPanel = ({
                         an online service.
                       </p>
                     </div>
+                  </div>
+                </SettingsGroup>
+
+                <SettingsGroup
+                  title={t("watch.section")}
+                  description={t("watch.description")}
+                >
+                  <div className="space-y-4">
+                    <label className="flex items-start gap-3">
+                      <input
+                        checked={watched.watchFoldersEnabled}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                        data-watch-folders-toggle
+                        onChange={(event) =>
+                          watched.setWatchFoldersEnabled(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                        {t("watch.enable")}
+                      </span>
+                    </label>
+
+                    {watched.watchedFolders.length === 0 ? (
+                      <p className="text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
+                        {t("watch.empty")}
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {watched.watchedFolders.map((folder) => (
+                          <li
+                            key={folder}
+                            className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2"
+                          >
+                            <span
+                              className="min-w-0 flex-1 truncate text-[var(--font-size-xs)] text-[var(--color-text-secondary)]"
+                              title={folder}
+                            >
+                              {folder}
+                            </span>
+                            <button
+                              className="shrink-0 rounded px-2 py-1 text-[var(--font-size-xs)] font-medium text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
+                              onClick={() => watched.removeFolder(folder)}
+                              type="button"
+                            >
+                              {t("watch.remove")}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        className={secondaryButtonClass}
+                        data-watch-add-folder
+                        onClick={() => { void watched.addFolder(); }}
+                        type="button"
+                      >
+                        {t("watch.add")}
+                      </button>
+                      <button
+                        className={secondaryButtonClass}
+                        data-watch-scan-now
+                        disabled={watched.scanning || watched.watchedFolders.length === 0}
+                        onClick={() => { void watched.scanNow(); }}
+                        type="button"
+                      >
+                        {watched.scanning ? t("watch.scanning") : t("watch.scan")}
+                      </button>
+                    </div>
+                    <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                      {t("watch.scan.hint")}
+                    </p>
+                  </div>
+                </SettingsGroup>
+
+                <SettingsGroup
+                  title={t("verify.section")}
+                  description={t("verify.description")}
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      className={primaryButtonClass}
+                      data-verify-library
+                      disabled={verification.verifying}
+                      onClick={() => { void verification.verify(); }}
+                      type="button"
+                    >
+                      {verification.verifying ? t("verify.running") : t("verify.run")}
+                    </button>
+                    {verification.missingTracks.length > 0 && (
+                      <button
+                        className={secondaryButtonClass}
+                        data-show-missing-tracks
+                        onClick={onShowMissingTracks}
+                        type="button"
+                      >
+                        {t("verify.showMissing")} ({verification.missingTracks.length})
+                      </button>
+                    )}
+                    {verification.lastResult && (
+                      <span className="text-[var(--font-size-xs)] tabular-nums text-[var(--color-text-secondary)]">
+                        {t("verify.result", {
+                          missing: String(verification.lastResult.missing),
+                          restored: String(verification.lastResult.restored),
+                          checked: String(verification.lastResult.checked),
+                        })}
+                      </span>
+                    )}
                   </div>
                 </SettingsGroup>
               </div>
@@ -1061,6 +1380,15 @@ export const SettingsPanel = ({
           )}
         </div>
       </div>
+
+      <MissingTracksModal
+        isOpen={missingTracksOpen}
+        tracks={verification.missingTracks}
+        relinking={verification.relinking}
+        onClose={() => setMissingTracksOpen(false)}
+        onRelinkTrack={(trackId) => { void verification.relinkTrack(trackId); }}
+        onAutoRelink={() => { void verification.autoRelink(); }}
+      />
     </div>
   );
 };

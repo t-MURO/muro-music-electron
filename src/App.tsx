@@ -33,6 +33,7 @@ import {
   PlaylistCreateModal,
   PlaylistEditModal,
   SmartCrateModal,
+  ShortcutHelpModal,
   ToastContainer,
   GlobalButtonTooltips,
 } from "./components";
@@ -62,6 +63,9 @@ import {
   useOrganizedLibraryExport,
   usePlayTracking,
   useKeyboardShortcuts,
+  useCommandHistory,
+  useGaplessPlayback,
+  useIndexedSearch,
   useArtistProfiles,
   normalizeArtistProfileKey,
   type LibraryView,
@@ -142,6 +146,8 @@ function App() {
   const createSmartCrate = useSmartCrateStore((s) => s.createSmartCrate);
   const updateSmartCrate = useSmartCrateStore((s) => s.updateSmartCrate);
   const deleteSmartCrate = useSmartCrateStore((s) => s.deleteSmartCrate);
+  const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
+  const { undo, redo } = useCommandHistory();
   const [isSmartCrateModalOpen, setIsSmartCrateModalOpen] = useState(false);
   const [editingSmartCrateId, setEditingSmartCrateId] = useState<string | null>(null);
   const [isFolderCreateOpen, setIsFolderCreateOpen] = useState(false);
@@ -191,6 +197,8 @@ function App() {
 
   const shuffleEnabled = usePlaybackStore((s) => s.shuffleEnabled);
   const repeatMode = usePlaybackStore((s) => s.repeatMode);
+  const toggleShuffle = usePlaybackStore((s) => s.toggleShuffle);
+  const toggleRepeat = usePlaybackStore((s) => s.toggleRepeat);
   const queue = usePlaybackStore((s) => s.queue);
   const playingNext = usePlaybackStore((s) => s.playingNext);
   const addToQueue = usePlaybackStore((s) => s.addToQueue);
@@ -288,7 +296,7 @@ function App() {
   }, [navigate]);
 
   const handleOpenArtistSource = useCallback((url: string) => {
-    void openExternal(url).catch(() => notify.error("Could not open artist source"));
+    void openExternal(url).catch(() => notify.error(t("toast.artist.openSourceFailed")));
   }, []);
 
   // Redirect unknown paths to library
@@ -385,7 +393,7 @@ function App() {
     candidate: ArtistImageCandidate,
   ) => {
     await selectArtistProfileImage(artistName, candidate);
-    notify.success("Artist picture updated");
+    notify.success(t("toast.artist.imageUpdated"));
   }, [selectArtistProfileImage]);
 
   const filterFormats = useMemo(
@@ -397,11 +405,18 @@ function App() {
     [advancedTrackFilters],
   );
 
+  // Text search resolves through the SQLite full-text index. Until it answers
+  // (first keystroke, or if the index is unavailable) the in-memory matcher
+  // keeps the results correct.
+  const { matchedIds: searchMatchedIds } = useIndexedSearch(searchQuery);
+
   // Apply text search first, then the structured track filters.
   const filteredTracks = useMemo(() => {
-    const searchResults = filterTracksBySearch(displayedTracks, searchQuery);
+    const searchResults = searchMatchedIds
+      ? displayedTracks.filter((track) => searchMatchedIds.has(track.id))
+      : filterTracksBySearch(displayedTracks, searchQuery);
     return filterTracksAdvanced(searchResults, advancedTrackFilters);
-  }, [advancedTrackFilters, displayedTracks, searchQuery]);
+  }, [advancedTrackFilters, displayedTracks, searchMatchedIds, searchQuery]);
   const hasTrackSearchFilters = searchQuery.trim().length > 0 || activeTrackFilterCount > 0;
 
   const sortedTracks = useMemo(() => {
@@ -534,6 +549,7 @@ function App() {
     isPlaying,
     currentPosition,
     currentTrack,
+    volume,
     playTrack,
     togglePlay,
     play,
@@ -623,6 +639,9 @@ function App() {
     playTrack,
     seek,
   });
+
+  // Gapless preload and crossfade hand-off
+  useGaplessPlayback({ allTracksById, getPlaybackContext });
 
   // Play tracking (30-second threshold)
   usePlayTracking({ currentPosition, allTracks });
@@ -729,15 +748,6 @@ function App() {
   useEffect(() => {
     mediaPlaybackRef.current = { play, pause, toggle: togglePlay };
   }, [pause, play, togglePlay]);
-
-  // Global keyboard shortcuts
-  useKeyboardShortcuts({
-    onTogglePlay: togglePlay,
-    onSkipPrevious: handleSkipPrevious,
-    onSkipNext: handleSkipNext,
-    onSeek: seek,
-    currentPosition,
-  });
 
   const handlePlayTrack = useCallback(
     (trackId: string) => {
@@ -984,12 +994,12 @@ function App() {
     for (const entry of entries) {
       await handleSaveMetadata([entry.trackId], entry.updates);
     }
-    notify.success(`Applied AcoustID metadata to ${entries.length} ${entries.length === 1 ? "track" : "tracks"}`);
+    notify.success(t("toast.acoustid.applied", { count: String(entries.length) }));
   }, [handleSaveMetadata]);
 
   const handleOpenArtistSeparatorReview = useCallback(() => {
     if (artistSeparatorCandidates.length === 0) {
-      notify.info("No artist fields containing “ & ” or “feat.” were found");
+      notify.info(t("toast.artistSeparator.none"));
       return;
     }
     setArtistSeparatorReview({
@@ -1094,7 +1104,7 @@ function App() {
         await exportOrganizedLibrary(destinationPath, useAsCurrentLibrary);
       }
     } catch {
-      notify.error("Library export folder picker failed");
+      notify.error(t("toast.picker.libraryExportFailed"));
     }
   }, [exportOrganizedLibrary]);
 
@@ -1121,11 +1131,11 @@ function App() {
   const handleSaveSmartCrate = useCallback((crate: Omit<SmartCrate, "id">) => {
     if (editingSmartCrateId) {
       updateSmartCrate(editingSmartCrateId, crate);
-      notify.success(`Updated ${crate.name}`);
+      notify.success(t("toast.smartCrate.updated", { name: crate.name }));
       navigateToView(`smartCrate:${editingSmartCrateId}` as LibraryView);
     } else {
       const id = createSmartCrate(crate);
-      notify.success(`Created ${crate.name}`);
+      notify.success(t("toast.smartCrate.created", { name: crate.name }));
       navigateToView(`smartCrate:${id}` as LibraryView);
     }
     handleCloseSmartCrateModal();
@@ -1147,7 +1157,7 @@ function App() {
     if (!shouldDelete) return;
     deleteSmartCrate(id);
     if (view === `smartCrate:${id}`) navigateToView("library");
-    notify.success(`Deleted ${crate.name}`);
+    notify.success(t("toast.smartCrate.deleted", { name: crate.name }));
   }, [deleteSmartCrate, navigateToView, smartCrates, view]);
 
   useEffect(() => {
@@ -1195,7 +1205,7 @@ function App() {
       const playlistId = await importPlaylist(filePath);
       if (playlistId) navigateToView(`playlist:${playlistId}` as LibraryView);
     } catch {
-      notify.error("Playlist picker failed");
+      notify.error(t("toast.picker.playlistFailed"));
     }
   }, [importPlaylist, navigateToView]);
 
@@ -1208,13 +1218,13 @@ function App() {
       const firstPlaylistId = imported?.playlistIds[0];
       if (firstPlaylistId) navigateToView(`playlist:${firstPlaylistId}` as LibraryView);
     } catch {
-      notify.error("Playlist folder picker failed");
+      notify.error(t("toast.picker.playlistFolderFailed"));
     }
   }, [importPlaylistFolder, navigateToView]);
 
   const handleExportAllPlaylists = useCallback(async () => {
     if (playlists.length === 0) {
-      notify.info("There are no playlists to export");
+      notify.info(t("toast.playlist.noneToExport"));
       return;
     }
     try {
@@ -1222,7 +1232,7 @@ function App() {
       const directoryPath = Array.isArray(result) ? result[0] : result;
       if (directoryPath) await exportAllPlaylists(directoryPath);
     } catch {
-      notify.error("Playlist export folder picker failed");
+      notify.error(t("toast.picker.playlistExportFolderFailed"));
     }
   }, [exportAllPlaylists, playlists.length]);
 
@@ -1304,7 +1314,7 @@ function App() {
     closeMenu();
     if (!track) return;
     void showItemInFolder(track.sourcePath).catch(() => {
-      notify.error("Could not show the track in Finder");
+      notify.error(t("toast.track.revealFailed"));
     });
   }, [allTracks, closeMenu, menuSelection]);
 
@@ -1383,6 +1393,69 @@ function App() {
     if (selectedVisibleTrackIds.length > 0) requestTrackDeletion(selectedVisibleTrackIds);
   }, [requestTrackDeletion, selectedVisibleTrackIds]);
 
+  // Global keyboard shortcuts. Selection-scoped actions fall back to the
+  // playing track so they still do something when focus is in the queue panel.
+  // Declared here because they depend on the selection and deletion handlers
+  // defined above.
+  const premuteVolumeRef = useRef(1);
+
+  const handleToggleMute = useCallback(() => {
+    const currentVolume = usePlaybackStore.getState().volume;
+    if (currentVolume > 0) {
+      premuteVolumeRef.current = currentVolume;
+      void setVolume(0);
+    } else {
+      void setVolume(premuteVolumeRef.current || 1);
+    }
+  }, [setVolume]);
+
+  const shortcutTargetIds = useCallback(() => {
+    if (selectedVisibleTrackIds.length > 0) return selectedVisibleTrackIds;
+    const playingId = usePlaybackStore.getState().currentTrack?.id;
+    return playingId ? [playingId] : [];
+  }, [selectedVisibleTrackIds]);
+
+  const handleRateShortcut = useCallback(
+    (rating: number) => {
+      for (const trackId of shortcutTargetIds()) handleRatingChange(trackId, rating);
+    },
+    [handleRatingChange, shortcutTargetIds]
+  );
+
+  const handleQueueShortcut = useCallback(() => {
+    const trackIds = shortcutTargetIds();
+    if (trackIds.length > 0) addToQueue(trackIds);
+  }, [addToQueue, shortcutTargetIds]);
+
+  const handlePlayNextShortcut = useCallback(() => {
+    const trackIds = shortcutTargetIds();
+    if (trackIds.length > 0) playNext(trackIds);
+  }, [playNext, shortcutTargetIds]);
+
+  const handleToggleShortcutHelp = useCallback(() => {
+    setIsShortcutHelpOpen((open) => !open);
+  }, []);
+
+  useKeyboardShortcuts({
+    onTogglePlay: togglePlay,
+    onSkipPrevious: handleSkipPrevious,
+    onSkipNext: handleSkipNext,
+    onSeek: seek,
+    currentPosition,
+    volume,
+    onSetVolume: setVolume,
+    onToggleMute: handleToggleMute,
+    onToggleShuffle: toggleShuffle,
+    onCycleRepeat: toggleRepeat,
+    onRateSelection: handleRateShortcut,
+    onQueueSelection: handleQueueShortcut,
+    onPlaySelectionNext: handlePlayNextShortcut,
+    onDeleteSelection: handleDeleteSelected,
+    onToggleShortcutHelp: handleToggleShortcutHelp,
+    onUndo: undo,
+    onRedo: redo,
+  });
+
   // Playlist menu handlers
   const handlePlaylistMenuEdit = useCallback(() => {
     if (!playlistMenuTarget || playlistMenuSelection.length !== 1) {
@@ -1411,7 +1484,7 @@ function App() {
       });
       if (filePath) await exportPlaylist(playlistMenuTarget.id, filePath);
     } catch {
-      notify.error("Playlist export dialog failed");
+      notify.error(t("toast.picker.playlistExportDialogFailed"));
     }
   }, [closePlaylistMenu, exportPlaylist, playlistMenuTarget]);
 
@@ -1498,7 +1571,7 @@ function App() {
       const paths = Array.isArray(result) ? result : [result];
       handleImportPaths(paths);
     } catch (error) {
-      notify.error("File picker failed");
+      notify.error(t("toast.picker.fileFailed"));
     }
   }, [handleImportPaths]);
 
@@ -1512,7 +1585,7 @@ function App() {
       const paths = Array.isArray(result) ? result : [result];
       handleImportPaths(paths);
     } catch (error) {
-      notify.error("Folder picker failed");
+      notify.error(t("toast.picker.folderFailed"));
     }
   }, [handleImportPaths]);
 
@@ -1548,6 +1621,10 @@ function App() {
     >
       <GlobalButtonTooltips />
       <ToastContainer />
+      <ShortcutHelpModal
+        isOpen={isShortcutHelpOpen}
+        onClose={() => setIsShortcutHelpOpen(false)}
+      />
       <DragOverlay
         isDragging={isDragging}
         nativeDropStatus={nativeDropStatus}

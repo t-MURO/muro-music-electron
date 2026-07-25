@@ -3,6 +3,7 @@ import { commandManager } from "../command-manager/commandManager";
 import { useLibraryStore, useUIStore, notify } from "../stores";
 import { useDbPath } from "./useDbPath";
 import { acceptTracks, rejectTracks, unacceptTracks } from "../utils";
+import { t } from "../i18n";
 
 export const useInboxOperations = () => {
   // Get state and actions from stores
@@ -32,7 +33,7 @@ export const useInboxOperations = () => {
         );
         setTracks((current) => [...tracksToAccept, ...current]);
         acceptTracks(resolvedDbPath, selectedTrackIds).catch(() => {
-          notify.error("Failed to accept tracks");
+          notify.error(t("toast.inbox.acceptFailed"));
         });
       },
       undo: () => {
@@ -41,7 +42,7 @@ export const useInboxOperations = () => {
         );
         setInboxTracks((current) => [...tracksToAccept, ...current]);
         unacceptTracks(resolvedDbPath, selectedTrackIds).catch(() => {
-          notify.error("Failed to undo accept");
+          notify.error(t("toast.inbox.undoAcceptFailed"));
         });
       },
     };
@@ -74,7 +75,7 @@ export const useInboxOperations = () => {
           current.filter((t) => !selectedTrackIds.includes(t.id))
         );
         rejectTracks(resolvedDbPath, selectedTrackIds).catch(() => {
-          notify.error("Failed to reject tracks");
+          notify.error(t("toast.inbox.rejectFailed"));
         });
       },
       undo: () => {

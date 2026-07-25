@@ -10,6 +10,7 @@ import {
   updatePlaylist,
 } from "../utils";
 import type { LibraryView } from "./useLibraryView";
+import { t } from "../i18n";
 
 type UsePlaylistOperationsArgs = {
   currentView: LibraryView;
@@ -58,7 +59,7 @@ export const usePlaylistOperations = ({
             })
           );
           updatePlaylist(resolvedDbPath, playlistId, { name: nextName }).catch(() => {
-            notify.error("Failed to rename playlist");
+            notify.error(t("toast.playlist.renameFailed"));
           });
         },
         undo: () => {
@@ -73,7 +74,7 @@ export const usePlaylistOperations = ({
             )
           );
           updatePlaylist(resolvedDbPath, playlistId, { name: previousName }).catch(() => {
-            notify.error("Failed to restore playlist name");
+            notify.error(t("toast.playlist.restoreNameFailed"));
           });
         },
       };
@@ -107,7 +108,7 @@ export const usePlaylistOperations = ({
           }
           Promise.all(removed.map(({ playlist }) =>
             deletePlaylist(resolvedDbPath, playlist.id)
-          )).catch(() => notify.error("Failed to delete playlists"));
+          )).catch(() => notify.error(t("toast.playlist.deleteFailed")));
         },
         undo: () => {
           setPlaylists((current) => {
@@ -131,7 +132,7 @@ export const usePlaylistOperations = ({
             if (playlist.trackIds.length > 0) {
               await addTracksToPlaylist(resolvedDbPath, playlist.id, playlist.trackIds);
             }
-          })).catch(() => notify.error("Failed to restore playlists"));
+          })).catch(() => notify.error(t("toast.playlist.restoreFailed")));
         },
       };
 
@@ -171,7 +172,7 @@ export const usePlaylistOperations = ({
             item.id === playlistId ? { ...item, trackIds: nextIds } : item
           ));
           setPlaylistTracks(resolvedDbPath, playlistId, nextIds).catch(() => {
-            notify.error("Failed to remove tracks from playlist");
+            notify.error(t("toast.playlist.removeFailed"));
           });
         },
         undo: () => {
@@ -179,7 +180,7 @@ export const usePlaylistOperations = ({
             item.id === playlistId ? { ...item, trackIds: previousIds } : item
           ));
           setPlaylistTracks(resolvedDbPath, playlistId, previousIds).catch(() => {
-            notify.error("Failed to restore playlist tracks");
+            notify.error(t("toast.playlist.restoreTracksFailed"));
           });
         },
       });

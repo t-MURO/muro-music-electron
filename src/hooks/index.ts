@@ -45,4 +45,16 @@ export {
 } from "./useLibraryView";
 export { useLibraryInit } from "./useLibraryInit";
 export { useOrganizedLibraryExport } from "./useOrganizedLibraryExport";
-export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+export {
+  useKeyboardShortcuts,
+  type KeyboardShortcutHandlers,
+} from "./useKeyboardShortcuts";
+export { useCommandHistory } from "./useCommandHistory";
+export { useGaplessPlayback } from "./useGaplessPlayback";
+export { useIndexedSearch } from "./useIndexedSearch";
+export { useLoudnessAnalysis } from "./useLoudnessAnalysis";
+export {
+  useLibraryVerification,
+  type MissingTrack,
+} from "./useLibraryVerification";
+export { useWatchedFolders } from "./useWatchedFolders";

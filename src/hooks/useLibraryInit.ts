@@ -99,7 +99,7 @@ export const useLibraryInit = () => {
         })));
         setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
       } catch (error) {
-        notify.error("Failed to load library");
+        notify.error(t("toast.library.loadFailed"));
       }
     };
 
@@ -208,7 +208,7 @@ export const useLibraryInit = () => {
       setTracks([]);
       setInboxTracks([]);
     } catch (error) {
-      notify.error("Failed to clear songs");
+      notify.error(t("toast.library.clearFailed"));
     } finally {
       setClearSongsPending(false);
     }

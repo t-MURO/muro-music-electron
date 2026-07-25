@@ -14,6 +14,7 @@ import {
   listPlaylistFiles,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
+import { t } from "../i18n";
 
 const normalizePath = (value: string) =>
   value.replace(/\//g, "\\").toLocaleLowerCase();
@@ -99,7 +100,7 @@ export const usePlaylistTransfer = () => {
       const dbPath = await resolveDbPath();
       const result = await importPlaylistIntoStore(dbPath, filePath);
       if (!result) {
-        notify.error("The playlist did not contain any available audio files");
+        notify.error(t("toast.playlist.noAvailableFiles"));
         return null;
       }
       notify.success(
@@ -109,7 +110,7 @@ export const usePlaylistTransfer = () => {
       );
       return result.playlist.id;
     } catch {
-      notify.error("Failed to import playlist");
+      notify.error(t("toast.playlist.importFailed"));
       return null;
     }
   }, [importPlaylistIntoStore, resolveDbPath]);
@@ -128,7 +129,7 @@ export const usePlaylistTransfer = () => {
     try {
       const scan = await listPlaylistFiles(directoryPath);
       if (scan.files.length === 0) {
-        notify.error("The selected folder does not contain any M3U, M3U8, or PLS playlists");
+        notify.error(t("toast.playlist.noPlaylistsInFolder"));
         return null;
       }
 
@@ -171,7 +172,7 @@ export const usePlaylistTransfer = () => {
       }
       setPlaylistFolders((current) => [...current, ...importedFolders]);
 
-      notify.info(`Importing ${scan.files.length} playlists from ${rootFolder.name}`);
+      notify.info(t("toast.playlist.importing", { count: String(scan.files.length), folder: rootFolder.name }));
       const playlistIds: string[] = [];
       for (const entry of scan.entries) {
         try {
@@ -185,7 +186,7 @@ export const usePlaylistTransfer = () => {
 
       if (playlistIds.length === 0) {
         await cleanupFolders();
-        notify.error(`Imported 0 of ${scan.files.length} playlists`);
+        notify.error(t("toast.playlist.importedNone", { count: String(scan.files.length) }));
         return null;
       }
 
@@ -195,7 +196,7 @@ export const usePlaylistTransfer = () => {
       return { folderId: rootFolder.id, playlistIds };
     } catch {
       await cleanupFolders();
-      notify.error("Failed to import playlist folder");
+      notify.error(t("toast.playlistFolder.importFailed"));
       return null;
     }
   }, [importPlaylistIntoStore, resolveDbPath, setPlaylistFolders]);
@@ -204,10 +205,10 @@ export const usePlaylistTransfer = () => {
     try {
       const dbPath = await resolveDbPath();
       const result = await exportPlaylistFile(dbPath, playlistId, filePath);
-      notify.success(`Exported ${result.exported} tracks`);
+      notify.success(t("toast.playlist.exported", { count: String(result.exported) }));
       return true;
     } catch {
-      notify.error("Failed to export playlist");
+      notify.error(t("toast.playlist.exportFailed"));
       return false;
     }
   }, [resolveDbPath]);
@@ -222,7 +223,7 @@ export const usePlaylistTransfer = () => {
       );
       return result;
     } catch {
-      notify.error("Failed to export playlists");
+      notify.error(t("toast.playlist.exportAllFailed"));
       return null;
     }
   }, [resolveDbPath]);

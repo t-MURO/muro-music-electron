@@ -134,11 +134,11 @@ export const Sidebar = ({
     { view: "recentlyAdded" as const, label: t("nav.recentlyAdded"), icon: CalendarPlus },
   ];
   const collections: { facet: CollectionFacet; label: string; icon: typeof Tag }[] = [
-    { facet: "genres", label: "Genres", icon: Tag },
-    { facet: "artists", label: "Artists", icon: UserRound },
-    { facet: "albums", label: "Albums", icon: Disc3 },
-    { facet: "labels", label: "Labels", icon: Badge },
-    { facet: "keys", label: "Keys", icon: KeyRound },
+    { facet: "genres", label: t("collection.genres"), icon: Tag },
+    { facet: "artists", label: t("collection.artists"), icon: UserRound },
+    { facet: "albums", label: t("collection.albums"), icon: Disc3 },
+    { facet: "labels", label: t("collection.labels"), icon: Badge },
+    { facet: "keys", label: t("collection.keys"), icon: KeyRound },
   ];
 
   const itemClass = (active: boolean) =>
@@ -357,15 +357,15 @@ export const Sidebar = ({
           className="toolbar-icon-button sidebar-collapse-button shrink-0"
           onClick={onToggleCollapsed}
           title={collapsed ? "Expand navigation" : "Collapse navigation"}
-          aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-label={collapsed ? t("nav.aria.expand") : t("nav.aria.collapse")}
           type="button"
         >
           {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
         </button>
       </div>
 
-      <nav className={`shrink-0 ${collapsed ? "px-2 py-3" : "px-3 py-4"}`} aria-label="Library navigation">
-        {!collapsed && <div className="sidebar-section-label">Library</div>}
+      <nav className={`shrink-0 ${collapsed ? "px-2 py-3" : "px-3 py-4"}`} aria-label={t("nav.aria.library")}>
+        {!collapsed && <div className="sidebar-section-label">{t("nav.library.section")}</div>}
         <div className="space-y-1">
           {navigation.map(({ view, label, icon: Icon, count }) => {
             const active = currentView === view;
@@ -391,7 +391,7 @@ export const Sidebar = ({
       {!collapsed && (
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--color-border-light)] px-3 py-4">
           <div data-sidebar-section="collection">
-            <div className="sidebar-section-label">Collection</div>
+            <div className="sidebar-section-label">{t("nav.collection.section")}</div>
             <div className="space-y-1">
               {collections.map(({ facet, label, icon: Icon }) => {
                 const collectionView = `collection:${facet}` as LibraryView;
@@ -418,7 +418,7 @@ export const Sidebar = ({
                   className="toolbar-icon-button h-6 w-6"
                   onClick={onCreatePlaylist}
                   title="Add playlist"
-                  aria-label="Add playlist"
+                  aria-label={t("nav.aria.addPlaylist")}
                   data-playlist-create
                   type="button"
                 >
@@ -435,7 +435,7 @@ export const Sidebar = ({
                     setPlaylistActionsPosition({ x: rect.right, y: rect.bottom + 4 });
                   }}
                   title="More playlist actions"
-                  aria-label="More playlist actions"
+                  aria-label={t("nav.aria.morePlaylistActions")}
                   aria-expanded={Boolean(playlistActionsPosition)}
                   aria-haspopup="menu"
                   data-playlist-actions-menu
@@ -450,7 +450,7 @@ export const Sidebar = ({
                 className="w-64 py-1"
                 onClose={() => setPlaylistActionsPosition(null)}
               >
-                <div role="menu" aria-label="Playlist actions">
+                <div role="menu" aria-label={t("nav.aria.playlistActions")}>
                   <PopoverItem
                     onClick={() => {
                       setPlaylistActionsPosition(null);
@@ -512,7 +512,7 @@ export const Sidebar = ({
                 className="toolbar-icon-button h-6 w-6"
                 onClick={onCreateSmartCrate}
                 title="New Smart Crate"
-                aria-label="New Smart Crate"
+                aria-label={t("nav.aria.newSmartCrate")}
                 data-smart-crate-create
                 type="button"
               >
@@ -538,8 +538,8 @@ export const Sidebar = ({
                         <span className="sidebar-count">{(smartCrateCounts.get(crate.id) ?? 0).toLocaleString()}</span>
                       </button>
                       <div className="smart-crate-sidebar-actions flex shrink-0 items-center">
-                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onEditSmartCrate(crate.id)} title={`Edit ${crate.name}`} aria-label={`Edit ${crate.name}`} data-smart-crate-edit={crate.id} type="button"><Pencil className="h-3 w-3" /></button>
-                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onDeleteSmartCrate(crate.id)} title={`Delete ${crate.name}`} aria-label={`Delete ${crate.name}`} data-smart-crate-delete={crate.id} type="button"><Trash2 className="h-3 w-3" /></button>
+                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onEditSmartCrate(crate.id)} title={t("nav.aria.editNamed", { name: crate.name })} aria-label={t("nav.aria.editNamed", { name: crate.name })} data-smart-crate-edit={crate.id} type="button"><Pencil className="h-3 w-3" /></button>
+                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onDeleteSmartCrate(crate.id)} title={t("nav.aria.deleteNamed", { name: crate.name })} aria-label={t("nav.aria.deleteNamed", { name: crate.name })} data-smart-crate-delete={crate.id} type="button"><Trash2 className="h-3 w-3" /></button>
                       </div>
                     </div>
                   );

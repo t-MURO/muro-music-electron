@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { isLocale, setLocale as setI18nLocale, type Locale } from "../i18n";
 import type { MixBars } from "../lib/mix/config";
+import type { ReplayGainMode } from "../utils/replayGain";
 
 export type AnalysisOutputMode = "none" | "prepend" | "append" | "overwrite";
 export type AnalysisNotationMode = "standard" | "custom" | "combined" | "djCombined";
@@ -71,6 +72,17 @@ type SettingsState = {
   acoustIdClientKey: string;
   audioOutputDeviceId: string;
   audioOutputDeviceLabel: string;
+  gaplessEnabled: boolean;
+  /** Seconds of overlap between tracks; 0 keeps the plain gapless hand-off. */
+  crossfadeSeconds: number;
+  replayGainMode: ReplayGainMode;
+  replayGainPreampDb: number;
+  replayGainPreventClipping: boolean;
+  /** ReplayGain 2.0 pins this at -18 LUFS; -14 matches streaming services. */
+  replayGainReferenceLufs: number;
+  watchFoldersEnabled: boolean;
+  /** Absolute paths watched for new audio; imports land in the Inbox. */
+  watchedFolders: string[];
 };
 
 type SettingsActions = {
@@ -96,6 +108,15 @@ type SettingsActions = {
   setBraveSearchApiKey: (braveSearchApiKey: string) => void;
   setAcoustIdClientKey: (acoustIdClientKey: string) => void;
   setAudioOutputDevice: (deviceId: string, label: string) => void;
+  setGaplessEnabled: (enabled: boolean) => void;
+  setCrossfadeSeconds: (seconds: number) => void;
+  setReplayGainMode: (mode: ReplayGainMode) => void;
+  setReplayGainPreampDb: (preampDb: number) => void;
+  setReplayGainPreventClipping: (preventClipping: boolean) => void;
+  setReplayGainReferenceLufs: (referenceLufs: number) => void;
+  setWatchFoldersEnabled: (enabled: boolean) => void;
+  addWatchedFolder: (folder: string) => void;
+  removeWatchedFolder: (folder: string) => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -127,6 +148,14 @@ export const useSettingsStore = create<SettingsStore>()(
       acoustIdClientKey: "",
       audioOutputDeviceId: "",
       audioOutputDeviceLabel: "",
+      gaplessEnabled: true,
+      crossfadeSeconds: 0,
+      replayGainMode: "off",
+      replayGainPreampDb: 0,
+      replayGainPreventClipping: true,
+      replayGainReferenceLufs: -18,
+      watchFoldersEnabled: false,
+      watchedFolders: [],
 
       // Actions
       setTheme: (theme) => {
@@ -167,6 +196,24 @@ export const useSettingsStore = create<SettingsStore>()(
       setAcoustIdClientKey: (acoustIdClientKey) => set({ acoustIdClientKey }),
       setAudioOutputDevice: (audioOutputDeviceId, audioOutputDeviceLabel) =>
         set({ audioOutputDeviceId, audioOutputDeviceLabel }),
+      setGaplessEnabled: (gaplessEnabled) => set({ gaplessEnabled }),
+      setCrossfadeSeconds: (seconds) =>
+        set({ crossfadeSeconds: Math.max(0, Math.min(12, seconds)) }),
+      setReplayGainMode: (replayGainMode) => set({ replayGainMode }),
+      setReplayGainPreampDb: (preampDb) =>
+        set({ replayGainPreampDb: Math.max(-15, Math.min(15, preampDb)) }),
+      setReplayGainPreventClipping: (replayGainPreventClipping) =>
+        set({ replayGainPreventClipping }),
+      setReplayGainReferenceLufs: (referenceLufs) =>
+        set({ replayGainReferenceLufs: Math.max(-30, Math.min(-5, referenceLufs)) }),
+      setWatchFoldersEnabled: (watchFoldersEnabled) => set({ watchFoldersEnabled }),
+      addWatchedFolder: (folder) => set((state) =>
+        state.watchedFolders.includes(folder)
+          ? {}
+          : { watchedFolders: [...state.watchedFolders, folder] }),
+      removeWatchedFolder: (folder) => set((state) => ({
+        watchedFolders: state.watchedFolders.filter((entry) => entry !== folder),
+      })),
     }),
     {
       name: "muro-settings",
@@ -195,6 +242,14 @@ export const useSettingsStore = create<SettingsStore>()(
         acoustIdClientKey: state.acoustIdClientKey,
         audioOutputDeviceId: state.audioOutputDeviceId,
         audioOutputDeviceLabel: state.audioOutputDeviceLabel,
+        gaplessEnabled: state.gaplessEnabled,
+        crossfadeSeconds: state.crossfadeSeconds,
+        replayGainMode: state.replayGainMode,
+        replayGainPreampDb: state.replayGainPreampDb,
+        replayGainPreventClipping: state.replayGainPreventClipping,
+        replayGainReferenceLufs: state.replayGainReferenceLufs,
+        watchFoldersEnabled: state.watchFoldersEnabled,
+        watchedFolders: state.watchedFolders,
       }),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;

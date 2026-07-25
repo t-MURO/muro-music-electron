@@ -12,6 +12,7 @@ import {
   listPlaylistFiles,
 } from "../utils";
 import type { Playlist } from "../types";
+import { t } from "../i18n";
 
 export type ImportProgress = {
   imported: number;
@@ -74,7 +75,7 @@ export const useFileImport = ({
           );
           // Persist to database
           addTracksToPlaylist(resolvedDbPath, playlistId, payload).catch(() => {
-            notify.error("Failed to add tracks to playlist");
+            notify.error(t("toast.playlist.addFailed"));
           });
         },
         undo: () => {
@@ -84,7 +85,7 @@ export const useFileImport = ({
             )
           );
           removeLastTracksFromPlaylist(resolvedDbPath, playlistId, trackCount).catch(() => {
-            notify.error("Failed to undo playlist changes");
+            notify.error(t("toast.playlist.undoFailed"));
           });
         },
       };
@@ -168,7 +169,7 @@ export const useFileImport = ({
         const imported = result.imported;
         if (imported.length === 0) {
           if (result.scanned === 0) {
-            notify.error("No supported audio files were found");
+            notify.error(t("toast.import.noSupportedFiles"));
           } else if (result.failures.length > 0) {
             notify.error(
               result.failures.length === 1
@@ -176,7 +177,7 @@ export const useFileImport = ({
                 : `${result.failures.length} audio files could not be imported`
             );
           } else {
-            notify.success("All selected songs are already in Muro");
+            notify.success(t("toast.import.allKnown"));
           }
           if (typeof window !== "undefined") {
             clearProgressTimerRef.current = window.setTimeout(() => {
@@ -204,9 +205,9 @@ export const useFileImport = ({
         };
         commandManager.execute(command);
         if (result.failures.length > 0) {
-          notify.error(`${result.failures.length} audio files could not be imported`);
+          notify.error(t("toast.import.someFailed", { count: String(result.failures.length) }));
         } else {
-          notify.success(`Imported ${imported.length} ${imported.length === 1 ? "song" : "songs"}`);
+          notify.success(t("toast.import.succeeded", { count: String(imported.length) }));
         }
         onImportComplete?.();
         if (typeof window !== "undefined") {
@@ -218,7 +219,7 @@ export const useFileImport = ({
           setImportProgress(null);
         }
       } catch (error) {
-        notify.error("Import failed");
+        notify.error(t("toast.import.failed"));
         setImportProgress(null);
       }
     },
@@ -272,34 +273,14 @@ export const useFileImport = ({
           playlist.sortOrder,
         );
       } catch (error) {
-        notify.error("Failed to create playlist");
+        notify.error(t("toast.playlist.createFailed"));
       }
     },
     [playlists, resolveDbPath, setPlaylists]
   );
 
-  // Undo/Redo keyboard handler
-  useEffect(() => {
-    const handleUndoRedo = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey)) {
-        return;
-      }
-      const key = event.key.toLowerCase();
-      if (key !== "z" && key !== "y") {
-        return;
-      }
-
-      event.preventDefault();
-      if (key === "y" || event.shiftKey) {
-        commandManager.redo();
-        return;
-      }
-      commandManager.undo();
-    };
-
-    window.addEventListener("keydown", handleUndoRedo);
-    return () => window.removeEventListener("keydown", handleUndoRedo);
-  }, []);
+  // Undo/redo is bound globally in useKeyboardShortcuts, which also guards
+  // text fields so Cmd+Z keeps working inside inputs.
 
   // Import progress listener
   const importListenerSetupRef = useRef(false);
@@ -341,7 +322,7 @@ export const useFileImport = ({
           }
         );
       } catch (error) {
-        notify.error("Failed to setup import progress listener");
+        notify.error(t("toast.import.listenerFailed"));
       }
     };
 

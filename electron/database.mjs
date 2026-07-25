@@ -56,7 +56,13 @@ const TRACK_SCHEMA = `
     cover_art_thumb_path TEXT,
     last_played_at TEXT,
     play_count INTEGER DEFAULT 0,
-    beat_grid_json TEXT
+    beat_grid_json TEXT,
+    loudness_lufs REAL,
+    replaygain_track_gain_db REAL,
+    replaygain_track_peak REAL,
+    replaygain_album_gain_db REAL,
+    replaygain_album_peak REAL,
+    loudness_source TEXT
   );
   CREATE INDEX IF NOT EXISTS tracks_import_status_idx ON tracks(import_status);
   CREATE INDEX IF NOT EXISTS tracks_last_played_idx ON tracks(last_played_at DESC);
@@ -128,6 +134,39 @@ const ACOUSTID_CACHE_SCHEMA = `
     ON acoustid_fingerprints(looked_up_at DESC);
 `;
 
+/**
+ * Full-text index over the already-normalized `tracks.search_text`.
+ *
+ * External-content FTS5: the index stores only the inverted terms and reads
+ * values back from `tracks`, so the text is not duplicated. The triggers keep
+ * both sides in step — every delete has to replay the old value so FTS can
+ * retire the right terms.
+ */
+const SEARCH_INDEX_SCHEMA = `
+  CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
+    search_text,
+    content='tracks',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 2'
+  );
+  CREATE TRIGGER IF NOT EXISTS tracks_fts_insert AFTER INSERT ON tracks BEGIN
+    INSERT INTO tracks_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
+  END;
+  CREATE TRIGGER IF NOT EXISTS tracks_fts_delete AFTER DELETE ON tracks BEGIN
+    INSERT INTO tracks_fts(tracks_fts, rowid, search_text)
+      VALUES ('delete', old.rowid, old.search_text);
+  END;
+  CREATE TRIGGER IF NOT EXISTS tracks_fts_update AFTER UPDATE OF search_text ON tracks BEGIN
+    INSERT INTO tracks_fts(tracks_fts, rowid, search_text)
+      VALUES ('delete', old.rowid, old.search_text);
+    INSERT INTO tracks_fts(rowid, search_text) VALUES (new.rowid, new.search_text);
+  END;
+`;
+
+export const rebuildSearchIndex = (db) => {
+  db.exec("INSERT INTO tracks_fts(tracks_fts) VALUES('rebuild')");
+};
+
 const REQUIRED_TRACK_COLUMNS = {
   album_artist: "TEXT",
   genre_json: "TEXT",
@@ -170,6 +209,14 @@ const REQUIRED_TRACK_COLUMNS = {
   last_played_at: "TEXT",
   play_count: "INTEGER DEFAULT 0",
   beat_grid_json: "TEXT",
+  loudness_lufs: "REAL",
+  replaygain_track_gain_db: "REAL",
+  replaygain_track_peak: "REAL",
+  replaygain_album_gain_db: "REAL",
+  replaygain_album_peak: "REAL",
+  // "tag" when read from the file's own ReplayGain frames, "analyzed" when
+  // Muro measured it.
+  loudness_source: "TEXT",
 };
 
 export const openDatabase = (dbPath) => {
@@ -246,8 +293,60 @@ export const openDatabase = (dbPath) => {
       }
     })();
   }
+  // The index is created after the column migrations so `search_text` is
+  // guaranteed to exist on databases written by older versions.
+  const hadSearchIndex = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tracks_fts'")
+    .get();
+  db.exec(SEARCH_INDEX_SCHEMA);
+  if (!hadSearchIndex) {
+    rebuildSearchIndex(db);
+  }
+
   connections.set(resolved, db);
   return db;
+};
+
+/** FTS5 treats bare punctuation and operator words as syntax, so each term is
+ * reduced to a quoted literal with a prefix wildcard. An empty result means the
+ * query had nothing searchable in it. */
+export const buildSearchMatchQuery = (query) => {
+  const terms = normalizeSearchText(query)
+    .split(" ")
+    // A term of pure punctuation tokenizes to nothing, so an expression built
+    // from it would match zero rows and read as a real "no results" answer.
+    // Dropping it here lets the caller fall back instead.
+    .filter((term) => /[\p{L}\p{N}]/u.test(term))
+    // Quote the term and escape any embedded quote, then allow prefix matches
+    // so results narrow while the user is still typing.
+    .map((term) => `"${term.replace(/"/g, '""')}"*`);
+  return terms.length > 0 ? terms.join(" AND ") : "";
+};
+
+/**
+ * Track ids matching a query, ordered by FTS relevance. Returns null when the
+ * query has no searchable terms so callers can skip filtering entirely.
+ */
+export const searchTrackIds = (dbPath, query, limit = 0) => {
+  const match = buildSearchMatchQuery(query);
+  if (!match) return null;
+
+  const db = openDatabase(dbPath);
+  const bounded = Number(limit) > 0 ? Math.min(Number(limit), 100_000) : 100_000;
+  try {
+    return db.prepare(`
+      SELECT t.id AS id
+      FROM tracks_fts f
+      JOIN tracks t ON t.rowid = f.rowid
+      WHERE tracks_fts MATCH ?
+      ORDER BY bm25(tracks_fts)
+      LIMIT ?
+    `).all(match, bounded).map((row) => String(row.id));
+  } catch {
+    // A malformed FTS expression must degrade to "no index answer" rather than
+    // breaking search; the caller falls back to its own filtering.
+    return null;
+  }
 };
 
 export const closeDatabases = () => {
@@ -311,6 +410,13 @@ export const rowToTrack = (row) => ({
   last_played_at: row.last_played_at || undefined,
   play_count: row.play_count || 0,
   beat_grid_json: row.beat_grid_json ?? null,
+  loudness_lufs: row.loudness_lufs ?? undefined,
+  replaygain_track_gain_db: row.replaygain_track_gain_db ?? undefined,
+  replaygain_track_peak: row.replaygain_track_peak ?? undefined,
+  replaygain_album_gain_db: row.replaygain_album_gain_db ?? undefined,
+  replaygain_album_peak: row.replaygain_album_peak ?? undefined,
+  loudness_source: row.loudness_source ?? undefined,
+  is_missing: Number(row.is_missing) === 1 ? 1 : 0,
   musicbrainz_trackid: row.musicbrainz_trackid || undefined,
   musicbrainz_albumid: row.musicbrainz_albumid || undefined,
   musicbrainz_releasegroupid: row.musicbrainz_releasegroupid || undefined,
@@ -324,7 +430,10 @@ const TRACK_SELECT = `
     import_status, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
     comment_json, label, disc_number, disc_total, beat_grid_json,
-    musicbrainz_trackid, musicbrainz_albumid, musicbrainz_releasegroupid, acoustid_id
+    musicbrainz_trackid, musicbrainz_albumid, musicbrainz_releasegroupid, acoustid_id,
+    loudness_lufs, replaygain_track_gain_db, replaygain_track_peak,
+    replaygain_album_gain_db, replaygain_album_peak, loudness_source,
+    is_missing
   FROM tracks`;
 
 export const loadTracks = (dbPath) => {

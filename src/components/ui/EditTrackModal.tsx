@@ -304,7 +304,7 @@ export const EditTrackModal = ({
     updateField("coverArtPath", cached.fullPath);
     updateField("coverArtThumbPath", cached.thumbPath);
     setCoverPreview(convertFileSrc(cached.fullPath));
-    notify.success("Cover selected from Brave Image Search");
+    notify.success(t("toast.cover.selectedFromBrave"));
   }, [onCacheCoverCandidate, updateField]);
 
   const handlePasteCoverArt = useCallback(async () => {

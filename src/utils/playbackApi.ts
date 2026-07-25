@@ -33,7 +33,8 @@ export const playbackPlayFile = (
   sourcePath: string,
   durationHint: number,
   coverArtPath?: string,
-  coverArtThumbPath?: string
+  coverArtThumbPath?: string,
+  gainFactor = 1
 ) => {
   return invoke<void>("playback_play_file", {
     id,
@@ -44,7 +45,51 @@ export const playbackPlayFile = (
     durationHint,
     coverArtPath,
     coverArtThumbPath,
+    gainFactor,
   });
+};
+
+// ============================================================================
+// Gapless, crossfade, and loudness
+// ============================================================================
+
+export type PreloadTrackPayload = {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  sourcePath: string;
+  durationHint: number;
+  coverArtPath?: string;
+  coverArtThumbPath?: string;
+  gainFactor: number;
+};
+
+/** Emitted when the runtime advanced to the preloaded track by itself. */
+export type TrackAdvancedPayload = {
+  track_id: string;
+  reason: "gapless" | "crossfade";
+};
+
+/** Pass null to drop whatever is currently staged. */
+export const playbackPreloadNext = (track: PreloadTrackPayload | null) => {
+  return invoke<void>("playback_preload_next", { track });
+};
+
+export const playbackClearPreload = () => {
+  return invoke<void>("playback_clear_preload");
+};
+
+export const playbackSetGapless = (enabled: boolean) => {
+  return invoke<void>("playback_set_gapless", { enabled });
+};
+
+export const playbackSetCrossfade = (seconds: number) => {
+  return invoke<void>("playback_set_crossfade", { seconds });
+};
+
+export const playbackSetTrackGain = (gainFactor: number) => {
+  return invoke<void>("playback_set_track_gain", { gainFactor });
 };
 
 export const playbackToggle = () => {

@@ -7,6 +7,7 @@ import {
   updatePlaylistFolder as updatePlaylistFolderInDatabase,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
+import { t } from "../i18n";
 
 export const usePlaylistFolders = () => {
   const sequenceRef = useRef(0);
@@ -37,10 +38,10 @@ export const usePlaylistFolders = () => {
         folder.sortOrder,
       );
       setPlaylistFolders((current) => [...current, folder]);
-      notify.success(`Created folder ${folder.name}`);
+      notify.success(t("toast.playlistFolder.created", { name: folder.name }));
       return folder.id;
     } catch {
-      notify.error("Failed to create playlist folder");
+      notify.error(t("toast.playlistFolder.createFailed"));
       return null;
     }
   }, [playlistFolders, resolveDbPath, setPlaylistFolders]);
@@ -54,10 +55,10 @@ export const usePlaylistFolders = () => {
       setPlaylistFolders((current) => current.map((folder) =>
         folder.id === folderId ? { ...folder, name: trimmed } : folder
       ));
-      notify.success(`Renamed folder to ${trimmed}`);
+      notify.success(t("toast.playlistFolder.renamed", { name: trimmed }));
       return true;
     } catch {
-      notify.error("Failed to rename playlist folder");
+      notify.error(t("toast.playlistFolder.renameFailed"));
       return false;
     }
   }, [resolveDbPath, setPlaylistFolders]);
@@ -101,10 +102,10 @@ export const usePlaylistFolders = () => {
             }
           : playlist);
       });
-      notify.success("Deleted playlist folder");
+      notify.success(t("toast.playlistFolder.deleted"));
       return true;
     } catch {
-      notify.error("Failed to delete playlist folder");
+      notify.error(t("toast.playlistFolder.deleteFailed"));
       return false;
     }
   }, [playlistFolders, resolveDbPath, setPlaylistFolders, setPlaylists]);
@@ -211,7 +212,7 @@ export const usePlaylistFolders = () => {
       return true;
     } catch {
       setPlaylists(previous);
-      notify.error("Failed to reorder playlists");
+      notify.error(t("toast.playlist.reorderFailed"));
       return false;
     }
   }, [playlists, resolveDbPath, setPlaylists]);

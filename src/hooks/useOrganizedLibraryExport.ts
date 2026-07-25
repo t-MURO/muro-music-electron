@@ -8,6 +8,7 @@ import {
   type OrganizedLibraryExportResult,
 } from "../utils";
 import { useDbPath } from "./useDbPath";
+import { t } from "../i18n";
 
 type OrganizedLibraryExportProgress = {
   phase: "music" | "playlists";
@@ -90,15 +91,15 @@ export const useOrganizedLibraryExport = () => {
         + `Saved to ${result.exportRoot}.${switchSuffix}`,
       );
       if (result.librarySwitchRequested && !result.librarySwitched) {
-        notify.info("Export complete, but the current library was not switched");
+        notify.info(t("toast.export.doneNotSwitched"));
       } else if (rendererReloadError) {
-        notify.info("Exported library activated; restart Muro to refresh the view");
+        notify.info(t("toast.export.restartNeeded"));
       } else if (result.tracksFailed > 0) {
-        notify.info(`Library export completed with ${result.tracksFailed} skipped files`);
+        notify.info(t("toast.export.completedWithSkips", { count: String(result.tracksFailed) }));
       } else if (result.librarySwitched) {
-        notify.success("Export complete; Muro is now using the exported library");
+        notify.success(t("toast.export.doneSwitched"));
       } else {
-        notify.success("Organized library export complete");
+        notify.success(t("toast.export.organizedDone"));
       }
       return result;
     } catch (error) {

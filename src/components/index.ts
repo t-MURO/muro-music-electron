@@ -40,6 +40,8 @@ export {
   PlaylistCreateModal,
   PlaylistEditModal,
   SmartCrateModal,
+  ShortcutHelpModal,
+  MissingTracksModal,
   Popover,
   PopoverItem,
   PopoverDivider,

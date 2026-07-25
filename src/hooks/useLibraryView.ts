@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { t } from "../i18n";
 import { filterTracksBySmartCrate } from "../utils/smartCrates";
 import { toCamelotCode } from "../utils/camelot";
+import { useLocaleVersion } from "./useLocaleVersion";
 import type { Playlist, SmartCrate, Track } from "../types";
 
 export type CollectionFacet = "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
@@ -75,6 +76,10 @@ export const useViewConfig = ({
   smartCrates,
   collectionFilterValue,
 }: UseViewConfigArgs): ViewConfig => {
+  // Titles and empty states are translated inside the memo, so the language
+  // has to invalidate it.
+  const localeVersion = useLocaleVersion();
+
   return useMemo(() => {
     const playlistId = parsePlaylistId(view);
     const smartCrateId = parseSmartCrateId(view);
@@ -104,10 +109,10 @@ export const useViewConfig = ({
         trackTable: {
           tracks: libraryTracks,
           emptyState: {
-            title: "No tracks yet",
-            description: "Drag folders or files into the app to build your library.",
-            primaryAction: { label: "Import files" },
-            secondaryAction: { label: "Import folder" },
+            title: t("library.empty.title"),
+            description: t("library.empty.description"),
+            primaryAction: { label: t("import.files") },
+            secondaryAction: { label: t("import.folder") },
           },
           showImportActions: true,
         },
@@ -124,10 +129,10 @@ export const useViewConfig = ({
         trackTable: {
           tracks: inboxTracks,
           emptyState: {
-            title: "Inbox is empty",
-            description: "Drop folders or audio files here to stage new imports.",
-            primaryAction: { label: "Import files" },
-            secondaryAction: { label: "Import folder" },
+            title: t("inbox.empty.title"),
+            description: t("inbox.empty.description"),
+            primaryAction: { label: t("import.files") },
+            secondaryAction: { label: t("import.folder") },
           },
           showImportActions: true,
           banner: "inbox",
@@ -184,14 +189,14 @@ export const useViewConfig = ({
       if (!smartCrate) {
         return {
           type: "smartCrate",
-          title: "Smart Crate not found",
+          title: t("smartCrate.notFound.title"),
           subtitle: "",
           playlist: null,
           trackTable: {
             tracks: [],
             emptyState: {
-              title: "Smart Crate not found",
-              description: "It may have been deleted.",
+              title: t("smartCrate.notFound.title"),
+              description: t("smartCrate.notFound.description"),
             },
             showImportActions: false,
           },
@@ -202,13 +207,17 @@ export const useViewConfig = ({
       return {
         type: "smartCrate",
         title: smartCrate.name,
-        subtitle: `${crateTracks.length.toLocaleString()} live matches · ${smartCrate.rules.length} ${smartCrate.rules.length === 1 ? "rule" : "rules"}`,
+        subtitle: t("smartCrate.subtitle", {
+          count: crateTracks.length.toLocaleString(),
+          rules: String(smartCrate.rules.length),
+          ruleLabel: smartCrate.rules.length === 1 ? t("smartCrate.rule") : t("smartCrate.rules"),
+        }),
         playlist: null,
         trackTable: {
           tracks: crateTracks,
           emptyState: {
-            title: "No tracks match yet",
-            description: "Edit the crate rules or update track metadata to populate it.",
+            title: t("smartCrate.empty.title"),
+            description: t("smartCrate.empty.description"),
           },
           showImportActions: false,
         },
@@ -217,13 +226,13 @@ export const useViewConfig = ({
 
     if (collectionFacet) {
       const labels: Record<CollectionFacet, string> = {
-        genres: "Genres",
-        artists: "Artists",
-        albums: "Albums",
-        labels: "Labels",
-        keys: "Keys",
-        bpm: "BPM",
-        formats: "Formats",
+        genres: t("collection.genres"),
+        artists: t("collection.artists"),
+        albums: t("collection.albums"),
+        labels: t("collection.labels"),
+        keys: t("collection.keys"),
+        bpm: t("collection.bpm"),
+        formats: t("collection.formats"),
       };
       const normalizedFilter = collectionFilterValue?.trim().toLocaleLowerCase() ?? "";
       const collectionTracks = libraryTracks.filter((track) => {
@@ -249,18 +258,21 @@ export const useViewConfig = ({
       });
       const collectionTitle = labels[collectionFacet];
       const title = collectionFilterValue?.trim() || collectionTitle;
+      const count = collectionTracks.length.toLocaleString();
       return {
         type: "collection",
         title,
         subtitle: normalizedFilter
-          ? `${collectionTracks.length.toLocaleString()} tracks · ${collectionTitle}`
-          : `${collectionTracks.length.toLocaleString()} tracks with ${collectionTitle.toLowerCase()} metadata`,
+          ? t("collection.subtitle.filtered", { count, facet: collectionTitle })
+          : t("collection.subtitle", { count, facet: collectionTitle.toLowerCase() }),
         playlist: null,
         trackTable: {
           tracks: collectionTracks,
           emptyState: {
-            title: normalizedFilter ? `No tracks match ${title}` : `No ${collectionTitle.toLowerCase()} yet`,
-            description: `Add or edit track metadata to populate this collection.`,
+            title: normalizedFilter
+              ? t("collection.empty.filtered", { value: title })
+              : t("collection.empty.title", { facet: collectionTitle.toLowerCase() }),
+            description: t("collection.empty.description"),
           },
           showImportActions: false,
         },
@@ -313,6 +325,7 @@ export const useViewConfig = ({
     collectionFilterValue,
     inboxTracks,
     libraryTracks,
+    localeVersion,
     playlists,
     recentlyPlayedTracks,
     smartCrates,
