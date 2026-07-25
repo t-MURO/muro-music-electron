@@ -10,11 +10,12 @@ export type LibraryView =
   | "inbox"
   | "settings"
   | "recentlyPlayed"
+  | "recentlyAdded"
   | `playlist:${string}`
   | `smartCrate:${string}`
   | `collection:${CollectionFacet}`;
 
-export type ViewType = "library" | "inbox" | "settings" | "playlist" | "smartCrate" | "recentlyPlayed" | "collection";
+export type ViewType = "library" | "inbox" | "settings" | "playlist" | "smartCrate" | "recentlyPlayed" | "recentlyAdded" | "collection";
 
 export type EmptyStateConfig = {
   title: string;
@@ -146,6 +147,32 @@ export const useViewConfig = ({
           emptyState: {
             title: t("recentlyPlayed.empty.title"),
             description: t("recentlyPlayed.empty.description"),
+          },
+          showImportActions: false,
+        },
+      };
+    }
+
+    if (view === "recentlyAdded") {
+      const recentlyAddedTracks = [...libraryTracks].sort((left, right) => {
+        const parsedLeft = left.dateAdded ? Date.parse(left.dateAdded) : 0;
+        const parsedRight = right.dateAdded ? Date.parse(right.dateAdded) : 0;
+        const leftAdded = Number.isFinite(parsedLeft) ? parsedLeft : 0;
+        const rightAdded = Number.isFinite(parsedRight) ? parsedRight : 0;
+        return rightAdded - leftAdded;
+      });
+      return {
+        type: "recentlyAdded",
+        title: t("header.recentlyAdded"),
+        subtitle: t("header.recentlyAdded.subtitle", {
+          count: recentlyAddedTracks.length.toLocaleString(),
+        }),
+        playlist: null,
+        trackTable: {
+          tracks: recentlyAddedTracks,
+          emptyState: {
+            title: t("recentlyAdded.empty.title"),
+            description: t("recentlyAdded.empty.description"),
           },
           showImportActions: false,
         },

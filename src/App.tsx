@@ -227,6 +227,7 @@ function App() {
     if (location.pathname === "/inbox") return "inbox";
     if (location.pathname === "/settings") return "settings";
     if (location.pathname === "/recently-played") return "recentlyPlayed";
+    if (location.pathname === "/recently-added") return "recentlyAdded";
     if (smartCrateMatch?.params.smartCrateId) {
       return `smartCrate:${smartCrateMatch.params.smartCrateId}` as LibraryView;
     }
@@ -298,6 +299,7 @@ function App() {
       pathname === "/inbox" ||
       pathname === "/settings" ||
       pathname === "/recently-played" ||
+      pathname === "/recently-added" ||
       pathname.startsWith("/collection/") ||
       pathname.startsWith("/playlists/") ||
       pathname.startsWith("/smart-crates/");

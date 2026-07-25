@@ -1,5 +1,6 @@
 import {
   Badge,
+  CalendarPlus,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -130,6 +131,7 @@ export const Sidebar = ({
     { view: "library" as const, label: t("nav.library"), icon: Music2, count: tracks.length },
     { view: "inbox" as const, label: t("nav.inbox"), icon: Inbox, count: inboxTracks.length },
     { view: "recentlyPlayed" as const, label: t("nav.recentlyPlayed"), icon: Clock3 },
+    { view: "recentlyAdded" as const, label: t("nav.recentlyAdded"), icon: CalendarPlus },
   ];
   const collections: { facet: CollectionFacet; label: string; icon: typeof Tag }[] = [
     { facet: "genres", label: "Genres", icon: Tag },
@@ -375,6 +377,7 @@ export const Sidebar = ({
                 title={collapsed ? label : undefined}
                 aria-label={label}
                 aria-current={active ? "page" : undefined}
+                data-library-view={view}
                 type="button"
               >
                 <Icon className="h-4 w-4 shrink-0" />

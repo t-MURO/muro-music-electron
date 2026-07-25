@@ -7,6 +7,7 @@ export const getPathForView = (view: LibraryView): string => {
   if (view === "inbox") return "/inbox";
   if (view === "settings") return "/settings";
   if (view === "recentlyPlayed") return "/recently-played";
+  if (view === "recentlyAdded") return "/recently-added";
   if (view.startsWith("collection:"))
     return `/collection/${view.slice("collection:".length)}`;
   if (view.startsWith("playlist:"))

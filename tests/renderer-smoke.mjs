@@ -2285,6 +2285,28 @@ app.whenReady().then(async () => {
           window.location.hash.includes("album=") &&
           Boolean(document.querySelector("[data-album-detail]"));
 
+        const libraryViewButtons = [...document.querySelectorAll('[data-library-view]')];
+        const recentlyPlayedNavigationIndex = libraryViewButtons.findIndex(
+          (button) => button.getAttribute("data-library-view") === "recentlyPlayed"
+        );
+        const recentlyAddedNavigationIndex = libraryViewButtons.findIndex(
+          (button) => button.getAttribute("data-library-view") === "recentlyAdded"
+        );
+        const recentlyAddedBelowPlayed =
+          recentlyAddedNavigationIndex === recentlyPlayedNavigationIndex + 1;
+        document.querySelector('[data-library-view="recentlyAdded"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const recentlyAddedFirstTitle = document.querySelector(
+          '[data-track-index="0"] [data-column-key="title"]'
+        )?.textContent?.trim();
+        const recentlyAddedViewReady = Boolean(
+          recentlyAddedBelowPlayed &&
+          window.location.hash === "#/recently-added" &&
+          document.querySelector('[data-library-view="recentlyAdded"]')?.getAttribute("aria-current") === "page" &&
+          document.querySelector("h2")?.textContent?.trim() === "Recently Added" &&
+          recentlyAddedFirstTitle === "Smoke Track 027"
+        );
+
         window.location.hash = "#/collection/genres";
         await new Promise((resolve) => setTimeout(resolve, 100));
         const genreItems = document.querySelectorAll('[data-collection-index="genres"] [data-collection-value]');
@@ -2671,6 +2693,7 @@ app.whenReady().then(async () => {
           tableArtistNavigationReady,
           tableAlbumNavigationReady,
           tableTextOnlyNavigationReady,
+          recentlyAddedViewReady,
           genreIndexReady,
           genreDrilldownReady,
           genreHistoryReady,
@@ -3071,6 +3094,10 @@ app.whenReady().then(async () => {
       }
       if (!result.artistInformationSettingsReady) {
         fail("Artist information provider settings are not visible in Metadata & Artwork");
+        return;
+      }
+      if (!result.recentlyAddedViewReady) {
+        fail("Recently Added navigation or newest-first ordering failed");
         return;
       }
       if (!result.autocompleteFieldsReady) {
