@@ -1,5 +1,7 @@
 # Muro Music Electron
 
+[![CI](https://github.com/t-MURO/muro-music-electron/actions/workflows/ci.yml/badge.svg)](https://github.com/t-MURO/muro-music-electron/actions/workflows/ci.yml)
+
 Muro Music Electron is a local-first desktop music library and player for
 macOS, Windows, and Linux. It is designed for large personal collections,
 detailed metadata work, playlist management, harmonic-mixing preparation, and
@@ -433,6 +435,18 @@ npm run test:renderer
 npm run build
 ```
 
+Run the same grouped smoke suites used by CI:
+
+```sh
+npm run test:ci:core
+npm run test:ci:ui
+```
+
+GitHub Actions runs the build and both grouped suites on Windows, macOS, and
+Linux for pull requests and pushes to `main`. Linux runs the Electron UI suite
+under Xvfb. The Neo KeyFinder integration suite is not part of this workflow
+because it requires the separate native repository and platform toolchain.
+
 Focused suites are also available:
 
 ```sh
@@ -471,17 +485,14 @@ npm run test:dlna
   React interface, workflows, application state, and shared logic.
 - `tests/` contains Node and renderer smoke tests.
 
-## License status
+## License
 
-This repository does not currently include a root `LICENSE` file, so no
-general permission to copy, modify, or redistribute Muro itself has yet been
-granted.
+Muro Music Electron is licensed under the GNU Affero General Public License,
+version 3 or any later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE)
+for the complete license text.
 
-Before publishing source code or distributing binaries, add an explicit
-project license and the required third-party notices. The bundled Neo
-KeyFinder engine client and native sidecar declare
-`AGPL-3.0-or-later`; Chromaprint `fpcalc` is distributed under LGPL 2.1 or
-later.
-Because Muro ships the AGPL component, `AGPL-3.0-or-later` is the most
-straightforward compatible choice for the application, subject to a proper
-license review.
+Bundled third-party components remain subject to their own licenses. In
+particular, the Neo KeyFinder native sidecar is distributed under
+`AGPL-3.0-or-later`, while Chromaprint `fpcalc` is distributed under LGPL 2.1
+or later. Binary distributions must include the required third-party notices
+and corresponding source offers.
