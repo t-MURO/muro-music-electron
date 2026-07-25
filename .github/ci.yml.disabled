@@ -1,3 +1,4 @@
+# Move this file back to .github/workflows/ci.yml to re-enable CI.
 name: CI
 
 on:

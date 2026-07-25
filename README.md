@@ -1,7 +1,5 @@
 # Muro Music Electron
 
-[![CI](https://github.com/t-MURO/muro-music-electron/actions/workflows/ci.yml/badge.svg)](https://github.com/t-MURO/muro-music-electron/actions/workflows/ci.yml)
-
 Muro Music Electron is a local-first desktop music library and player for
 macOS, Windows, and Linux. It is designed for large personal collections,
 detailed metadata work, playlist management, harmonic-mixing preparation, and
@@ -442,10 +440,11 @@ npm run test:ci:core
 npm run test:ci:ui
 ```
 
-GitHub Actions runs the build and both grouped suites on Windows, macOS, and
-Linux for pull requests and pushes to `main`. Linux runs the Electron UI suite
-under Xvfb. The Neo KeyFinder integration suite is not part of this workflow
-because it requires the separate native repository and platform toolchain.
+The cross-platform GitHub Actions workflow is currently disabled. Its
+definition is retained at `.github/ci.yml.disabled` so it can be moved back to
+`.github/workflows/ci.yml` when CI is re-enabled. The Neo KeyFinder integration
+suite is not part of that workflow because it requires the separate native
+repository and platform toolchain.
 
 Focused suites are also available:
 
