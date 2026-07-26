@@ -20,8 +20,33 @@ env:
   PUBLISH_MODE: ${{ github.event_name == 'push' && 'onTagOrDraft' || 'never' }}
 
 jobs:
+  prepare_release:
+    name: Prepare tagged release
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Create draft release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --verify-tag \
+              --title "Muro Music $RELEASE_TAG"
+          fi
+
+      - name: Keep manual builds unpublished
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "Manual workflow runs produce Actions artifacts only."
+
   windows:
     name: Windows x64 installer
+    needs: prepare_release
     runs-on: windows-2022
     timeout-minutes: 120
 
@@ -75,6 +100,7 @@ jobs:
 
   macos:
     name: macOS DMG
+    needs: prepare_release
     runs-on: macos-14
     timeout-minutes: 120
 
