@@ -1,0 +1,132 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-artifacts-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  NEO_KEYFINDER_ROOT: ${{ github.workspace }}/neo-keyfinder
+  VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
+
+jobs:
+  windows:
+    name: Windows x64 installer
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out Muro Music
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check out Neo KeyFinder
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: t-MURO/neo-keyfinder
+          path: neo-keyfinder
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
+          git -C "$env:VCPKG_ROOT" checkout f87344cac03158cbf1467264565f1fd36b382a24
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm ci
+          npm ci --prefix "$env:NEO_KEYFINDER_ROOT"
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          npm run predist
+          npx --no-install vite build
+          npx --no-install electron-builder --win nsis
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: muro-music-windows-x64
+          path: dist/*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  macos:
+    name: macOS DMG
+    runs-on: macos-14
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out Muro Music
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Check out Neo KeyFinder
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: t-MURO/neo-keyfinder
+          path: neo-keyfinder
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout f87344cac03158cbf1467264565f1fd36b382a24
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          npm ci
+          npm ci --prefix "$NEO_KEYFINDER_ROOT"
+
+      - name: Build DMG
+        shell: bash
+        run: |
+          npm run predist
+          npx --no-install vite build
+          npx --no-install electron-builder --mac dmg
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: muro-music-macos
+          path: dist/*.dmg
+          if-no-files-found: error
+          retention-days: 14
