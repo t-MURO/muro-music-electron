@@ -66,6 +66,7 @@ jobs:
         shell: pwsh
         run: |
           npm run predist
+          node scripts/verify-packaged-resources.cjs
           npx --no-install vite build
 
       - name: Build and publish NSIS installer
@@ -128,6 +129,7 @@ jobs:
         shell: bash
         run: |
           npm run predist
+          node scripts/verify-packaged-resources.cjs
           npx --no-install vite build
 
       - name: Build and publish DMG

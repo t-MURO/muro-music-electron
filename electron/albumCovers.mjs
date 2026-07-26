@@ -219,7 +219,7 @@ export const createAlbumCoverService = ({
   fetchImpl = globalThis.fetch,
   cacheCoverBytesImpl = cacheCoverBytes,
   now = () => Date.now(),
-  userAgent = "MuroMusic/0.1.1 (https://github.com/t-MURO/muro-music-electron)",
+  userAgent = "MuroMusic/0.1.2 (https://github.com/t-MURO/muro-music-electron)",
 } = {}) => {
   const cacheRemoteCover = async (imageUrl, sourceUrl, provider) => {
     const imageResponse = await fetchImpl(imageUrl, { headers: { "User-Agent": userAgent } });

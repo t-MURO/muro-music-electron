@@ -68,7 +68,7 @@ const allowedUpdates = {
 
 const MUSICBRAINZ_RECORDING_SEARCH = "https://musicbrainz.org/ws/2/recording/";
 const MUSICBRAINZ_RELEASE_SEARCH = "https://musicbrainz.org/ws/2/release/";
-const MUSICBRAINZ_USER_AGENT = "MuroMusicElectron/0.1.0 (https://github.com/t-MURO/muro-music-electron)";
+const MUSICBRAINZ_USER_AGENT = "MuroMusicElectron/0.1.2 (https://github.com/t-MURO/muro-music-electron)";
 const MUSICBRAINZ_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
