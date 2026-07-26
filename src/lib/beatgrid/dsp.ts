@@ -617,6 +617,17 @@ export type TrackStructure = {
 const SECTION_BOUNDARY_FRACTION = 0.45;
 // Sections shorter than this are arrangement detail, not structure.
 const MIN_SECTION_BARS = 4;
+/**
+ * An "outro" longer than this share of the track is not an outro.
+ *
+ * The scan walks backwards through contiguous quiet sections, so a track whose
+ * closing half is merely restrained can hand back most of its own length — an
+ * early sample produced a 156-bar outro. The planner starts the blend at the
+ * outro, so an overreaching one cuts the track off mid-arrangement.
+ */
+const MAX_OUTRO_FRACTION = 0.35;
+/** The same overreach at the other end, where it inflates the intro runway. */
+const MAX_INTRO_FRACTION = 0.35;
 // A section counts as quiet below this fraction of the track's *loudest*
 // section. Measured against the track rather than an absolute level, because
 // masters differ by far more than sections within one master do — and against
@@ -704,6 +715,15 @@ export function detectSections(
   // both intro and outro.
   if (outroStartBar <= introEndBar) {
     return { sections, introEndBar: 0, outroStartBar: barCount };
+  }
+
+  // Reject a run that has swallowed too much of the track to be a real intro or
+  // outro; treating one as structure would move the blend deep into the body.
+  if (barCount - outroStartBar > barCount * MAX_OUTRO_FRACTION) {
+    outroStartBar = barCount;
+  }
+  if (introEndBar > barCount * MAX_INTRO_FRACTION) {
+    introEndBar = 0;
   }
 
   return { sections, introEndBar, outroStartBar };

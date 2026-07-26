@@ -254,12 +254,18 @@ for (const plan of [
     assert.ok(automation.incomingGain >= 0 && automation.incomingGain <= 1);
     assert.ok(automation.outgoingGain >= 0 && automation.outgoingGain <= 1);
     if (plan.mode === "fade") {
-      approx(
-        automation.incomingGain ** 2 + automation.outgoingGain ** 2,
-        1,
-        // Sampled into linear segments, so the curve cuts a chord across each.
-        2e-3,
-        `equal-power gain at ${offset.toFixed(3)} s`,
+      // The -4.5 dB law makes two guarantees at once, and neither pure law
+      // manages both: the combined level never dips far, and the two gains
+      // never sum high enough to clip two loud masters together.
+      const power = automation.incomingGain ** 2 + automation.outgoingGain ** 2;
+      assert.ok(
+        power >= 0.69 && power <= 1.001,
+        `fade power at ${offset.toFixed(3)} s should stay within 1.6 dB of unity, got ${(10 * Math.log10(power)).toFixed(2)} dB`,
+      );
+      const sum = automation.incomingGain + automation.outgoingGain;
+      assert.ok(
+        sum <= 1.2,
+        `fade gains at ${offset.toFixed(3)} s sum to ${sum.toFixed(3)}, enough to clip`,
       );
     } else {
       approx(
@@ -271,15 +277,21 @@ for (const plan of [
     }
   }
 
-  // The dip this replaced: complementary gains put the midpoint of an unaligned
-  // blend at sqrt(0.45^2 + 0.55^2) ~= 0.71, about -3 dB. Equal power must hold
-  // the combined level within a hair of unity all the way across.
+  // The midpoint is where both pure laws fail. Complementary gains put an
+  // unaligned blend at sqrt(0.45^2 + 0.55^2) ~= 0.71, a 3 dB hole; equal power
+  // fills the hole but lets the two gains reach 1.41 together, which clips.
+  // The compromise must land between them on both counts.
   if (plan.mode === "fade") {
     const middle = transitionAutomationAt(plan, plan.durationSec / 2);
     const combined = Math.hypot(middle.incomingGain, middle.outgoingGain);
+    const dip = 20 * Math.log10(combined);
     assert.ok(
-      Math.abs(20 * Math.log10(combined)) < 0.1,
-      `fade midpoint should stay at unity power, got ${(20 * Math.log10(combined)).toFixed(2)} dB`,
+      dip > -1.8 && dip <= 0.05,
+      `fade midpoint should dip by well under 3 dB, got ${dip.toFixed(2)} dB`,
+    );
+    assert.ok(
+      middle.incomingGain + middle.outgoingGain < 1.25,
+      `fade midpoint gains sum to ${(middle.incomingGain + middle.outgoingGain).toFixed(3)}, too close to clipping`,
     );
   }
   // Endpoints are compared with a tolerance because the equal-power law lands

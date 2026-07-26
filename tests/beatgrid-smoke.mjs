@@ -305,7 +305,24 @@ const circularErrorSec = (a, b, period) => {
   );
   assert.equal(steady.hasOutro, false, "a track with no outro must report none");
   assert.equal(steady.introEndSec, 0, "a track with no intro must report none");
-  console.log("test 6 ok: intro and outro located");
+
+  // A track whose whole back half is restrained must not report all of it as an
+  // outro. The backwards scan walks through contiguous quiet sections, so
+  // without a bound it hands back most of the track — an early sample produced
+  // a 156-bar outro — and the planner would then start the blend deep inside
+  // the body and cut the track off.
+  const longTail = analyzeBeatGrid(
+    synthesizeArrangedTrack({
+      bpm: 128, firstBeatSec: 0.31, durationSec: 200, introBars: 0, outroBars: 60,
+    }),
+    SAMPLE_RATE,
+  );
+  assert.equal(
+    longTail.hasOutro,
+    false,
+    "an outro covering more than a third of the track must be rejected",
+  );
+  console.log("test 6 ok: intro and outro located, overreaching runs rejected");
 }
 
 console.log("Beat grid smoke test passed");
