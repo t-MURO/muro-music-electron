@@ -8,24 +8,17 @@ import { openDatabase } from "../electron/database.mjs";
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "muro-data-features-"));
 const dbPath = path.join(root, "muro.db");
 const covers = path.join(root, "covers");
-const sourcePath = path.join(root, "track.wav");
+const sourcePath = path.join(root, "track.mp3");
 const artworkPath = path.join(covers, "cover.jpg");
 const backupPath = path.join(root, "library.murobackup");
 fs.mkdirSync(covers, { recursive: true });
-const wav = Buffer.alloc(44 + 1600);
-wav.write("RIFF", 0);
-wav.writeUInt32LE(1636, 4);
-wav.write("WAVEfmt ", 8);
-wav.writeUInt32LE(16, 16);
-wav.writeUInt16LE(1, 20);
-wav.writeUInt16LE(1, 22);
-wav.writeUInt32LE(8000, 24);
-wav.writeUInt32LE(16000, 28);
-wav.writeUInt16LE(2, 32);
-wav.writeUInt16LE(16, 34);
-wav.write("data", 36);
-wav.writeUInt32LE(1600, 40);
-fs.writeFileSync(sourcePath, wav);
+const mp3Frames = [];
+for (let index = 0; index < 12; index += 1) {
+  const frame = Buffer.alloc(417);
+  Buffer.from([0xff, 0xfb, 0x90, 0x64]).copy(frame);
+  mp3Frames.push(frame);
+}
+fs.writeFileSync(sourcePath, Buffer.concat(mp3Frames));
 fs.writeFileSync(artworkPath, "artwork");
 
 const backend = createBackend({
@@ -49,7 +42,7 @@ try {
     "Original title",
     "Test artist",
     "Test album",
-    "track.wav",
+    "track.mp3",
     sourcePath,
     now,
     now,
@@ -89,10 +82,14 @@ try {
   );
   assert.equal((await backend.invoke("list_playlist_snapshots", { dbPath })).length, 1);
 
-  await backend.invoke("update_track_metadata", {
+  assert.deepEqual(await backend.invoke("update_track_metadata", {
     dbPath,
     trackIds: ["track-1"],
     updates: { title: "Edited title", rating: 4 },
+  }), {
+    updated: 1,
+    filesWritten: 1,
+    fileWriteErrors: [],
   });
   const metadataHistory = await backend.invoke("list_metadata_history", {
     dbPath,

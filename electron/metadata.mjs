@@ -8,7 +8,7 @@ import { TagLib } from "taglib-wasm";
 import { normalizeSearchText, openDatabase, rowToTrack } from "./database.mjs";
 
 export const AUDIO_EXTENSIONS = new Set([
-  ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".aiff", ".aif", ".alac",
+  ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".aiff", ".aif", ".alac",
 ]);
 
 let taglibPromise;
@@ -101,11 +101,117 @@ export const cacheEmbeddedCover = async (pictures, cacheDir, filePath) => {
   return undefined;
 };
 
-const ratingFromMetadata = (common) => {
+const clampStars = (value) => Math.max(0, Math.min(5, value));
+const MP3_POPM_BY_HALF_STAR = [0, 13, 1, 54, 64, 118, 128, 186, 196, 242, 255];
+const VORBIS_RATING_EXTENSIONS = new Set([".flac", ".ogg", ".opus"]);
+
+export const starsFromNormalizedRating = (value) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  // Muro exposes half-star steps. Snapping also removes the small 8-bit
+  // quantization error used by ID3 POPM ratings (for example 204 / 255).
+  return Math.round(clampStars(value * 5) * 2) / 2;
+};
+
+export const normalizedRatingFromStars = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(clampStars(numeric) * 2) / 10;
+};
+
+export const starsFromMp3PopmRating = (value) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  const raw = Math.max(0, Math.min(255, Math.round(value * 255)));
+  const exactHalfStar = MP3_POPM_BY_HALF_STAR.indexOf(raw);
+  if (exactHalfStar >= 0) return exactHalfStar / 2;
+  if (raw <= 31) return 1;
+  if (raw <= 95) return 2;
+  if (raw <= 159) return 3;
+  if (raw <= 223) return 4;
+  return 5;
+};
+
+export const starsFromVorbisRating = (value) => {
+  const raw = first(value);
+  if (raw === undefined || raw === null || String(raw).trim() === "") return undefined;
+  const text = String(raw).trim();
+  const numeric = Number(text);
+  if (!Number.isFinite(numeric) || numeric < 0) return undefined;
+  if (numeric === 0) return 0;
+
+  // A decimal in the normalized range is treated as 0.0–1.0. Preserve the
+  // common integer 1–5 convention when the source is an integer string.
+  if (numeric <= 1 && /[.eE]/.test(text)) {
+    return starsFromNormalizedRating(numeric);
+  }
+  if (Number.isInteger(numeric) && numeric <= 5) {
+    return numeric;
+  }
+  if (numeric <= 1) {
+    return starsFromNormalizedRating(numeric);
+  }
+  if (numeric <= 100) {
+    return Math.round(clampStars(numeric / 20) * 2) / 2;
+  }
+  if (numeric <= 255) {
+    return starsFromMp3PopmRating(numeric / 255);
+  }
+  return undefined;
+};
+
+export const vorbisRatingFromStars = (value) => {
+  const normalized = normalizedRatingFromStars(value);
+  return Math.round(starsFromNormalizedRating(normalized) * 20);
+};
+
+const starsFromFileRating = (sourcePath, value) =>
+  path.extname(sourcePath).toLowerCase() === ".mp3"
+    ? starsFromMp3PopmRating(value)
+    : starsFromNormalizedRating(value);
+
+const mp3PopmRatingFromStars = (value) => {
+  const stars = starsFromNormalizedRating(normalizedRatingFromStars(value));
+  const raw = MP3_POPM_BY_HALF_STAR[Math.round(stars * 2)];
+  // An exact 1.0 overflows in taglib-wasm 1.4.0; 0.999 serializes to 255.
+  return raw === 255 ? 0.999 : raw / 255;
+};
+
+const ratingFromMetadata = (common, sourcePath) => {
   const rating = first(common.rating);
-  if (typeof rating === "number") return Math.max(0, Math.min(5, rating <= 1 ? rating * 5 : rating));
-  if (typeof rating?.rating === "number") return Math.max(0, Math.min(5, rating.rating * 5));
+  if (typeof rating === "number") {
+    return rating <= 1
+      ? starsFromFileRating(sourcePath, rating)
+      : Math.round(clampStars(rating) * 2) / 2;
+  }
+  if (typeof rating?.rating === "number") {
+    return starsFromFileRating(sourcePath, rating.rating);
+  }
   return 0;
+};
+
+/**
+ * TagLib normalizes the format-specific rating fields used by ID3/MP3,
+ * Vorbis/FLAC/Ogg, and MP4. Keep music-metadata as a fallback so an optional
+ * rating never prevents an otherwise valid file from being imported.
+ */
+export const readRatingFromFile = async (sourcePath, common = {}) => {
+  let file;
+  try {
+    const taglib = await getTagLib();
+    file = await taglib.open(sourcePath);
+    if (VORBIS_RATING_EXTENSIONS.has(path.extname(sourcePath).toLowerCase())) {
+      const vorbisRating = starsFromVorbisRating(file.getProperty("RATING"));
+      if (vorbisRating !== undefined) return vorbisRating;
+    }
+    const rating = file.getRating();
+    if (typeof rating === "number" && Number.isFinite(rating)) {
+      return starsFromFileRating(sourcePath, rating);
+    }
+  } catch {
+    // Unsupported or damaged tags can still be exposed by music-metadata.
+  } finally {
+    file?.dispose();
+  }
+  return ratingFromMetadata(common, sourcePath);
 };
 
 const fallbackTitle = (filePath) =>
@@ -160,6 +266,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
   const discNumber = common.disk?.no ?? undefined;
   const discTotal = common.disk?.of ?? undefined;
   const year = common.year ?? (common.date ? Number(String(common.date).slice(0, 4)) || undefined : undefined);
+  const rating = await readRatingFromFile(filePath, common);
   const searchText = normalizeSearchText(
     title, artist, album, albumArtist, genres, comments, label,
     path.basename(filePath), year, trackNumber, discNumber
@@ -183,7 +290,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     disc_total: discTotal ?? null,
     key: common.key ?? null,
     bpm: common.bpm ?? null,
-    rating: ratingFromMetadata(common),
+    rating,
     raw_tags_json: cleanRawTags(metadata.native),
     musicbrainz_albumid: first(common.musicbrainz_albumid) ?? null,
     musicbrainz_artistid: first(common.musicbrainz_artistid) ?? null,
@@ -248,54 +355,138 @@ const propertyMap = {
   label: "LABEL",
   bpm: "BPM",
   key: "INITIALKEY",
-  rating: "RATING",
   musicBrainzTrackId: "MUSICBRAINZ_TRACKID",
   musicBrainzAlbumId: "MUSICBRAINZ_ALBUMID",
   musicBrainzReleaseGroupId: "MUSICBRAINZ_RELEASEGROUPID",
   acoustIdId: "ACOUSTID_ID",
 };
 
+const RATING_UNSUPPORTED_EXTENSIONS = new Set([".wav", ".aif", ".aiff"]);
+
 export const writeMetadataToFile = async (sourcePath, updates) => {
+  const expectedRating = updates.rating === undefined
+    ? undefined
+    : normalizedRatingFromStars(updates.rating);
+  const extension = path.extname(sourcePath).toLowerCase();
+  if (expectedRating !== undefined && RATING_UNSUPPORTED_EXTENSIONS.has(extension)) {
+    throw new Error(`The ${extension.slice(1).toUpperCase()} format does not support embedded ratings`);
+  }
   const taglib = await getTagLib();
   const coverBytes = updates.coverArtPath
     ? await fs.promises.readFile(updates.coverArtPath)
     : null;
-  await taglib.edit(sourcePath, async (file) => {
-    const tag = file.tag();
-    if (updates.title !== undefined) tag.setTitle(String(updates.title));
-    if (updates.artist !== undefined) tag.setArtist(String(updates.artist));
-    if (updates.album !== undefined) tag.setAlbum(String(updates.album));
-    if (updates.comment !== undefined) tag.setComment(String(updates.comment));
-    if (updates.genre !== undefined) tag.setGenre(String(updates.genre));
-    if (updates.year !== undefined) tag.setYear(Number(updates.year) || 0);
-    if (updates.trackNumber !== undefined) tag.setTrack(Number(updates.trackNumber) || 0);
-    for (const [key, property] of Object.entries(propertyMap)) {
-      if (updates[key] !== undefined) file.setProperty(property, String(updates[key] ?? ""));
-    }
-    if (coverBytes) {
-      file.setPictures([{
-        mimeType: "image/jpeg",
-        data: coverBytes,
-        type: "FrontCover",
-        description: "Front Cover",
-      }]);
-    }
-  });
+  const vorbisRatingValue = expectedRating !== undefined
+    && expectedRating > 0
+    && VORBIS_RATING_EXTENSIONS.has(extension)
+    ? String(vorbisRatingFromStars(updates.rating))
+    : undefined;
+  let replacedVorbisRating;
 
-  // Saving artwork is materially different from caching it for the UI. Verify
-  // that TagLib can read a real front-cover frame back from the audio file so a
-  // failed or unsupported write is never reported as a successful embed.
-  if (coverBytes) {
+  // taglib-wasm exposes Vorbis RATING through both its complex rating API and
+  // generic property API. When the field already exists, setting the generic
+  // property is silently ignored. Clear it in one save so the following save
+  // can create the MusicBee-compatible integer value.
+  if (vorbisRatingValue !== undefined) {
     const file = await taglib.open(sourcePath);
+    let currentRating;
     try {
-      const embeddedCover = file.getPictures()
-        .find((picture) => picture.type === "FrontCover" && picture.data.length > 0);
-      if (!embeddedCover) {
-        throw new Error("The audio format did not retain the embedded front cover");
-      }
+      currentRating = file.getProperty("RATING") ?? "";
     } finally {
       file.dispose();
     }
+    if (currentRating !== "" && currentRating !== vorbisRatingValue) {
+      await taglib.edit(sourcePath, (editable) => editable.setRatings([]));
+      replacedVorbisRating = currentRating;
+    }
+  }
+
+  try {
+    await taglib.edit(sourcePath, async (file) => {
+      const tag = file.tag();
+      if (updates.title !== undefined) tag.setTitle(String(updates.title));
+      if (updates.artist !== undefined) tag.setArtist(String(updates.artist));
+      if (updates.album !== undefined) tag.setAlbum(String(updates.album));
+      if (updates.comment !== undefined) tag.setComment(String(updates.comment));
+      if (updates.genre !== undefined) tag.setGenre(String(updates.genre));
+      if (updates.year !== undefined) tag.setYear(Number(updates.year) || 0);
+      if (updates.trackNumber !== undefined) tag.setTrack(Number(updates.trackNumber) || 0);
+      for (const [key, property] of Object.entries(propertyMap)) {
+        if (updates[key] !== undefined) file.setProperty(property, String(updates[key] ?? ""));
+      }
+      if (expectedRating !== undefined) {
+        if (expectedRating === 0) {
+          file.setRatings([]);
+        } else {
+          if (vorbisRatingValue !== undefined) {
+            // MusicBee and other common Vorbis Comment readers use an integer
+            // percentage rather than a normalized decimal.
+            file.setProperty("RATING", vorbisRatingValue);
+          } else {
+            // MP3 POPM uses application-defined 0–255 bands rather than a linear
+            // five-star scale. Use values compatible with Windows Explorer and
+            // common half-star-aware players. Other tag types stay normalized.
+            const serializedRating = extension === ".mp3"
+              ? mp3PopmRatingFromStars(updates.rating)
+              : expectedRating === 1 ? 0.999 : expectedRating;
+            file.setRating(serializedRating);
+          }
+        }
+      }
+      if (coverBytes) {
+        file.setPictures([{
+          mimeType: "image/jpeg",
+          data: coverBytes,
+          type: "FrontCover",
+          description: "Front Cover",
+        }]);
+      }
+    });
+
+    // Reopen the file after TagLib's save. This distinguishes a real embedded
+    // metadata write from formats that silently ignore an unsupported field.
+    if (coverBytes || expectedRating !== undefined) {
+      const file = await taglib.open(sourcePath);
+      try {
+        if (coverBytes) {
+          const embeddedCover = file.getPictures()
+            .find((picture) => picture.type === "FrontCover" && picture.data.length > 0);
+          if (!embeddedCover) {
+            throw new Error("The audio format did not retain the embedded front cover");
+          }
+        }
+        if (expectedRating !== undefined) {
+          const persistedRating = VORBIS_RATING_EXTENSIONS.has(extension)
+            ? starsFromVorbisRating(file.getProperty("RATING"))
+            : file.getRating();
+          const persistedStars = VORBIS_RATING_EXTENSIONS.has(extension)
+            ? persistedRating ?? 0
+            : typeof persistedRating === "number" && Number.isFinite(persistedRating)
+              ? starsFromFileRating(sourcePath, persistedRating)
+              : 0;
+          const expectedStars = starsFromNormalizedRating(expectedRating);
+          if (persistedStars !== expectedStars) {
+            throw new Error(
+              `The audio format did not retain the embedded rating (${expectedStars} stars requested)`,
+            );
+          }
+        }
+      } finally {
+        file.dispose();
+      }
+    }
+  } catch (error) {
+    if (replacedVorbisRating !== undefined) {
+      try {
+        await taglib.edit(sourcePath, (file) => file.setRatings([]));
+        await taglib.edit(
+          sourcePath,
+          (file) => file.setProperty("RATING", replacedVorbisRating),
+        );
+      } catch (restoreError) {
+        console.warn(`Failed to restore the previous rating in ${sourcePath}:`, restoreError);
+      }
+    }
+    throw error;
   }
 };
 
