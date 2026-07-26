@@ -76,29 +76,21 @@ const MAX_ALIGNMENT_BARS = 16;
  * where the blend *starts*, not how long it runs; the tail margin already
  * guarantees it fits.
  *
- * The length is then pulled back when the blend is a riskier one to hold: a
- * large tempo pull exposes pitch and drift for longer, and a weak grid means
- * the alignment itself is less certain.
+ * Nothing else shortens it. Earlier revisions halved the length for a large
+ * tempo pull and again for a weak grid, on the theory that a riskier blend
+ * should be held for less time. Both thresholds turned out to fire constantly —
+ * the tempo one at a 4.7% ratio, a six BPM gap at 128, and the confidence one
+ * at the tenth percentile of a real library — so the pairs with the widest
+ * tempo gap, where beatmatching is most audible, were the ones cut to two
+ * bars. Neither rule was ever tested against listening, and both made it worse.
  */
 const deriveBars = (args: {
   cap: number;
   introBarsB: number | null;
-  rateLog2: number;
-  confidence: number;
 }): number => {
-  const { cap, introBarsB, rateLog2, confidence } = args;
-
-  let bars = cap;
+  const { cap, introBarsB } = args;
   // Only constrain by a runway that was actually detected.
-  if (introBarsB !== null) bars = Math.min(bars, introBarsB);
-
-  // Tempo strain: 0 when the tracks already share a tempo, 1 at the maximum
-  // pull the planner allows.
-  const strain = MAX_RATE_LOG2 > 0 ? Math.abs(rateLog2) / MAX_RATE_LOG2 : 0;
-  if (strain > 0.6) bars /= 2;
-  if (confidence < 0.45) bars /= 2;
-
-  return bars;
+  return introBarsB !== null ? Math.min(cap, introBarsB) : cap;
 };
 
 const gridAnchor = (grid: BeatGrid, barSec: number) => {
@@ -183,12 +175,7 @@ export function planTransition(args: PlanTransitionArgs): TransitionPlan {
         return bars >= 1 ? bars : null;
       })()
     : null;
-  const targetBars = deriveBars({
-    cap: requestedBars,
-    introBarsB,
-    rateLog2: bestRateLog2,
-    confidence: Math.min(gridA.confidence, gridB.confidence),
-  });
+  const targetBars = deriveBars({ cap: requestedBars, introBarsB });
 
   // A blend that both begins and ends on a phrase boundary is what makes the
   // change of track sound intended, so whole-phrase lengths come first. The

@@ -506,40 +506,122 @@ for (const plan of [
   approx(roomy.durationSec, 16 * barSecA, 1e-9, "with room on both sides the cap decides");
 }
 
-// A blend held under strain is shortened: a large tempo pull exposes pitch and
-// drift for longer, and a weak grid means the alignment is less certain.
+// Neither a wide tempo gap nor a middling grid may shorten the blend.
+//
+// Earlier revisions halved it for both, reasoning that a riskier blend should
+// be held for less time. Both thresholds fired constantly on a real library —
+// the tempo one at a 4.7% ratio, six BPM at 128, and the confidence one at the
+// tenth percentile — so the widest-gap pairs, where beatmatching is most
+// audible, were the ones cut to two bars. It sounded worse, which is the only
+// evidence that ever bore on the question.
 {
   const barSec = 4 * (60 / 128);
   const relaxed = planTransition({
     gridA: grid(128, 0.5, 0.9),
     gridB: grid(128, 0.5, 0.9),
-    durationASec: 300,
-    durationBSec: 300,
-    bars: 16,
+    durationASec: 300, durationBSec: 300, bars: 16,
   });
   const strained = planTransition({
     gridA: grid(128, 0.5, 0.9),
-    gridB: grid(120, 0.5, 0.9), // ~6.5% pull, past the strain threshold
-    durationASec: 300,
-    durationBSec: 300,
-    bars: 16,
+    gridB: grid(120, 0.5, 0.9), // ~6.5% pull, past the old strain threshold
+    durationASec: 300, durationBSec: 300, bars: 16,
   });
-  assert.ok(
-    strained.durationSec < relaxed.durationSec,
-    `a large tempo pull should shorten the blend: relaxed=${(relaxed.durationSec / barSec).toFixed(1)} strained=${(strained.durationSec / barSec).toFixed(1)} bars`,
+  approx(
+    strained.durationSec,
+    relaxed.durationSec,
+    1e-9,
+    `a wide tempo gap must not shorten the blend: relaxed=${(relaxed.durationSec / barSec).toFixed(1)} strained=${(strained.durationSec / barSec).toFixed(1)} bars`,
   );
 
   const shaky = planTransition({
     gridA: grid(128, 0.5, 0.3),
     gridB: grid(128, 0.5, 0.3),
-    durationASec: 300,
-    durationBSec: 300,
-    bars: 16,
+    durationASec: 300, durationBSec: 300, bars: 16,
   });
-  assert.ok(
-    shaky.durationSec < relaxed.durationSec,
-    `a weak grid should shorten the blend: got ${(shaky.durationSec / barSec).toFixed(1)} bars`,
+  approx(
+    shaky.durationSec,
+    relaxed.durationSec,
+    1e-9,
+    `a middling grid must not shorten the blend: got ${(shaky.durationSec / barSec).toFixed(1)} bars`,
   );
+}
+
+// Beatmatching invariant: both decks must enter on a downbeat of their own
+// grid. If either start is a fraction of a bar off, every kick in the blend
+// flams no matter how good the tempo match is. Phrase alignment, the outro
+// start point and the derived length all move these two numbers, so the
+// invariant is checked across the combinations rather than one happy path.
+{
+  const cases = [];
+  for (const phraseConfidence of [0, 0.6]) {
+    for (const phraseOffsetBars of [0, 3, 7]) {
+      for (const hasOutro of [false, true]) {
+        for (const [bpmA, bpmB] of [[128, 128], [128, 124], [128, 174], [124, 128]]) {
+          for (const bars of [4, 8, 16, 32]) {
+            cases.push({ phraseConfidence, phraseOffsetBars, hasOutro, bpmA, bpmB, bars });
+          }
+        }
+      }
+    }
+  }
+
+  let checked = 0;
+  for (const testCase of cases) {
+    const barSecA = 4 * (60 / testCase.bpmA);
+    const firstDownbeatA = 0.37;
+    const firstDownbeatB = 1.21;
+    const gridA = grid(testCase.bpmA, firstDownbeatA, 0.8, {
+      phraseBars: 16,
+      firstPhraseSec: firstDownbeatA + testCase.phraseOffsetBars * barSecA,
+      phraseConfidence: testCase.phraseConfidence,
+      hasOutro: testCase.hasOutro,
+      outroStartSec: testCase.hasOutro ? 240 : Number.MAX_SAFE_INTEGER,
+    });
+    const gridB = grid(testCase.bpmB, firstDownbeatB, 0.8, {
+      phraseBars: 16,
+      firstPhraseSec: firstDownbeatB + 5 * (4 * (60 / testCase.bpmB)),
+      phraseConfidence: testCase.phraseConfidence,
+    });
+    const plan = planTransition({
+      gridA, gridB, durationASec: 300, durationBSec: 300, bars: testCase.bars,
+    });
+    if (plan.mode !== "beatmatch") continue;
+    checked += 1;
+    const label = JSON.stringify(testCase);
+
+    // A enters on one of its own bar lines.
+    const barsFromDownbeatA = (plan.startAtSec - firstDownbeatA) / barSecA;
+    approx(
+      barsFromDownbeatA - Math.round(barsFromDownbeatA),
+      0,
+      1e-9,
+      `A must start on a downbeat, off by ${(
+        (barsFromDownbeatA - Math.round(barsFromDownbeatA)) * barSecA * 1000
+      ).toFixed(1)} ms — ${label}`,
+    );
+
+    // B enters on one of its own bar lines.
+    const barSecB = 4 * (60 / testCase.bpmB);
+    const barsFromDownbeatB = (plan.cueInSec - firstDownbeatB) / barSecB;
+    approx(
+      barsFromDownbeatB - Math.round(barsFromDownbeatB),
+      0,
+      1e-9,
+      `B must be cued on a downbeat — ${label}`,
+    );
+
+    // The blend has to finish inside the outgoing track.
+    assert.ok(
+      plan.startAtSec + plan.durationSec <= 300,
+      `blend must end within A — ${label}`,
+    );
+    // And the incoming track must have the material to cover it.
+    assert.ok(
+      plan.cueInSec + plan.durationSec * plan.rate <= 300,
+      `blend must fit inside B — ${label}`,
+    );
+  }
+  assert.ok(checked > 40, `expected many beatmatched cases, only checked ${checked}`);
 }
 
 console.log("Mix plan smoke test passed.");
