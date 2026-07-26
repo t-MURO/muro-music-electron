@@ -224,6 +224,17 @@ env.RUSTUP_TOOLCHAIN = "stable-x86_64-pc-windows-msvc";
 if (existsSync(path.join(vcpkgRoot, "vcpkg.exe"))) {
   env.VCPKG_ROOT = vcpkgRoot;
   env.VCPKG_TARGET_TRIPLET = "x64-windows-static";
+  const eigenInclude = path.join(
+    keyfinderRoot,
+    "vcpkg_installed",
+    env.VCPKG_TARGET_TRIPLET,
+    "include",
+    "eigen3",
+  );
+  // Essentia's static Waf target can detect Eigen without forwarding its
+  // include directory to MSVC. INCLUDE is honored directly by cl.exe and the
+  // directory will exist by the time vcpkg finishes inside the native build.
+  env.INCLUDE = [eigenInclude, env.INCLUDE].filter(Boolean).join(";");
   env._CL_ = "/DNOMINMAX";
   env.PYTHONUTF8 = "1";
 } else if (release) {
