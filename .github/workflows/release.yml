@@ -64,7 +64,7 @@ jobs:
         run: |
           npm run predist
           npx --no-install vite build
-          npx --no-install electron-builder --win nsis
+          npx --no-install electron-builder --win nsis --publish never
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -121,7 +121,7 @@ jobs:
         run: |
           npm run predist
           npx --no-install vite build
-          npx --no-install electron-builder --mac dmg
+          npx --no-install electron-builder --mac dmg --publish never
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
