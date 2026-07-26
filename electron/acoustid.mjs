@@ -158,7 +158,7 @@ export const createAcoustIdService = ({
           headers: {
             Accept: "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "MuroMusic/0.1.0",
+            "User-Agent": "MuroMusic/0.1.1",
           },
           body,
           signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
