@@ -17,6 +17,7 @@ env:
   CI: "true"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
   NEO_KEYFINDER_VERSION: "v0.1.2"
+  PUBLISH_MODE: ${{ github.event_name == 'push' && 'onTagOrDraft' || 'never' }}
 
 jobs:
   windows:
@@ -62,7 +63,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-packaged-resources.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npx --no-install electron-builder --win nsis --publish onTagOrDraft
+          npx --no-install electron-builder --win nsis --publish "$env:PUBLISH_MODE"
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -109,7 +110,7 @@ jobs:
         run: |
           node scripts/stage-packaged-resources.cjs
           node scripts/verify-packaged-resources.cjs
-          npx --no-install electron-builder --mac dmg --publish onTagOrDraft
+          npx --no-install electron-builder --mac dmg --publish "$PUBLISH_MODE"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
