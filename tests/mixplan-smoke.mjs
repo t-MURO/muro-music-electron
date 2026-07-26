@@ -356,11 +356,18 @@ for (const plan of [
     1e-9,
     "start lands a whole number of phrases after A's first phrase",
   );
+  // The incoming track always starts at its beginning. Cueing it at its first
+  // detected phrase instead discarded everything before that line — a mean of
+  // about thirty seconds across a real library, intro included.
   approx(
     plan.cueInSec,
-    gridB.firstPhraseSec,
+    gridB.firstDownbeatSec,
     1e-9,
-    "B is cued at its own phrase start",
+    "B is cued at its first downbeat, not at a phrase line further in",
+  );
+  assert.ok(
+    plan.cueInSec < 5,
+    `B must start near the beginning of the track, got ${plan.cueInSec.toFixed(1)}s in`,
   );
   // 16 bars is two whole 8-bar phrases, so the blend also ends on a phrase line.
   approx(
