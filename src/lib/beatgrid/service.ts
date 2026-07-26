@@ -1,6 +1,6 @@
 import { convertFileSrc, invoke } from "@muro/desktop/runtime";
 import type { Track } from "../../types";
-import type { BeatGrid } from "./types";
+import { BEAT_GRID_VERSION, type BeatGrid } from "./types";
 
 type WorkerReply =
   | { ok: true; grid: BeatGrid }
@@ -99,7 +99,7 @@ export async function getOrComputeBeatGrid(
   track: Track,
   dbPath: string,
 ): Promise<BeatGrid> {
-  if (track.beatGrid?.version === 1) return track.beatGrid;
+  if (track.beatGrid?.version === BEAT_GRID_VERSION) return track.beatGrid;
   const grid = await analyzeSourceBeatGrid(track.sourcePath, track.bpm ?? null);
   // Persist fire-and-forget: a failed write must not block the transition.
   invoke("update_track_beat_grid", {

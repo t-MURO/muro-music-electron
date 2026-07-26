@@ -27,6 +27,32 @@ const MAX_RATE_LOG2 = Math.log2(1.08);
 const TAIL_MARGIN_SEC = 1.5;
 const RATE_MULTIPLIERS = [0.5, 1, 2];
 
+// Below this the novelty curve was too flat to trust a phrase period, so the
+// plan stays on plain bar alignment.
+const MIN_PHRASE_CONFIDENCE = 0.15;
+
+/**
+ * The musical grid a transition should start on.
+ *
+ * Bars alone put the blend on a downbeat, which lines the kicks up but can
+ * still land three bars into a phrase — beat-matched and yet plainly wrong to
+ * anyone listening. Where the phrase grid is trustworthy the anchor advances a
+ * whole phrase at a time instead.
+ */
+const gridAnchor = (grid: BeatGrid, barSec: number) => {
+  const usePhrase =
+    grid.phraseConfidence >= MIN_PHRASE_CONFIDENCE &&
+    grid.phraseBars > 0 &&
+    Number.isFinite(grid.firstPhraseSec);
+  return usePhrase
+    ? {
+        originSec: Math.max(0, grid.firstPhraseSec),
+        stepSec: grid.phraseBars * barSec,
+        bars: grid.phraseBars,
+      }
+    : { originSec: Math.max(0, grid.firstDownbeatSec), stepSec: barSec, bars: 1 };
+};
+
 const buildFadePlan = (
   gridB: BeatGrid | null,
   durationASec: number,
@@ -83,10 +109,17 @@ export function planTransition(args: PlanTransitionArgs): TransitionPlan {
 
   const beatSecA = 60 / gridA.bpm;
   const barSecA = 4 * beatSecA;
-  const firstDownbeatA = Math.max(0, gridA.firstDownbeatSec);
+  const anchorA = gridAnchor(gridA, barSecA);
 
+  // A blend that both begins and ends on a phrase boundary is what makes the
+  // change of track sound intended, so whole-phrase lengths come first. The
+  // rest stay available for tracks with little runway left.
   const barsCandidates = [32, 16, 8, 4, 2]
-    .filter((bars) => bars <= requestedBars);
+    .filter((bars) => bars <= requestedBars)
+    .sort((left, right) => {
+      const wholePhrase = (bars: number) => (bars % anchorA.bars === 0 ? 0 : 1);
+      return wholePhrase(left) - wholePhrase(right) || right - left;
+    });
 
   let chosenBars = 0;
   let durationSec = 0;
@@ -94,18 +127,21 @@ export function planTransition(args: PlanTransitionArgs): TransitionPlan {
   for (const bars of barsCandidates) {
     const candidateDuration = bars * barSecA;
     const latestStart = durationASec - candidateDuration - TAIL_MARGIN_SEC;
-    if (firstDownbeatA > latestStart) continue;
-    const k = Math.floor((latestStart - firstDownbeatA) / barSecA);
+    if (anchorA.originSec > latestStart) continue;
+    const k = Math.floor((latestStart - anchorA.originSec) / anchorA.stepSec);
     chosenBars = bars;
     durationSec = candidateDuration;
-    startAtSec = firstDownbeatA + k * barSecA;
+    startAtSec = anchorA.originSec + k * anchorA.stepSec;
     break;
   }
   if (chosenBars === 0 || startAtSec < 0 || durationSec <= 0) {
     return buildFadePlan(gridB, durationASec, durationBSec);
   }
 
-  const cueInSec = Math.max(0, gridB.firstDownbeatSec);
+  // Cue B at a phrase start too, so its intro enters the blend where a DJ
+  // would drop it rather than wherever its first bar happens to fall.
+  const barSecB = 4 * (60 / gridB.bpm);
+  const cueInSec = Math.max(0, gridAnchor(gridB, barSecB).originSec);
   if (!(durationBSec - cueInSec > durationSec * rate + 10)) {
     return buildFadePlan(gridB, durationASec, durationBSec);
   }

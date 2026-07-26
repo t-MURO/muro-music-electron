@@ -35,6 +35,50 @@ const synthesizeClickTrack = ({ bpm, firstBeatSec, durationSec = DURATION_SEC })
   return samples;
 };
 
+// Sectioned track: every `sectionBars` the arrangement swaps timbre, the way an
+// intro gives way to a drop. This is what phrase detection actually keys on —
+// a change in what the music *sounds like*, not a louder bar.
+const synthesizeSectionedTrack = ({ bpm, firstBeatSec, durationSec, sectionBars, offset = 0 }) => {
+  const total = Math.floor(durationSec * SAMPLE_RATE);
+  const samples = new Float32Array(total);
+  const beatSec = 60 / bpm;
+  for (let beat = 0; ; beat += 1) {
+    const beatTime = firstBeatSec + beat * beatSec;
+    if (beatTime >= durationSec - 0.2) break;
+    const bar = Math.floor(beat / 4);
+    const section = sectionBars > 0 ? Math.floor(Math.max(0, bar - offset) / sectionBars) : 0;
+    const hasBass = sectionBars === 0 ? true : section % 2 === 1;
+    const hasHats = sectionBars === 0 ? true : section % 2 === 0;
+    const accent = beat % 4 === 0;
+    const amplitude = accent ? 1 : 0.5;
+    const start = Math.round(beatTime * SAMPLE_RATE);
+
+    const kickLength = Math.round(0.08 * SAMPLE_RATE);
+    for (let i = 0; i < kickLength && start + i < total; i += 1) {
+      const t = i / SAMPLE_RATE;
+      const decay = Math.exp(-t / 0.02);
+      samples[start + i] += amplitude * decay * Math.sin(2 * Math.PI * 60 * t);
+      if (hasBass) samples[start + i] += 0.8 * amplitude * decay * Math.sin(2 * Math.PI * 45 * t);
+    }
+    if (hasHats) {
+      const hatLength = Math.round(0.03 * SAMPLE_RATE);
+      let noise = 0;
+      for (let i = 0; i < hatLength && start + i < total; i += 1) {
+        const t = i / SAMPLE_RATE;
+        // Deterministic pseudo-noise; tests must not depend on Math.random.
+        noise = Math.sin(noise * 12.9898 + i * 78.233) * 43758.5453;
+        samples[start + i] += 0.35 * Math.exp(-t / 0.008) * (noise - Math.floor(noise) - 0.5);
+      }
+    }
+    const padLength = Math.round(beatSec * SAMPLE_RATE);
+    for (let i = 0; i < padLength && start + i < total; i += 1) {
+      const t = i / SAMPLE_RATE;
+      samples[start + i] += 0.12 * Math.sin(2 * Math.PI * (hasBass ? 220 : 330) * t);
+    }
+  }
+  return samples;
+};
+
 // Smallest absolute distance between a and b on a circle of the given period.
 const circularErrorSec = (a, b, period) => {
   let d = (a - b) % period;
@@ -51,7 +95,7 @@ const circularErrorSec = (a, b, period) => {
     synthesizeClickTrack({ bpm: truthBpm, firstBeatSec: truthFirstBeat }),
     SAMPLE_RATE,
   );
-  assert.equal(grid.version, 1);
+  assert.equal(grid.version, 2);
   assert.ok(
     Math.abs(grid.bpm - truthBpm) <= 0.8,
     `128 BPM: detected ${grid.bpm}, expected within ±0.8`,
@@ -116,6 +160,66 @@ const circularErrorSec = (a, b, period) => {
     "short input should throw",
   );
   console.log("test 4 ok: degenerate input throws");
+}
+
+// Test 5: the phrase period and its starting bar are both recovered.
+{
+  for (const { bpm, sectionBars, offset, durationSec } of [
+    { bpm: 128, sectionBars: 8, offset: 0, durationSec: 120 },
+    { bpm: 128, sectionBars: 8, offset: 3, durationSec: 120 },
+    { bpm: 124, sectionBars: 16, offset: 5, durationSec: 240 },
+    { bpm: 130, sectionBars: 4, offset: 2, durationSec: 120 },
+  ]) {
+    const grid = analyzeBeatGrid(
+      synthesizeSectionedTrack({ bpm, firstBeatSec: 0.31, durationSec, sectionBars, offset }),
+      SAMPLE_RATE,
+    );
+    const barSec = 4 * (60 / grid.bpm);
+
+    assert.equal(
+      grid.phraseBars,
+      sectionBars,
+      `${sectionBars}-bar sections: detected phrase of ${grid.phraseBars}`,
+    );
+    assert.ok(
+      grid.phraseConfidence > 0.15,
+      `${sectionBars}-bar sections: phrase confidence ${grid.phraseConfidence} too low to use`,
+    );
+
+    // The phrase must start on the bar the arrangement changes on, modulo the
+    // phrase period.
+    const expected = grid.firstDownbeatSec + (offset % sectionBars) * barSec;
+    const error = circularErrorSec(grid.firstPhraseSec, expected, sectionBars * barSec);
+    assert.ok(
+      error <= barSec * 0.5,
+      `${sectionBars}@${offset}: firstPhraseSec off by ${error.toFixed(3)}s (bar is ${barSec.toFixed(3)}s)`,
+    );
+
+    // A phrase start is always a bar line.
+    const barError = circularErrorSec(grid.firstPhraseSec, grid.firstDownbeatSec, barSec);
+    assert.ok(
+      barError <= 0.02,
+      `${sectionBars}@${offset}: phrase start is not on a bar line, off by ${barError.toFixed(3)}s`,
+    );
+  }
+
+  // The case that sank the previous approach: audio with no structure at all
+  // must report no phrase rather than locking onto an analysis artifact. A
+  // scalar per-bar score reported *higher* confidence here than for genuinely
+  // sectioned audio, because a bar is a non-integer number of FFT frames and
+  // the resulting jitter is itself bar-periodic.
+  const flat = analyzeBeatGrid(
+    synthesizeSectionedTrack({
+      bpm: 128, firstBeatSec: 0.31, durationSec: 120, sectionBars: 0,
+    }),
+    SAMPLE_RATE,
+  );
+  assert.equal(
+    flat.phraseConfidence,
+    0,
+    `featureless audio must report no phrase, got ${flat.phraseConfidence}`,
+  );
+  console.log("test 5 ok: phrase grid detected, flat audio rejected");
 }
 
 console.log("Beat grid smoke test passed");

@@ -8,11 +8,21 @@ assert.deepEqual(MIX_BAR_OPTIONS, [4, 8, 16, 32]);
 assert.equal(isDjMixFeatureAvailable(true), true);
 assert.equal(isDjMixFeatureAvailable(false), false);
 
-const grid = (bpm, firstDownbeatSec = 0.5, confidence = 0.8) => ({
-  version: 1,
+// phraseConfidence defaults to 0, so the existing cases keep exercising plain
+// bar alignment; the phrase cases below opt in explicitly.
+const grid = (
+  bpm,
+  firstDownbeatSec = 0.5,
+  confidence = 0.8,
+  { phraseBars = 8, firstPhraseSec = firstDownbeatSec, phraseConfidence = 0 } = {},
+) => ({
+  version: 2,
   bpm,
   firstBeatSec: firstDownbeatSec,
   firstDownbeatSec,
+  phraseBars,
+  firstPhraseSec,
+  phraseConfidence,
   confidence,
   analyzedAt: 1_752_000_000,
 });
@@ -300,6 +310,81 @@ for (const plan of [
     getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec),
     "after",
   );
+}
+
+// Phrase alignment: the blend must begin on a phrase line of A and cue B at a
+// phrase line of its own, not merely on a downbeat. A beat-matched blend that
+// starts three bars into a phrase lines every kick up and still sounds wrong.
+{
+  const barSec = 4 * (60 / 128);
+  const phraseSec = 8 * barSec;
+  // A's phrase grid is offset from its first downbeat by 3 bars.
+  const gridA = grid(128, 0.5, 0.8, {
+    phraseBars: 8,
+    firstPhraseSec: 0.5 + 3 * barSec,
+    phraseConfidence: 0.6,
+  });
+  const gridB = grid(128, 1.25, 0.8, {
+    phraseBars: 8,
+    firstPhraseSec: 1.25 + 2 * barSec,
+    phraseConfidence: 0.6,
+  });
+  const plan = planTransition({
+    gridA,
+    gridB,
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
+  });
+
+  assert.equal(plan.mode, "beatmatch");
+
+  const startOffset = plan.startAtSec - gridA.firstPhraseSec;
+  approx(
+    startOffset / phraseSec - Math.round(startOffset / phraseSec),
+    0,
+    1e-9,
+    "start lands a whole number of phrases after A's first phrase",
+  );
+  approx(
+    plan.cueInSec,
+    gridB.firstPhraseSec,
+    1e-9,
+    "B is cued at its own phrase start",
+  );
+  // 16 bars is two whole 8-bar phrases, so the blend also ends on a phrase line.
+  approx(
+    plan.durationSec / phraseSec - Math.round(plan.durationSec / phraseSec),
+    0,
+    1e-9,
+    "the blend spans whole phrases",
+  );
+}
+
+// Without a trustworthy phrase grid the plan must behave exactly as before,
+// anchoring on the first downbeat.
+{
+  const barSec = 4 * (60 / 128);
+  const gridA = grid(128, 0.5, 0.8, {
+    phraseBars: 8,
+    firstPhraseSec: 0.5 + 3 * barSec,
+    phraseConfidence: 0.02,
+  });
+  const plan = planTransition({
+    gridA,
+    gridB: grid(128, 1.25),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
+  });
+  const startOffset = plan.startAtSec - gridA.firstDownbeatSec;
+  approx(
+    startOffset / barSec - Math.round(startOffset / barSec),
+    0,
+    1e-9,
+    "low phrase confidence falls back to bar alignment",
+  );
+  approx(plan.cueInSec, 1.25, 1e-9, "B is cued at its first downbeat when no phrase is trusted");
 }
 
 console.log("Mix plan smoke test passed.");

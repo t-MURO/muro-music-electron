@@ -1,6 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { Track } from "../types";
-import type { BeatGrid } from "../lib/beatgrid/types";
+import { BEAT_GRID_VERSION, type BeatGrid } from "../lib/beatgrid/types";
 
 // ============================================================================
 // Types
@@ -111,11 +111,16 @@ const parseBeatGrid = (raw?: string | null): BeatGrid | undefined => {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return undefined;
     const candidate = parsed as Partial<BeatGrid>;
+    // An older version counts as absent, so the caller re-analyses and picks up
+    // the fields it predates rather than planning against missing ones.
     if (
-      candidate.version === 1 &&
+      candidate.version === BEAT_GRID_VERSION &&
       isFiniteNumber(candidate.bpm) &&
       isFiniteNumber(candidate.firstBeatSec) &&
       isFiniteNumber(candidate.firstDownbeatSec) &&
+      isFiniteNumber(candidate.phraseBars) &&
+      isFiniteNumber(candidate.firstPhraseSec) &&
+      isFiniteNumber(candidate.phraseConfidence) &&
       isFiniteNumber(candidate.confidence)
     ) {
       return candidate as BeatGrid;
