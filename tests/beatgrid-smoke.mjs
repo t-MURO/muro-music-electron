@@ -79,6 +79,47 @@ const synthesizeSectionedTrack = ({ bpm, firstBeatSec, durationSec, sectionBars,
   return samples;
 };
 
+// Quiet intro, full body, quiet outro — the shape the planner needs in order to
+// mix out where a track stops being the main event.
+const synthesizeArrangedTrack = ({ bpm, firstBeatSec, durationSec, introBars, outroBars }) => {
+  const total = Math.floor(durationSec * SAMPLE_RATE);
+  const samples = new Float32Array(total);
+  const beatSec = 60 / bpm;
+  const totalBars = Math.floor((durationSec - firstBeatSec) / (4 * beatSec));
+  for (let beat = 0; ; beat += 1) {
+    const beatTime = firstBeatSec + beat * beatSec;
+    if (beatTime >= durationSec - 0.2) break;
+    const bar = Math.floor(beat / 4);
+    const full = bar >= introBars && bar < totalBars - outroBars;
+    const accent = beat % 4 === 0;
+    const amplitude = accent ? 1 : 0.5;
+    const start = Math.round(beatTime * SAMPLE_RATE);
+
+    const kickLength = Math.round(0.08 * SAMPLE_RATE);
+    for (let i = 0; i < kickLength && start + i < total; i += 1) {
+      const t = i / SAMPLE_RATE;
+      const decay = Math.exp(-t / 0.02);
+      samples[start + i] += amplitude * decay * Math.sin(2 * Math.PI * 60 * t) * (full ? 1 : 0.55);
+      if (full) samples[start + i] += 0.8 * amplitude * decay * Math.sin(2 * Math.PI * 45 * t);
+    }
+    if (full) {
+      const hatLength = Math.round(0.03 * SAMPLE_RATE);
+      let noise = 0;
+      for (let i = 0; i < hatLength && start + i < total; i += 1) {
+        const t = i / SAMPLE_RATE;
+        noise = Math.sin(noise * 12.9898 + i * 78.233) * 43758.5453;
+        samples[start + i] += 0.35 * Math.exp(-t / 0.008) * (noise - Math.floor(noise) - 0.5);
+      }
+    }
+    const padLength = Math.round(beatSec * SAMPLE_RATE);
+    for (let i = 0; i < padLength && start + i < total; i += 1) {
+      const t = i / SAMPLE_RATE;
+      samples[start + i] += (full ? 0.18 : 0.05) * Math.sin(2 * Math.PI * (full ? 220 : 330) * t);
+    }
+  }
+  return samples;
+};
+
 // Smallest absolute distance between a and b on a circle of the given period.
 const circularErrorSec = (a, b, period) => {
   let d = (a - b) % period;
@@ -95,7 +136,7 @@ const circularErrorSec = (a, b, period) => {
     synthesizeClickTrack({ bpm: truthBpm, firstBeatSec: truthFirstBeat }),
     SAMPLE_RATE,
   );
-  assert.equal(grid.version, 2);
+  assert.equal(grid.version, 3);
   assert.ok(
     Math.abs(grid.bpm - truthBpm) <= 0.8,
     `128 BPM: detected ${grid.bpm}, expected within ±0.8`,
@@ -220,6 +261,51 @@ const circularErrorSec = (a, b, period) => {
     `featureless audio must report no phrase, got ${flat.phraseConfidence}`,
   );
   console.log("test 5 ok: phrase grid detected, flat audio rejected");
+}
+
+// Test 6: the intro and outro are located, so the planner can mix out where the
+// track stops being the main event instead of over whatever fills its last bars.
+{
+  for (const { introBars, outroBars, bpm, durationSec } of [
+    { introBars: 16, outroBars: 16, bpm: 128, durationSec: 200 },
+    { introBars: 8, outroBars: 24, bpm: 128, durationSec: 200 },
+    { introBars: 32, outroBars: 0, bpm: 128, durationSec: 200 },
+    { introBars: 16, outroBars: 8, bpm: 124, durationSec: 240 },
+  ]) {
+    const grid = analyzeBeatGrid(
+      synthesizeArrangedTrack({ bpm, firstBeatSec: 0.31, durationSec, introBars, outroBars }),
+      SAMPLE_RATE,
+    );
+    const barSec = 4 * (60 / grid.bpm);
+    const label = `intro=${introBars} outro=${outroBars}`;
+
+    const introBarsFound = (grid.introEndSec - grid.firstDownbeatSec) / barSec;
+    assert.ok(
+      Math.abs(introBarsFound - introBars) <= 2,
+      `${label}: intro ended at bar ${introBarsFound.toFixed(1)}, expected ${introBars}`,
+    );
+
+    assert.equal(grid.hasOutro, outroBars > 0, `${label}: hasOutro`);
+    if (outroBars > 0) {
+      const outroBarsFound = (durationSec - grid.outroStartSec) / barSec;
+      assert.ok(
+        Math.abs(outroBarsFound - outroBars) <= 3,
+        `${label}: outro runs ${outroBarsFound.toFixed(1)} bars, expected ${outroBars}`,
+      );
+    }
+  }
+
+  // A track that never drops away must not report a phantom outro, or the
+  // planner would mix out early and cut the ending off.
+  const steady = analyzeBeatGrid(
+    synthesizeArrangedTrack({
+      bpm: 128, firstBeatSec: 0.31, durationSec: 200, introBars: 0, outroBars: 0,
+    }),
+    SAMPLE_RATE,
+  );
+  assert.equal(steady.hasOutro, false, "a track with no outro must report none");
+  assert.equal(steady.introEndSec, 0, "a track with no intro must report none");
+  console.log("test 6 ok: intro and outro located");
 }
 
 console.log("Beat grid smoke test passed");

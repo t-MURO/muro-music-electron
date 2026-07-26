@@ -597,6 +597,118 @@ export function estimatePhrase(
   };
 }
 
+export type Section = {
+  startBar: number;
+  endBar: number;
+  /** Mean band level across the section, comparable within a track only. */
+  level: number;
+};
+
+export type TrackStructure = {
+  sections: Section[];
+  /** Bar where the opening quiet run ends; 0 when the track starts at full tilt. */
+  introEndBar: number;
+  /** Bar where the closing quiet run begins; barCount when it never drops away. */
+  outroStartBar: number;
+};
+
+// A novelty peak counts as a section boundary once it reaches this fraction of
+// the strongest peak in the track.
+const SECTION_BOUNDARY_FRACTION = 0.45;
+// Sections shorter than this are arrangement detail, not structure.
+const MIN_SECTION_BARS = 4;
+// A section counts as quiet below this fraction of the track's *loudest*
+// section. Measured against the track rather than an absolute level, because
+// masters differ by far more than sections within one master do — and against
+// the peak rather than the median, because a track that opens and closes quietly
+// has quiet sections on both sides of its own median, which would then sit below
+// the level it is supposed to identify.
+const QUIET_SECTION_RATIO = 0.9;
+
+/**
+ * Split the track into sections and locate its intro and outro.
+ *
+ * Boundaries are the peaks of the novelty curve, not the phrase lines. Those
+ * are separate questions: the phrase grid is the repeating pulse a transition
+ * should *align* to, while a section change is a one-off event that can land
+ * anywhere. Snapping boundaries to phrase multiples pushed a detected outro
+ * from bar 90 to bar 96 simply because 90 is not a multiple of the phrase
+ * length.
+ *
+ * The planner uses the two ends. Mixing out should begin once the last loud
+ * section is over, so a blend no longer runs across whatever happens to occupy
+ * a track's final bars — an outro, a fade, applause, or silence.
+ */
+export function detectSections(
+  features: BarFeatures,
+  novelty: Float32Array,
+): TrackStructure {
+  const { barCount, level } = features;
+
+  let strongest = 0;
+  for (let bar = 0; bar < barCount; bar += 1) {
+    if (novelty[bar] > strongest) strongest = novelty[bar];
+  }
+
+  const boundaries: number[] = [0];
+  // A flat novelty curve means one continuous section. Without this guard the
+  // threshold collapses toward zero and every bar reads as a boundary.
+  if (strongest >= MIN_NOVELTY_PEAK) {
+    const threshold = strongest * SECTION_BOUNDARY_FRACTION;
+    for (let bar = 1; bar < barCount - 1; bar += 1) {
+      if (novelty[bar] < threshold) continue;
+      // Local maximum only, so one section change yields one boundary rather
+      // than one per bar of its ramp.
+      if (novelty[bar] < novelty[bar - 1] || novelty[bar] < novelty[bar + 1]) continue;
+      if (bar - boundaries[boundaries.length - 1] < MIN_SECTION_BARS) continue;
+      boundaries.push(bar);
+    }
+  }
+  if (barCount - boundaries[boundaries.length - 1] < MIN_SECTION_BARS) {
+    boundaries.pop();
+  }
+  boundaries.push(barCount);
+
+  const sections: Section[] = [];
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const startBar = boundaries[index];
+    const endBar = boundaries[index + 1];
+    if (endBar <= startBar) continue;
+    let sum = 0;
+    for (let bar = startBar; bar < endBar; bar += 1) sum += level[bar];
+    sections.push({ startBar, endBar, level: sum / (endBar - startBar) });
+  }
+
+  if (sections.length === 0) {
+    return { sections: [], introEndBar: 0, outroStartBar: barCount };
+  }
+
+  const loudest = sections.reduce(
+    (highest, section) => Math.max(highest, section.level),
+    0,
+  );
+  const quiet = loudest * QUIET_SECTION_RATIO;
+
+  let introEndBar = 0;
+  for (const section of sections) {
+    if (section.level >= quiet) break;
+    introEndBar = section.endBar;
+  }
+
+  let outroStartBar = barCount;
+  for (let index = sections.length - 1; index >= 0; index -= 1) {
+    if (sections[index].level >= quiet) break;
+    outroStartBar = sections[index].startBar;
+  }
+  // A track that is quiet throughout would otherwise report its whole length as
+  // both intro and outro.
+  if (outroStartBar <= introEndBar) {
+    return { sections, introEndBar: 0, outroStartBar: barCount };
+  }
+
+  return { sections, introEndBar, outroStartBar };
+}
+
 export function analyzeBeatGrid(
   samples: Float32Array,
   sampleRate: number,
@@ -617,9 +729,19 @@ export function analyzeBeatGrid(
   const phase = estimateBeatPhase(full, tempo.bpm);
   const downbeat = estimateDownbeat(low, tempo.bpm, phase.firstBeatSec);
   const features = computeBarFeatures(bands, tempo.bpm, downbeat.firstDownbeatSec);
-  const phrase = features
-    ? estimatePhrase(features, computeBarNovelty(features))
+  const novelty = features ? computeBarNovelty(features) : null;
+  const phrase = features && novelty
+    ? estimatePhrase(features, novelty)
     : { phraseBars: 8, firstPhraseSec: downbeat.firstDownbeatSec, confidence: 0 };
+  const structure = features && novelty ? detectSections(features, novelty) : null;
+
+  const trackEndSec = samples.length / sampleRate;
+  const barToSec = (bar: number) =>
+    features ? features.firstBarSec + bar * features.barSec : 0;
+  const hasOutro = Boolean(
+    structure && features && structure.outroStartBar < features.barCount,
+  );
+
   const confidence = clamp01(0.45 * tempo.strength + 0.55 * phase.confidence);
   return {
     version: BEAT_GRID_VERSION,
@@ -629,6 +751,14 @@ export function analyzeBeatGrid(
     phraseBars: phrase.phraseBars,
     firstPhraseSec: phrase.firstPhraseSec,
     phraseConfidence: phrase.confidence,
+    // Exactly 0 when there is no intro. Emitting the first downbeat instead
+    // reads as a zero-length intro to the planner, which then treats the track
+    // as having no room for a blend at all.
+    introEndSec: structure && structure.introEndBar > 0
+      ? barToSec(structure.introEndBar)
+      : 0,
+    outroStartSec: hasOutro && structure ? barToSec(structure.outroStartBar) : trackEndSec,
+    hasOutro,
     confidence,
     analyzedAt: Math.floor(Date.now() / 1000),
   };

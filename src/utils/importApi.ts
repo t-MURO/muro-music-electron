@@ -121,6 +121,9 @@ const parseBeatGrid = (raw?: string | null): BeatGrid | undefined => {
       isFiniteNumber(candidate.phraseBars) &&
       isFiniteNumber(candidate.firstPhraseSec) &&
       isFiniteNumber(candidate.phraseConfidence) &&
+      isFiniteNumber(candidate.introEndSec) &&
+      isFiniteNumber(candidate.outroStartSec) &&
+      typeof candidate.hasOutro === "boolean" &&
       isFiniteNumber(candidate.confidence)
     ) {
       return candidate as BeatGrid;

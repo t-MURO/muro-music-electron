@@ -14,15 +14,25 @@ const grid = (
   bpm,
   firstDownbeatSec = 0.5,
   confidence = 0.8,
-  { phraseBars = 8, firstPhraseSec = firstDownbeatSec, phraseConfidence = 0 } = {},
+  {
+    phraseBars = 8,
+    firstPhraseSec = firstDownbeatSec,
+    phraseConfidence = 0,
+    introEndSec = 0,
+    outroStartSec = Number.MAX_SAFE_INTEGER,
+    hasOutro = false,
+  } = {},
 ) => ({
-  version: 2,
+  version: 3,
   bpm,
   firstBeatSec: firstDownbeatSec,
   firstDownbeatSec,
   phraseBars,
   firstPhraseSec,
   phraseConfidence,
+  introEndSec,
+  outroStartSec,
+  hasOutro,
   confidence,
   analyzedAt: 1_752_000_000,
 });
@@ -385,6 +395,119 @@ for (const plan of [
     "low phrase confidence falls back to bar alignment",
   );
   approx(plan.cueInSec, 1.25, 1e-9, "B is cued at its first downbeat when no phrase is trusted");
+}
+
+// The blend starts where the outgoing track stops being the main event, rather
+// than simply occupying its final bars.
+{
+  const barSec = 4 * (60 / 128);
+  const outroStartSec = 240;
+  const gridA = grid(128, 0.5, 0.8, { hasOutro: true, outroStartSec });
+  const plan = planTransition({
+    gridA,
+    gridB: grid(128, 0.5),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 8,
+  });
+  assert.equal(plan.mode, "beatmatch");
+  assert.ok(
+    plan.startAtSec <= outroStartSec + barSec && plan.startAtSec >= outroStartSec - barSec,
+    `expected the mix to start at the outro (~${outroStartSec}s), got ${plan.startAtSec.toFixed(2)}s`,
+  );
+  // Without the outro it would have started as late as the tail margin allows.
+  const noOutro = planTransition({
+    gridA: grid(128, 0.5),
+    gridB: grid(128, 0.5),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 8,
+  });
+  assert.ok(
+    noOutro.startAtSec > outroStartSec + 30,
+    `a track with no outro should still mix out near its end, got ${noOutro.startAtSec.toFixed(2)}s`,
+  );
+}
+
+// The requested bar count is a cap: the runway the two tracks actually offer
+// decides the length.
+{
+  const barSecA = 4 * (60 / 128);
+  // A has only an 8-bar outro, so a 32-bar request cannot be honoured.
+  const shortOutro = planTransition({
+    gridA: grid(128, 0.5, 0.8, {
+      hasOutro: true,
+      outroStartSec: 300 - 8 * barSecA,
+    }),
+    gridB: grid(128, 0.5),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 32,
+  });
+  assert.ok(
+    shortOutro.durationSec <= 8 * barSecA + 1e-6,
+    `an 8-bar outro must cap the blend, got ${(shortOutro.durationSec / barSecA).toFixed(1)} bars`,
+  );
+
+  // B has only a 4-bar intro, which caps it just as hard.
+  const barSecB = 4 * (60 / 128);
+  const shortIntro = planTransition({
+    gridA: grid(128, 0.5),
+    gridB: grid(128, 0.5, 0.8, { introEndSec: 0.5 + 4 * barSecB }),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 32,
+  });
+  assert.ok(
+    shortIntro.durationSec <= 4 * barSecA + 1e-6,
+    `a 4-bar intro must cap the blend, got ${(shortIntro.durationSec / barSecA).toFixed(1)} bars`,
+  );
+
+  // Plenty of runway on both sides: the cap is what binds.
+  const roomy = planTransition({
+    gridA: grid(128, 0.5, 0.8, { hasOutro: true, outroStartSec: 300 - 40 * barSecA }),
+    gridB: grid(128, 0.5, 0.8, { introEndSec: 0.5 + 40 * barSecB }),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
+  });
+  approx(roomy.durationSec, 16 * barSecA, 1e-9, "with room on both sides the cap decides");
+}
+
+// A blend held under strain is shortened: a large tempo pull exposes pitch and
+// drift for longer, and a weak grid means the alignment is less certain.
+{
+  const barSec = 4 * (60 / 128);
+  const relaxed = planTransition({
+    gridA: grid(128, 0.5, 0.9),
+    gridB: grid(128, 0.5, 0.9),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
+  });
+  const strained = planTransition({
+    gridA: grid(128, 0.5, 0.9),
+    gridB: grid(120, 0.5, 0.9), // ~6.5% pull, past the strain threshold
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
+  });
+  assert.ok(
+    strained.durationSec < relaxed.durationSec,
+    `a large tempo pull should shorten the blend: relaxed=${(relaxed.durationSec / barSec).toFixed(1)} strained=${(strained.durationSec / barSec).toFixed(1)} bars`,
+  );
+
+  const shaky = planTransition({
+    gridA: grid(128, 0.5, 0.3),
+    gridB: grid(128, 0.5, 0.3),
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
+  });
+  assert.ok(
+    shaky.durationSec < relaxed.durationSec,
+    `a weak grid should shorten the blend: got ${(shaky.durationSec / barSec).toFixed(1)} bars`,
+  );
 }
 
 console.log("Mix plan smoke test passed.");
