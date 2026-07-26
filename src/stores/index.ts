@@ -10,6 +10,16 @@ export {
   applyThemeMode,
 } from "./settingsStore";
 export {
+  DEFAULT_KEYBOARD_SHORTCUTS,
+  SHORTCUT_DEFINITIONS,
+  matchesShortcut,
+  shortcutDisplay,
+  shortcutDisplayParts,
+  shortcutFromEvent,
+  type KeyboardShortcutMap,
+  type ShortcutAction,
+} from "../keyboard/shortcuts";
+export {
   useLibraryStore,
   selectAllTracks,
   selectPlaylistTracks,

@@ -1,79 +1,35 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { t } from "../../i18n";
+import {
+  matchesShortcut,
+  shortcutDisplayParts,
+  SHORTCUT_DEFINITIONS,
+} from "../../keyboard/shortcuts";
+import { useSettingsStore } from "../../stores";
 
 type ShortcutHelpModalProps = {
   isOpen: boolean;
   onClose: () => void;
 };
 
-const isMac = () => window.muro?.platform === "darwin";
-
-/** "Mod" renders as ⌘ on macOS and Ctrl elsewhere. */
-const renderKey = (key: string) => (key === "Mod" ? (isMac() ? "⌘" : "Ctrl") : key);
-
-type ShortcutGroup = {
-  titleKey: Parameters<typeof t>[0];
-  shortcuts: { keys: string[]; labelKey: Parameters<typeof t>[0] }[];
-};
-
-const GROUPS: ShortcutGroup[] = [
-  {
-    titleKey: "shortcuts.group.playback",
-    shortcuts: [
-      { keys: ["Space"], labelKey: "shortcuts.togglePlay" },
-      { keys: ["←"], labelKey: "shortcuts.previous" },
-      { keys: ["→"], labelKey: "shortcuts.next" },
-      { keys: ["Mod", "←"], labelKey: "shortcuts.seekBackward" },
-      { keys: ["Mod", "→"], labelKey: "shortcuts.seekForward" },
-      { keys: ["↑"], labelKey: "shortcuts.volumeUp" },
-      { keys: ["↓"], labelKey: "shortcuts.volumeDown" },
-      { keys: ["M"], labelKey: "shortcuts.mute" },
-      { keys: ["S"], labelKey: "shortcuts.shuffle" },
-      { keys: ["R"], labelKey: "shortcuts.repeat" },
-    ],
-  },
-  {
-    titleKey: "shortcuts.group.selection",
-    shortcuts: [
-      { keys: ["Mod", "A"], labelKey: "shortcuts.selectAll" },
-      { keys: ["0", "–", "5"], labelKey: "shortcuts.rate" },
-      { keys: ["Q"], labelKey: "shortcuts.queue" },
-      { keys: ["N"], labelKey: "shortcuts.playNext" },
-      { keys: ["Enter"], labelKey: "shortcuts.playSelected" },
-      { keys: ["Delete"], labelKey: "shortcuts.remove" },
-      { keys: ["Esc"], labelKey: "shortcuts.clearSelection" },
-    ],
-  },
-  {
-    titleKey: "shortcuts.group.library",
-    shortcuts: [
-      { keys: ["Mod", "F"], labelKey: "shortcuts.search" },
-      { keys: ["Mod", "Z"], labelKey: "shortcuts.undo" },
-      { keys: ["Mod", "⇧", "Z"], labelKey: "shortcuts.redo" },
-      { keys: ["?"], labelKey: "shortcuts.help" },
-    ],
-  },
-];
-
 export const ShortcutHelpModal = ({ isOpen, onClose }: ShortcutHelpModalProps) => {
+  const shortcuts = useSettingsStore((state) => state.keyboardShortcuts);
+
   useEffect(() => {
     if (!isOpen) return;
-
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" || event.key === "?") {
+      if (event.key === "Escape" || matchesShortcut(event, shortcuts.help)) {
         event.preventDefault();
         onClose();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, shortcuts]);
 
-  if (!isOpen || typeof document === "undefined") {
-    return null;
-  }
+  if (!isOpen || typeof document === "undefined") return null;
+  const groups = ["Playback", "Selection", "Library"] as const;
 
   return createPortal(
     <div
@@ -81,7 +37,7 @@ export const ShortcutHelpModal = ({ isOpen, onClose }: ShortcutHelpModalProps) =
       onClick={onClose}
     >
       <div
-        className="modal-panel-animate flex max-h-[80vh] w-full max-w-[640px] flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] shadow-[var(--shadow-lg)]"
+        className="modal-panel-animate flex max-h-[80vh] w-full max-w-[720px] flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] shadow-[var(--shadow-lg)]"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -95,41 +51,31 @@ export const ShortcutHelpModal = ({ isOpen, onClose }: ShortcutHelpModalProps) =
             {t("shortcuts.subtitle")}
           </p>
         </div>
-
         <div className="min-h-0 flex-1 overflow-y-auto border-y border-[var(--color-border)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
-          <div className="grid gap-[var(--spacing-lg)] sm:grid-cols-2">
-            {GROUPS.map((group) => (
-              <section key={group.titleKey}>
+          <div className="grid gap-[var(--spacing-lg)] sm:grid-cols-3">
+            {groups.map((group) => (
+              <section key={group}>
                 <h3 className="mb-[var(--spacing-sm)] text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
-                  {t(group.titleKey)}
+                  {group}
                 </h3>
                 <ul className="space-y-[var(--spacing-xs)]">
-                  {group.shortcuts.map((shortcut) => (
+                  {SHORTCUT_DEFINITIONS.filter((item) => item.group === group).map((item) => (
                     <li
-                      key={shortcut.labelKey}
+                      key={item.action}
                       className="flex items-center justify-between gap-[var(--spacing-md)]"
                     >
                       <span className="text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
-                        {t(shortcut.labelKey)}
+                        {item.label}
                       </span>
                       <span className="flex shrink-0 items-center gap-1">
-                        {shortcut.keys.map((key, index) =>
-                          key === "–" ? (
-                            <span
-                              key={index}
-                              className="text-[10px] text-[var(--color-text-muted)]"
-                            >
-                              –
-                            </span>
-                          ) : (
-                            <kbd
-                              key={index}
-                              className="rounded border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-text-muted)]"
-                            >
-                              {renderKey(key)}
-                            </kbd>
-                          )
-                        )}
+                        {shortcutDisplayParts(shortcuts[item.action]).map((key, index) => (
+                          <kbd
+                            key={`${key}-${index}`}
+                            className="rounded border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--color-text-muted)]"
+                          >
+                            {key}
+                          </kbd>
+                        ))}
                       </span>
                     </li>
                   ))}
@@ -138,10 +84,9 @@ export const ShortcutHelpModal = ({ isOpen, onClose }: ShortcutHelpModalProps) =
             ))}
           </div>
         </div>
-
         <div className="flex items-center justify-end p-[var(--spacing-lg)]">
           <button
-            className="rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-semibold text-white transition-colors hover:bg-[var(--color-accent-hover)]"
+            className="rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-semibold text-white"
             onClick={onClose}
             type="button"
           >
@@ -150,6 +95,6 @@ export const ShortcutHelpModal = ({ isOpen, onClose }: ShortcutHelpModalProps) =
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

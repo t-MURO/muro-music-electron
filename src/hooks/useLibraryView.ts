@@ -4,6 +4,7 @@ import { filterTracksBySmartCrate } from "../utils/smartCrates";
 import { toCamelotCode } from "../utils/camelot";
 import { useLocaleVersion } from "./useLocaleVersion";
 import type { Playlist, SmartCrate, Track } from "../types";
+import { useSettingsStore } from "../stores";
 
 export type CollectionFacet = "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
 export type LibraryView =
@@ -12,11 +13,12 @@ export type LibraryView =
   | "settings"
   | "recentlyPlayed"
   | "recentlyAdded"
+  | "statistics"
   | `playlist:${string}`
   | `smartCrate:${string}`
   | `collection:${CollectionFacet}`;
 
-export type ViewType = "library" | "inbox" | "settings" | "playlist" | "smartCrate" | "recentlyPlayed" | "recentlyAdded" | "collection";
+export type ViewType = "library" | "inbox" | "settings" | "playlist" | "smartCrate" | "recentlyPlayed" | "recentlyAdded" | "statistics" | "collection";
 
 export type EmptyStateConfig = {
   title: string;
@@ -79,6 +81,9 @@ export const useViewConfig = ({
   // Titles and empty states are translated inside the memo, so the language
   // has to invalidate it.
   const localeVersion = useLocaleVersion();
+  const recentlyAddedPeriodDays = useSettingsStore(
+    (state) => state.recentlyAddedPeriodDays,
+  );
 
   return useMemo(() => {
     const playlistId = parsePlaylistId(view);
@@ -94,6 +99,16 @@ export const useViewConfig = ({
         type: "settings",
         title: t("header.settings"),
         subtitle: t("header.settings.subtitle"),
+        playlist: null,
+        trackTable: null,
+      };
+    }
+
+    if (view === "statistics") {
+      return {
+        type: "statistics",
+        title: t("header.statistics"),
+        subtitle: t("header.statistics.subtitle"),
         playlist: null,
         trackTable: null,
       };
@@ -159,7 +174,13 @@ export const useViewConfig = ({
     }
 
     if (view === "recentlyAdded") {
-      const recentlyAddedTracks = [...libraryTracks].sort((left, right) => {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - (recentlyAddedPeriodDays - 1));
+      const recentlyAddedTracks = libraryTracks.filter((track) => {
+        const added = track.dateAdded ? Date.parse(track.dateAdded) : NaN;
+        return Number.isFinite(added) && added >= start.getTime();
+      }).sort((left, right) => {
         const parsedLeft = left.dateAdded ? Date.parse(left.dateAdded) : 0;
         const parsedRight = right.dateAdded ? Date.parse(right.dateAdded) : 0;
         const leftAdded = Number.isFinite(parsedLeft) ? parsedLeft : 0;
@@ -326,6 +347,7 @@ export const useViewConfig = ({
     inboxTracks,
     libraryTracks,
     localeVersion,
+    recentlyAddedPeriodDays,
     playlists,
     recentlyPlayedTracks,
     smartCrates,

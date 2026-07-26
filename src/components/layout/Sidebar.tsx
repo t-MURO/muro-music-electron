@@ -25,6 +25,7 @@ import {
   UserRound,
   KeyRound,
   MoreHorizontal,
+  ChartNoAxesColumnIncreasing,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { t } from "../../i18n";
@@ -132,6 +133,7 @@ export const Sidebar = ({
     { view: "inbox" as const, label: t("nav.inbox"), icon: Inbox, count: inboxTracks.length },
     { view: "recentlyPlayed" as const, label: t("nav.recentlyPlayed"), icon: Clock3 },
     { view: "recentlyAdded" as const, label: t("nav.recentlyAdded"), icon: CalendarPlus },
+    { view: "statistics" as const, label: t("nav.statistics"), icon: ChartNoAxesColumnIncreasing },
   ];
   const collections: { facet: CollectionFacet; label: string; icon: typeof Tag }[] = [
     { facet: "genres", label: t("collection.genres"), icon: Tag },

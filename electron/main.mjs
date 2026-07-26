@@ -243,7 +243,7 @@ const startApplication = async () => {
 };
 
 app.whenReady().then(startApplication).catch((error) => {
-  console.error("Failed to start Muro Music Electron:", error);
+  console.error("Failed to start Muro Music:", error);
   app.quit();
 });
 

@@ -12,6 +12,8 @@ import {
   countAdvancedTrackFilters,
   type AdvancedTrackFilters,
 } from "../../utils/trackFilters";
+import { matchesShortcut, shortcutDisplayParts } from "../../keyboard/shortcuts";
+import { useSettingsStore } from "../../stores";
 
 type LibraryHeaderProps = {
   title: string;
@@ -46,7 +48,11 @@ export const LibraryHeader = ({
 }: LibraryHeaderProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
-  const searchShortcut = window.muro?.platform === "darwin" ? "⌘F" : "Ctrl F";
+  const configuredSearchShortcut = useSettingsStore(
+    (state) => state.keyboardShortcuts.focusSearch,
+  );
+  const searchShortcut = shortcutDisplayParts(configuredSearchShortcut)
+    .join(window.muro?.platform === "darwin" ? "" : " ");
   const [compactTable, setCompactTable] = useState(
     () => window.localStorage.getItem("muro-table-density") === "compact"
   );
@@ -59,7 +65,7 @@ export const LibraryHeader = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && (event.key === "f" || event.key === "k")) {
+      if (matchesShortcut(event, configuredSearchShortcut)) {
         event.preventDefault();
         focusSearch();
       }
@@ -71,7 +77,7 @@ export const LibraryHeader = ({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusSearch, onSearchChange]);
+  }, [configuredSearchShortcut, focusSearch, onSearchChange]);
 
   useEffect(() => {
     if (!filterOpen) return;

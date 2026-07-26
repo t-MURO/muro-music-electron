@@ -134,6 +134,54 @@ const ACOUSTID_CACHE_SCHEMA = `
     ON acoustid_fingerprints(looked_up_at DESC);
 `;
 
+const HISTORY_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS play_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id TEXT REFERENCES tracks(id) ON DELETE SET NULL,
+    played_at TEXT NOT NULL,
+    listened_seconds REAL NOT NULL DEFAULT 0,
+    duration_seconds REAL,
+    title TEXT NOT NULL,
+    artist TEXT NOT NULL,
+    album TEXT NOT NULL,
+    track_added_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS play_history_played_at_idx
+    ON play_history(played_at DESC);
+  CREATE INDEX IF NOT EXISTS play_history_track_idx
+    ON play_history(track_id, played_at DESC);
+
+  CREATE TABLE IF NOT EXISTS metadata_change_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    changed_at TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'user',
+    changes_json TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS metadata_change_track_idx
+    ON metadata_change_history(track_id, changed_at DESC);
+
+  CREATE TABLE IF NOT EXISTS playlist_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    before_json TEXT NOT NULL,
+    after_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    undone INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS playlist_history_state_idx
+    ON playlist_history(undone, id DESC);
+
+  CREATE TABLE IF NOT EXISTS playlist_snapshots (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS playlist_snapshots_created_idx
+    ON playlist_snapshots(created_at DESC);
+`;
+
 /**
  * Full-text index over the already-normalized `tracks.search_text`.
  *
@@ -239,6 +287,7 @@ export const openDatabase = (dbPath) => {
   db.exec(ARTIST_PROFILE_SCHEMA);
   db.exec(ALBUM_COVER_CACHE_SCHEMA);
   db.exec(ACOUSTID_CACHE_SCHEMA);
+  db.exec(HISTORY_SCHEMA);
   const playlistColumns = new Set(
     db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
   );
@@ -352,6 +401,15 @@ export const searchTrackIds = (dbPath, query, limit = 0) => {
 export const closeDatabases = () => {
   for (const db of connections.values()) db.close();
   connections.clear();
+};
+
+export const closeDatabase = (dbPath) => {
+  const resolved = path.resolve(dbPath);
+  const db = connections.get(resolved);
+  if (!db) return false;
+  db.close();
+  connections.delete(resolved);
+  return true;
 };
 
 const jsonList = (value) => {

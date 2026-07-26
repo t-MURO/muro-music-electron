@@ -368,6 +368,113 @@ export const exportAllPlaylists = (
   destinationPath,
 });
 
+export type LibraryBackupResult = {
+  destinationPath: string;
+  bytes: number;
+  manifest: {
+    backupId: string;
+    createdAt: string;
+    counts: {
+      tracks: number;
+      playlists: number;
+      playlistFolders: number;
+      playlistEntries: number;
+      artworkFiles: number;
+    };
+  };
+};
+
+export const createLibraryBackup = (
+  dbPath: string,
+  destinationPath: string,
+  settingsJson: string,
+) => invoke<LibraryBackupResult>("create_library_backup", {
+  dbPath,
+  destinationPath,
+  settingsJson,
+});
+
+export type LibraryRestoreResult = {
+  archivePath: string;
+  recoveryPath: string | null;
+  settingsJson: string;
+  restoredArtworkFiles: number;
+  manifest: LibraryBackupResult["manifest"];
+};
+
+export const restoreLibraryBackup = (dbPath: string, archivePath: string) =>
+  invoke<LibraryRestoreResult>("restore_library_backup", { dbPath, archivePath });
+
+export type MetadataHistoryEntry = {
+  id: number;
+  trackId: string;
+  changedAt: string;
+  source: string;
+  title: string;
+  artist: string;
+  changes: Record<string, { before: unknown; after: unknown }>;
+};
+
+export const listMetadataHistory = (
+  dbPath: string,
+  trackId?: string,
+  limit = 100,
+) => invoke<MetadataHistoryEntry[]>("list_metadata_history", { dbPath, trackId, limit });
+
+export const rollbackMetadataChange = (
+  dbPath: string,
+  historyId: number,
+  field: string,
+) => invoke("rollback_metadata_change", { dbPath, historyId, field });
+
+export type PlaylistHistoryState = {
+  entries: Array<{ id: number; action: string; createdAt: string; undone: boolean }>;
+  canUndo: boolean;
+  canRedo: boolean;
+};
+
+export type PlaylistSnapshotEntry = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
+export const listPlaylistHistory = (dbPath: string, limit = 50) =>
+  invoke<PlaylistHistoryState>("list_playlist_history", { dbPath, limit });
+export const undoPlaylistHistory = (dbPath: string) =>
+  invoke("undo_playlist_history", { dbPath });
+export const redoPlaylistHistory = (dbPath: string) =>
+  invoke("redo_playlist_history", { dbPath });
+export const createPlaylistSnapshot = (dbPath: string, name: string) =>
+  invoke<PlaylistSnapshotEntry>("create_playlist_snapshot", { dbPath, name });
+export const listPlaylistSnapshots = (dbPath: string) =>
+  invoke<PlaylistSnapshotEntry[]>("list_playlist_snapshots", { dbPath });
+export const restorePlaylistSnapshot = (dbPath: string, snapshotId: string) =>
+  invoke("restore_playlist_snapshot", { dbPath, snapshotId });
+export const deletePlaylistSnapshot = (dbPath: string, snapshotId: string) =>
+  invoke<{ deleted: boolean }>("delete_playlist_snapshot", { dbPath, snapshotId });
+
+export type ListeningStatistics = {
+  listeningSeconds: number;
+  plays: number;
+  uniqueTracks: number;
+  discoveryRate: number;
+  topArtists: Array<{ name: string; plays: number; listeningSeconds: number }>;
+  topAlbums: Array<{ name: string; plays: number; listeningSeconds: number }>;
+  monthly: Array<{ month: string; plays: number; listeningSeconds: number }>;
+  neglectedTracks: Array<{
+    id: string;
+    title: string;
+    artist: string;
+    album: string;
+    lastPlayedAt: string | null;
+    playCount: number;
+  }>;
+};
+
+export const loadListeningStatistics = (dbPath: string) =>
+  invoke<ListeningStatistics>("load_listening_statistics", { dbPath });
+
 export type OrganizedLibraryExportResult = {
   exportRoot: string;
   tracks: number;
@@ -416,5 +523,18 @@ export const loadRecentlyPlayed = (dbPath: string, limit: number = 50) => {
 };
 
 export const recordTrackPlay = (dbPath: string, trackId: string) => {
-  return invoke<void>("record_track_play", { dbPath, trackId });
+  return invoke<{ historyId: number; playedAt: string }>("record_track_play", {
+    dbPath,
+    trackId,
+  });
 };
+
+export const updatePlayHistory = (
+  dbPath: string,
+  historyId: number,
+  listenedSeconds: number,
+) => invoke<{ updated: boolean }>("update_play_history", {
+  dbPath,
+  historyId,
+  listenedSeconds,
+});

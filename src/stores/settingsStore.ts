@@ -3,6 +3,12 @@ import { persist } from "zustand/middleware";
 import { isLocale, setLocale as setI18nLocale, type Locale } from "../i18n";
 import type { MixBars } from "../lib/mix/config";
 import type { ReplayGainMode } from "../utils/replayGain";
+import {
+  DEFAULT_KEYBOARD_SHORTCUTS,
+  normalizeShortcutMap,
+  type KeyboardShortcutMap,
+  type ShortcutAction,
+} from "../keyboard/shortcuts";
 
 export type AnalysisOutputMode = "none" | "prepend" | "append" | "overwrite";
 export type AnalysisNotationMode = "standard" | "custom" | "combined" | "djCombined";
@@ -83,6 +89,8 @@ type SettingsState = {
   watchFoldersEnabled: boolean;
   /** Absolute paths watched for new audio; imports land in the Inbox. */
   watchedFolders: string[];
+  recentlyAddedPeriodDays: 1 | 7 | 30;
+  keyboardShortcuts: KeyboardShortcutMap;
 };
 
 type SettingsActions = {
@@ -117,6 +125,9 @@ type SettingsActions = {
   setWatchFoldersEnabled: (enabled: boolean) => void;
   addWatchedFolder: (folder: string) => void;
   removeWatchedFolder: (folder: string) => void;
+  setRecentlyAddedPeriodDays: (days: 1 | 7 | 30) => void;
+  setKeyboardShortcut: (action: ShortcutAction, shortcut: string) => void;
+  resetKeyboardShortcuts: () => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -156,6 +167,8 @@ export const useSettingsStore = create<SettingsStore>()(
       replayGainReferenceLufs: -18,
       watchFoldersEnabled: false,
       watchedFolders: [],
+      recentlyAddedPeriodDays: 30,
+      keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS },
 
       // Actions
       setTheme: (theme) => {
@@ -214,10 +227,17 @@ export const useSettingsStore = create<SettingsStore>()(
       removeWatchedFolder: (folder) => set((state) => ({
         watchedFolders: state.watchedFolders.filter((entry) => entry !== folder),
       })),
+      setRecentlyAddedPeriodDays: (recentlyAddedPeriodDays) =>
+        set({ recentlyAddedPeriodDays }),
+      setKeyboardShortcut: (action, shortcut) => set((state) => ({
+        keyboardShortcuts: { ...state.keyboardShortcuts, [action]: shortcut },
+      })),
+      resetKeyboardShortcuts: () =>
+        set({ keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS } }),
     }),
     {
       name: "muro-settings",
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
@@ -250,6 +270,8 @@ export const useSettingsStore = create<SettingsStore>()(
         replayGainReferenceLufs: state.replayGainReferenceLufs,
         watchFoldersEnabled: state.watchFoldersEnabled,
         watchedFolders: state.watchedFolders,
+        recentlyAddedPeriodDays: state.recentlyAddedPeriodDays,
+        keyboardShortcuts: state.keyboardShortcuts,
       }),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;
@@ -279,6 +301,13 @@ export const useSettingsStore = create<SettingsStore>()(
             ...DEFAULT_ANALYSIS_OUTPUTS,
             ...(persisted.analysisOutputs ?? {}),
           },
+          recentlyAddedPeriodDays:
+            persisted.recentlyAddedPeriodDays === 1
+            || persisted.recentlyAddedPeriodDays === 7
+            || persisted.recentlyAddedPeriodDays === 30
+              ? persisted.recentlyAddedPeriodDays
+              : 30,
+          keyboardShortcuts: normalizeShortcutMap(persisted.keyboardShortcuts),
         };
       },
       onRehydrateStorage: () => (state) => {

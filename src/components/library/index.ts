@@ -17,3 +17,4 @@ export {
   type CollectionIndexFacet,
   type CollectionIndexItem,
 } from "./CollectionIndexView";
+export { ListeningStatisticsView } from "./ListeningStatisticsView";

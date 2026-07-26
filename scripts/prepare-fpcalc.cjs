@@ -67,7 +67,7 @@ const main = async () => {
   const archivePath = path.join(temporaryRoot, asset.name);
   console.log(`Downloading Chromaprint ${VERSION} for ${process.platform}-${process.arch}...`);
   const response = await fetch(`${RELEASE_ROOT}/${asset.name}`, {
-    headers: { "User-Agent": "MuroMusicElectron/0.1.0" },
+    headers: { "User-Agent": "MuroMusic/0.1.0" },
   });
   if (!response.ok) throw new Error(`Chromaprint download failed (${response.status})`);
   const archive = Buffer.from(await response.arrayBuffer());

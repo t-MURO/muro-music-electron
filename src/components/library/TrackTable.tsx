@@ -4,8 +4,9 @@ import type { ColumnConfig, Track } from "../../types";
 import { TableHeader } from "./TableHeader";
 import { TableEmptyState } from "./TableEmptyState";
 import { TableRow } from "./TableRow";
-import { usePlaybackStore, useUIStore } from "../../stores";
+import { usePlaybackStore, useSettingsStore, useUIStore } from "../../stores";
 import { LEADING_COLUMN_WIDTH, PAGE_STEP } from "../../constants/ui";
+import { matchesShortcut } from "../../keyboard/shortcuts";
 
 type TrackTableProps = {
   tracks: Track[];
@@ -76,6 +77,7 @@ export const TrackTable = memo(
     const clearSelection = useUIStore((s) => s.clearSelection);
     const isCurrentlyPlaying = usePlaybackStore((s) => s.isPlaying);
     const currentTrack = usePlaybackStore((s) => s.currentTrack);
+    const shortcuts = useSettingsStore((s) => s.keyboardShortcuts);
     const playingTrackId = currentTrack?.id;
     const tableHeaderScrollRef = useRef<HTMLDivElement | null>(null);
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
@@ -161,24 +163,30 @@ export const TrackTable = memo(
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a") {
+      if (matchesShortcut(event, shortcuts.selectAll)) {
         event.preventDefault();
         selectAll(tracks.map((t) => t.id));
         return;
       }
 
-      if (event.key === "Escape") {
+      if (matchesShortcut(event, shortcuts.clearSelection)) {
         event.preventDefault();
         clearSelection();
         return;
       }
 
-      if ((event.key === "Enter" || event.code === "Space") && activeIndex !== null) {
+      if (
+        (
+          matchesShortcut(event, shortcuts.playSelected)
+          || matchesShortcut(event, shortcuts.togglePlay)
+        )
+        && activeIndex !== null
+      ) {
         event.preventDefault();
         event.stopPropagation();
         const track = tracks[activeIndex];
         if (track) {
-          if (event.code === "Space" && track.id === playingTrackId) {
+          if (track.id === playingTrackId && isCurrentlyPlaying) {
             onTogglePlay?.();
           } else {
             onRowDoubleClick?.(track.id);

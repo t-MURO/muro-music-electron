@@ -25,6 +25,8 @@ import { useLoudnessAnalysis } from "../../hooks/useLoudnessAnalysis";
 import { useLibraryVerification } from "../../hooks/useLibraryVerification";
 import { useWatchedFolders } from "../../hooks/useWatchedFolders";
 import { MissingTracksModal } from "../ui/MissingTracksModal";
+import { LibraryDataTools } from "./LibraryDataTools";
+import { KeyboardShortcutSettings } from "./KeyboardShortcutSettings";
 import type { ReplayGainMode } from "../../utils/replayGain";
 import {
   useSettingsStore,
@@ -92,7 +94,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "library",
     label: "Library & Files",
     description: "Database, export, and maintenance",
-    keywords: "database path files export organize separator cache index artwork",
+    keywords: "database path files export organize separator cache index artwork backup restore history snapshots keyboard shortcuts",
     icon: Database,
   },
   {
@@ -901,6 +903,10 @@ export const SettingsPanel = ({
                     </div>
                   </div>
                 </SettingsGroup>
+
+                <LibraryDataTools dbPath={dbPath} />
+
+                <KeyboardShortcutSettings />
 
                 <SettingsGroup
                   title="Maintenance"

@@ -18,3 +18,4 @@ export { SmartCrateModal } from "./SmartCrateModal";
 export { ShortcutHelpModal } from "./ShortcutHelpModal";
 export { MissingTracksModal } from "./MissingTracksModal";
 export { GlobalButtonTooltips } from "./GlobalButtonTooltips";
+export { CommandPalette, type CommandPaletteItem } from "./CommandPalette";

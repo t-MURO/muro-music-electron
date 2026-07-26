@@ -11,6 +11,17 @@ import {
   refreshSearchText,
   searchTrackIds,
 } from "./database.mjs";
+import { createLibraryBackup, restoreLibraryBackup } from "./dataArchive.mjs";
+import {
+  createPlaylistSnapshot,
+  deletePlaylistSnapshot,
+  listPlaylistHistory,
+  listPlaylistSnapshots,
+  redoPlaylistHistory,
+  restorePlaylistSnapshot,
+  undoPlaylistHistory,
+  withPlaylistHistory,
+} from "./history.mjs";
 import {
   AUDIO_EXTENSIONS,
   cacheCoverBytes,
@@ -404,7 +415,17 @@ const bulkTrackOperation = (dbPath, trackIds, sqlPrefix) => {
   db.prepare(`${sqlPrefix} (${placeholders})`).run(...trackIds);
 };
 
-const updateTrackMetadata = async (dbPath, trackIds, updates) => {
+const metadataValueFromDatabase = (key, value) => {
+  if (key !== "genre" && key !== "comment") return value;
+  try {
+    const parsed = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") => {
   if (!trackIds.length || Object.keys(updates).length === 0) {
     return { updated: 0, filesWritten: 0, fileWriteErrors: [] };
   }
@@ -418,6 +439,34 @@ const updateTrackMetadata = async (dbPath, trackIds, updates) => {
   if (!entries.length) return { updated: 0, filesWritten: 0, fileWriteErrors: [] };
 
   const updateDatabase = db.transaction(() => {
+    const historyInsert = db.prepare(`
+      INSERT INTO metadata_change_history(track_id, changed_at, source, changes_json)
+      VALUES (?, ?, ?, ?)
+    `);
+    const selectCurrent = db.prepare(
+      `SELECT ${entries.map(([column]) => column).join(", ")} FROM tracks WHERE id = ?`,
+    );
+    const changedAt = new Date().toISOString();
+    for (const id of trackIds) {
+      const current = selectCurrent.get(id);
+      if (!current) continue;
+      const changes = {};
+      for (const [key, requestedValue] of Object.entries(updates)) {
+        const column = allowedUpdates[key];
+        if (!column) continue;
+        const before = metadataValueFromDatabase(key, current[column]);
+        const after = metadataValueFromDatabase(
+          key,
+          key === "genre" || key === "comment" ? listJson(requestedValue) : requestedValue,
+        );
+        if (JSON.stringify(before) !== JSON.stringify(after)) {
+          changes[key] = { before, after };
+        }
+      }
+      if (Object.keys(changes).length) {
+        historyInsert.run(id, changedAt, String(source || "user"), JSON.stringify(changes));
+      }
+    }
     const set = entries.map(([column]) => `${column} = ?`).join(", ");
     const placeholders = trackIds.map(() => "?").join(", ");
     db.prepare(`UPDATE tracks SET ${set}, updated_at = ? WHERE id IN (${placeholders})`)
@@ -517,6 +566,14 @@ export const createBackend = ({
     load_tracks: ({ dbPath }) => loadTracks(dbPath),
     load_playlists: ({ dbPath }) => loadPlaylists(dbPath),
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
+    create_library_backup: ({ dbPath, destinationPath, settingsJson }) =>
+      createLibraryBackup({ dbPath, destinationPath, settingsJson }),
+    restore_library_backup: ({ dbPath, archivePath }) =>
+      restoreLibraryBackup({
+        dbPath,
+        archivePath,
+        artworkRoot: path.dirname(cacheDir),
+      }),
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
     get_artist_profile: ({ dbPath, artistName, force, fanartApiKey, lastFmApiKey, theAudioDbApiKey }) =>
@@ -635,24 +692,7 @@ export const createBackend = ({
 
     create_playlist: ({ dbPath, id, name, folderId, sortOrder }) => {
       const db = openDatabase(dbPath);
-      const targetFolderId = folderId || null;
-      const nextSortOrder = Number.isInteger(sortOrder)
-        ? sortOrder
-        : db.prepare(`
-            SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
-            FROM playlists
-            WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
-          `).get(targetFolderId, targetFolderId).next;
-      db.prepare("INSERT INTO playlists(id, name, folder_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?)")
-        .run(id, String(name).trim(), targetFolderId, nextSortOrder, Math.floor(Date.now() / 1000));
-    },
-    update_playlist: ({ dbPath, playlistId, name, folderId, sortOrder }) => {
-      const db = openDatabase(dbPath);
-      if (name !== undefined) {
-        db.prepare("UPDATE playlists SET name = ? WHERE id = ?")
-          .run(String(name).trim(), playlistId);
-      }
-      if (folderId !== undefined) {
+      return withPlaylistHistory(db, `Create playlist: ${String(name).trim()}`, () => {
         const targetFolderId = folderId || null;
         const nextSortOrder = Number.isInteger(sortOrder)
           ? sortOrder
@@ -661,26 +701,49 @@ export const createBackend = ({
               FROM playlists
               WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
             `).get(targetFolderId, targetFolderId).next;
-        db.prepare("UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?")
-          .run(targetFolderId, nextSortOrder, playlistId);
-      } else if (Number.isInteger(sortOrder)) {
-        db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?")
-          .run(sortOrder, playlistId);
-      }
+        db.prepare("INSERT INTO playlists(id, name, folder_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?)")
+          .run(id, String(name).trim(), targetFolderId, nextSortOrder, Math.floor(Date.now() / 1000));
+      });
+    },
+    update_playlist: ({ dbPath, playlistId, name, folderId, sortOrder }) => {
+      const db = openDatabase(dbPath);
+      return withPlaylistHistory(db, name !== undefined ? "Rename playlist" : "Move playlist", () => {
+        if (name !== undefined) {
+          db.prepare("UPDATE playlists SET name = ? WHERE id = ?")
+            .run(String(name).trim(), playlistId);
+        }
+        if (folderId !== undefined) {
+          const targetFolderId = folderId || null;
+          const nextSortOrder = Number.isInteger(sortOrder)
+            ? sortOrder
+            : db.prepare(`
+                SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+                FROM playlists
+                WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
+              `).get(targetFolderId, targetFolderId).next;
+          db.prepare("UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?")
+            .run(targetFolderId, nextSortOrder, playlistId);
+        } else if (Number.isInteger(sortOrder)) {
+          db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?")
+            .run(sortOrder, playlistId);
+        }
+      });
     },
     reorder_playlists: ({ dbPath, items }) => {
       const db = openDatabase(dbPath);
       const update = db.prepare(
         "UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?"
       );
-      db.transaction(() => {
+      withPlaylistHistory(db, "Reorder playlists", () => {
         for (const item of Array.isArray(items) ? items : []) {
           update.run(item.folderId || null, Number(item.sortOrder) || 0, item.id);
         }
-      })();
+      });
     },
     delete_playlist: ({ dbPath, playlistId }) => {
-      openDatabase(dbPath).prepare("DELETE FROM playlists WHERE id = ?").run(playlistId);
+      const db = openDatabase(dbPath);
+      return withPlaylistHistory(db, "Delete playlist", () =>
+        db.prepare("DELETE FROM playlists WHERE id = ?").run(playlistId));
     },
     create_playlist_folder: ({ dbPath, id, name, parentId, sortOrder }) => {
       const db = openDatabase(dbPath);
@@ -692,29 +755,32 @@ export const createBackend = ({
             FROM playlist_folders
             WHERE parent_id = ? OR (parent_id IS NULL AND ? IS NULL)
           `).get(targetParentId, targetParentId).next;
-      db.prepare(`
-        INSERT INTO playlist_folders(id, name, parent_id, sort_order, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(id, String(name).trim(), targetParentId, nextSortOrder, Math.floor(Date.now() / 1000));
+      return withPlaylistHistory(db, `Create playlist folder: ${String(name).trim()}`, () =>
+        db.prepare(`
+          INSERT INTO playlist_folders(id, name, parent_id, sort_order, created_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(id, String(name).trim(), targetParentId, nextSortOrder, Math.floor(Date.now() / 1000)));
     },
     update_playlist_folder: ({ dbPath, folderId, name, parentId, sortOrder }) => {
       const db = openDatabase(dbPath);
-      if (name !== undefined) {
-        db.prepare("UPDATE playlist_folders SET name = ? WHERE id = ?")
-          .run(String(name).trim(), folderId);
-      }
-      if (parentId !== undefined) {
-        db.prepare("UPDATE playlist_folders SET parent_id = ? WHERE id = ?")
-          .run(parentId || null, folderId);
-      }
-      if (Number.isInteger(sortOrder)) {
-        db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?")
-          .run(sortOrder, folderId);
-      }
+      return withPlaylistHistory(db, name !== undefined ? "Rename playlist folder" : "Move playlist folder", () => {
+        if (name !== undefined) {
+          db.prepare("UPDATE playlist_folders SET name = ? WHERE id = ?")
+            .run(String(name).trim(), folderId);
+        }
+        if (parentId !== undefined) {
+          db.prepare("UPDATE playlist_folders SET parent_id = ? WHERE id = ?")
+            .run(parentId || null, folderId);
+        }
+        if (Number.isInteger(sortOrder)) {
+          db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?")
+            .run(sortOrder, folderId);
+        }
+      });
     },
     delete_playlist_folder: ({ dbPath, folderId }) => {
       const db = openDatabase(dbPath);
-      db.transaction(() => {
+      return withPlaylistHistory(db, "Delete playlist folder", () => {
         const parentId = db.prepare("SELECT parent_id FROM playlist_folders WHERE id = ?")
           .get(folderId)?.parent_id ?? null;
         let playlistSortOrder = db.prepare(`
@@ -746,7 +812,7 @@ export const createBackend = ({
           folderSortOrder += 1;
         }
         db.prepare("DELETE FROM playlist_folders WHERE id = ?").run(folderId);
-      })();
+      });
     },
     list_playlist_files: ({ directoryPath }) => listPlaylistFilesForImport(directoryPath),
     import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
@@ -764,7 +830,7 @@ export const createBackend = ({
     add_tracks_to_playlist: ({ dbPath, playlistId, trackIds }) => {
       if (!trackIds.length) return;
       const db = openDatabase(dbPath);
-      const add = db.transaction(() => {
+      return withPlaylistHistory(db, "Add tracks to playlist", () => {
         let position = db.prepare(
           "SELECT COALESCE(MAX(position), -1) + 1 AS next FROM playlist_tracks WHERE playlist_id = ?"
         ).get(playlistId).next;
@@ -779,7 +845,6 @@ export const createBackend = ({
           insert.run(playlistId, trackId, position++);
         }
       });
-      add();
     },
     set_playlist_tracks: ({ dbPath, playlistId, trackIds }) => {
       const db = openDatabase(dbPath);
@@ -788,26 +853,79 @@ export const createBackend = ({
           .map((id) => String(id))
           .filter(Boolean),
       )];
-      const replace = db.transaction(() => {
+      return withPlaylistHistory(db, "Reorder playlist tracks", () => {
         db.prepare("DELETE FROM playlist_tracks WHERE playlist_id = ?").run(playlistId);
         const insert = db.prepare(
           "INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)"
         );
         ids.forEach((trackId, position) => insert.run(playlistId, trackId, position));
       });
-      replace();
     },
     remove_last_tracks_from_playlist: ({ dbPath, playlistId, count }) => {
-      openDatabase(dbPath).prepare(`
-        DELETE FROM playlist_tracks WHERE rowid IN (
-          SELECT rowid FROM playlist_tracks WHERE playlist_id = ?
-          ORDER BY position DESC LIMIT ?
-        )
-      `).run(playlistId, Math.max(0, Number(count) || 0));
+      const db = openDatabase(dbPath);
+      return withPlaylistHistory(db, "Remove tracks from playlist", () =>
+        db.prepare(`
+          DELETE FROM playlist_tracks WHERE rowid IN (
+            SELECT rowid FROM playlist_tracks WHERE playlist_id = ?
+            ORDER BY position DESC LIMIT ?
+          )
+        `).run(playlistId, Math.max(0, Number(count) || 0)));
     },
 
     update_track_metadata: ({ dbPath, trackIds, updates }) =>
       updateTrackMetadata(dbPath, trackIds, updates),
+    list_metadata_history: ({ dbPath, trackId, limit }) => {
+      const db = openDatabase(dbPath);
+      const bounded = Math.max(1, Math.min(Number(limit) || 100, 500));
+      const where = trackId ? "WHERE h.track_id = ?" : "";
+      return db.prepare(`
+        SELECT h.id, h.track_id, h.changed_at, h.source, h.changes_json,
+               t.title, t.artist
+        FROM metadata_change_history h
+        LEFT JOIN tracks t ON t.id = h.track_id
+        ${where}
+        ORDER BY h.id DESC
+        LIMIT ?
+      `).all(...(trackId ? [trackId, bounded] : [bounded])).map((row) => ({
+        id: Number(row.id),
+        trackId: String(row.track_id),
+        changedAt: String(row.changed_at),
+        source: String(row.source),
+        changes: JSON.parse(row.changes_json),
+        title: row.title ?? "Unknown Title",
+        artist: row.artist ?? "Unknown Artist",
+      }));
+    },
+    rollback_metadata_change: async ({ dbPath, historyId, field }) => {
+      const row = openDatabase(dbPath).prepare(`
+        SELECT track_id, changes_json FROM metadata_change_history WHERE id = ?
+      `).get(historyId);
+      if (!row) throw new Error("Metadata history entry was not found");
+      const changes = JSON.parse(row.changes_json);
+      if (!allowedUpdates[field] || !Object.hasOwn(changes, field)) {
+        throw new Error("That field is not part of this metadata change");
+      }
+      return updateTrackMetadata(
+        dbPath,
+        [String(row.track_id)],
+        { [field]: changes[field].before },
+        "rollback",
+      );
+    },
+    list_playlist_history: ({ dbPath, limit }) =>
+      listPlaylistHistory(openDatabase(dbPath), limit),
+    undo_playlist_history: ({ dbPath }) =>
+      undoPlaylistHistory(openDatabase(dbPath)),
+    redo_playlist_history: ({ dbPath }) =>
+      redoPlaylistHistory(openDatabase(dbPath)),
+    create_playlist_snapshot: ({ dbPath, name }) =>
+      createPlaylistSnapshot(openDatabase(dbPath), name),
+    list_playlist_snapshots: ({ dbPath }) =>
+      listPlaylistSnapshots(openDatabase(dbPath)),
+    restore_playlist_snapshot: ({ dbPath, snapshotId }) =>
+      restorePlaylistSnapshot(openDatabase(dbPath), snapshotId),
+    delete_playlist_snapshot: ({ dbPath, snapshotId }) =>
+      deletePlaylistSnapshot(openDatabase(dbPath), snapshotId),
     update_track_analysis: ({ dbPath, trackId, bpm, key }) => {
       openDatabase(dbPath)
         .prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?")
@@ -1098,10 +1216,113 @@ export const createBackend = ({
     get_track_source_path: ({ dbPath, trackId }) =>
       openDatabase(dbPath).prepare("SELECT source_path FROM tracks WHERE id = ?").get(trackId)?.source_path ?? null,
     record_track_play: ({ dbPath, trackId }) => {
-      openDatabase(dbPath).prepare(`
-        UPDATE tracks SET last_played_at = ?, play_count = COALESCE(play_count, 0) + 1
-        WHERE id = ?
-      `).run(new Date().toISOString(), trackId);
+      const db = openDatabase(dbPath);
+      return db.transaction(() => {
+        const track = db.prepare(`
+          SELECT id, title, artist, album, duration_seconds, added_at FROM tracks WHERE id = ?
+        `).get(trackId);
+        if (!track) throw new Error("Track was not found");
+        const playedAt = new Date().toISOString();
+        db.prepare(`
+          UPDATE tracks SET last_played_at = ?, play_count = COALESCE(play_count, 0) + 1
+          WHERE id = ?
+        `).run(playedAt, trackId);
+        const result = db.prepare(`
+          INSERT INTO play_history(
+            track_id, played_at, listened_seconds, duration_seconds,
+            title, artist, album, track_added_at
+          ) VALUES (?, ?, 30, ?, ?, ?, ?, ?)
+        `).run(
+          trackId,
+          playedAt,
+          track.duration_seconds ?? null,
+          track.title || "Unknown Title",
+          track.artist || "Unknown Artist",
+          track.album || "Unknown Album",
+          track.added_at ?? null,
+        );
+        return { historyId: Number(result.lastInsertRowid), playedAt };
+      })();
+    },
+    update_play_history: ({ dbPath, historyId, listenedSeconds }) => {
+      const value = Math.max(0, Math.min(Number(listenedSeconds) || 0, 86_400));
+      const result = openDatabase(dbPath).prepare(`
+        UPDATE play_history SET listened_seconds = ? WHERE id = ?
+      `).run(value, historyId);
+      return { updated: result.changes > 0 };
+    },
+    load_listening_statistics: ({ dbPath }) => {
+      const db = openDatabase(dbPath);
+      const totals = db.prepare(`
+        SELECT COALESCE(SUM(listened_seconds), 0) AS listening_seconds,
+               COUNT(*) AS plays,
+               COUNT(DISTINCT track_id) AS unique_tracks,
+               COALESCE(SUM(
+                 CASE WHEN track_added_at IS NOT NULL
+                   AND julianday(played_at) - julianday(datetime(track_added_at, 'unixepoch')) BETWEEN 0 AND 30
+                 THEN 1 ELSE 0 END
+               ), 0) AS discovery_plays
+        FROM play_history
+      `).get();
+      const top = (field) => db.prepare(`
+        SELECT ${field} AS name, COUNT(*) AS plays,
+               COALESCE(SUM(listened_seconds), 0) AS listening_seconds
+        FROM play_history
+        GROUP BY ${field}
+        ORDER BY listening_seconds DESC, plays DESC, name COLLATE NOCASE
+        LIMIT 10
+      `).all().map((row) => ({
+        name: String(row.name),
+        plays: Number(row.plays),
+        listeningSeconds: Number(row.listening_seconds),
+      }));
+      const monthlyRows = new Map(db.prepare(`
+        SELECT strftime('%Y-%m', played_at) AS month,
+               COUNT(*) AS plays,
+               COALESCE(SUM(listened_seconds), 0) AS listening_seconds
+        FROM play_history
+        WHERE played_at >= datetime('now', '-11 months', 'start of month')
+        GROUP BY month
+      `).all().map((row) => [row.month, row]));
+      const monthly = [];
+      const now = new Date();
+      for (let offset = 11; offset >= 0; offset -= 1) {
+        const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+        const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+        const row = monthlyRows.get(month);
+        monthly.push({
+          month,
+          plays: Number(row?.plays) || 0,
+          listeningSeconds: Number(row?.listening_seconds) || 0,
+        });
+      }
+      const neglectedTracks = db.prepare(`
+        SELECT id, title, artist, album, last_played_at, play_count
+        FROM tracks
+        WHERE import_status = 'accepted'
+          AND (last_played_at IS NULL OR last_played_at < datetime('now', '-180 days'))
+        ORDER BY CASE WHEN last_played_at IS NULL THEN 0 ELSE 1 END,
+                 last_played_at ASC, added_at ASC
+        LIMIT 50
+      `).all().map((row) => ({
+        id: String(row.id),
+        title: row.title || "Unknown Title",
+        artist: row.artist || "Unknown Artist",
+        album: row.album || "Unknown Album",
+        lastPlayedAt: row.last_played_at ?? null,
+        playCount: Number(row.play_count) || 0,
+      }));
+      const plays = Number(totals.plays) || 0;
+      return {
+        listeningSeconds: Number(totals.listening_seconds) || 0,
+        plays,
+        uniqueTracks: Number(totals.unique_tracks) || 0,
+        discoveryRate: plays ? (Number(totals.discovery_plays) / plays) * 100 : 0,
+        topArtists: top("artist"),
+        topAlbums: top("album"),
+        monthly,
+        neglectedTracks,
+      };
     },
 
     backfill_search_text: ({ dbPath }) => {

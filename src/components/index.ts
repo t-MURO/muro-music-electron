@@ -6,6 +6,8 @@ export {
   SettingsPanel,
   Sidebar,
   WindowChrome,
+  LibraryDataTools,
+  KeyboardShortcutSettings,
 } from "./layout";
 export {
   ColumnsMenu,
@@ -23,6 +25,7 @@ export {
   TrackSelectionBar,
   CollectionIndexView,
   buildCollectionIndexItems,
+  ListeningStatisticsView,
 } from "./library";
 export {
   AnalysisModal,
@@ -48,5 +51,7 @@ export {
   PopoverHeader,
   ToastContainer,
   GlobalButtonTooltips,
+  CommandPalette,
+  type CommandPaletteItem,
 } from "./ui";
 export { CamelotWheel, MixSuggestions, NowPlayingTrack, QueueItem } from "./queue";

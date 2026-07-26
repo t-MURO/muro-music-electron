@@ -1,6 +1,6 @@
-# Muro Music Electron
+# Muro Music
 
-Muro Music Electron is a local-first desktop music library and player for
+Muro Music is a local-first desktop music library and player for
 macOS, Windows, and Linux. It is designed for large personal collections,
 detailed metadata work, playlist management, harmonic-mixing preparation, and
 playing music on the computer or compatible devices on the local network.
@@ -486,7 +486,7 @@ npm run test:dlna
 
 ## License
 
-Muro Music Electron is licensed under the GNU Affero General Public License,
+Muro Music is licensed under the GNU Affero General Public License,
 version 3 or any later version (`AGPL-3.0-or-later`). See [`LICENSE`](LICENSE)
 for the complete license text.
 

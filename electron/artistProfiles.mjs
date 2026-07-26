@@ -536,7 +536,7 @@ export const createArtistProfileService = ({
   fetchImpl = globalThis.fetch,
   musicBrainzIntervalMs = MUSICBRAINZ_INTERVAL_MS,
   now = () => Date.now(),
-  userAgent = "MuroMusicElectron/0.1.0 (https://github.com/t-MURO/muro-music-electron)",
+  userAgent = "MuroMusic/0.1.0 (https://github.com/t-MURO/muro-music-electron)",
 }) => {
   const inFlight = new Map();
   const scanInFlight = new WeakMap();

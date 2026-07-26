@@ -36,6 +36,8 @@ import {
   ShortcutHelpModal,
   ToastContainer,
   GlobalButtonTooltips,
+  CommandPalette,
+  ListeningStatisticsView,
 } from "./components";
 import {
   useFileImport,
@@ -102,6 +104,7 @@ import {
   type ArtistSeparatorCandidate,
 } from "./lib/metadata/artistSeparators";
 import type { ArtistImageCandidate, ColumnConfig, SmartCrate, Track, TrackMetadataUpdates } from "./types";
+import { shortcutDisplay } from "./keyboard/shortcuts";
 
 type ArtistSeparatorReviewSession = {
   candidates: ArtistSeparatorCandidate[];
@@ -147,6 +150,7 @@ function App() {
   const updateSmartCrate = useSmartCrateStore((s) => s.updateSmartCrate);
   const deleteSmartCrate = useSmartCrateStore((s) => s.deleteSmartCrate);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const { undo, redo } = useCommandHistory();
   const [isSmartCrateModalOpen, setIsSmartCrateModalOpen] = useState(false);
   const [editingSmartCrateId, setEditingSmartCrateId] = useState<string | null>(null);
@@ -184,6 +188,9 @@ function App() {
   const setDbPath = useSettingsStore((s) => s.setDbPath);
   const setDbFileName = useSettingsStore((s) => s.setDbFileName);
   const setUseAutoDbPath = useSettingsStore((s) => s.setUseAutoDbPath);
+  const recentlyAddedPeriodDays = useSettingsStore((s) => s.recentlyAddedPeriodDays);
+  const setRecentlyAddedPeriodDays = useSettingsStore((s) => s.setRecentlyAddedPeriodDays);
+  const keyboardShortcuts = useSettingsStore((s) => s.keyboardShortcuts);
 
   useEffect(() => {
     applyThemeMode(theme);
@@ -236,6 +243,7 @@ function App() {
     if (location.pathname === "/settings") return "settings";
     if (location.pathname === "/recently-played") return "recentlyPlayed";
     if (location.pathname === "/recently-added") return "recentlyAdded";
+    if (location.pathname === "/statistics") return "statistics";
     if (smartCrateMatch?.params.smartCrateId) {
       return `smartCrate:${smartCrateMatch.params.smartCrateId}` as LibraryView;
     }
@@ -308,6 +316,7 @@ function App() {
       pathname === "/settings" ||
       pathname === "/recently-played" ||
       pathname === "/recently-added" ||
+      pathname === "/statistics" ||
       pathname.startsWith("/collection/") ||
       pathname.startsWith("/playlists/") ||
       pathname.startsWith("/smart-crates/");
@@ -1454,6 +1463,7 @@ function App() {
     onToggleShortcutHelp: handleToggleShortcutHelp,
     onUndo: undo,
     onRedo: redo,
+    onOpenCommandPalette: () => setIsCommandPaletteOpen(true),
   });
 
   // Playlist menu handlers
@@ -1609,6 +1619,28 @@ function App() {
       )
     : 0;
 
+  const commandPaletteItems = useMemo(() => [
+    { id: "library", label: "Go to Library", keywords: "songs tracks", run: () => navigateToView("library") },
+    { id: "inbox", label: "Go to Inbox", keywords: "imports", run: () => navigateToView("inbox") },
+    { id: "recent", label: "Go to Recently Added", run: () => navigateToView("recentlyAdded") },
+    { id: "statistics", label: "Open Listening Statistics", keywords: "charts history plays", run: () => navigateToView("statistics") },
+    { id: "settings", label: "Open Settings", run: () => navigateToView("settings") },
+    { id: "play", label: "Toggle Play / Pause", keywords: "music playback", shortcut: shortcutDisplay(keyboardShortcuts.togglePlay), run: togglePlay },
+    { id: "import-files", label: "Import Music Files", keywords: "add songs", run: () => { void handleEmptyImport(); } },
+    { id: "import-folder", label: "Import Music Folder", keywords: "scan add songs", run: () => { void handleEmptyImportFolder(); } },
+    { id: "create-playlist", label: "Create Playlist", run: openPlaylistModal },
+    { id: "export-playlists", label: "Export All Playlists (M3U8 only)", keywords: "backup no music", run: () => { void handleExportAllPlaylists(); } },
+    { id: "shortcut-help", label: "Show Keyboard Shortcuts", shortcut: shortcutDisplay(keyboardShortcuts.help), run: () => setIsShortcutHelpOpen(true) },
+  ], [
+    handleEmptyImport,
+    handleEmptyImportFolder,
+    handleExportAllPlaylists,
+    keyboardShortcuts,
+    navigateToView,
+    openPlaylistModal,
+    togglePlay,
+  ]);
+
   return (
     <div
       className="theme-transition flex h-screen flex-col overflow-hidden bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
@@ -1624,6 +1656,11 @@ function App() {
       <ShortcutHelpModal
         isOpen={isShortcutHelpOpen}
         onClose={() => setIsShortcutHelpOpen(false)}
+      />
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        commands={commandPaletteItems}
+        onClose={() => setIsCommandPaletteOpen(false)}
       />
       <DragOverlay
         isDragging={isDragging}
@@ -1862,7 +1899,7 @@ function App() {
                 <LibraryHeader
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
-                  isSettings={viewConfig.type === "settings"}
+                  isSettings={viewConfig.type === "settings" || viewConfig.type === "statistics"}
                   resultCount={isArtistIndex ? artistIndexResults.length : collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
@@ -1874,6 +1911,29 @@ function App() {
                   contentMode={isArtistIndex || collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
                   resultLabel={isArtistIndex ? "artists" : collectionIndexFacet ?? undefined}
                 />
+                {viewConfig.type === "recentlyAdded" && (
+                  <div className="flex items-center gap-2 border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-4 py-2">
+                    <span className="mr-1 text-[11px] font-semibold text-[var(--color-text-muted)]">Show:</span>
+                    {([
+                      [1, "Today"],
+                      [7, "7 days"],
+                      [30, "30 days"],
+                    ] as const).map(([days, label]) => (
+                      <button
+                        key={days}
+                        className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
+                          recentlyAddedPeriodDays === days
+                            ? "bg-[var(--color-accent)] text-white"
+                            : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+                        }`}
+                        onClick={() => setRecentlyAddedPeriodDays(days)}
+                        type="button"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
                     <div className="mb-[var(--spacing-xs)] text-[length:var(--font-size-xs)] font-semibold text-[color:var(--color-text-secondary)]">
@@ -1920,6 +1980,8 @@ function App() {
                       onClearSongs={handleClearSongs}
                       onUseDefaultLocation={() => setUseAutoDbPath(true)}
                     />
+                  ) : viewConfig.type === "statistics" ? (
+                    <ListeningStatisticsView dbPath={dbPath} />
                   ) : isArtistIndex ? (
                     <ArtistIndexView
                       items={artistIndexResults}
