@@ -66,14 +66,17 @@ jobs:
         shell: pwsh
         run: |
           npm run predist
-          node scripts/verify-packaged-resources.cjs
           npx --no-install vite build
+          node scripts/verify-packaged-resources.cjs
 
       - name: Build and publish NSIS installer
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --no-install electron-builder --win nsis --publish onTagOrDraft
+        run: |
+          node scripts/stage-packaged-resources.cjs
+          node scripts/verify-packaged-resources.cjs
+          npx --no-install electron-builder --win nsis --publish onTagOrDraft
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -129,14 +132,17 @@ jobs:
         shell: bash
         run: |
           npm run predist
-          node scripts/verify-packaged-resources.cjs
           npx --no-install vite build
+          node scripts/verify-packaged-resources.cjs
 
       - name: Build and publish DMG
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --no-install electron-builder --mac dmg --publish onTagOrDraft
+        run: |
+          node scripts/stage-packaged-resources.cjs
+          node scripts/verify-packaged-resources.cjs
+          npx --no-install electron-builder --mac dmg --publish onTagOrDraft
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
