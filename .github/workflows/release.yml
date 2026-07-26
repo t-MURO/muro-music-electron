@@ -16,8 +16,7 @@ concurrency:
 env:
   CI: "true"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
-  NEO_KEYFINDER_ROOT: ${{ github.workspace }}/neo-keyfinder
-  VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
+  NEO_KEYFINDER_VERSION: "v0.1.2"
 
 jobs:
   windows:
@@ -31,43 +30,28 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out Neo KeyFinder
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: t-MURO/neo-keyfinder
-          path: neo-keyfinder
-          persist-credentials: false
-
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
 
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.13"
-
-      - name: Bootstrap vcpkg
-        shell: pwsh
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git "$env:VCPKG_ROOT"
-          git -C "$env:VCPKG_ROOT" checkout f87344cac03158cbf1467264565f1fd36b382a24
-          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
-
       - name: Install dependencies
-        shell: pwsh
-        run: |
-          npm ci
-          npm ci --prefix "$env:NEO_KEYFINDER_ROOT"
+        run: npm ci
 
       - name: Prepare Windows build
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run predist
+          npm run fpcalc:prepare
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run keyfinder:download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx --no-install vite build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-packaged-resources.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build and publish NSIS installer
         shell: pwsh
@@ -75,7 +59,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           node scripts/stage-packaged-resources.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-packaged-resources.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx --no-install electron-builder --win nsis --publish onTagOrDraft
 
       - name: Upload Windows installer
@@ -97,41 +83,22 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check out Neo KeyFinder
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          repository: t-MURO/neo-keyfinder
-          path: neo-keyfinder
-          persist-credentials: false
-
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
 
-      - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: "3.13"
-
-      - name: Bootstrap vcpkg
-        shell: bash
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
-          git -C "$VCPKG_ROOT" checkout f87344cac03158cbf1467264565f1fd36b382a24
-          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
-
       - name: Install dependencies
-        shell: bash
-        run: |
-          npm ci
-          npm ci --prefix "$NEO_KEYFINDER_ROOT"
+        run: npm ci
 
       - name: Prepare macOS build
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          npm run predist
+          npm run fpcalc:prepare
+          npm run keyfinder:download
           npx --no-install vite build
           node scripts/verify-packaged-resources.cjs
 
