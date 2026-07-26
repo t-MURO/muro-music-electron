@@ -20,6 +20,32 @@ const BASS_KILL_DB = -28;
 const SWAP_START_GAIN = 0.45;
 const SWAP_END_GAIN = 0.55;
 
+// Automation is interpolated linearly between points, so a curved law has to be
+// sampled into segments. 24 is well past the point where the residual error is
+// audible and still a trivial array.
+const EQUAL_POWER_STEPS = 24;
+
+/**
+ * Equal-power (sin/cos) crossfade.
+ *
+ * Beat-matched decks play correlated audio: their amplitudes add, so gains that
+ * sum to one hold the level steady. Unaligned decks are uncorrelated and their
+ * *power* adds instead — gains summing to one then dip about 3 dB at the middle
+ * of the blend. sin/cos keeps the summed power constant, which is what the
+ * fade path needs.
+ */
+const equalPowerCurves = (durationSec: number) => {
+  const incoming: AutomationPoint[] = [];
+  const outgoing: AutomationPoint[] = [];
+  for (let step = 0; step <= EQUAL_POWER_STEPS; step += 1) {
+    const progress = step / EQUAL_POWER_STEPS;
+    const at = progress * durationSec;
+    incoming.push({ at, value: Math.sin((progress * Math.PI) / 2) });
+    outgoing.push({ at, value: Math.cos((progress * Math.PI) / 2) });
+  }
+  return { incoming, outgoing };
+};
+
 export const valueAtAutomationPoint = (
   points: AutomationPoint[],
   offsetSec: number,
@@ -42,10 +68,12 @@ export const valueAtAutomationPoint = (
 export const buildTransitionAutomation = (plan: TransitionPlan): TransitionAutomation => {
   const swapStart = plan.bassSwapAtSec;
   const swapEnd = Math.min(plan.durationSec, plan.bassSwapAtSec + plan.bassSwapDurSec);
+
   // Complementary gains keep the combined amplitude at unity or below. The
   // former additive curve could reach 1.85 before the bass swap and clip
-  // already-mastered tracks badly.
-  const incomingGain: AutomationPoint[] = [
+  // already-mastered tracks badly. This only holds while the decks are
+  // beat-matched; the fade path uses an equal-power law instead.
+  const beatmatchedIncoming: AutomationPoint[] = [
     { at: 0, value: 0 },
     { at: swapStart, value: SWAP_START_GAIN },
     ...(swapEnd < plan.durationSec
@@ -53,7 +81,11 @@ export const buildTransitionAutomation = (plan: TransitionPlan): TransitionAutom
       : []),
     { at: plan.durationSec, value: 1 },
   ];
-  const outgoingGain = incomingGain.map(({ at, value }) => ({ at, value: 1 - value }));
+  const equalPower = plan.mode === "fade" ? equalPowerCurves(plan.durationSec) : null;
+  const incomingGain = equalPower ? equalPower.incoming : beatmatchedIncoming;
+  const outgoingGain = equalPower
+    ? equalPower.outgoing
+    : beatmatchedIncoming.map(({ at, value }) => ({ at, value: 1 - value }));
   const incomingShelfStart = plan.mode === "beatmatch" ? BASS_KILL_DB : 0;
   const incomingShelf: AutomationPoint[] = [
     { at: 0, value: incomingShelfStart },

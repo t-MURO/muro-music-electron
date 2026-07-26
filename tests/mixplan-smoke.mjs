@@ -220,22 +220,63 @@ for (const plan of [
     bars: 4,
   }),
 ]) {
+  // Which conservation law applies depends on how the two decks relate.
+  //
+  // Beat-matched decks are correlated, so their amplitudes add and gains must
+  // sum to one or the blend clips. Faded decks are not aligned and therefore
+  // uncorrelated, so their power adds and the *squares* must sum to one or the
+  // blend dips in the middle. The two failure modes are mutually exclusive:
+  // material correlated enough to clip under equal power would not have dipped
+  // under complementary gain in the first place.
   for (let sample = 0; sample <= 200; sample += 1) {
     const offset = plan.durationSec * sample / 200;
     const automation = transitionAutomationAt(plan, offset);
     assert.ok(automation.incomingGain >= 0 && automation.incomingGain <= 1);
     assert.ok(automation.outgoingGain >= 0 && automation.outgoingGain <= 1);
-    approx(
-      automation.incomingGain + automation.outgoingGain,
-      1,
-      1e-9,
-      `complementary gain at ${offset.toFixed(3)} s`,
+    if (plan.mode === "fade") {
+      approx(
+        automation.incomingGain ** 2 + automation.outgoingGain ** 2,
+        1,
+        // Sampled into linear segments, so the curve cuts a chord across each.
+        2e-3,
+        `equal-power gain at ${offset.toFixed(3)} s`,
+      );
+    } else {
+      approx(
+        automation.incomingGain + automation.outgoingGain,
+        1,
+        1e-9,
+        `complementary gain at ${offset.toFixed(3)} s`,
+      );
+    }
+  }
+
+  // The dip this replaced: complementary gains put the midpoint of an unaligned
+  // blend at sqrt(0.45^2 + 0.55^2) ~= 0.71, about -3 dB. Equal power must hold
+  // the combined level within a hair of unity all the way across.
+  if (plan.mode === "fade") {
+    const middle = transitionAutomationAt(plan, plan.durationSec / 2);
+    const combined = Math.hypot(middle.incomingGain, middle.outgoingGain);
+    assert.ok(
+      Math.abs(20 * Math.log10(combined)) < 0.1,
+      `fade midpoint should stay at unity power, got ${(20 * Math.log10(combined)).toFixed(2)} dB`,
     );
   }
+  // Endpoints are compared with a tolerance because the equal-power law lands
+  // on cos(pi/2), which is 5.6e-17 rather than a clean zero.
   const start = transitionAutomationAt(plan, 0);
   const end = transitionAutomationAt(plan, plan.durationSec);
+  for (const [label, actual, expected] of [
+    ["start incoming", start.incomingGain, 0],
+    ["start outgoing", start.outgoingGain, 1],
+    ["end incoming", end.incomingGain, 1],
+    ["end outgoing", end.outgoingGain, 0],
+  ]) {
+    approx(actual, expected, 1e-9, label);
+  }
   assert.deepEqual(
-    [start.incomingGain, start.outgoingGain, end.incomingGain, end.outgoingGain],
+    [Math.round(start.incomingGain), Math.round(start.outgoingGain),
+      Math.round(end.incomingGain), Math.round(end.outgoingGain)],
     [0, 1, 1, 0],
   );
 }
