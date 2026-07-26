@@ -2,9 +2,12 @@ name: Build release artifacts
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: release-artifacts-${{ github.ref }}
@@ -59,12 +62,17 @@ jobs:
           npm ci
           npm ci --prefix "$env:NEO_KEYFINDER_ROOT"
 
-      - name: Build NSIS installer
+      - name: Prepare Windows build
         shell: pwsh
         run: |
           npm run predist
           npx --no-install vite build
-          npx --no-install electron-builder --win nsis --publish never
+
+      - name: Build and publish NSIS installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no-install electron-builder --win nsis --publish onTagOrDraft
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -116,12 +124,17 @@ jobs:
           npm ci
           npm ci --prefix "$NEO_KEYFINDER_ROOT"
 
-      - name: Build DMG
+      - name: Prepare macOS build
         shell: bash
         run: |
           npm run predist
           npx --no-install vite build
-          npx --no-install electron-builder --mac dmg --publish never
+
+      - name: Build and publish DMG
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no-install electron-builder --mac dmg --publish onTagOrDraft
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
