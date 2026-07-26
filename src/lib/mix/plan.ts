@@ -33,8 +33,26 @@ const TAIL_MARGIN_SEC = 1.5;
 const RATE_MULTIPLIERS = [0.5, 1, 2];
 
 // Below this the novelty curve was too flat to trust a phrase period, so the
-// plan stays on plain bar alignment.
+// plan stays on plain bar alignment. Measured across 199 tracks of a real
+// library, phrase confidence is cleanly bimodal — a cluster at zero, nothing
+// at all between 0.05 and 0.30, then everything else above 0.30 — so this sits
+// in the empty gap rather than cutting through a distribution.
 const MIN_PHRASE_CONFIDENCE = 0.15;
+
+/**
+ * Ceiling on the alignment step, in bars.
+ *
+ * What the novelty curve finds is the *section* period, and in real music that
+ * is usually 16 or 32 bars — 72% of a 199-track sample came back as 32. A
+ * 32-bar step is 60 seconds at 128 BPM, far too coarse to place a transition
+ * with: the start rounds down to the grid, so it can land a full minute before
+ * the intended point.
+ *
+ * Capping at 16 costs nothing musically. Every 32-bar boundary is also a 16-bar
+ * boundary, so the finer grid still lands on a phrase line — it just offers
+ * twice as many of them.
+ */
+const MAX_ALIGNMENT_BARS = 16;
 
 /**
  * The musical grid a transition should start on.
@@ -47,10 +65,16 @@ const MIN_PHRASE_CONFIDENCE = 0.15;
 /**
  * How long the blend should run, given what the two tracks actually offer.
  *
- * A DJ blends the outgoing track's outro against the incoming track's intro, so
- * those two runways bound the length — asking for thirty-two bars over an
- * eight-bar outro just means twenty-four bars of the previous track's chorus
- * fighting the new one. The setting caps the result rather than fixing it.
+ * The incoming track's intro bounds it: blending for longer than that means the
+ * new track's main body arrives while the old one is still playing.
+ *
+ * The outgoing track's outro does *not* bound it, which took a real library to
+ * see. Detected outros there run about five bars at the median, and letting
+ * that cap the blend produced four-bar transitions — under eight seconds — for
+ * half of all pairs. A DJ facing a short outro starts the blend earlier, over
+ * the final chorus, rather than accepting a snatched one. So the outro decides
+ * where the blend *starts*, not how long it runs; the tail margin already
+ * guarantees it fits.
  *
  * The length is then pulled back when the blend is a riskier one to hold: a
  * large tempo pull exposes pitch and drift for longer, and a weak grid means
@@ -58,17 +82,14 @@ const MIN_PHRASE_CONFIDENCE = 0.15;
  */
 const deriveBars = (args: {
   cap: number;
-  outroBarsA: number | null;
   introBarsB: number | null;
   rateLog2: number;
   confidence: number;
 }): number => {
-  const { cap, outroBarsA, introBarsB, rateLog2, confidence } = args;
+  const { cap, introBarsB, rateLog2, confidence } = args;
 
   let bars = cap;
-  // Only constrain by a runway that was actually detected; a track with no
-  // outro simply does not bound the blend.
-  if (outroBarsA !== null) bars = Math.min(bars, outroBarsA);
+  // Only constrain by a runway that was actually detected.
   if (introBarsB !== null) bars = Math.min(bars, introBarsB);
 
   // Tempo strain: 0 when the tracks already share a tempo, 1 at the maximum
@@ -85,13 +106,15 @@ const gridAnchor = (grid: BeatGrid, barSec: number) => {
     grid.phraseConfidence >= MIN_PHRASE_CONFIDENCE &&
     grid.phraseBars > 0 &&
     Number.isFinite(grid.firstPhraseSec);
-  return usePhrase
-    ? {
-        originSec: Math.max(0, grid.firstPhraseSec),
-        stepSec: grid.phraseBars * barSec,
-        bars: grid.phraseBars,
-      }
-    : { originSec: Math.max(0, grid.firstDownbeatSec), stepSec: barSec, bars: 1 };
+  if (!usePhrase) {
+    return { originSec: Math.max(0, grid.firstDownbeatSec), stepSec: barSec, bars: 1 };
+  }
+  const bars = Math.min(grid.phraseBars, MAX_ALIGNMENT_BARS);
+  return {
+    originSec: Math.max(0, grid.firstPhraseSec),
+    stepSec: bars * barSec,
+    bars,
+  };
 };
 
 const buildFadePlan = (
@@ -152,18 +175,16 @@ export function planTransition(args: PlanTransitionArgs): TransitionPlan {
   const barSecA = 4 * beatSecA;
   const anchorA = gridAnchor(gridA, barSecA);
 
-  // How much runway each track actually offers. A runway under a bar is no
-  // runway at all, and must not be read as "zero bars of blend allowed".
-  const usableRunway = (bars: number) => (bars >= 1 ? bars : null);
-  const outroBarsA = gridA.hasOutro
-    ? usableRunway((durationASec - gridA.outroStartSec) / barSecA)
-    : null;
+  // A runway under a bar is no runway at all, and must not be read as "zero
+  // bars of blend allowed".
   const introBarsB = gridB.introEndSec > 0
-    ? usableRunway((gridB.introEndSec - gridB.firstDownbeatSec) / (4 * (60 / gridB.bpm)))
+    ? (() => {
+        const bars = (gridB.introEndSec - gridB.firstDownbeatSec) / (4 * (60 / gridB.bpm));
+        return bars >= 1 ? bars : null;
+      })()
     : null;
   const targetBars = deriveBars({
     cap: requestedBars,
-    outroBarsA,
     introBarsB,
     rateLog2: bestRateLog2,
     confidence: Math.min(gridA.confidence, gridB.confidence),

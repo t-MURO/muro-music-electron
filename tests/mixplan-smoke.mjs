@@ -433,7 +433,10 @@ for (const plan of [
 // decides the length.
 {
   const barSecA = 4 * (60 / 128);
-  // A has only an 8-bar outro, so a 32-bar request cannot be honoured.
+  // A short outro must NOT shorten the blend. Detected outros across a real
+  // library run about five bars at the median, and capping on them produced
+  // four-bar transitions for half of all pairs. A DJ facing a short outro
+  // starts earlier, over the final chorus, instead of taking a snatched blend.
   const shortOutro = planTransition({
     gridA: grid(128, 0.5, 0.8, {
       hasOutro: true,
@@ -444,9 +447,19 @@ for (const plan of [
     durationBSec: 300,
     bars: 32,
   });
+  approx(
+    shortOutro.durationSec,
+    32 * barSecA,
+    1e-6,
+    "a short outro must not shorten the blend",
+  );
   assert.ok(
-    shortOutro.durationSec <= 8 * barSecA + 1e-6,
-    `an 8-bar outro must cap the blend, got ${(shortOutro.durationSec / barSecA).toFixed(1)} bars`,
+    shortOutro.startAtSec < 300 - 8 * barSecA,
+    "with a short outro the blend must start before it, not inside it",
+  );
+  assert.ok(
+    shortOutro.startAtSec + shortOutro.durationSec <= 300,
+    "the blend must still end within the track",
   );
 
   // B has only a 4-bar intro, which caps it just as hard.
