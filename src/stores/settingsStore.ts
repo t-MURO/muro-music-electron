@@ -89,6 +89,8 @@ type SettingsState = {
   watchFoldersEnabled: boolean;
   /** Absolute paths watched for new audio; imports land in the Inbox. */
   watchedFolders: string[];
+  /** Move accepted watched-folder imports into Album Artist / Album folders. */
+  organizeAcceptedTracks: boolean;
   recentlyAddedPeriodDays: 1 | 7 | 30;
   keyboardShortcuts: KeyboardShortcutMap;
 };
@@ -123,6 +125,7 @@ type SettingsActions = {
   setReplayGainPreventClipping: (preventClipping: boolean) => void;
   setReplayGainReferenceLufs: (referenceLufs: number) => void;
   setWatchFoldersEnabled: (enabled: boolean) => void;
+  setOrganizeAcceptedTracks: (enabled: boolean) => void;
   addWatchedFolder: (folder: string) => void;
   removeWatchedFolder: (folder: string) => void;
   setRecentlyAddedPeriodDays: (days: 1 | 7 | 30) => void;
@@ -167,6 +170,7 @@ export const useSettingsStore = create<SettingsStore>()(
       replayGainReferenceLufs: -18,
       watchFoldersEnabled: false,
       watchedFolders: [],
+      organizeAcceptedTracks: true,
       recentlyAddedPeriodDays: 30,
       keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS },
 
@@ -220,6 +224,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setReplayGainReferenceLufs: (referenceLufs) =>
         set({ replayGainReferenceLufs: Math.max(-30, Math.min(-5, referenceLufs)) }),
       setWatchFoldersEnabled: (watchFoldersEnabled) => set({ watchFoldersEnabled }),
+      setOrganizeAcceptedTracks: (organizeAcceptedTracks) =>
+        set({ organizeAcceptedTracks }),
       addWatchedFolder: (folder) => set((state) =>
         state.watchedFolders.includes(folder)
           ? {}
@@ -237,7 +243,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "muro-settings",
-      version: 3,
+      version: 4,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
@@ -270,6 +276,7 @@ export const useSettingsStore = create<SettingsStore>()(
         replayGainReferenceLufs: state.replayGainReferenceLufs,
         watchFoldersEnabled: state.watchFoldersEnabled,
         watchedFolders: state.watchedFolders,
+        organizeAcceptedTracks: state.organizeAcceptedTracks,
         recentlyAddedPeriodDays: state.recentlyAddedPeriodDays,
         keyboardShortcuts: state.keyboardShortcuts,
       }),

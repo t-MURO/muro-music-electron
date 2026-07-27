@@ -977,6 +977,26 @@ export const SettingsPanel = ({
                       </span>
                     </label>
 
+                    <label className="flex items-start gap-3">
+                      <input
+                        checked={watched.organizeAcceptedTracks}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                        data-organize-accepted-tracks-toggle
+                        onChange={(event) =>
+                          watched.setOrganizeAcceptedTracks(event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        <span className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                          {t("watch.organizeAccepted")}
+                        </span>
+                        <span className="mt-1 block text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                          {t("watch.organizeAccepted.hint")}
+                        </span>
+                      </span>
+                    </label>
+
                     {watched.watchedFolders.length === 0 ? (
                       <p className="text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
                         {t("watch.empty")}

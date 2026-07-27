@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { closeDatabases, openDatabase } from "../electron/database.mjs";
 import { createLibraryWatcher } from "../electron/libraryWatcher.mjs";
+import { acceptInboxTracks } from "../electron/inboxOrganizer.mjs";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "muro-watch-"));
 const dbPath = path.join(tempDir, "watch.db");
@@ -108,6 +109,68 @@ const run = async () => {
   // Re-scanning imports nothing new.
   const rescan = await watcher.scanNow({ dbPath, folders: [watchDir] });
   assert.equal(rescan.imported, 0, "a second scan is a no-op");
+
+  const droppedRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
+    path.resolve(dropped),
+  );
+  const offlineRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
+    path.resolve(offline),
+  );
+  db.prepare(`
+    UPDATE tracks
+    SET artist = 'Track Artist', album_artist = 'Album Artist', album = 'First Album'
+    WHERE id = ?
+  `).run(droppedRow.id);
+  db.prepare(`
+    UPDATE tracks
+    SET artist = 'Fallback Artist', album_artist = NULL, album = 'Second Album'
+    WHERE id = ?
+  `).run(offlineRow.id);
+
+  const existingAlbumFolder = path.join(watchDir, "Fallback Artist", "Second Album");
+  fs.mkdirSync(existingAlbumFolder, { recursive: true });
+  const existingCollision = path.join(existingAlbumFolder, "offline.mp3");
+  fs.writeFileSync(existingCollision, "existing file must not be overwritten");
+
+  const accepted = await acceptInboxTracks({
+    dbPath,
+    trackIds: [droppedRow.id, offlineRow.id],
+    organize: true,
+    watchedFolders: [watchDir],
+  });
+  const organizedDropped = path.join(
+    watchDir,
+    "Album Artist",
+    "First Album",
+    "dropped.mp3",
+  );
+  const organizedOffline = path.join(existingAlbumFolder, "offline (2).mp3");
+  assert.equal(accepted.moved.length, 2, "accepted watched imports are organized");
+  assert.equal(
+    fs.existsSync(organizedDropped),
+    true,
+    "Album Artist is preferred when it is present",
+  );
+  assert.equal(
+    fs.existsSync(organizedOffline),
+    true,
+    "Artist is used when Album Artist is absent",
+  );
+  assert.equal(
+    fs.readFileSync(existingCollision, "utf8"),
+    "existing file must not be overwritten",
+    "existing album contents are preserved",
+  );
+  assert.equal(fs.existsSync(dropped), false, "the first Inbox file was moved");
+  assert.equal(fs.existsSync(offline), false, "the second Inbox file was moved");
+  const organizedRow = db.prepare(`
+    SELECT import_status, source_path, filename
+    FROM tracks
+    WHERE id = ?
+  `).get(offlineRow.id);
+  assert.equal(organizedRow.import_status, "accepted", "the organized track is accepted");
+  assert.equal(organizedRow.source_path, organizedOffline, "the database follows the moved file");
+  assert.equal(organizedRow.filename, "offline (2).mp3", "the collision suffix is stored");
 
   console.log("library-watcher-smoke: all assertions passed");
 };

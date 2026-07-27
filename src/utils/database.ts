@@ -14,8 +14,23 @@ export const clearTracks = (dbPath: string) => {
   return invoke<void>("clear_tracks", { dbPath });
 };
 
-export const acceptTracks = (dbPath: string, trackIds: string[]) => {
-  return invoke<void>("accept_tracks", { dbPath, trackIds });
+export type AcceptTracksResult = {
+  accepted: number;
+  moved: Array<{ trackId: string; sourcePath: string; filename: string }>;
+  failures: Array<{ trackId: string; sourcePath: string; message: string }>;
+};
+
+export const acceptTracks = (
+  dbPath: string,
+  trackIds: string[],
+  options?: { organize?: boolean; watchedFolders?: string[] },
+) => {
+  return invoke<AcceptTracksResult>("accept_tracks", {
+    dbPath,
+    trackIds,
+    organize: options?.organize ?? false,
+    watchedFolders: options?.watchedFolders ?? [],
+  });
 };
 
 export const unacceptTracks = (dbPath: string, trackIds: string[]) => {

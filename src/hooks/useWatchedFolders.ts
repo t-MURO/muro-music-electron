@@ -20,7 +20,9 @@ export const useWatchedFolders = () => {
   const [scanning, setScanning] = useState(false);
   const watchFoldersEnabled = useSettingsStore((s) => s.watchFoldersEnabled);
   const watchedFolders = useSettingsStore((s) => s.watchedFolders);
+  const organizeAcceptedTracks = useSettingsStore((s) => s.organizeAcceptedTracks);
   const setWatchFoldersEnabled = useSettingsStore((s) => s.setWatchFoldersEnabled);
+  const setOrganizeAcceptedTracks = useSettingsStore((s) => s.setOrganizeAcceptedTracks);
   const addWatchedFolder = useSettingsStore((s) => s.addWatchedFolder);
   const removeWatchedFolder = useSettingsStore((s) => s.removeWatchedFolder);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
@@ -106,7 +108,9 @@ export const useWatchedFolders = () => {
     scanning,
     watchFoldersEnabled,
     watchedFolders,
+    organizeAcceptedTracks,
     setWatchFoldersEnabled,
+    setOrganizeAcceptedTracks,
     addFolder,
     removeFolder: removeWatchedFolder,
     scanNow,

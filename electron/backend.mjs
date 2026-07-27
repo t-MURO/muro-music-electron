@@ -41,6 +41,7 @@ import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
 import { exportAllPlaylists, exportOrganizedLibrary } from "./libraryExport.mjs";
 import { createLibraryWatcher } from "./libraryWatcher.mjs";
+import { acceptInboxTracks } from "./inboxOrganizer.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -644,8 +645,8 @@ export const createBackend = ({
       await fs.promises.rm(artistCacheDir, { recursive: true, force: true });
     },
 
-    accept_tracks: ({ dbPath, trackIds }) =>
-      bulkTrackOperation(dbPath, trackIds, "UPDATE tracks SET import_status = 'accepted' WHERE id IN"),
+    accept_tracks: ({ dbPath, trackIds, organize, watchedFolders }) =>
+      acceptInboxTracks({ dbPath, trackIds, organize, watchedFolders }),
     unaccept_tracks: ({ dbPath, trackIds }) =>
       bulkTrackOperation(dbPath, trackIds, "UPDATE tracks SET import_status = 'staged' WHERE id IN"),
     reject_tracks: ({ dbPath, trackIds }) =>
