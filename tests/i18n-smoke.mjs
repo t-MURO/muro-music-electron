@@ -91,6 +91,12 @@ const ALLOWED_IDENTICAL = new Set([
   "edit.field.label",
   "analysis.bpmRange",
   "playback.crossfade.seconds",
+  "filters.field.album",
+  "filters.field.genre",
+  "filters.field.bpm",
+  "filters.field.label",
+  "selection.mix",
+  "player.pause",
 ]);
 
 const untranslated = enKeys.filter(

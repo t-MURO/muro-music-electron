@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { strFromU8, unzipSync } from "fflate";
 import { createBackend } from "../electron/backend.mjs";
 import { openDatabase } from "../electron/database.mjs";
 
@@ -121,11 +122,34 @@ try {
   const backup = await backend.invoke("create_library_backup", {
     dbPath,
     destinationPath: backupPath,
-    settingsJson: JSON.stringify({ state: { theme: "dark" }, version: 3 }),
+    settingsJson: JSON.stringify({
+      state: { theme: "dark", braveSearchApiKey: "must-not-leave-this-device" },
+      version: 4,
+    }),
+    smartCratesJson: JSON.stringify({
+      state: {
+        smartCrates: [{
+          id: "crate-1",
+          name: "Backup crate",
+          match: "all",
+          rules: [{ id: "rule-1", field: "bpm", operator: "gte", value: 120 }],
+        }],
+      },
+      version: 0,
+    }),
   });
   assert.equal(backup.manifest.counts.playlists, 1);
   assert.equal(backup.manifest.counts.artworkFiles, 1);
+  assert.equal(backup.manifest.counts.smartCrates, 1);
   assert.ok(fs.statSync(backupPath).size > 0);
+  const archiveEntries = unzipSync(new Uint8Array(fs.readFileSync(backupPath)));
+  const archivedSettings = strFromU8(archiveEntries["settings/muro-settings.json"]);
+  assert.doesNotMatch(archivedSettings, /must-not-leave-this-device/);
+  assert.doesNotMatch(archivedSettings, /braveSearchApiKey/);
+  assert.match(
+    strFromU8(archiveEntries["settings/muro-smart-crates.json"]),
+    /Backup crate/,
+  );
 
   openDatabase(dbPath).prepare("DELETE FROM playlists").run();
   openDatabase(dbPath).prepare("UPDATE tracks SET title = 'After backup'").run();
@@ -145,6 +169,8 @@ try {
   ).get("track-1").cover_art_path;
   assert.ok(fs.existsSync(restoredArtwork));
   assert.match(restored.settingsJson, /"theme":"dark"/);
+  assert.doesNotMatch(restored.settingsJson, /braveSearchApiKey/);
+  assert.match(restored.smartCratesJson, /Backup crate/);
 
   playlistHistory = await backend.invoke("list_playlist_history", { dbPath });
   assert.ok(playlistHistory.entries.length >= 2);

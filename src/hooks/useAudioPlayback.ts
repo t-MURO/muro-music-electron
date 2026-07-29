@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@muro/desktop/events";
 import { t } from "../i18n";
 import type { Track } from "../types";
-import { usePlaybackStore, trackToCurrentTrack, notify, useSettingsStore } from "../stores";
+import {
+  useLibraryStore,
+  usePlaybackStore,
+  trackToCurrentTrack,
+  notify,
+  useSettingsStore,
+} from "../stores";
 import {
   useRemoteOutputStore,
   isRemoteOutputActive,
@@ -16,6 +22,7 @@ import {
   playbackSeek,
   playbackSetOutputDevice,
   playbackSetSeekMode,
+  playbackSetTrackGain,
   playbackSetVolume,
   playbackToggle,
   type PlaybackState,
@@ -68,6 +75,9 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   const currentPosition = usePlaybackStore((s) => s.currentPosition);
   const duration = usePlaybackStore((s) => s.duration);
   const volume = usePlaybackStore((s) => s.volume);
+  const replayGainMode = useSettingsStore((s) => s.replayGainMode);
+  const replayGainPreampDb = useSettingsStore((s) => s.replayGainPreampDb);
+  const replayGainPreventClipping = useSettingsStore((s) => s.replayGainPreventClipping);
 
   const setIsPlaying = usePlaybackStore((s) => s.setIsPlaying);
   const setCurrentTrack = usePlaybackStore((s) => s.setCurrentTrack);
@@ -300,6 +310,24 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
       notify.error(t("toast.playback.seekModeFailed"));
     });
   }, [seekMode]);
+
+  useEffect(() => {
+    if (!currentTrack || isRemoteOutputActive()) return;
+    const library = useLibraryStore.getState();
+    const track = [...library.tracks, ...library.inboxTracks]
+      .find((candidate) => candidate.id === currentTrack.id);
+    if (!track) return;
+    void playbackSetTrackGain(resolveGainFactor(track, {
+      mode: replayGainMode,
+      preampDb: replayGainPreampDb,
+      preventClipping: replayGainPreventClipping,
+    })).catch(() => undefined);
+  }, [
+    currentTrack?.id,
+    replayGainMode,
+    replayGainPreampDb,
+    replayGainPreventClipping,
+  ]);
 
   // Restore the persisted local output device once at startup.
   useEffect(() => {

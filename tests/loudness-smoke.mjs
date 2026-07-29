@@ -146,16 +146,16 @@ const closeTo = (actual, expected, tolerance, message) => {
       { replayGainTrackDb: 6, replayGainTrackPeak: 0.9 },
       { ...base, preventClipping: true },
     ),
-    1 / 0.9 > 1 ? 1 : 1 / 0.9,
+    1 / 0.9,
     0.001,
     "the clipping guard holds the gain back",
   );
 
-  // A boost can never exceed unity, because HTMLMediaElement.volume caps at 1.
-  assert.equal(
+  closeTo(
     resolveGainFactor({ replayGainTrackDb: 12 }, base),
-    1,
-    "positive gain is clamped to unity",
+    dbToLinear(12),
+    0.001,
+    "positive gain is preserved for the Web Audio output stage",
   );
 }
 

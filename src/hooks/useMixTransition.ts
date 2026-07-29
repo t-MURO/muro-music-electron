@@ -10,6 +10,7 @@ import {
 import { getOrComputeBeatGrid, type BeatGrid } from "../lib/beatgrid";
 import { planTransition } from "../lib/mix/plan";
 import { playbackCancelTransition, playbackTransitionTo } from "../utils/playbackApi";
+import { resolveGainFactor } from "../utils/replayGain";
 import { useDbPath } from "./useDbPath";
 import { t } from "../i18n";
 
@@ -29,6 +30,11 @@ const toTransitionTarget = (track: Track) => ({
   durationHint: track.durationSeconds,
   coverArtPath: track.coverArtPath,
   coverArtThumbPath: track.coverArtThumbPath,
+  gainFactor: resolveGainFactor(track, {
+    mode: useSettingsStore.getState().replayGainMode,
+    preampDb: useSettingsStore.getState().replayGainPreampDb,
+    preventClipping: useSettingsStore.getState().replayGainPreventClipping,
+  }),
 });
 
 export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMixTransitionArgs) => {

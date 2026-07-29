@@ -17,17 +17,22 @@ const dbPath = path.join(tempDir, "search.db");
 
 // The filename deliberately does not echo the title: search_text covers both,
 // so a shared word would hide whether a title edit actually reindexed.
-const insertTrack = (db, { title, artist, album, genre = [] }) => {
+const insertTrack = (db, { title, artist, album, genre = [], key = null, bpm = null }) => {
   const id = randomUUID();
   db.prepare(`
-    INSERT INTO tracks (id, title, artist, album, genre_json, filename, source_path, import_status, added_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'library', ?)
+    INSERT INTO tracks (
+      id, title, artist, album, genre_json, key, bpm, filename,
+      source_path, import_status, added_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'library', ?)
   `).run(
     id,
     title,
     artist,
     album,
     JSON.stringify(genre),
+    key,
+    bpm,
     `${id}.mp3`,
     path.join(tempDir, `${id}.mp3`),
     Math.floor(Date.now() / 1000),
@@ -50,6 +55,13 @@ const run = () => {
     artist: "Björk",
     album: "Homogenic",
     genre: ["Electronic"],
+  });
+  const harmonic = insertTrack(db, {
+    title: "Harmonic Search",
+    artist: "Index Test",
+    album: "Metadata",
+    key: "8A",
+    bpm: 128,
   });
   insertTrack(db, {
     title: "Teardrop",
@@ -86,6 +98,8 @@ const run = () => {
   const bjorkHits = searchTrackIds(dbPath, "bjork");
   assert.deepEqual(bjorkHits, [bjork], "an unaccented query matches accented text");
   assert.deepEqual(searchTrackIds(dbPath, "jóga"), [bjork], "an accented query still matches");
+  assert.deepEqual(searchTrackIds(dbPath, "8A"), [harmonic], "musical key is searchable");
+  assert.deepEqual(searchTrackIds(dbPath, "128"), [harmonic], "BPM is searchable");
 
   // "No opinion" and "no matches" must stay distinguishable: callers fall back
   // to their own matcher on null, but must show an empty list on [].

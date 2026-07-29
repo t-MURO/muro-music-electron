@@ -330,7 +330,7 @@ themselves.
 
 ## Requirements for development
 
-- Node.js 22.6 or newer
+- Node.js 22.22 or newer
 - npm 10 or newer
 - A Neo KeyFinder checkout at one of these locations:
   - `../neo-keyfinder`

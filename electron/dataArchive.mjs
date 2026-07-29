@@ -8,8 +8,17 @@ import { capturePlaylistState } from "./history.mjs";
 import { closeDatabase, openDatabase } from "./database.mjs";
 
 const ARCHIVE_FORMAT = "muro-library-backup";
-const ARCHIVE_VERSION = 1;
+const ARCHIVE_VERSION = 2;
+const SUPPORTED_ARCHIVE_VERSIONS = new Set([1, ARCHIVE_VERSION]);
 const MAX_SETTINGS_BYTES = 10 * 1024 * 1024;
+const MAX_SMART_CRATES_BYTES = 10 * 1024 * 1024;
+const SENSITIVE_SETTING_KEYS = new Set([
+  "lastFmApiKey",
+  "theAudioDbApiKey",
+  "fanartApiKey",
+  "braveSearchApiKey",
+  "acoustIdClientKey",
+]);
 
 const safeJson = (value, fallback = null) => {
   try {
@@ -67,14 +76,44 @@ const countLibrary = (db) => ({
   ) || 0,
 });
 
-const validateSettings = (settingsJson) => {
-  const normalized = typeof settingsJson === "string" ? settingsJson : "";
-  if (Buffer.byteLength(normalized, "utf8") > MAX_SETTINGS_BYTES) {
-    throw new Error("The settings payload is too large");
+const validateJsonPayload = (value, maxBytes, label) => {
+  const normalized = typeof value === "string" ? value : "";
+  if (Buffer.byteLength(normalized, "utf8") > maxBytes) {
+    throw new Error(`The ${label} payload is too large`);
   }
   if (normalized && safeJson(normalized) == null) {
-    throw new Error("The settings payload is not valid JSON");
+    throw new Error(`The ${label} payload is not valid JSON`);
   }
+  return normalized;
+};
+
+const sanitizeSettings = (settingsJson) => {
+  const normalized = validateJsonPayload(settingsJson, MAX_SETTINGS_BYTES, "settings");
+  if (!normalized) return "";
+  const persisted = safeJson(normalized);
+  if (!persisted || typeof persisted !== "object") {
+    throw new Error("The settings payload is not valid persisted state");
+  }
+  const state = persisted.state && typeof persisted.state === "object"
+    ? { ...persisted.state }
+    : {};
+  for (const key of SENSITIVE_SETTING_KEYS) delete state[key];
+  return JSON.stringify({ ...persisted, state });
+};
+
+const validateSmartCrates = (smartCratesJson) => {
+  const normalized = validateJsonPayload(
+    smartCratesJson,
+    MAX_SMART_CRATES_BYTES,
+    "Smart Crates",
+  );
+  if (!normalized) return "";
+  const persisted = safeJson(normalized);
+  const crates = persisted?.state?.smartCrates;
+  if (!persisted || typeof persisted !== "object" || !Array.isArray(crates)) {
+    throw new Error("The Smart Crates payload is not valid persisted state");
+  }
+  if (crates.length > 10_000) throw new Error("The Smart Crates payload is too large");
   return normalized;
 };
 
@@ -82,6 +121,7 @@ export const createLibraryBackup = async ({
   dbPath,
   destinationPath,
   settingsJson,
+  smartCratesJson,
 }) => {
   const resolvedDbPath = path.resolve(dbPath);
   const resolvedDestination = path.resolve(destinationPath);
@@ -98,7 +138,8 @@ export const createLibraryBackup = async ({
       "playlists/playlists.json": strToU8(
         JSON.stringify(capturePlaylistState(db), null, 2),
       ),
-      "settings/muro-settings.json": strToU8(validateSettings(settingsJson)),
+      "settings/muro-settings.json": strToU8(sanitizeSettings(settingsJson)),
+      "settings/muro-smart-crates.json": strToU8(validateSmartCrates(smartCratesJson)),
     };
 
     for (const artworkPath of artworkPaths) {
@@ -120,11 +161,13 @@ export const createLibraryBackup = async ({
       app: "Muro Music",
       databaseFile: "database/muro.db",
       settingsFile: "settings/muro-settings.json",
+      smartCratesFile: "settings/muro-smart-crates.json",
       playlistFile: "playlists/playlists.json",
       artworkIndexFile: "artwork/index.json",
       counts: {
         ...countLibrary(db),
         artworkFiles: artworkIndex.length,
+        smartCrates: safeJson(smartCratesJson, {})?.state?.smartCrates?.length ?? 0,
       },
     };
     archiveEntries["manifest.json"] = strToU8(JSON.stringify(manifest, null, 2));
@@ -215,17 +258,23 @@ export const restoreLibraryBackup = async ({
   const manifest = safeJson(strFromU8(requireArchiveEntry(entries, "manifest.json")));
   if (
     manifest?.format !== ARCHIVE_FORMAT
-    || Number(manifest?.version) !== ARCHIVE_VERSION
+    || !SUPPORTED_ARCHIVE_VERSIONS.has(Number(manifest?.version))
     || typeof manifest?.backupId !== "string"
   ) {
     throw new Error("This is not a supported Muro library backup");
   }
 
   const databaseBytes = requireArchiveEntry(entries, "database/muro.db");
-  const settingsJson = entries["settings/muro-settings.json"]
-    ? strFromU8(entries["settings/muro-settings.json"])
-    : "";
-  validateSettings(settingsJson);
+  const settingsJson = sanitizeSettings(
+    entries["settings/muro-settings.json"]
+      ? strFromU8(entries["settings/muro-settings.json"])
+      : "",
+  );
+  const smartCratesJson = validateSmartCrates(
+    entries["settings/muro-smart-crates.json"]
+      ? strFromU8(entries["settings/muro-smart-crates.json"])
+      : "",
+  );
 
   const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "muro-restore-"));
   const restoredDbPath = path.join(tempDir, "muro.db");
@@ -282,6 +331,7 @@ export const restoreLibraryBackup = async ({
       archivePath: resolvedArchivePath,
       recoveryPath: originalMoved ? recoveryPath : null,
       settingsJson,
+      smartCratesJson,
       manifest,
       restoredArtworkFiles: artworkMap.size,
     };

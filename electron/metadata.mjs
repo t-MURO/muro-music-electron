@@ -269,7 +269,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
   const rating = await readRatingFromFile(filePath, common);
   const searchText = normalizeSearchText(
     title, artist, album, albumArtist, genres, comments, label,
-    path.basename(filePath), year, trackNumber, discNumber
+    path.basename(filePath), year, trackNumber, discNumber, common.key, common.bpm
   );
 
   const record = {

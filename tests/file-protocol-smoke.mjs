@@ -12,6 +12,7 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "muro-file-protocol-"));
 const audioPath = path.join(tempDir, "sample.mp3");
 const recoveredFlacPath = path.join(tempDir, "recovered.flac");
 const validFlacPath = path.join(tempDir, "valid.flac");
+const privateTextPath = path.join(tempDir, "private.txt");
 
 const streamInfo = Buffer.concat([
   Buffer.from("664c6143", "hex"),
@@ -26,6 +27,13 @@ try {
   fs.writeFileSync(audioPath, Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
   fs.writeFileSync(recoveredFlacPath, Buffer.concat([streamInfo, invalidPrefix, validFrame]));
   fs.writeFileSync(validFlacPath, Buffer.concat([streamInfo, validFrame]));
+  fs.writeFileSync(privateTextPath, "must not be exposed through the media protocol");
+
+  const blockedNonMedia = await createLocalFileResponse(
+    new Request("https://local/private.txt"),
+    privateTextPath,
+  );
+  assert.equal(blockedNonMedia.status, 415);
 
   assert.deepEqual(parseByteRange("bytes=2-5", 10), { start: 2, end: 5 });
   assert.deepEqual(parseByteRange("bytes=7-", 10), { start: 7, end: 9 });

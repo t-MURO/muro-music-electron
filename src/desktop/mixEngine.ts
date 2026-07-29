@@ -26,7 +26,8 @@ export type TransitionRequest = {
 type ElementChain = {
   source: MediaElementAudioSourceNode;
   lowShelf: BiquadFilterNode;
-  gain: GainNode;
+  transitionGain: GainNode;
+  levelGain: GainNode;
 };
 
 type PitchCapableElement = HTMLAudioElement & {
@@ -107,8 +108,8 @@ const ensureAudioContextRunning = async (): Promise<AudioContext> => {
 };
 
 export function routeElement(el: HTMLAudioElement): void {
-  // The graph is created lazily on the first armTransition; until then
-  // elements keep playing through the default output path.
+  // The graph is created lazily when a transition or above-unity ReplayGain
+  // needs Web Audio; otherwise elements keep the simpler default output path.
   if (!audioContext || elementChains.has(el)) return;
   const source = audioContext.createMediaElementSource(el);
   const lowShelf = audioContext.createBiquadFilter();
@@ -117,10 +118,13 @@ export function routeElement(el: HTMLAudioElement): void {
   lowShelf.gain.value = 0;
   const gain = audioContext.createGain();
   gain.gain.value = 1;
+  const levelGain = audioContext.createGain();
+  levelGain.gain.value = 1;
   source.connect(lowShelf);
   lowShelf.connect(gain);
-  gain.connect(audioContext.destination);
-  elementChains.set(el, { source, lowShelf, gain });
+  gain.connect(levelGain);
+  levelGain.connect(audioContext.destination);
+  elementChains.set(el, { source, lowShelf, transitionGain: gain, levelGain });
 }
 
 const getChain = (el: HTMLAudioElement): ElementChain | null =>
@@ -142,11 +146,33 @@ const holdParam = (param: AudioParam): void => {
 const setChainNeutral = (chain: ElementChain): void => {
   if (!audioContext) return;
   const now = audioContext.currentTime;
-  chain.gain.gain.cancelScheduledValues(now);
-  chain.gain.gain.setValueAtTime(1, now);
+  chain.transitionGain.gain.cancelScheduledValues(now);
+  chain.transitionGain.gain.setValueAtTime(1, now);
   chain.lowShelf.gain.cancelScheduledValues(now);
   chain.lowShelf.gain.setValueAtTime(0, now);
 };
+
+const updateElementLevel = (el: HTMLAudioElement, level: number): boolean => {
+  if (!audioContext) return false;
+  const chain = getChain(el);
+  if (!chain) return false;
+  const normalized = Number.isFinite(level) && level >= 0 ? level : 1;
+  const now = audioContext.currentTime;
+  chain.levelGain.gain.cancelScheduledValues(now);
+  chain.levelGain.gain.setValueAtTime(normalized, now);
+  return true;
+};
+
+export const setElementLevel = async (
+  el: HTMLAudioElement,
+  level: number,
+): Promise<void> => {
+  await ensureAudioContextRunning();
+  routeElement(el);
+  updateElementLevel(el, level);
+};
+
+export const refreshElementLevel = updateElementLevel;
 
 const waitForLoadedMetadata = (player: HTMLAudioElement, timeoutMs: number) =>
   new Promise<void>((resolve, reject) => {
@@ -216,9 +242,9 @@ const scheduleAutomation = (t: ActiveTransition, fromAClockOffset: number): void
   const outChain = getChain(t.outgoingEl);
   if (!inChain || !outChain) return;
   const automation = buildTransitionAutomation(t.plan);
-  scheduleParam(inChain.gain.gain, automation.incomingGain, fromAClockOffset);
+  scheduleParam(inChain.transitionGain.gain, automation.incomingGain, fromAClockOffset);
   scheduleParam(inChain.lowShelf.gain, automation.incomingShelf, fromAClockOffset);
-  scheduleParam(outChain.gain.gain, automation.outgoingGain, fromAClockOffset);
+  scheduleParam(outChain.transitionGain.gain, automation.outgoingGain, fromAClockOffset);
   scheduleParam(outChain.lowShelf.gain, automation.outgoingShelf, fromAClockOffset);
 };
 
@@ -230,9 +256,9 @@ const setAutomationAt = (t: ActiveTransition, offsetSec: number): void => {
   const now = audioContext.currentTime;
   const snapshot = transitionAutomationAt(t.plan, offsetSec);
   for (const [param, value] of [
-    [incoming.gain.gain, snapshot.incomingGain],
+    [incoming.transitionGain.gain, snapshot.incomingGain],
     [incoming.lowShelf.gain, snapshot.incomingShelf],
-    [outgoing.gain.gain, snapshot.outgoingGain],
+    [outgoing.transitionGain.gain, snapshot.outgoingGain],
     [outgoing.lowShelf.gain, snapshot.outgoingShelf],
   ] as const) {
     param.cancelScheduledValues(now);
@@ -421,8 +447,8 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
   const now = context.currentTime;
   const inChain = getChain(incomingEl);
   if (inChain) {
-    inChain.gain.gain.cancelScheduledValues(now);
-    inChain.gain.gain.setValueAtTime(0, now);
+    inChain.transitionGain.gain.cancelScheduledValues(now);
+    inChain.transitionGain.gain.setValueAtTime(0, now);
     inChain.lowShelf.gain.cancelScheduledValues(now);
     inChain.lowShelf.gain.setValueAtTime(
       req.plan.mode === "beatmatch" ? BASS_KILL_DB : 0,
@@ -488,13 +514,13 @@ export function cancelTransition(): void {
   // Active: quick ramp back to the outgoing deck, then park the incoming one.
   const rampEnd = audioContext.currentTime + CANCEL_RAMP_SEC;
   if (inChain) {
-    holdParam(inChain.gain.gain);
-    inChain.gain.gain.linearRampToValueAtTime(0, rampEnd);
+    holdParam(inChain.transitionGain.gain);
+    inChain.transitionGain.gain.linearRampToValueAtTime(0, rampEnd);
     holdParam(inChain.lowShelf.gain);
   }
   if (outChain) {
-    holdParam(outChain.gain.gain);
-    outChain.gain.gain.linearRampToValueAtTime(1, rampEnd);
+    holdParam(outChain.transitionGain.gain);
+    outChain.transitionGain.gain.linearRampToValueAtTime(1, rampEnd);
     holdParam(outChain.lowShelf.gain);
     outChain.lowShelf.gain.linearRampToValueAtTime(0, rampEnd);
   }
@@ -584,7 +610,7 @@ export function notifyPause(): void {
   if (!t.started || !audioContext) return;
   for (const chain of [getChain(t.incomingEl), getChain(t.outgoingEl)]) {
     if (!chain) continue;
-    holdParam(chain.gain.gain);
+    holdParam(chain.transitionGain.gain);
     holdParam(chain.lowShelf.gain);
   }
 }
@@ -617,7 +643,8 @@ export function disposeMixEngine(): void {
     try {
       chain.source.disconnect();
       chain.lowShelf.disconnect();
-      chain.gain.disconnect();
+      chain.transitionGain.disconnect();
+      chain.levelGain.disconnect();
     } catch {
       // Nodes may already be disconnected if the context is closing.
     }

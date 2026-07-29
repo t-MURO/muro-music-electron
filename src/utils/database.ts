@@ -409,6 +409,7 @@ export type LibraryBackupResult = {
       playlistFolders: number;
       playlistEntries: number;
       artworkFiles: number;
+      smartCrates: number;
     };
   };
 };
@@ -417,16 +418,19 @@ export const createLibraryBackup = (
   dbPath: string,
   destinationPath: string,
   settingsJson: string,
+  smartCratesJson: string,
 ) => invoke<LibraryBackupResult>("create_library_backup", {
   dbPath,
   destinationPath,
   settingsJson,
+  smartCratesJson,
 });
 
 export type LibraryRestoreResult = {
   archivePath: string;
   recoveryPath: string | null;
   settingsJson: string;
+  smartCratesJson: string;
   restoredArtworkFiles: number;
   manifest: LibraryBackupResult["manifest"];
 };

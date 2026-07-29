@@ -56,7 +56,12 @@ export const useInboxOperations = () => {
             count: String(result.failures.length),
           }));
         }
-        return `Accepted ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? "" : "s"} into the Library.`;
+        return t(
+          selectedTrackIds.length === 1
+            ? "history.inbox.accepted.one"
+            : "history.inbox.accepted.many",
+          { count: String(selectedTrackIds.length) },
+        );
       },
       undo: async () => {
         await unacceptTracks(resolvedDbPath, selectedTrackIds);
@@ -68,9 +73,14 @@ export const useInboxOperations = () => {
           ...current.filter((track) => !selectedTrackIds.includes(track.id)),
         ]);
         const organizedNote = organizedFileCount > 0
-          ? " Organized files remain in their current folders."
+          ? ` ${t("history.inbox.organizedFilesKept")}`
           : "";
-        return `Moved ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? "" : "s"} back to the Inbox.${organizedNote}`;
+        return `${t(
+          selectedTrackIds.length === 1
+            ? "history.inbox.returned.one"
+            : "history.inbox.returned.many",
+          { count: String(selectedTrackIds.length) },
+        )}${organizedNote}`;
       },
     };
 
@@ -105,7 +115,12 @@ export const useInboxOperations = () => {
         current.filter((track) => !selectedTrackIds.includes(track.id))
       );
       notify.info(
-        `Rejected ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? "" : "s"} from the Inbox. This action cannot be undone.`,
+        t(
+          selectedTrackIds.length === 1
+            ? "history.inbox.rejected.one"
+            : "history.inbox.rejected.many",
+          { count: String(selectedTrackIds.length) },
+        ),
       );
     } catch {
       notify.error(t("toast.inbox.rejectFailed"));

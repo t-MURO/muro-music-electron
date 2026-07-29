@@ -52,7 +52,9 @@ export const resolveGainFactor = (
     }
   }
 
-  // Boosts above unity cannot be realised through HTMLMediaElement.volume, so
-  // they are clamped rather than silently distorting the level.
-  return Math.max(0, Math.min(1, factor));
+  // Web Audio applies boosts above unity. Keep malformed or hostile tags from
+  // producing an unbounded multiplier; +24 dB is already a 15.8× increase.
+  return Number.isFinite(factor)
+    ? Math.max(0, Math.min(dbToLinear(24), factor))
+    : DEFAULT_FALLBACK_GAIN;
 };

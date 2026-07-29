@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const connections = new Map();
+const SEARCH_TEXT_VERSION = 2;
 
 const TRACK_SCHEMA = `
   CREATE TABLE IF NOT EXISTS tracks (
@@ -348,7 +349,28 @@ export const openDatabase = (dbPath) => {
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tracks_fts'")
     .get();
   db.exec(SEARCH_INDEX_SCHEMA);
-  if (!hadSearchIndex) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS app_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+  const storedSearchTextVersion = Number(
+    db.prepare("SELECT value FROM app_metadata WHERE key = 'search_text_version'").get()?.value,
+  ) || 0;
+  if (storedSearchTextVersion < SEARCH_TEXT_VERSION) {
+    const refreshAllSearchText = db.transaction(() => {
+      for (const row of db.prepare("SELECT id FROM tracks").all()) {
+        refreshSearchText(db, row.id);
+      }
+      db.prepare(`
+        INSERT INTO app_metadata(key, value) VALUES ('search_text_version', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(String(SEARCH_TEXT_VERSION));
+    });
+    refreshAllSearchText();
+    rebuildSearchIndex(db);
+  } else if (!hadSearchIndex) {
     rebuildSearchIndex(db);
   }
 
@@ -567,7 +589,7 @@ export const normalizeSearchText = (...values) =>
 export const refreshSearchText = (db, trackId) => {
   const row = db.prepare(`
     SELECT title, artist, album, album_artist, genre_json, comment_json,
-      label, filename, year, track_number, disc_number
+      label, filename, year, track_number, disc_number, key, bpm
     FROM tracks WHERE id = ?
   `).get(trackId);
   if (!row) return;
@@ -577,7 +599,7 @@ export const refreshSearchText = (db, trackId) => {
   const searchText = normalizeSearchText(
     row.title, row.artist, row.album, row.album_artist,
     parse(row.genre_json), parse(row.comment_json), row.label, row.filename,
-    row.year, row.track_number, row.disc_number
+    row.year, row.track_number, row.disc_number, row.key, row.bpm
   );
   db.prepare("UPDATE tracks SET search_text = ? WHERE id = ?").run(searchText, trackId);
 };

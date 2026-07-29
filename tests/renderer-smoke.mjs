@@ -693,6 +693,14 @@ app.whenReady().then(async () => {
       const scroller = document.querySelector('[data-track-table-scroll]');
       const headerScroller = document.querySelector('[data-track-table-header-scroll]');
       const searchShortcutHint = document.querySelector('[data-search-shortcut-hint]');
+      const waitForSelector = async (selector, attempts = 40) => {
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          const element = document.querySelector(selector);
+          if (element) return element;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return null;
+      };
       if (${settingsSmokeOnly ? "true" : "false"}) {
         if (!root?.childElementCount || !scroller) {
           return {
@@ -767,8 +775,11 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 180));
 
         window.location.hash = "#/settings";
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const searchInput = document.querySelector("[data-settings-search]");
+        let searchInput = null;
+        for (let attempt = 0; attempt < 40 && !searchInput; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          searchInput = document.querySelector("[data-settings-search]");
+        }
         const initialCategoryCount = document.querySelectorAll("[data-settings-section]").length;
         if (searchInput instanceof HTMLInputElement) {
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
@@ -1320,7 +1331,7 @@ app.whenReady().then(async () => {
           document.querySelector('[data-selection-delete]')
         );
         document.querySelector('[data-selection-edit]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector('[data-edit-track-modal]');
         const autocompleteFieldsReady = [
           ["artist", "Muro"],
           ["albumArtist", "Muro"],
@@ -2214,7 +2225,13 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => setTimeout(resolve, 60));
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
         window.location.hash = "#/settings";
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        for (
+          let attempt = 0;
+          attempt < 40 && document.querySelectorAll("[data-settings-section]").length !== 6;
+          attempt += 1
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
         const settingsNavigationReady = Boolean(
           document.querySelector("[data-settings-search]") &&
           document.querySelectorAll("[data-settings-section]").length === 6 &&
@@ -2335,7 +2352,7 @@ app.whenReady().then(async () => {
           performanceOptions.join(",") === "stable,fast,maximum" &&
           persistedAnalysisPerformance === "maximum";
         window.location.hash = "#/collection/albums";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForSelector("[data-albums-view]");
         const albumsViewReady = Boolean(document.querySelector("[data-albums-view]"));
         const albumCardCount = document.querySelectorAll("[data-album-card]").length;
         const albumSort = document.querySelector("[data-album-sort]");
@@ -2624,7 +2641,7 @@ app.whenReady().then(async () => {
           !document.querySelector('[data-collection-facet="formats"]');
 
         document.querySelector('[data-smart-crate-create]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForSelector("[data-smart-crate-modal]");
         const smartCrateModalReady = Boolean(
           document.querySelector('[data-smart-crate-modal]') &&
           document.querySelector('[data-smart-crate-rule]') &&

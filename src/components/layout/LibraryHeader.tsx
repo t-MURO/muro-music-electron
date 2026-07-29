@@ -115,7 +115,13 @@ export const LibraryHeader = ({
                 <input
                   ref={inputRef}
                   className="command-search h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] pl-9 pr-14 text-[13px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-light)]"
-                  placeholder={contentMode === "albums" ? "Search albums" : contentMode === "collections" ? "Search collection" : "Search library"}
+                  placeholder={t(
+                    contentMode === "albums"
+                      ? "search.placeholder.albums"
+                      : contentMode === "collections"
+                        ? "search.placeholder.collection"
+                        : "search.placeholder.library",
+                  )}
                   value={searchQuery}
                   onChange={(event) => onSearchChange(event.target.value)}
                 />
@@ -135,8 +141,8 @@ export const LibraryHeader = ({
                   <button
                     className={`toolbar-icon-button relative h-9 w-9 border ${filterOpen || activeFilterCount > 0 ? "border-[var(--color-accent)] bg-[var(--color-accent-light)] text-[var(--color-accent)]" : "border-[var(--color-border)] bg-[var(--color-bg-primary)]"}`}
                     onClick={() => setFilterOpen((value) => !value)}
-                    title="Advanced filters"
-                    aria-label="Advanced filters"
+                    title={t("filters.title")}
+                    aria-label={t("filters.title")}
                     aria-expanded={filterOpen}
                     aria-haspopup="dialog"
                     data-advanced-filter-button
@@ -162,8 +168,8 @@ export const LibraryHeader = ({
               )}
             </div>
             {contentMode === "tracks" && <div className="library-view-toggle">
-              <button className="toolbar-icon-button toolbar-view-button" onClick={onShowColumns} title="Choose visible columns" aria-label="Choose visible columns" data-library-columns type="button"><LayoutGrid className="h-4 w-4" /></button>
-              <button className={`toolbar-icon-button ${compactTable ? "toolbar-view-button" : ""}`} onClick={() => setCompactTable((value) => !value)} title="Toggle compact table" aria-label="Toggle compact table" aria-pressed={compactTable} type="button"><List className="h-4 w-4" /></button>
+              <button className="toolbar-icon-button toolbar-view-button" onClick={onShowColumns} title={t("columns.choose")} aria-label={t("columns.choose")} data-library-columns type="button"><LayoutGrid className="h-4 w-4" /></button>
+              <button className={`toolbar-icon-button ${compactTable ? "toolbar-view-button" : ""}`} onClick={() => setCompactTable((value) => !value)} title={t("table.compact.toggle")} aria-label={t("table.compact.toggle")} aria-pressed={compactTable} type="button"><List className="h-4 w-4" /></button>
             </div>}
           </>
         )}

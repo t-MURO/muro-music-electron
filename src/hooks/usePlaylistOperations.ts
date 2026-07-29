@@ -55,7 +55,7 @@ export const usePlaylistOperations = ({
               playlist.id === playlistId ? { ...playlist, name: nextName } : playlist
             )
           );
-          return `Renamed playlist "${previousName}" to "${nextName}".`;
+          return t("history.playlist.renamed", { previousName, nextName });
         },
         undo: async () => {
           await updatePlaylist(resolvedDbPath, playlistId, { name: previousName });
@@ -66,7 +66,7 @@ export const usePlaylistOperations = ({
                 : playlist
             )
           );
-          return `Renamed playlist "${nextName}" back to "${previousName}".`;
+          return t("history.playlist.renameUndone", { previousName, nextName });
         },
       };
 
@@ -97,7 +97,10 @@ export const usePlaylistOperations = ({
         do: async () => {
           const result = await deletePlaylists(resolvedDbPath, [...ids]);
           if (result.deleted !== removed.length) {
-            throw new Error(`Only ${result.deleted} of ${removed.length} playlists were deleted`);
+            throw new Error(t("history.playlist.deletePartial", {
+              actual: String(result.deleted),
+              expected: String(removed.length),
+            }));
           }
           setPlaylists((current) =>
             current.filter((playlist) => !ids.has(playlist.id))
@@ -105,7 +108,12 @@ export const usePlaylistOperations = ({
           if (wasOnDeletedPlaylist) {
             navigateToView("library");
           }
-          return `Deleted ${removed.length} playlist${removed.length === 1 ? "" : "s"}.`;
+          return t(
+            removed.length === 1
+              ? "history.playlist.deleted.one"
+              : "history.playlist.deleted.many",
+            { count: String(removed.length) },
+          );
         },
         undo: async () => {
           const result = await restorePlaylists(
@@ -113,7 +121,10 @@ export const usePlaylistOperations = ({
             removed.map(({ playlist }) => playlist),
           );
           if (result.restored !== removed.length) {
-            throw new Error(`Only ${result.restored} of ${removed.length} playlists were restored`);
+            throw new Error(t("history.playlist.restorePartial", {
+              actual: String(result.restored),
+              expected: String(removed.length),
+            }));
           }
           setPlaylists((current) => {
             const next = [...current];
@@ -129,7 +140,12 @@ export const usePlaylistOperations = ({
             (total, entry) => total + entry.playlist.trackIds.length,
             0,
           );
-          return `Restored ${removed.length} playlist${removed.length === 1 ? "" : "s"} with ${restoredTracks} track entr${restoredTracks === 1 ? "y" : "ies"}.`;
+          return t(
+            removed.length === 1
+              ? "history.playlist.restored.one"
+              : "history.playlist.restored.many",
+            { count: String(removed.length), tracks: String(restoredTracks) },
+          );
         },
       };
 
@@ -175,14 +191,24 @@ export const usePlaylistOperations = ({
             setPlaylists((current) => current.map((item) =>
               item.id === playlistId ? { ...item, trackIds: nextIds } : item
             ));
-            return `Removed ${removedCount} track${removedCount === 1 ? "" : "s"} from "${playlist.name}".`;
+            return t(
+              removedCount === 1
+                ? "history.playlist.removed.one"
+                : "history.playlist.removed.many",
+              { count: String(removedCount), name: playlist.name },
+            );
           },
           undo: async () => {
             await setPlaylistTracks(resolvedDbPath, playlistId, previousIds);
             setPlaylists((current) => current.map((item) =>
               item.id === playlistId ? { ...item, trackIds: previousIds } : item
             ));
-            return `Restored ${removedCount} track${removedCount === 1 ? "" : "s"} to "${playlist.name}".`;
+            return t(
+              removedCount === 1
+                ? "history.playlist.tracksRestored.one"
+                : "history.playlist.tracksRestored.many",
+              { count: String(removedCount), name: playlist.name },
+            );
           },
         });
       } catch {

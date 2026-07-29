@@ -567,8 +567,8 @@ export const createBackend = ({
     load_tracks: ({ dbPath }) => loadTracks(dbPath),
     load_playlists: ({ dbPath }) => loadPlaylists(dbPath),
     load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
-    create_library_backup: ({ dbPath, destinationPath, settingsJson }) =>
-      createLibraryBackup({ dbPath, destinationPath, settingsJson }),
+    create_library_backup: ({ dbPath, destinationPath, settingsJson, smartCratesJson }) =>
+      createLibraryBackup({ dbPath, destinationPath, settingsJson, smartCratesJson }),
     restore_library_backup: ({ dbPath, archivePath }) =>
       restoreLibraryBackup({
         dbPath,

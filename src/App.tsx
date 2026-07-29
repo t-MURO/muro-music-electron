@@ -1,17 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useLocation, useNavigate, useMatch } from "react-router-dom";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { useLocation, useNavigate, useMatch } from "react-router";
 import {
   AppLayout,
   QueuePanel,
   LibraryHeader,
   PlayerBar,
-  SettingsPanel,
   Sidebar,
   WindowChrome,
   ColumnsMenu,
   InboxBanner,
   TrackSelectionBar,
-  AlbumsView,
   ArtistDetailPanel,
   ArtistIndexView,
   buildArtistIndexItems,
@@ -22,9 +29,7 @@ import {
   DeleteTracksModal,
   DragOverlay,
   PlaylistContextMenu,
-  AnalysisModal,
   DuplicateTracksModal,
-  EditTrackModal,
   MetadataSearchModal,
   AlbumMetadataSearchModal,
   AcoustIdModal,
@@ -32,12 +37,10 @@ import {
   ArtistSeparatorReviewModal,
   PlaylistCreateModal,
   PlaylistEditModal,
-  SmartCrateModal,
   ShortcutHelpModal,
   ToastContainer,
   GlobalButtonTooltips,
   CommandPalette,
-  ListeningStatisticsView,
 } from "./components";
 import {
   useFileImport,
@@ -112,6 +115,31 @@ type ArtistSeparatorReviewSession = {
   completed: number;
   applied: number;
 };
+
+const SettingsPanel = lazy(() =>
+  import("./components/layout/SettingsPanel").then((module) => ({
+    default: module.SettingsPanel,
+  })));
+const ListeningStatisticsView = lazy(() =>
+  import("./components/library/ListeningStatisticsView").then((module) => ({
+    default: module.ListeningStatisticsView,
+  })));
+const AlbumsView = lazy(() =>
+  import("./components/library/AlbumsView").then((module) => ({
+    default: module.AlbumsView,
+  })));
+const AnalysisModal = lazy(() =>
+  import("./components/ui/AnalysisModal").then((module) => ({
+    default: module.AnalysisModal,
+  })));
+const EditTrackModal = lazy(() =>
+  import("./components/ui/EditTrackModal").then((module) => ({
+    default: module.EditTrackModal,
+  })));
+const SmartCrateModal = lazy(() =>
+  import("./components/ui/SmartCrateModal").then((module) => ({
+    default: module.SmartCrateModal,
+  })));
 
 const shuffleTrackIds = (trackIds: string[]) => {
   const shuffled = [...trackIds];
@@ -1690,12 +1718,16 @@ function App() {
         placeholder="Folder name"
         submitLabel="Save"
       />
-      <SmartCrateModal
-        isOpen={isSmartCrateModalOpen}
-        crate={editingSmartCrate}
-        onClose={handleCloseSmartCrateModal}
-        onSave={handleSaveSmartCrate}
-      />
+      {isSmartCrateModalOpen && (
+        <Suspense fallback={null}>
+          <SmartCrateModal
+            isOpen
+            crate={editingSmartCrate}
+            onClose={handleCloseSmartCrateModal}
+            onSave={handleSaveSmartCrate}
+          />
+        </Suspense>
+      )}
       <DuplicateTracksModal
         isOpen={pendingPlaylistDrop !== null}
         duplicateTracks={
@@ -1716,27 +1748,35 @@ function App() {
         onRemoveFromLibrary={removePendingFromLibrary}
         onDeleteFromDisk={deletePendingFromDisk}
       />
-      <AnalysisModal
-        isOpen={isAnalysisModalOpen}
-        isMinimized={isAnalysisModalMinimized}
-        tracks={analysisTracks}
-        dbPath={dbPath}
-        onClose={closeAnalysisModal}
-        onMinimize={minimizeAnalysisModal}
-        onRestore={restoreAnalysisModal}
-        onAnalysisComplete={handleAnalysisComplete}
-      />
-      <EditTrackModal
-        isOpen={isEditModalOpen}
-        libraryTracks={allTracks}
-        tracks={editTrackIds
-          .map((id) => allTracks.find((t) => t.id === id))
-          .filter((t): t is Track => t !== undefined)}
-        onClose={closeEditModal}
-        onSave={handleSaveMetadata}
-        onFetchCoverArt={handleFetchCoverArt}
-        onCacheCoverCandidate={handleCacheCoverCandidate}
-      />
+      {isAnalysisModalOpen && (
+        <Suspense fallback={null}>
+          <AnalysisModal
+            isOpen
+            isMinimized={isAnalysisModalMinimized}
+            tracks={analysisTracks}
+            dbPath={dbPath}
+            onClose={closeAnalysisModal}
+            onMinimize={minimizeAnalysisModal}
+            onRestore={restoreAnalysisModal}
+            onAnalysisComplete={handleAnalysisComplete}
+          />
+        </Suspense>
+      )}
+      {isEditModalOpen && (
+        <Suspense fallback={null}>
+          <EditTrackModal
+            isOpen
+            libraryTracks={allTracks}
+            tracks={editTrackIds
+              .map((id) => allTracks.find((t) => t.id === id))
+              .filter((t): t is Track => t !== undefined)}
+            onClose={closeEditModal}
+            onSave={handleSaveMetadata}
+            onFetchCoverArt={handleFetchCoverArt}
+            onCacheCoverCandidate={handleCacheCoverCandidate}
+          />
+        </Suspense>
+      )}
       <MetadataSearchModal
         track={metadataSearchTrack}
         onClose={() => setMetadataSearchTrackId(null)}
@@ -1935,36 +1975,40 @@ function App() {
                 )}
                 <section className="flex min-h-0 flex-1 flex-col bg-[var(--color-bg-primary)]">
                   {viewConfig.type === "settings" ? (
-                    <SettingsPanel
-                      theme={theme}
-                      locale={locale}
-                      themes={themes}
-                      localeOptions={localeOptions}
-                      dbPath={dbPath}
-                      dbFileName={dbFileName}
-                      backfillPending={backfillPending}
-                      backfillStatus={backfillStatus}
-                      coverArtBackfillPending={coverArtBackfillPending}
-                      coverArtBackfillStatus={coverArtBackfillStatus}
-                      artistSeparatorCandidateCount={artistSeparatorCandidates.length}
-                      organizedLibraryExportPending={organizedLibraryExportPending}
-                      organizedLibraryExportStatus={organizedLibraryExportStatus}
-                      clearSongsPending={clearSongsPending}
-                      seekMode={seekMode}
-                      onThemeChange={setTheme}
-                      onLocaleChange={setLocale}
-                      onSeekModeChange={setSeekMode}
-                      onDbPathChange={setDbPath}
-                      onDbFileNameChange={setDbFileName}
-                      onBackfillSearchText={handleBackfillSearchText}
-                      onBackfillCoverArt={handleBackfillCoverArt}
-                      onReviewArtistSeparators={handleOpenArtistSeparatorReview}
-                      onExportOrganizedLibrary={handleExportOrganizedLibrary}
-                      onClearSongs={handleClearSongs}
-                      onUseDefaultLocation={() => setUseAutoDbPath(true)}
-                    />
+                    <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
+                      <SettingsPanel
+                        theme={theme}
+                        locale={locale}
+                        themes={themes}
+                        localeOptions={localeOptions}
+                        dbPath={dbPath}
+                        dbFileName={dbFileName}
+                        backfillPending={backfillPending}
+                        backfillStatus={backfillStatus}
+                        coverArtBackfillPending={coverArtBackfillPending}
+                        coverArtBackfillStatus={coverArtBackfillStatus}
+                        artistSeparatorCandidateCount={artistSeparatorCandidates.length}
+                        organizedLibraryExportPending={organizedLibraryExportPending}
+                        organizedLibraryExportStatus={organizedLibraryExportStatus}
+                        clearSongsPending={clearSongsPending}
+                        seekMode={seekMode}
+                        onThemeChange={setTheme}
+                        onLocaleChange={setLocale}
+                        onSeekModeChange={setSeekMode}
+                        onDbPathChange={setDbPath}
+                        onDbFileNameChange={setDbFileName}
+                        onBackfillSearchText={handleBackfillSearchText}
+                        onBackfillCoverArt={handleBackfillCoverArt}
+                        onReviewArtistSeparators={handleOpenArtistSeparatorReview}
+                        onExportOrganizedLibrary={handleExportOrganizedLibrary}
+                        onClearSongs={handleClearSongs}
+                        onUseDefaultLocation={() => setUseAutoDbPath(true)}
+                      />
+                    </Suspense>
                   ) : viewConfig.type === "statistics" ? (
-                    <ListeningStatisticsView dbPath={dbPath} />
+                    <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
+                      <ListeningStatisticsView dbPath={dbPath} />
+                    </Suspense>
                   ) : isArtistIndex ? (
                     <ArtistIndexView
                       items={artistIndexResults}
@@ -1978,25 +2022,27 @@ function App() {
                       onSelect={(value) => handleOpenCollectionValue(collectionIndexFacet, value)}
                     />
                   ) : isAlbumsView ? (
-                    <AlbumsView
-                      albums={albums}
-                      searchQuery={searchQuery}
-                      selectedAlbumId={selectedAlbumId}
-                      currentTrackId={currentTrack?.id ?? null}
-                      isPlaying={isPlaying}
-                      onSelectAlbum={handleSelectAlbum}
-                      onPlayTrack={handlePlayAlbumTrack}
-                      onPlayAlbum={handlePlayAlbum}
-                      onTogglePlay={togglePlay}
-                      onPlayNext={playNext}
-                      onAddToQueue={addToQueue}
-                      onOpenArtist={(artist) => handleOpenCollectionValue("artists", artist)}
-                      onOpenGenre={(genre) => handleOpenCollectionValue("genres", genre)}
-                      onTracksContextMenu={handleAlbumTracksContextMenu}
-                      onImportFiles={handleEmptyImport}
-                      onImportFolder={handleEmptyImportFolder}
-                      revealRequest={revealTrackRequest}
-                    />
+                    <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
+                      <AlbumsView
+                        albums={albums}
+                        searchQuery={searchQuery}
+                        selectedAlbumId={selectedAlbumId}
+                        currentTrackId={currentTrack?.id ?? null}
+                        isPlaying={isPlaying}
+                        onSelectAlbum={handleSelectAlbum}
+                        onPlayTrack={handlePlayAlbumTrack}
+                        onPlayAlbum={handlePlayAlbum}
+                        onTogglePlay={togglePlay}
+                        onPlayNext={playNext}
+                        onAddToQueue={addToQueue}
+                        onOpenArtist={(artist) => handleOpenCollectionValue("artists", artist)}
+                        onOpenGenre={(genre) => handleOpenCollectionValue("genres", genre)}
+                        onTracksContextMenu={handleAlbumTracksContextMenu}
+                        onImportFiles={handleEmptyImport}
+                        onImportFolder={handleEmptyImportFolder}
+                        revealRequest={revealTrackRequest}
+                      />
+                    </Suspense>
                   ) : (
                     viewConfig.trackTable && (
                       <>

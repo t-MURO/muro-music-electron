@@ -66,7 +66,7 @@ export const useFileImport = ({
       const previousSet = new Set(previousIds);
       const novelIds = [...new Set(payload)].filter((trackId) => !previousSet.has(trackId));
       if (novelIds.length === 0) {
-        notify.info(`No tracks were added to "${playlist.name}" because they were already present.`);
+        notify.info(t("history.playlist.noneAdded", { name: playlist.name }));
         return;
       }
       const nextIds = [...previousIds, ...novelIds];
@@ -80,7 +80,12 @@ export const useFileImport = ({
               p.id === playlistId ? { ...p, trackIds: nextIds } : p
             )
           );
-          return `Added ${novelIds.length} track${novelIds.length === 1 ? "" : "s"} to "${playlist.name}".`;
+          return t(
+            novelIds.length === 1
+              ? "history.playlist.added.one"
+              : "history.playlist.added.many",
+            { count: String(novelIds.length), name: playlist.name },
+          );
         },
         undo: async () => {
           await setPlaylistTracks(resolvedDbPath, playlistId, previousIds);
@@ -89,7 +94,12 @@ export const useFileImport = ({
               p.id === playlistId ? { ...p, trackIds: previousIds } : p
             )
           );
-          return `Restored "${playlist.name}" to its previous ${previousIds.length} track${previousIds.length === 1 ? "" : "s"}.`;
+          return t(
+            previousIds.length === 1
+              ? "history.playlist.restoredCount.one"
+              : "history.playlist.restoredCount.many",
+            { count: String(previousIds.length), name: playlist.name },
+          );
         },
       };
 
@@ -208,24 +218,34 @@ export const useFileImport = ({
               redoResult.failures.length > 0
               || redoResult.imported.length !== importedSourcePaths.length
             ) {
-              throw new Error("The imported tracks could not all be restored");
+              throw new Error(t("history.import.restoreFailed"));
             }
             currentImported = redoResult.imported;
             convertedTracks = currentImported.map(importedTrackToTrack);
             setInboxTracks((current) => [...convertedTracks, ...current]);
-            return `Re-imported ${currentImported.length} track${currentImported.length === 1 ? "" : "s"} into the Inbox.`;
+            return t(
+              currentImported.length === 1
+                ? "history.import.redone.one"
+                : "history.import.redone.many",
+              { count: String(currentImported.length) },
+            );
           },
           undo: async () => {
             const ids = currentImported.map((track) => track.id);
             const result = await deleteTracks(resolvedDbPath, ids, false);
             if (result.failures.length > 0 || result.deletedTrackIds.length !== ids.length) {
-              throw new Error("The imported tracks could not all be removed");
+              throw new Error(t("history.import.removeFailed"));
             }
             const deletedIds = new Set(result.deletedTrackIds);
             setInboxTracks((current) =>
               current.filter((track) => !deletedIds.has(track.id))
             );
-            return `Removed ${deletedIds.size} imported track${deletedIds.size === 1 ? "" : "s"} from Muro. The audio files were kept.`;
+            return t(
+              deletedIds.size === 1
+                ? "history.import.undone.one"
+                : "history.import.undone.many",
+              { count: String(deletedIds.size) },
+            );
           },
         };
         setInboxTracks((current) => [...convertedTracks, ...current]);
@@ -287,14 +307,14 @@ export const useFileImport = ({
             playlist.sortOrder,
           );
           setPlaylists((current) => [...current, playlist]);
-          return `Created playlist "${playlist.name}".`;
+          return t("history.playlist.created", { name: playlist.name });
         },
         undo: async () => {
           await deletePlaylist(resolvedDbPath, playlist.id);
           setPlaylists((current) =>
             current.filter((item) => item.id !== playlist.id)
           );
-          return `Deleted the newly created playlist "${playlist.name}".`;
+          return t("history.playlist.undidCreate", { name: playlist.name });
         },
       };
 

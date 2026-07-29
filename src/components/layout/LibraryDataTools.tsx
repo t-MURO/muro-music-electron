@@ -21,6 +21,14 @@ import {
 } from "../../utils";
 import { notify, useLibraryStore } from "../../stores";
 
+const SENSITIVE_SETTING_KEYS = [
+  "lastFmApiKey",
+  "theAudioDbApiKey",
+  "fanartApiKey",
+  "braveSearchApiKey",
+  "acoustIdClientKey",
+] as const;
+
 const buttonClass =
   "rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-[12px] font-semibold text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-50";
 const primaryButtonClass =
@@ -116,6 +124,7 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
       dbPath,
       destinationPath,
       window.localStorage.getItem("muro-settings") ?? "",
+      window.localStorage.getItem("muro-smart-crates") ?? "",
     );
     setStatus(
       `Backup created: ${result.manifest.counts.tracks.toLocaleString()} tracks, `
@@ -140,10 +149,21 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
     if (result.settingsJson) {
       const restored = JSON.parse(result.settingsJson);
       if (restored?.state && typeof restored.state === "object") {
+        const current = JSON.parse(window.localStorage.getItem("muro-settings") ?? "{}");
+        const currentState = current?.state && typeof current.state === "object"
+          ? current.state
+          : {};
+        restored.state = { ...currentState, ...restored.state };
+        for (const key of SENSITIVE_SETTING_KEYS) {
+          restored.state[key] = currentState[key] ?? "";
+        }
         restored.state.dbPath = dbPath;
         restored.state.useAutoDbPath = false;
         window.localStorage.setItem("muro-settings", JSON.stringify(restored));
       }
+    }
+    if (result.smartCratesJson) {
+      window.localStorage.setItem("muro-smart-crates", result.smartCratesJson);
     }
     window.location.reload();
   });
@@ -173,8 +193,9 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
           Backup and restore
         </h4>
         <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
-          A .murobackup archive contains a consistent SQLite snapshot, playlists, settings,
-          artwork selections and files, plus a versioned manifest. Music files are not copied.
+          A .murobackup archive contains a consistent SQLite snapshot, playlists, Smart Crates,
+          non-secret settings, artwork selections and files, plus a versioned manifest. API keys
+          and music files are not copied.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button className={primaryButtonClass} disabled={busy || !dbPath} onClick={handleBackup} type="button">

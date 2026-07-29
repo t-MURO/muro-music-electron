@@ -6,6 +6,7 @@ import { createBackend } from "./backend.mjs";
 import { createLocalFileResponse } from "./fileProtocol.mjs";
 import { createKeyFinderService } from "./keyfinder.mjs";
 import { registerMediaShortcuts } from "./mediaShortcuts.mjs";
+import { createTrustedRendererUrlCheck } from "./rendererSecurity.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
@@ -18,6 +19,7 @@ const developmentKeyFinderBinaries = [
   path.resolve(appRoot, "../neo-keyfinder/src-tauri/binaries"),
   path.resolve(appRoot, "../neo-key-finder/neo-keyfinder/src-tauri/binaries"),
 ].filter(Boolean);
+const productionRendererPath = path.join(appRoot, "dist", "index.html");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -35,6 +37,28 @@ protocol.registerSchemesAsPrivileged([
 let mainWindow = null;
 let backend = null;
 let mediaShortcutRegistration = null;
+
+const isTrustedRendererUrl = createTrustedRendererUrlCheck({
+  developmentUrl: process.env.MURO_DEV_URL,
+  productionRendererPath,
+});
+
+const assertTrustedRenderer = (event) => {
+  if (
+    !event.senderFrame
+    || event.senderFrame !== event.sender.mainFrame
+    || !isTrustedRendererUrl(event.senderFrame.url)
+  ) {
+    throw new Error("IPC request was not sent by the trusted application renderer");
+  }
+};
+
+const registerTrustedHandler = (channel, listener) => {
+  ipcMain.handle(channel, (event, ...args) => {
+    assertTrustedRenderer(event);
+    return listener(event, ...args);
+  });
+};
 
 const unregisterApplicationMediaShortcuts = () => {
   mediaShortcutRegistration?.unregister();
@@ -70,6 +94,10 @@ const createWindow = async () => {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      webviewTag: false,
+      navigateOnDragDrop: false,
     },
   });
   const createdWindow = mainWindow;
@@ -89,11 +117,22 @@ const createWindow = async () => {
   mainWindow.on("unmaximize", emitWindowState);
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-attach-webview", (event) => event.preventDefault());
+  mainWindow.webContents.on("will-navigate", (event, targetUrl) => {
+    if (!isTrustedRendererUrl(targetUrl)) event.preventDefault();
+  });
+  mainWindow.webContents.on("will-redirect", (event, targetUrl) => {
+    if (!isTrustedRendererUrl(targetUrl)) event.preventDefault();
+  });
+  mainWindow.webContents.session.setPermissionCheckHandler(() => false);
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
+    callback(false);
+  });
 
   if (process.env.MURO_DEV_URL) {
     await mainWindow.loadURL(process.env.MURO_DEV_URL);
   } else {
-    await mainWindow.loadFile(path.join(appRoot, "dist", "index.html"));
+    await mainWindow.loadFile(productionRendererPath);
   }
   registerApplicationMediaShortcuts();
 };
@@ -132,27 +171,27 @@ const startApplication = async () => {
       : [path.join(appRoot, "build", "fpcalc")],
   });
 
-  ipcMain.handle("muro:invoke", (event, command, args) =>
+  registerTrustedHandler("muro:invoke", (event, command, args) =>
     backend.invoke(command, args ?? {}, event.sender)
   );
-  ipcMain.handle("muro:app-data-dir", () => app.getPath("userData"));
-  ipcMain.handle("muro:clipboard-has-image", () => !clipboard.readImage().isEmpty());
-  ipcMain.handle("muro:cache-clipboard-cover-art", () => {
+  registerTrustedHandler("muro:app-data-dir", () => app.getPath("userData"));
+  registerTrustedHandler("muro:clipboard-has-image", () => !clipboard.readImage().isEmpty());
+  registerTrustedHandler("muro:cache-clipboard-cover-art", () => {
     const image = clipboard.readImage();
     if (image.isEmpty()) return null;
     return backend.invoke("cache_cover_art_from_bytes", { bytes: image.toPNG() });
   });
-  ipcMain.handle("muro:copy-image-to-clipboard", (_event, filePath) => {
+  registerTrustedHandler("muro:copy-image-to-clipboard", (_event, filePath) => {
     const image = nativeImage.createFromPath(String(filePath ?? ""));
     if (image.isEmpty()) throw new Error("The cover art could not be read");
     clipboard.writeImage(image);
     return true;
   });
-  ipcMain.handle("muro:window-is-maximized", (event) => {
+  registerTrustedHandler("muro:window-is-maximized", (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     return window?.isMaximized() ?? false;
   });
-  ipcMain.handle("muro:window-control", (event, action) => {
+  registerTrustedHandler("muro:window-control", (event, action) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) return false;
 
@@ -171,7 +210,7 @@ const startApplication = async () => {
         throw new Error(`Unsupported window control action: ${String(action)}`);
     }
   });
-  ipcMain.handle("muro:open-dialog", async (_event, options) => {
+  registerTrustedHandler("muro:open-dialog", async (_event, options) => {
     const properties = [];
     if (options.directory) properties.push("openDirectory");
     else properties.push("openFile");
@@ -183,7 +222,7 @@ const startApplication = async () => {
     if (result.canceled || result.filePaths.length === 0) return null;
     return options.multiple ? result.filePaths : result.filePaths[0];
   });
-  ipcMain.handle("muro:save-dialog", async (_event, options) => {
+  registerTrustedHandler("muro:save-dialog", async (_event, options) => {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: typeof options.title === "string" ? options.title : undefined,
       defaultPath: typeof options.defaultPath === "string" ? options.defaultPath : undefined,
@@ -191,7 +230,7 @@ const startApplication = async () => {
     });
     return result.canceled || !result.filePath ? null : result.filePath;
   });
-  ipcMain.handle("muro:open-external", async (_event, value) => {
+  registerTrustedHandler("muro:open-external", async (_event, value) => {
     const url = new URL(String(value));
     const allowedHost = url.hostname === "musicbrainz.org"
       || url.hostname.endsWith(".wikipedia.org")
@@ -209,14 +248,14 @@ const startApplication = async () => {
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
     await shell.openExternal(url.toString());
   });
-  ipcMain.handle("muro:show-item-in-folder", (_event, value) => {
+  registerTrustedHandler("muro:show-item-in-folder", (_event, value) => {
     const filePath = String(value || "");
     if (!path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
       throw new Error("Track source file does not exist");
     }
     shell.showItemInFolder(path.normalize(filePath));
   });
-  ipcMain.handle("muro:confirm-dialog", async (_event, message, options) => {
+  registerTrustedHandler("muro:confirm-dialog", async (_event, message, options) => {
     const result = await dialog.showMessageBox(mainWindow, {
       type: options.kind === "warning" ? "warning" : "question",
       title: typeof options.title === "string" ? options.title : "Muro Music",
@@ -229,6 +268,11 @@ const startApplication = async () => {
     return result.response === 1;
   });
   ipcMain.on("muro:native-drag", (event, payload) => {
+    try {
+      assertTrustedRenderer(event);
+    } catch {
+      return;
+    }
     event.sender.send("muro:event", "muro://native-drag", payload);
   });
 

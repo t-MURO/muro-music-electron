@@ -32,6 +32,10 @@ const MIME_TYPES = new Map([
   [".webp", "image/webp"],
 ]);
 
+export const isSupportedLocalMediaPath = (filePath) =>
+  path.isAbsolute(filePath)
+  && MIME_TYPES.has(path.extname(filePath).toLowerCase());
+
 const readAt = async (fileHandle, position, length) => {
   const buffer = Buffer.alloc(length);
   const { bytesRead } = await fileHandle.read(buffer, 0, length, position);
@@ -285,6 +289,13 @@ const createSegmentedReadStream = (filePath, segments) => Readable.from((async f
 })());
 
 export const createLocalFileResponse = async (request, filePath) => {
+  if (!isSupportedLocalMediaPath(filePath)) {
+    return new Response("Unsupported local media type", {
+      status: 415,
+      headers: corsHeaders,
+    });
+  }
+
   let fileStats;
   try {
     fileStats = await fs.promises.stat(filePath);

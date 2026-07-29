@@ -45,6 +45,8 @@ let currentTrack: CurrentTrack | null = null;
 let durationHint = 0;
 let seekMode = "accurate";
 let mediaSessionConfigured = false;
+let mediaSessionArtworkUrl: string | null = null;
+let mediaSessionArtworkRequest = 0;
 let playbackOperationChain: Promise<unknown> = Promise.resolve();
 
 // ---------------------------------------------------------------------------
@@ -75,13 +77,29 @@ let handoffInFlight = false;
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
-/**
- * HTMLMediaElement.volume is capped at 1, so a positive ReplayGain adjustment
- * (a track quieter than the reference level) can only be applied up to unity.
- * Attenuation — which is what most modern masters need — is exact.
- */
 const applyElementVolume = (element: HTMLAudioElement, gainFactor: number) => {
+  if (mix.refreshElementLevel(element, gainFactor)) {
+    element.volume = masterVolume;
+    return;
+  }
+  // Before the Web Audio route has been prepared, retain a safe direct-output
+  // fallback. Values above unity are clamped until routing can be prepared.
   element.volume = clamp01(masterVolume * gainFactor);
+};
+
+const prepareElementVolume = async (
+  element: HTMLAudioElement,
+  gainFactor: number,
+) => {
+  if (gainFactor > 1 && !mix.refreshElementLevel(element, gainFactor)) {
+    try {
+      await mix.setElementLevel(element, gainFactor);
+    } catch {
+      // Playback must still work if Web Audio is unavailable. The direct path
+      // below safely clamps the boost rather than failing the whole track.
+    }
+  }
+  applyElementVolume(element, gainFactor);
 };
 
 const applyCurrentVolume = () => {
@@ -214,18 +232,47 @@ const seekPlayer = async (player: HTMLAudioElement, requestedPosition: number) =
 
 const setMediaSessionMetadata = (track: CurrentTrack | null) => {
   if (!("mediaSession" in navigator) || typeof MediaMetadata === "undefined") return;
+  const requestId = ++mediaSessionArtworkRequest;
+  if (mediaSessionArtworkUrl) {
+    URL.revokeObjectURL(mediaSessionArtworkUrl);
+    mediaSessionArtworkUrl = null;
+  }
   if (!track) {
     navigator.mediaSession.metadata = null;
     return;
   }
 
   const coverPath = track.cover_art_path || track.cover_art_thumb_path;
-  navigator.mediaSession.metadata = new MediaMetadata({
+  const metadata = {
     title: track.title,
     artist: track.artist,
     album: track.album,
-    artwork: coverPath ? [{ src: convertFileSrc(coverPath) }] : undefined,
-  });
+  };
+  navigator.mediaSession.metadata = new MediaMetadata(metadata);
+  if (!coverPath) return;
+
+  // Chromium's Media Session implementation rejects custom URL schemes even
+  // when they are secure. Convert cached local artwork into a blob URL and
+  // discard stale responses if playback changes while the file is loading.
+  void fetch(convertFileSrc(coverPath))
+    .then((response) => {
+      if (!response.ok) throw new Error("Artwork could not be read");
+      return response.blob();
+    })
+    .then((blob) => {
+      if (!blob.type.startsWith("image/")) return;
+      const artworkUrl = URL.createObjectURL(blob);
+      if (requestId !== mediaSessionArtworkRequest || currentTrack?.id !== track.id) {
+        URL.revokeObjectURL(artworkUrl);
+        return;
+      }
+      mediaSessionArtworkUrl = artworkUrl;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        ...metadata,
+        artwork: [{ src: artworkUrl, type: blob.type }],
+      });
+    })
+    .catch(() => undefined);
 };
 
 const emitMediaSessionControl = (action: MediaControlPayload["action"]) => {
@@ -545,9 +592,9 @@ const playbackInvoke = async <T>(
       durationHint = Number(args.durationHint) || 0;
       currentGainFactor = Number(args.gainFactor) > 0 ? Number(args.gainFactor) : 1;
       setMediaSessionMetadata(currentTrack);
+      await prepareElementVolume(player, currentGainFactor);
       player.src = convertFileSrc(currentTrack.source_path);
       player.currentTime = 0;
-      applyElementVolume(player, currentGainFactor);
       emitState();
       await playWithTimeout(player, PLAYBACK_START_TIMEOUT_MS, "Track playback");
       return undefined as T;
@@ -576,6 +623,8 @@ const playbackInvoke = async <T>(
 
       discardPreload();
       const element = ensureIdleElement();
+      const nextGainFactor = Number(track.gainFactor) > 0 ? Number(track.gainFactor) : 1;
+      await prepareElementVolume(element, nextGainFactor);
       element.src = convertFileSrc(String(track.sourcePath));
       element.currentTime = 0;
       element.load();
@@ -590,7 +639,7 @@ const playbackInvoke = async <T>(
           cover_art_thumb_path: track.coverArtThumbPath,
         },
         durationHint: Number(track.durationHint) || 0,
-        gainFactor: Number(track.gainFactor) > 0 ? Number(track.gainFactor) : 1,
+        gainFactor: nextGainFactor,
       };
       return undefined as T;
     }
@@ -606,7 +655,7 @@ const playbackInvoke = async <T>(
       return undefined as T;
     case "playback_set_track_gain":
       currentGainFactor = Number(args.gainFactor) > 0 ? Number(args.gainFactor) : 1;
-      applyCurrentVolume();
+      await prepareElementVolume(player, currentGainFactor);
       emitState();
       return undefined as T;
     case "playback_toggle":
@@ -712,13 +761,18 @@ const playbackInvoke = async <T>(
         durationHint: number;
         coverArtPath?: string;
         coverArtThumbPath?: string;
+        gainFactor?: number;
       };
       const plan = args.plan as TransitionPlan;
       if (!idleEl) {
         idleEl = createAudioElement("auto");
       }
-      idleEl.volume = masterVolume;
       const incomingEl = idleEl;
+      const incomingGainFactor = Number(track.gainFactor) > 0
+        ? Number(track.gainFactor)
+        : 1;
+      await mix.setElementLevel(incomingEl, incomingGainFactor);
+      applyElementVolume(incomingEl, incomingGainFactor);
       const fromId = currentTrack.id;
       await mix.armTransition({
         plan,
@@ -749,6 +803,7 @@ const playbackInvoke = async <T>(
               cover_art_thumb_path: track.coverArtThumbPath,
             };
             durationHint = Number(track.durationHint) || 0;
+            currentGainFactor = incomingGainFactor;
             setMediaSessionMetadata(currentTrack);
             emitState();
           },
@@ -837,6 +892,11 @@ if (import.meta.hot) {
       }
       navigator.mediaSession.metadata = null;
     }
+    if (mediaSessionArtworkUrl) {
+      URL.revokeObjectURL(mediaSessionArtworkUrl);
+      mediaSessionArtworkUrl = null;
+    }
+    mediaSessionArtworkRequest += 1;
     stopCrossfade();
     audio = null;
     idleEl = null;

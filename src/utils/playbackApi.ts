@@ -159,6 +159,7 @@ export const playbackTransitionTo = (
     durationHint: number;
     coverArtPath?: string;
     coverArtThumbPath?: string;
+    gainFactor?: number;
   },
   plan: TransitionPlan,
   preservePitch = true

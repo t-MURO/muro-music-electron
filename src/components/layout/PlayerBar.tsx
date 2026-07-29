@@ -222,13 +222,13 @@ export const PlayerBar = ({
 
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center justify-center gap-2">
-          <button className={`${controlButtonClass} ${shuffleEnabled ? "text-[var(--color-accent)]" : ""}`} onClick={toggleShuffle} title="Shuffle" type="button"><Shuffle className="h-4 w-4" /></button>
-          <button className={controlButtonClass} onClick={onSkipPrevious} title="Previous" type="button"><SkipBack className="h-[18px] w-[18px]" /></button>
-          <button className="player-bar-play-button flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-accent)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-accent-light)]" onClick={onTogglePlay} title={isPlaying ? "Pause" : "Play"} type="button">
+          <button className={`${controlButtonClass} ${shuffleEnabled ? "text-[var(--color-accent)]" : ""}`} onClick={toggleShuffle} title={t("player.shuffle")} type="button"><Shuffle className="h-4 w-4" /></button>
+          <button className={controlButtonClass} onClick={onSkipPrevious} title={t("player.previous")} type="button"><SkipBack className="h-[18px] w-[18px]" /></button>
+          <button className="player-bar-play-button flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-accent)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-accent-light)]" onClick={onTogglePlay} title={t(isPlaying ? "player.pause" : "player.play")} type="button">
             {isPlaying ? <Pause className="h-[18px] w-[18px]" fill="currentColor" /> : <Play className="h-[18px] w-[18px] translate-x-px" fill="currentColor" />}
           </button>
-          <button className={controlButtonClass} onClick={onSkipNext} title="Next" type="button"><SkipForward className="h-[18px] w-[18px]" /></button>
-          <button className={`${controlButtonClass} ${repeatMode !== "off" ? "text-[var(--color-accent)]" : ""}`} onClick={toggleRepeat} title={repeatMode === "off" ? "Repeat" : repeatMode === "all" ? "Repeat all" : "Repeat one"} type="button">
+          <button className={controlButtonClass} onClick={onSkipNext} title={t("player.next")} type="button"><SkipForward className="h-[18px] w-[18px]" /></button>
+          <button className={`${controlButtonClass} ${repeatMode !== "off" ? "text-[var(--color-accent)]" : ""}`} onClick={toggleRepeat} title={t(repeatMode === "off" ? "player.repeat" : repeatMode === "all" ? "player.repeatAll" : "player.repeatOne")} type="button">
             {repeatMode === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
           </button>
         </div>
@@ -247,16 +247,16 @@ export const PlayerBar = ({
           />
           <span className="w-9 text-[10px] tabular-nums text-[var(--color-text-secondary)]">{formatTime(duration)}</span>
         </div>
-        {waveformLoading && <span className="sr-only" role="status">Generating waveform</span>}
+        {waveformLoading && <span className="sr-only" role="status">{t("player.waveform.generating")}</span>}
       </div>
 
       <div className="flex items-center justify-end gap-3 pr-2">
         <OutputMenu />
-        <button className={controlButtonClass} onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)} title={volume > 0 ? "Mute" : "Unmute"} type="button">
+        <button className={controlButtonClass} onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)} title={t(volume > 0 ? "player.mute" : "player.unmute")} type="button">
           {volume > 0 ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
         </button>
         <div className="player-volume-control relative h-1 w-[92px]">
-          <input type="range" min="0" max="100" value={volumePercent} onChange={(event) => onVolumeChange(Number(event.target.value) / 100)} className="absolute left-0 top-0 z-[2] h-full w-full cursor-pointer opacity-0" aria-label="Volume" />
+          <input type="range" min="0" max="100" value={volumePercent} onChange={(event) => onVolumeChange(Number(event.target.value) / 100)} className="absolute left-0 top-0 z-[2] h-full w-full cursor-pointer opacity-0" aria-label={t("player.volume")} />
           <div className="player-volume-fill" style={{ width: `${volumePercent}%` }} />
         </div>
       </div>
