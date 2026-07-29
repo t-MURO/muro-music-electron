@@ -63,6 +63,11 @@ export type PlaylistSnapshot = {
     name: string;
     folder_id: string | null;
     sort_order: number;
+    source_path: string | null;
+    source_mtime_ms: number | null;
+    source_size: number | null;
+    source_sync_error: string | null;
+    last_synced_at: number | null;
     track_ids: string[];
   }[];
   folders: {
@@ -75,6 +80,7 @@ export type PlaylistSnapshot = {
 
 export type ImportedPlaylistFile = {
   name: string;
+  source_path: string;
   entries: Array<{
     path: string;
     track_id: string | null;

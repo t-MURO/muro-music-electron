@@ -174,6 +174,10 @@ export const usePlaylistOperations = ({
     async (playlistId: string, trackIds: string[]) => {
       const playlist = playlists.find((item) => item.id === playlistId);
       if (!playlist || trackIds.length === 0) return;
+      if (playlist.sourcePath) {
+        notify.info(t("toast.playlist.sourceManaged", { name: playlist.name }));
+        return;
+      }
 
       const removed = new Set(trackIds);
       const previousIds = [...playlist.trackIds];

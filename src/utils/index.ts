@@ -78,6 +78,8 @@ export {
   deletePlaylistFolder,
   listPlaylistFiles,
   importPlaylistFile,
+  configurePlaylistSync,
+  syncPlaylistSource,
   exportPlaylistFile,
   exportAllPlaylists,
   exportOrganizedLibrary,
@@ -113,6 +115,7 @@ export {
   type MetadataHistoryEntry,
   type PlaylistHistoryState,
   type PlaylistSnapshotEntry,
+  type PlaylistSourceSyncResult,
   type ListeningStatistics,
 } from "./database";
 export {

@@ -18,10 +18,12 @@ import {
   PanelLeftOpen,
   Pencil,
   Plus,
+  RefreshCw,
   Settings,
   Sparkles,
   Tag,
   Trash2,
+  TriangleAlert,
   UserRound,
   KeyRound,
   MoreHorizontal,
@@ -312,6 +314,21 @@ export const Sidebar = ({
         <GripVertical className="sidebar-playlist-grip h-3 w-3 shrink-0" />
         <ListMusic className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 flex-1 truncate">{playlist.name}</span>
+        {playlist.sourcePath && (
+          <span
+            className={playlist.sourceSyncError
+              ? "shrink-0 text-[var(--color-danger)]"
+              : "shrink-0 text-[var(--color-text-muted)]"}
+            data-playlist-source-linked={playlist.id}
+            title={playlist.sourceSyncError
+              ? `Could not fully sync ${playlist.sourcePath}: ${playlist.sourceSyncError}`
+              : `Automatically synced from ${playlist.sourcePath}`}
+          >
+            {playlist.sourceSyncError
+              ? <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+              : <RefreshCw className="h-3 w-3" aria-hidden="true" />}
+          </span>
+        )}
         <span className="sidebar-count">{playlist.trackIds.length}</span>
       </button>
     );

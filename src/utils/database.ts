@@ -256,6 +256,7 @@ export const createPlaylist = (
   name: string,
   folderId?: string,
   sortOrder?: number,
+  sourcePath?: string,
 ) => {
   return invoke<void>("create_playlist", {
     dbPath,
@@ -263,6 +264,7 @@ export const createPlaylist = (
     name,
     folderId,
     sortOrder,
+    sourcePath,
   });
 };
 
@@ -295,6 +297,11 @@ export const restorePlaylists = (
     trackIds: string[];
     folderId?: string;
     sortOrder: number;
+    sourcePath?: string;
+    sourceMtimeMs?: number;
+    sourceSize?: number;
+    sourceSyncError?: string;
+    lastSyncedAt?: number;
   }>,
 ) => invoke<{ restored: number }>("restore_playlists", { dbPath, playlists });
 
@@ -371,6 +378,33 @@ export const importPlaylistFile = (dbPath: string, filePath: string) =>
   invoke<import("./importApi").ImportedPlaylistFile>("import_playlist_file", {
     dbPath,
     filePath,
+  });
+
+export type PlaylistSourceSyncResult = {
+  playlistId: string;
+  name: string;
+  sourcePath: string;
+  trackIds: string[];
+  imported: import("./importApi").ImportedTrack[];
+  added: number;
+  removed: number;
+  skipped: number;
+  changed: boolean;
+  sourceSyncError: string | null;
+  errorChanged: boolean;
+  reason: "startup" | "watch" | "manual";
+};
+
+export const configurePlaylistSync = (dbPath: string) =>
+  invoke<{ linked: number; synced: number; changed: number }>(
+    "configure_playlist_sync",
+    { dbPath },
+  );
+
+export const syncPlaylistSource = (dbPath: string, playlistId: string) =>
+  invoke<PlaylistSourceSyncResult | null>("sync_playlist_source", {
+    dbPath,
+    playlistId,
   });
 
 export const exportPlaylistFile = (

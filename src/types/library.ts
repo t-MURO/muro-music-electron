@@ -80,6 +80,12 @@ export type Playlist = {
   trackIds: string[];
   folderId?: string;
   sortOrder: number;
+  /** Imported playlist file that remains authoritative for automatic syncing. */
+  sourcePath?: string;
+  sourceMtimeMs?: number;
+  sourceSize?: number;
+  sourceSyncError?: string;
+  lastSyncedAt?: number;
 };
 
 export type PlaylistFolder = {

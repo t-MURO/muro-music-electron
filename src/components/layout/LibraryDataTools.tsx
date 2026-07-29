@@ -74,6 +74,11 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
       name: playlist.name,
       folderId: playlist.folder_id ?? undefined,
       sortOrder: playlist.sort_order,
+      sourcePath: playlist.source_path ?? undefined,
+      sourceMtimeMs: playlist.source_mtime_ms ?? undefined,
+      sourceSize: playlist.source_size ?? undefined,
+      sourceSyncError: playlist.source_sync_error ?? undefined,
+      lastSyncedAt: playlist.last_synced_at ?? undefined,
       trackIds: playlist.track_ids,
     })));
     store.setPlaylistFolders(playlistData.folders.map((folder) => ({

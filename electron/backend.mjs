@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   closeDatabases,
   loadPlaylists,
@@ -46,6 +45,11 @@ import {
   findContainingWatchedFolder,
   isPathInsideOrEqual,
 } from "./inboxOrganizer.mjs";
+import {
+  listPlaylistFilesForImport,
+  readPlaylistForImport,
+} from "./playlistFiles.mjs";
+import { createPlaylistSyncService } from "./playlistSync.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -275,125 +279,6 @@ const listJson = (value) => JSON.stringify(
     .filter(Boolean)
 );
 
-const normalizePlaylistPath = (value) => {
-  const resolved = path.resolve(String(value || ""));
-  const normalized = path.normalize(resolved);
-  return process.platform === "win32" ? normalized.toLocaleLowerCase() : normalized;
-};
-
-const PLAYLIST_EXTENSIONS = new Set([".m3u", ".m3u8", ".pls"]);
-
-const listPlaylistFilesForImport = async (directoryPath) => {
-  const root = path.resolve(String(directoryPath || ""));
-  const rootStats = await fs.promises.stat(root);
-  if (!rootStats.isDirectory()) throw new Error("Playlist import path is not a directory");
-
-  const files = [];
-  let audioFileCount = 0;
-  const visit = async (directory) => {
-    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
-    entries.sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue;
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory()) {
-        await visit(entryPath);
-      } else if (entry.isFile()) {
-        const extension = path.extname(entry.name).toLowerCase();
-        if (PLAYLIST_EXTENSIONS.has(extension)) files.push(entryPath);
-        if (AUDIO_EXTENSIONS.has(extension)) audioFileCount += 1;
-      }
-    }
-  };
-
-  await visit(root);
-  files.sort((a, b) => path.relative(root, a).localeCompare(path.relative(root, b)));
-  const entries = files.map((filePath) => {
-    const relativePath = path.relative(root, filePath).split(path.sep).join("/");
-    const directory = path.posix.dirname(relativePath);
-    return {
-      path: filePath,
-      relativePath,
-      folderPath: directory === "." ? null : directory,
-    };
-  });
-  const folderPaths = new Set();
-  for (const entry of entries) {
-    if (!entry.folderPath) continue;
-    const segments = entry.folderPath.split("/");
-    for (let index = 1; index <= segments.length; index += 1) {
-      folderPaths.add(segments.slice(0, index).join("/"));
-    }
-  }
-  return {
-    name: path.basename(root) || root,
-    audioFileCount,
-    files,
-    entries,
-    folders: [...folderPaths]
-      .sort((a, b) => (
-        a.split("/").length - b.split("/").length || a.localeCompare(b)
-      ))
-      .map((folderPath) => {
-        const segments = folderPath.split("/");
-        return {
-          path: folderPath,
-          name: segments.at(-1),
-          parentPath: segments.length > 1 ? segments.slice(0, -1).join("/") : null,
-        };
-      }),
-  };
-};
-
-const resolvePlaylistEntry = (entry, playlistDirectory) => {
-  const trimmed = String(entry || "").trim().replace(/^"|"$/g, "");
-  if (!trimmed) return null;
-  try {
-    if (/^file:/i.test(trimmed)) return fileURLToPath(trimmed);
-  } catch {
-    return null;
-  }
-  return path.isAbsolute(trimmed) ? path.normalize(trimmed) : path.resolve(playlistDirectory, trimmed);
-};
-
-const parsePlaylistFile = async (filePath) => {
-  const buffer = await fs.promises.readFile(filePath);
-  const text = buffer[0] === 0xff && buffer[1] === 0xfe
-    ? buffer.subarray(2).toString("utf16le")
-    : buffer.toString("utf8").replace(/^\uFEFF/, "");
-  const extension = path.extname(filePath).toLocaleLowerCase();
-  const lines = text.split(/\r?\n/);
-  const rawEntries = extension === ".pls"
-    ? lines
-        .map((line) => /^File\d+=(.*)$/i.exec(line.trim())?.[1])
-        .filter(Boolean)
-    : lines
-        .map((line) => line.trim())
-        .filter((line) => line && !line.startsWith("#"));
-  const directory = path.dirname(filePath);
-  return rawEntries
-    .map((entry) => resolvePlaylistEntry(entry, directory))
-    .filter(Boolean);
-};
-
-const readPlaylistForImport = async (dbPath, filePath) => {
-  const entries = await parsePlaylistFile(filePath);
-  const rows = openDatabase(dbPath)
-    .prepare("SELECT id, source_path FROM tracks")
-    .all();
-  const trackIdByPath = new Map(
-    rows.map((row) => [normalizePlaylistPath(row.source_path), String(row.id)])
-  );
-  return {
-    name: path.basename(filePath, path.extname(filePath)),
-    entries: entries.map((entry) => ({
-      path: entry,
-      track_id: trackIdByPath.get(normalizePlaylistPath(entry)) ?? null,
-      exists: fs.existsSync(entry),
-    })),
-  };
-};
-
 const exportPlaylistFile = async (dbPath, playlistId, filePath) => {
   const rows = openDatabase(dbPath).prepare(`
     SELECT t.source_path, t.duration_seconds, t.artist, t.title
@@ -533,6 +418,11 @@ export const createBackend = ({
   // most recent sender rather than receiving one per event.
   let lastSender = null;
   const libraryWatcher = createLibraryWatcher({
+    cacheDir,
+    emit,
+    getSender: () => lastSender,
+  });
+  const playlistSync = createPlaylistSyncService({
     cacheDir,
     emit,
     getSender: () => lastSender,
@@ -748,9 +638,19 @@ export const createBackend = ({
       return { deletedTrackIds, failures };
     },
 
-    create_playlist: ({ dbPath, id, name, folderId, sortOrder }) => {
+    create_playlist: async ({
+      dbPath,
+      id,
+      name,
+      folderId,
+      sortOrder,
+      sourcePath,
+    }) => {
       const db = openDatabase(dbPath);
-      return withPlaylistHistory(db, `Create playlist: ${String(name).trim()}`, () => {
+      const linkedSourcePath = sourcePath
+        ? path.resolve(String(sourcePath))
+        : null;
+      const result = withPlaylistHistory(db, `Create playlist: ${String(name).trim()}`, () => {
         const targetFolderId = folderId || null;
         const nextSortOrder = Number.isInteger(sortOrder)
           ? sortOrder
@@ -759,9 +659,22 @@ export const createBackend = ({
               FROM playlists
               WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
             `).get(targetFolderId, targetFolderId).next;
-        db.prepare("INSERT INTO playlists(id, name, folder_id, sort_order, created_at) VALUES (?, ?, ?, ?, ?)")
-          .run(id, String(name).trim(), targetFolderId, nextSortOrder, Math.floor(Date.now() / 1000));
+        db.prepare(`
+          INSERT INTO playlists(
+            id, name, folder_id, sort_order, source_path, created_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          String(name).trim(),
+          targetFolderId,
+          nextSortOrder,
+          linkedSourcePath,
+          Math.floor(Date.now() / 1000),
+        );
       });
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
     },
     update_playlist: ({ dbPath, playlistId, name, folderId, sortOrder }) => {
       const db = openDatabase(dbPath);
@@ -798,12 +711,14 @@ export const createBackend = ({
         }
       });
     },
-    delete_playlist: ({ dbPath, playlistId }) => {
+    delete_playlist: async ({ dbPath, playlistId }) => {
       const db = openDatabase(dbPath);
-      return withPlaylistHistory(db, "Delete playlist", () =>
+      const result = withPlaylistHistory(db, "Delete playlist", () =>
         db.prepare("DELETE FROM playlists WHERE id = ?").run(playlistId));
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
     },
-    delete_playlists: ({ dbPath, playlistIds }) => {
+    delete_playlists: async ({ dbPath, playlistIds }) => {
       const ids = [...new Set(
         (Array.isArray(playlistIds) ? playlistIds : [])
           .map((id) => String(id))
@@ -812,12 +727,14 @@ export const createBackend = ({
       if (ids.length === 0) return { deleted: 0 };
       const db = openDatabase(dbPath);
       const placeholders = ids.map(() => "?").join(", ");
-      return withPlaylistHistory(db, `Delete ${ids.length} playlists`, () => {
+      const result = withPlaylistHistory(db, `Delete ${ids.length} playlists`, () => {
         const result = db.prepare(`DELETE FROM playlists WHERE id IN (${placeholders})`).run(...ids);
         return { deleted: Number(result.changes) || 0 };
       });
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
     },
-    restore_playlists: ({ dbPath, playlists }) => {
+    restore_playlists: async ({ dbPath, playlists }) => {
       const requested = Array.isArray(playlists) ? playlists : [];
       if (requested.length === 0) return { restored: 0 };
       const db = openDatabase(dbPath);
@@ -825,14 +742,17 @@ export const createBackend = ({
         db.prepare("SELECT id FROM tracks").all().map((row) => String(row.id)),
       );
       const insertPlaylist = db.prepare(`
-        INSERT INTO playlists(id, name, folder_id, sort_order, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO playlists(
+          id, name, folder_id, sort_order, source_path, source_mtime_ms,
+          source_size, source_sync_error, last_synced_at, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const insertTrack = db.prepare(`
         INSERT INTO playlist_tracks(playlist_id, track_id, position)
         VALUES (?, ?, ?)
       `);
-      return withPlaylistHistory(db, `Restore ${requested.length} playlists`, () => {
+      const result = withPlaylistHistory(db, `Restore ${requested.length} playlists`, () => {
         let restored = 0;
         for (const playlist of requested) {
           const id = String(playlist?.id ?? "");
@@ -843,6 +763,11 @@ export const createBackend = ({
             name,
             playlist.folderId ? String(playlist.folderId) : null,
             Number(playlist.sortOrder) || 0,
+            playlist.sourcePath ? path.resolve(String(playlist.sourcePath)) : null,
+            playlist.sourceMtimeMs == null ? null : Number(playlist.sourceMtimeMs),
+            playlist.sourceSize == null ? null : Number(playlist.sourceSize),
+            playlist.sourceSyncError == null ? null : String(playlist.sourceSyncError),
+            playlist.lastSyncedAt == null ? null : Number(playlist.lastSyncedAt),
             Math.floor(Date.now() / 1000),
           );
           const trackIds = [...new Set(
@@ -855,6 +780,8 @@ export const createBackend = ({
         }
         return { restored };
       });
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
     },
     create_playlist_folder: ({ dbPath, id, name, parentId, sortOrder }) => {
       const db = openDatabase(dbPath);
@@ -927,6 +854,10 @@ export const createBackend = ({
     },
     list_playlist_files: ({ directoryPath }) => listPlaylistFilesForImport(directoryPath),
     import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
+    configure_playlist_sync: ({ dbPath }) =>
+      playlistSync.refreshSources({ dbPath, syncChanged: true }),
+    sync_playlist_source: ({ dbPath, playlistId }) =>
+      playlistSync.syncPlaylist({ dbPath, playlistId, force: true, reason: "manual" }),
     export_playlist_file: ({ dbPath, playlistId, filePath }) =>
       exportPlaylistFile(dbPath, playlistId, filePath),
     export_all_playlists: ({ dbPath, destinationPath }) =>
@@ -1025,16 +956,25 @@ export const createBackend = ({
     },
     list_playlist_history: ({ dbPath, limit }) =>
       listPlaylistHistory(openDatabase(dbPath), limit),
-    undo_playlist_history: ({ dbPath }) =>
-      undoPlaylistHistory(openDatabase(dbPath)),
-    redo_playlist_history: ({ dbPath }) =>
-      redoPlaylistHistory(openDatabase(dbPath)),
+    undo_playlist_history: async ({ dbPath }) => {
+      const result = undoPlaylistHistory(openDatabase(dbPath));
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
+    },
+    redo_playlist_history: async ({ dbPath }) => {
+      const result = redoPlaylistHistory(openDatabase(dbPath));
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
+    },
     create_playlist_snapshot: ({ dbPath, name }) =>
       createPlaylistSnapshot(openDatabase(dbPath), name),
     list_playlist_snapshots: ({ dbPath }) =>
       listPlaylistSnapshots(openDatabase(dbPath)),
-    restore_playlist_snapshot: ({ dbPath, snapshotId }) =>
-      restorePlaylistSnapshot(openDatabase(dbPath), snapshotId),
+    restore_playlist_snapshot: async ({ dbPath, snapshotId }) => {
+      const result = restorePlaylistSnapshot(openDatabase(dbPath), snapshotId);
+      await playlistSync.refreshSources({ dbPath, syncChanged: false });
+      return result;
+    },
     delete_playlist_snapshot: ({ dbPath, snapshotId }) =>
       deletePlaylistSnapshot(openDatabase(dbPath), snapshotId),
     update_track_analysis: ({ dbPath, trackId, bpm, key }) => {
@@ -1561,6 +1501,7 @@ export const createBackend = ({
     },
     close() {
       libraryWatcher.close();
+      playlistSync.close();
       castService.close();
       dlnaService.close();
       keyFinder.close();

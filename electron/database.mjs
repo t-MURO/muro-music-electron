@@ -83,6 +83,11 @@ const PLAYLIST_SCHEMA = `
     name TEXT NOT NULL,
     folder_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    source_path TEXT,
+    source_mtime_ms REAL,
+    source_size INTEGER,
+    source_sync_error TEXT,
+    last_synced_at INTEGER,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS playlist_tracks (
@@ -297,6 +302,25 @@ export const openDatabase = (dbPath) => {
   if (!playlistColumns.has("folder_id")) {
     db.exec("ALTER TABLE playlists ADD COLUMN folder_id TEXT");
   }
+  if (!playlistColumns.has("source_path")) {
+    db.exec("ALTER TABLE playlists ADD COLUMN source_path TEXT");
+  }
+  if (!playlistColumns.has("source_mtime_ms")) {
+    db.exec("ALTER TABLE playlists ADD COLUMN source_mtime_ms REAL");
+  }
+  if (!playlistColumns.has("source_size")) {
+    db.exec("ALTER TABLE playlists ADD COLUMN source_size INTEGER");
+  }
+  if (!playlistColumns.has("source_sync_error")) {
+    db.exec("ALTER TABLE playlists ADD COLUMN source_sync_error TEXT");
+  }
+  if (!playlistColumns.has("last_synced_at")) {
+    db.exec("ALTER TABLE playlists ADD COLUMN last_synced_at INTEGER");
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS playlists_source_path_idx
+    ON playlists(source_path)
+  `);
   const addedPlaylistSortOrder = !playlistColumns.has("sort_order");
   if (addedPlaylistSortOrder) {
     db.exec("ALTER TABLE playlists ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
@@ -553,7 +577,8 @@ export const loadPlaylists = (dbPath) => {
     trackIdsByPlaylist.set(playlistId, ids);
   }
   const playlists = db.prepare(`
-    SELECT id, name, folder_id, sort_order
+    SELECT id, name, folder_id, sort_order, source_path,
+      source_mtime_ms, source_size, source_sync_error, last_synced_at
     FROM playlists
     ORDER BY folder_id, sort_order ASC, created_at DESC, id
   `).all().map((playlist) => ({
@@ -561,6 +586,17 @@ export const loadPlaylists = (dbPath) => {
     name: playlist.name,
     folder_id: playlist.folder_id == null ? null : String(playlist.folder_id),
     sort_order: Number(playlist.sort_order) || 0,
+    source_path: playlist.source_path == null ? null : String(playlist.source_path),
+    source_mtime_ms: playlist.source_mtime_ms == null
+      ? null
+      : Number(playlist.source_mtime_ms),
+    source_size: playlist.source_size == null ? null : Number(playlist.source_size),
+    source_sync_error: playlist.source_sync_error == null
+      ? null
+      : String(playlist.source_sync_error),
+    last_synced_at: playlist.last_synced_at == null
+      ? null
+      : Number(playlist.last_synced_at),
     track_ids: trackIdsByPlaylist.get(String(playlist.id)) ?? [],
   }));
   const folders = db.prepare(`

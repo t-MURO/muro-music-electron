@@ -67,6 +67,10 @@ export const useFileImport = ({
       if (!playlist) {
         return;
       }
+      if (playlist.sourcePath) {
+        notify.info(t("toast.playlist.sourceManaged", { name: playlist.name }));
+        return;
+      }
       const previousIds = [...playlist.trackIds];
       const previousSet = new Set(previousIds);
       const novelIds = [...new Set(payload)].filter((trackId) => !previousSet.has(trackId));

@@ -259,6 +259,18 @@ app.whenReady().then(async () => {
           sort_order: 0,
           track_ids: [],
         },
+        {
+          id: "smoke-linked-playlist",
+          name: "Linked M3U",
+          folder_id: null,
+          sort_order: 3,
+          source_path: path.join(temporaryDirectory, "linked.m3u"),
+          source_mtime_ms: null,
+          source_size: null,
+          source_sync_error: null,
+          last_synced_at: null,
+          track_ids: [],
+        },
       ],
       folders: [
         {
@@ -649,6 +661,10 @@ app.whenReady().then(async () => {
     if (command === "search_tracks") return null;
     if (command === "set_watched_folders") return { watching: [] };
     if (command === "scan_watched_folders") return { imported: 0, scanned: 0 };
+    if (command === "configure_playlist_sync") {
+      return { linked: 0, synced: 0, changed: 0 };
+    }
+    if (command === "sync_playlist_source") return null;
     if (command === "watched_folders_status") {
       return { enabled: false, watching: [], pending: 0 };
     }
@@ -1238,6 +1254,9 @@ app.whenReady().then(async () => {
       const playlistImportButton = document.querySelector('[data-playlist-import]');
       const playlistFolderImportButton = document.querySelector('[data-playlist-folder-import]');
       const playlistExportAllButton = document.querySelector('[data-playlist-export-all]');
+      const linkedPlaylistIndicatorReady = Boolean(
+        document.querySelector('[data-playlist-source-linked="smoke-linked-playlist"]')
+      );
       const playlistTransferControlsReady = Boolean(
         playlistCreateButton &&
         playlistActionsButton?.getAttribute("aria-expanded") === "true" &&
@@ -2890,6 +2909,7 @@ app.whenReady().then(async () => {
           playlistFolderReady,
           nestedPlaylistFolderReady,
           playlistTransferControlsReady,
+          linkedPlaylistIndicatorReady,
           playlistsUnderCollection,
           collapsedQueueControlsReady,
           collapsedQueueWidth,
@@ -3517,6 +3537,7 @@ app.whenReady().then(async () => {
         !result.playlistFolderReady ||
         !result.nestedPlaylistFolderReady ||
         !result.playlistTransferControlsReady ||
+        !result.linkedPlaylistIndicatorReady ||
         !result.playlistsUnderCollection ||
         !result.playlistExportMoveMenuReady ||
         !result.playlistReorderReady
@@ -3524,6 +3545,7 @@ app.whenReady().then(async () => {
         fail(
           `Playlist organization failed: folder=${result.playlistFolderReady}, ` +
           `nested=${result.nestedPlaylistFolderReady}, controls=${result.playlistTransferControlsReady}, ` +
+          `linked=${result.linkedPlaylistIndicatorReady}, ` +
           `underCollection=${result.playlistsUnderCollection}, ` +
           `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}`
         );

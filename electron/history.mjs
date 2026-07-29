@@ -36,7 +36,8 @@ export const capturePlaylistState = (db) => {
     tracksByPlaylist.set(playlistId, ids);
   }
   const playlists = db.prepare(`
-    SELECT id, name, folder_id, sort_order, created_at
+    SELECT id, name, folder_id, sort_order, source_path, source_mtime_ms,
+      source_size, source_sync_error, last_synced_at, created_at
     FROM playlists
     ORDER BY folder_id, sort_order, id
   `).all().map((playlist) => ({
@@ -44,6 +45,17 @@ export const capturePlaylistState = (db) => {
     name: String(playlist.name),
     folderId: playlist.folder_id == null ? null : String(playlist.folder_id),
     sortOrder: Number(playlist.sort_order) || 0,
+    sourcePath: playlist.source_path == null ? null : String(playlist.source_path),
+    sourceMtimeMs: playlist.source_mtime_ms == null
+      ? null
+      : Number(playlist.source_mtime_ms),
+    sourceSize: playlist.source_size == null ? null : Number(playlist.source_size),
+    sourceSyncError: playlist.source_sync_error == null
+      ? null
+      : String(playlist.source_sync_error),
+    lastSyncedAt: playlist.last_synced_at == null
+      ? null
+      : Number(playlist.last_synced_at),
     createdAt: Number(playlist.created_at) || 0,
     trackIds: tracksByPlaylist.get(String(playlist.id)) ?? [],
   }));
@@ -67,8 +79,11 @@ const applyPlaylistStateChanges = (db, requestedState) => {
     "UPDATE playlist_folders SET parent_id = ? WHERE id = ?",
   );
   const insertPlaylist = db.prepare(`
-    INSERT INTO playlists(id, name, folder_id, sort_order, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO playlists(
+      id, name, folder_id, sort_order, source_path, source_mtime_ms,
+      source_size, source_sync_error, last_synced_at, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertTrack = db.prepare(`
     INSERT INTO playlist_tracks(playlist_id, track_id, position)
@@ -101,6 +116,11 @@ const applyPlaylistStateChanges = (db, requestedState) => {
       String(playlist.name || "Playlist").trim() || "Playlist",
       folderId && folderIds.has(folderId) ? folderId : null,
       Number(playlist.sortOrder) || 0,
+      playlist.sourcePath == null ? null : String(playlist.sourcePath),
+      playlist.sourceMtimeMs == null ? null : Number(playlist.sourceMtimeMs),
+      playlist.sourceSize == null ? null : Number(playlist.sourceSize),
+      playlist.sourceSyncError == null ? null : String(playlist.sourceSyncError),
+      playlist.lastSyncedAt == null ? null : Number(playlist.lastSyncedAt),
       Number(playlist.createdAt) || Math.floor(Date.now() / 1000),
     );
     const uniqueTrackIds = [...new Set(

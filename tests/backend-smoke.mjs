@@ -69,6 +69,8 @@ assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlist_folders)").all()
   .some((column) => column.name === "parent_id"));
 assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlists)").all()
   .some((column) => column.name === "sort_order"));
+assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlists)").all()
+  .some((column) => column.name === "source_path"));
 assert.deepEqual(
   migratedLegacyDb.prepare("SELECT id, sort_order FROM playlists ORDER BY sort_order").all(),
   [
@@ -94,6 +96,14 @@ const writeSilentWav = (filePath) => {
   buffer.write("data", 36);
   buffer.writeUInt32LE(dataSize, 40);
   fs.writeFileSync(filePath, buffer);
+};
+const waitFor = async (predicate, message, timeoutMs = 5_000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.fail(message);
 };
 let keyFinderClosed = false;
 let keyFinderStartArguments;
@@ -858,6 +868,7 @@ try {
     filePath: importedPlaylistPath,
   });
   assert.equal(importedPlaylist.name, "smoke-import");
+  assert.equal(importedPlaylist.source_path, importedPlaylistPath);
   assert.deepEqual(
     importedPlaylist.entries.map((entry) => ({ track_id: entry.track_id, exists: entry.exists })),
     [
@@ -866,6 +877,116 @@ try {
       { track_id: null, exists: false },
     ],
   );
+
+  await backend.invoke("create_playlist", {
+    dbPath,
+    id: "playlist-source-linked",
+    name: "Source Linked",
+    sourcePath: importedPlaylistPath,
+  });
+  await backend.invoke("add_tracks_to_playlist", {
+    dbPath,
+    playlistId: "playlist-source-linked",
+    trackIds: ["track-1", "track-2"],
+  });
+  const playlistSyncNewPath = path.join(directory, "playlist-sync-new.wav");
+  writeSilentWav(playlistSyncNewPath);
+  fs.writeFileSync(
+    importedPlaylistPath,
+    ["#EXTM3U", secondSourcePath, playlistSyncNewPath].join("\r\n"),
+    "utf8",
+  );
+  const catchUpPlaylistSync = await backend.invoke("configure_playlist_sync", { dbPath });
+  assert.equal(catchUpPlaylistSync.changed, 1);
+  const syncedNewTrack = db.prepare(`
+    SELECT id, import_status
+    FROM tracks
+    WHERE source_path = ?
+  `).get(playlistSyncNewPath);
+  assert.ok(syncedNewTrack);
+  assert.deepEqual(
+    db.prepare(`
+      SELECT track_id
+      FROM playlist_tracks
+      WHERE playlist_id = 'playlist-source-linked'
+      ORDER BY position
+    `).all().map((row) => row.track_id),
+    ["track-2", syncedNewTrack.id],
+  );
+  assert.equal(
+    syncedNewTrack.import_status,
+    "staged",
+    "new audio referenced by a synced playlist is staged in the Inbox",
+  );
+  const manualPlaylistSync = await backend.invoke("sync_playlist_source", {
+    dbPath,
+    playlistId: "playlist-source-linked",
+  });
+  assert.equal(manualPlaylistSync.changed, false);
+  assert.deepEqual(manualPlaylistSync.trackIds, ["track-2", syncedNewTrack.id]);
+  const linkedPlaylistSnapshot = await backend.invoke("load_playlists", { dbPath });
+  const linkedPlaylist = linkedPlaylistSnapshot.playlists.find(
+    (playlist) => playlist.id === "playlist-source-linked",
+  );
+  assert.equal(linkedPlaylist.source_path, importedPlaylistPath);
+  assert.equal(linkedPlaylist.source_sync_error, null);
+  assert.ok(linkedPlaylist.last_synced_at > 0);
+
+  await backend.invoke("configure_playlist_sync", { dbPath });
+  fs.writeFileSync(
+    importedPlaylistPath,
+    ["#EXTM3U", playlistSyncNewPath, firstSourcePath].join("\r\n"),
+    "utf8",
+  );
+  await waitFor(
+    () => {
+      const ids = db.prepare(`
+        SELECT track_id
+        FROM playlist_tracks
+        WHERE playlist_id = 'playlist-source-linked'
+        ORDER BY position
+      `).all().map((row) => row.track_id);
+      return ids.length === 2
+        && ids[0] === syncedNewTrack.id
+        && ids[1] === "track-1";
+    },
+    "the linked M3U playlist should automatically follow source-file changes",
+  );
+  await backend.invoke("delete_playlist", {
+    dbPath,
+    playlistId: "playlist-source-linked",
+  });
+  await backend.invoke("reject_tracks", {
+    dbPath,
+    trackIds: [syncedNewTrack.id],
+  });
+
+  const emptyLinkedPlaylistPath = path.join(directory, "empty-linked.m3u");
+  fs.writeFileSync(emptyLinkedPlaylistPath, "#EXTM3U\r\n", "utf8");
+  await backend.invoke("create_playlist", {
+    dbPath,
+    id: "playlist-empty-linked",
+    name: "Empty Linked",
+    sourcePath: emptyLinkedPlaylistPath,
+  });
+  await backend.invoke("configure_playlist_sync", { dbPath });
+  fs.writeFileSync(
+    emptyLinkedPlaylistPath,
+    ["#EXTM3U", firstSourcePath].join("\r\n"),
+    "utf8",
+  );
+  await waitFor(
+    () => db.prepare(`
+      SELECT track_id
+      FROM playlist_tracks
+      WHERE playlist_id = 'playlist-empty-linked'
+    `).get()?.track_id === "track-1",
+    "an imported empty M3U should populate when its first song is added",
+  );
+  await backend.invoke("delete_playlist", {
+    dbPath,
+    playlistId: "playlist-empty-linked",
+  });
 
   const playlistBundlePath = path.join(directory, "playlist-bundle");
   const nestedPlaylistPath = path.join(playlistBundlePath, "nested");
