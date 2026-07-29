@@ -86,10 +86,29 @@ export const connectToRemoteDevice = async (device: RemoteDevice): Promise<void>
     });
     playback.setIsPlaying(true);
   } catch (error) {
+    try {
+      await remoteDisconnect(device.protocol);
+    } catch {
+      // The receiver may have already closed after the failed load. Resetting
+      // renderer ownership is still required so controls return to local.
+    }
+    useRemoteOutputStore.getState().reset();
+    let localRestored = false;
+    try {
+      await restoreLocalTrackPaused(handoffTrack, handoffPosition);
+      playback.setCurrentPosition(handoffPosition);
+      playback.setDuration(handoffTrack.durationSeconds);
+      playback.setIsPlaying(false);
+      localRestored = true;
+    } catch {
+      playback.setIsPlaying(false);
+    }
     notify.error(
-      isRemoteUnsupportedFormat(error)
+      `${isRemoteUnsupportedFormat(error)
         ? t("player.output.unsupported")
-        : t("player.output.loadFailed"),
+        : t("player.output.loadFailed")} ${t(
+          localRestored ? "player.output.returnedLocal" : "player.output.localRestoreFailed",
+        )}`,
     );
   }
 };

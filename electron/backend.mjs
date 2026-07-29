@@ -746,6 +746,59 @@ export const createBackend = ({
       return withPlaylistHistory(db, "Delete playlist", () =>
         db.prepare("DELETE FROM playlists WHERE id = ?").run(playlistId));
     },
+    delete_playlists: ({ dbPath, playlistIds }) => {
+      const ids = [...new Set(
+        (Array.isArray(playlistIds) ? playlistIds : [])
+          .map((id) => String(id))
+          .filter(Boolean),
+      )];
+      if (ids.length === 0) return { deleted: 0 };
+      const db = openDatabase(dbPath);
+      const placeholders = ids.map(() => "?").join(", ");
+      return withPlaylistHistory(db, `Delete ${ids.length} playlists`, () => {
+        const result = db.prepare(`DELETE FROM playlists WHERE id IN (${placeholders})`).run(...ids);
+        return { deleted: Number(result.changes) || 0 };
+      });
+    },
+    restore_playlists: ({ dbPath, playlists }) => {
+      const requested = Array.isArray(playlists) ? playlists : [];
+      if (requested.length === 0) return { restored: 0 };
+      const db = openDatabase(dbPath);
+      const existingTrackIds = new Set(
+        db.prepare("SELECT id FROM tracks").all().map((row) => String(row.id)),
+      );
+      const insertPlaylist = db.prepare(`
+        INSERT INTO playlists(id, name, folder_id, sort_order, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const insertTrack = db.prepare(`
+        INSERT INTO playlist_tracks(playlist_id, track_id, position)
+        VALUES (?, ?, ?)
+      `);
+      return withPlaylistHistory(db, `Restore ${requested.length} playlists`, () => {
+        let restored = 0;
+        for (const playlist of requested) {
+          const id = String(playlist?.id ?? "");
+          const name = String(playlist?.name ?? "").trim();
+          if (!id || !name) throw new Error("Invalid playlist restore payload");
+          insertPlaylist.run(
+            id,
+            name,
+            playlist.folderId ? String(playlist.folderId) : null,
+            Number(playlist.sortOrder) || 0,
+            Math.floor(Date.now() / 1000),
+          );
+          const trackIds = [...new Set(
+            (Array.isArray(playlist.trackIds) ? playlist.trackIds : [])
+              .map((trackId) => String(trackId))
+              .filter((trackId) => existingTrackIds.has(trackId)),
+          )];
+          trackIds.forEach((trackId, position) => insertTrack.run(id, trackId, position));
+          restored += 1;
+        }
+        return { restored };
+      });
+    },
     create_playlist_folder: ({ dbPath, id, name, parentId, sortOrder }) => {
       const db = openDatabase(dbPath);
       const targetParentId = parentId || null;
@@ -1074,15 +1127,15 @@ export const createBackend = ({
         if (!bucket) continue;
 
         const expected = Number(track.duration_seconds) || 0;
+        // Without a known duration there is no safe automatic discriminator.
+        // Leave the track for manual relinking rather than pairing by a common
+        // file name alone.
+        if (!(expected > 0)) continue;
         let chosen = null;
         for (const candidate of bucket) {
           if (taken.has(candidate)) continue;
-          if (expected > 0) {
-            const probe = await readAudioDuration(candidate);
-            // A zero probe means the file could not be parsed; the name match
-            // alone still stands.
-            if (probe > 0 && Math.abs(probe - expected) > 1) continue;
-          }
+          const probe = await readAudioDuration(candidate);
+          if (!(probe > 0) || Math.abs(probe - expected) > 1) continue;
           chosen = candidate;
           break;
         }

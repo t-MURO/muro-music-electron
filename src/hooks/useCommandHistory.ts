@@ -3,7 +3,7 @@ import { commandManager, type HistoryState } from "../command-manager/commandMan
 import { notify } from "../stores";
 import { t } from "../i18n";
 
-const EMPTY_STATE: HistoryState = { canUndo: false, canRedo: false };
+const EMPTY_STATE: HistoryState = { canUndo: false, canRedo: false, isBusy: false };
 
 // useSyncExternalStore compares snapshots by identity, so the manager's state
 // object is cached and only replaced when the history actually changes.
@@ -24,16 +24,22 @@ const getServerSnapshot = () => EMPTY_STATE;
 export const useCommandHistory = () => {
   const history = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  const undo = useCallback(() => {
-    const label = commandManager.undo();
-    if (label === undefined && !commandManager.canRedo) return;
-    notify.info(label ? t("history.undoneAction", { action: label }) : t("history.undone"));
+  const undo = useCallback(async () => {
+    try {
+      const outcome = await commandManager.undo();
+      if (outcome) notify.info(outcome);
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("history.undoFailed"));
+    }
   }, []);
 
-  const redo = useCallback(() => {
-    const label = commandManager.redo();
-    if (label === undefined && !commandManager.canUndo) return;
-    notify.info(label ? t("history.redoneAction", { action: label }) : t("history.redone"));
+  const redo = useCallback(async () => {
+    try {
+      const outcome = await commandManager.redo();
+      if (outcome) notify.info(outcome);
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : t("history.redoFailed"));
+    }
   }, []);
 
   return { ...history, undo, redo };

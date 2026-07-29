@@ -175,23 +175,23 @@ export const TrackTable = memo(
         return;
       }
 
-      if (
-        (
-          matchesShortcut(event, shortcuts.playSelected)
-          || matchesShortcut(event, shortcuts.togglePlay)
-        )
-        && activeIndex !== null
-      ) {
+      if (matchesShortcut(event, shortcuts.togglePlay)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (playingTrackId) {
+          onTogglePlay?.();
+        } else if (activeIndex !== null) {
+          const track = tracks[activeIndex];
+          if (track) onRowDoubleClick?.(track.id);
+        }
+        return;
+      }
+
+      if (matchesShortcut(event, shortcuts.playSelected) && activeIndex !== null) {
         event.preventDefault();
         event.stopPropagation();
         const track = tracks[activeIndex];
-        if (track) {
-          if (track.id === playingTrackId && isCurrentlyPlaying) {
-            onTogglePlay?.();
-          } else {
-            onRowDoubleClick?.(track.id);
-          }
-        }
+        if (track) onRowDoubleClick?.(track.id);
         return;
       }
 

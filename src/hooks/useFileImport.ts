@@ -4,12 +4,13 @@ import { commandManager, type Command } from "../command-manager/commandManager"
 import { useLibraryStore, useUIStore, notify } from "../stores";
 import { useDbPath } from "./useDbPath";
 import {
-  addTracksToPlaylist,
   createPlaylist,
-  removeLastTracksFromPlaylist,
+  deletePlaylist,
+  deleteTracks,
   importFiles,
   importedTrackToTrack,
   listPlaylistFiles,
+  setPlaylistTracks,
 } from "../utils";
 import type { Playlist } from "../types";
 import { t } from "../i18n";
@@ -55,7 +56,6 @@ export const useFileImport = ({
   const executePlaylistDrop = useCallback(
     async (playlistId: string, payload: string[]) => {
       const resolvedDbPath = await resolveDbPath();
-      const trackCount = payload.length;
 
       // Capture the current state before executing
       const playlist = playlists.find((p: Playlist) => p.id === playlistId);
@@ -63,34 +63,41 @@ export const useFileImport = ({
         return;
       }
       const previousIds = [...playlist.trackIds];
-      const nextIds = [...previousIds, ...payload];
+      const previousSet = new Set(previousIds);
+      const novelIds = [...new Set(payload)].filter((trackId) => !previousSet.has(trackId));
+      if (novelIds.length === 0) {
+        notify.info(`No tracks were added to "${playlist.name}" because they were already present.`);
+        return;
+      }
+      const nextIds = [...previousIds, ...novelIds];
 
       const command: Command = {
-        label: `Add ${trackCount} tracks to playlist`,
-        do: () => {
+        label: `Add ${novelIds.length} tracks to playlist`,
+        do: async () => {
+          await setPlaylistTracks(resolvedDbPath, playlistId, nextIds);
           setPlaylists((current) =>
             current.map((p) =>
               p.id === playlistId ? { ...p, trackIds: nextIds } : p
             )
           );
-          // Persist to database
-          addTracksToPlaylist(resolvedDbPath, playlistId, payload).catch(() => {
-            notify.error(t("toast.playlist.addFailed"));
-          });
+          return `Added ${novelIds.length} track${novelIds.length === 1 ? "" : "s"} to "${playlist.name}".`;
         },
-        undo: () => {
+        undo: async () => {
+          await setPlaylistTracks(resolvedDbPath, playlistId, previousIds);
           setPlaylists((current) =>
             current.map((p) =>
               p.id === playlistId ? { ...p, trackIds: previousIds } : p
             )
           );
-          removeLastTracksFromPlaylist(resolvedDbPath, playlistId, trackCount).catch(() => {
-            notify.error(t("toast.playlist.undoFailed"));
-          });
+          return `Restored "${playlist.name}" to its previous ${previousIds.length} track${previousIds.length === 1 ? "" : "s"}.`;
         },
       };
 
-      commandManager.execute(command);
+      try {
+        await commandManager.execute(command);
+      } catch {
+        notify.error(t("toast.playlist.addFailed"));
+      }
     },
     [setPlaylists, resolveDbPath, playlists]
   );
@@ -190,20 +197,39 @@ export const useFileImport = ({
           return;
         }
 
-        const convertedTracks = imported.map(importedTrackToTrack);
+        let currentImported = imported;
+        let convertedTracks = currentImported.map(importedTrackToTrack);
+        const importedSourcePaths = imported.map((track) => track.source_path);
         const command: Command = {
           label: `Import ${imported.length} tracks`,
-          do: () => {
+          do: async () => {
+            const redoResult = await importFiles(resolvedDbPath, importedSourcePaths);
+            if (
+              redoResult.failures.length > 0
+              || redoResult.imported.length !== importedSourcePaths.length
+            ) {
+              throw new Error("The imported tracks could not all be restored");
+            }
+            currentImported = redoResult.imported;
+            convertedTracks = currentImported.map(importedTrackToTrack);
             setInboxTracks((current) => [...convertedTracks, ...current]);
+            return `Re-imported ${currentImported.length} track${currentImported.length === 1 ? "" : "s"} into the Inbox.`;
           },
-          undo: () => {
-            const ids = new Set(imported.map((track) => track.id));
+          undo: async () => {
+            const ids = currentImported.map((track) => track.id);
+            const result = await deleteTracks(resolvedDbPath, ids, false);
+            if (result.failures.length > 0 || result.deletedTrackIds.length !== ids.length) {
+              throw new Error("The imported tracks could not all be removed");
+            }
+            const deletedIds = new Set(result.deletedTrackIds);
             setInboxTracks((current) =>
-              current.filter((track) => !ids.has(track.id))
+              current.filter((track) => !deletedIds.has(track.id))
             );
+            return `Removed ${deletedIds.size} imported track${deletedIds.size === 1 ? "" : "s"} from Muro. The audio files were kept.`;
           },
         };
-        commandManager.execute(command);
+        setInboxTracks((current) => [...convertedTracks, ...current]);
+        await commandManager.recordExecuted(command);
         if (result.failures.length > 0) {
           notify.error(t("toast.import.someFailed", { count: String(result.failures.length) }));
         } else {
@@ -248,30 +274,32 @@ export const useFileImport = ({
           .filter((item) => !item.folderId)
           .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1,
       };
+      const resolvedDbPath = await resolveDbPath();
 
       const command: Command = {
         label: `Create playlist ${trimmed}`,
-        do: () => {
+        do: async () => {
+          await createPlaylist(
+            resolvedDbPath,
+            playlist.id,
+            playlist.name,
+            playlist.folderId,
+            playlist.sortOrder,
+          );
           setPlaylists((current) => [...current, playlist]);
+          return `Created playlist "${playlist.name}".`;
         },
-        undo: () => {
+        undo: async () => {
+          await deletePlaylist(resolvedDbPath, playlist.id);
           setPlaylists((current) =>
             current.filter((item) => item.id !== playlist.id)
           );
+          return `Deleted the newly created playlist "${playlist.name}".`;
         },
       };
 
-      commandManager.execute(command);
-
       try {
-        const resolvedDbPath = await resolveDbPath();
-        await createPlaylist(
-          resolvedDbPath,
-          playlist.id,
-          playlist.name,
-          playlist.folderId,
-          playlist.sortOrder,
-        );
+        await commandManager.execute(command);
       } catch (error) {
         notify.error(t("toast.playlist.createFailed"));
       }

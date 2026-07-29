@@ -23,52 +23,62 @@ export const useInboxOperations = () => {
     }
 
     let tracksToAccept = inboxTracks.filter((t) => selectedIds.has(t.id));
+    let organizedFileCount = 0;
     const resolvedDbPath = await resolveDbPath();
 
     clearSelection();
 
     const command = {
       label: `Accept ${selectedTrackIds.length} tracks`,
-      do: () => {
+      do: async () => {
+        const result = await acceptTracks(resolvedDbPath, selectedTrackIds, {
+          organize: organizeAcceptedTracks,
+          watchedFolders,
+        });
+        const movedPaths = new Map(
+          result.moved.map((entry) => [entry.trackId, entry.sourcePath]),
+        );
+        organizedFileCount = result.moved.length;
+        const applyMovedPaths = (track: typeof tracksToAccept[number]) => {
+          const sourcePath = movedPaths.get(track.id);
+          return sourcePath ? { ...track, sourcePath } : track;
+        };
+        tracksToAccept = tracksToAccept.map(applyMovedPaths);
         setInboxTracks((current) =>
           current.filter((t) => !selectedTrackIds.includes(t.id))
         );
-        setTracks((current) => [...tracksToAccept, ...current]);
-        acceptTracks(resolvedDbPath, selectedTrackIds, {
-          organize: organizeAcceptedTracks,
-          watchedFolders,
-        }).then((result) => {
-          const movedPaths = new Map(
-            result.moved.map((entry) => [entry.trackId, entry.sourcePath]),
-          );
-          const applyMovedPaths = (track: typeof tracksToAccept[number]) => {
-            const sourcePath = movedPaths.get(track.id);
-            return sourcePath ? { ...track, sourcePath } : track;
-          };
-          tracksToAccept = tracksToAccept.map(applyMovedPaths);
-          setTracks((current) => current.map(applyMovedPaths));
-          setInboxTracks((current) => current.map(applyMovedPaths));
-          if (result.failures.length > 0) {
-            notify.error(t("toast.inbox.organizeFailed", {
-              count: String(result.failures.length),
-            }));
-          }
-        }).catch(() => {
-          notify.error(t("toast.inbox.acceptFailed"));
-        });
+        setTracks((current) => [
+          ...tracksToAccept,
+          ...current.filter((track) => !selectedTrackIds.includes(track.id)),
+        ]);
+        if (result.failures.length > 0) {
+          notify.error(t("toast.inbox.organizeFailed", {
+            count: String(result.failures.length),
+          }));
+        }
+        return `Accepted ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? "" : "s"} into the Library.`;
       },
-      undo: () => {
+      undo: async () => {
+        await unacceptTracks(resolvedDbPath, selectedTrackIds);
         setTracks((current) =>
           current.filter((t) => !selectedTrackIds.includes(t.id))
         );
-        setInboxTracks((current) => [...tracksToAccept, ...current]);
-        unacceptTracks(resolvedDbPath, selectedTrackIds).catch(() => {
-          notify.error(t("toast.inbox.undoAcceptFailed"));
-        });
+        setInboxTracks((current) => [
+          ...tracksToAccept,
+          ...current.filter((track) => !selectedTrackIds.includes(track.id)),
+        ]);
+        const organizedNote = organizedFileCount > 0
+          ? " Organized files remain in their current folders."
+          : "";
+        return `Moved ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? "" : "s"} back to the Inbox.${organizedNote}`;
       },
     };
 
-    commandManager.execute(command);
+    try {
+      await commandManager.execute(command);
+    } catch {
+      notify.error(t("toast.inbox.acceptFailed"));
+    }
   }, [
     clearSelection,
     resolveDbPath,
@@ -86,29 +96,21 @@ export const useInboxOperations = () => {
       return;
     }
 
-    const tracksToReject = inboxTracks.filter((t) => selectedIds.has(t.id));
     const resolvedDbPath = await resolveDbPath();
 
     clearSelection();
-
-    const command = {
-      label: `Reject ${selectedTrackIds.length} tracks`,
-      do: () => {
-        setInboxTracks((current) =>
-          current.filter((t) => !selectedTrackIds.includes(t.id))
-        );
-        rejectTracks(resolvedDbPath, selectedTrackIds).catch(() => {
-          notify.error(t("toast.inbox.rejectFailed"));
-        });
-      },
-      undo: () => {
-        // Note: DB deletion is permanent, this only restores frontend state
-        setInboxTracks((current) => [...tracksToReject, ...current]);
-      },
-    };
-
-    commandManager.execute(command);
-  }, [clearSelection, resolveDbPath, inboxTracks, selectedIds, setInboxTracks]);
+    try {
+      await rejectTracks(resolvedDbPath, selectedTrackIds);
+      setInboxTracks((current) =>
+        current.filter((track) => !selectedTrackIds.includes(track.id))
+      );
+      notify.info(
+        `Rejected ${selectedTrackIds.length} track${selectedTrackIds.length === 1 ? "" : "s"} from the Inbox. This action cannot be undone.`,
+      );
+    } catch {
+      notify.error(t("toast.inbox.rejectFailed"));
+    }
+  }, [clearSelection, resolveDbPath, selectedIds, setInboxTracks]);
 
   return {
     handleAcceptTracks,

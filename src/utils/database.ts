@@ -284,6 +284,20 @@ export const deletePlaylist = (dbPath: string, playlistId: string) => {
   });
 };
 
+export const deletePlaylists = (dbPath: string, playlistIds: string[]) =>
+  invoke<{ deleted: number }>("delete_playlists", { dbPath, playlistIds });
+
+export const restorePlaylists = (
+  dbPath: string,
+  playlists: Array<{
+    id: string;
+    name: string;
+    trackIds: string[];
+    folderId?: string;
+    sortOrder: number;
+  }>,
+) => invoke<{ restored: number }>("restore_playlists", { dbPath, playlists });
+
 export const addTracksToPlaylist = (
   dbPath: string,
   playlistId: string,

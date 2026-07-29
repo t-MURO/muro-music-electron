@@ -1,6 +1,6 @@
 export type Command = {
-  do: () => void;
-  undo: () => void;
+  do: () => string | void | Promise<string | void>;
+  undo: () => string | void | Promise<string | void>;
   label?: string;
   timestamp?: number;
 };
@@ -8,6 +8,7 @@ export type Command = {
 export type HistoryState = {
   canUndo: boolean;
   canRedo: boolean;
+  isBusy: boolean;
   undoLabel?: string;
   redoLabel?: string;
 };
@@ -20,6 +21,8 @@ export class CommandManager {
   private past: Command[] = [];
   private future: Command[] = [];
   private listeners = new Set<(state: HistoryState) => void>();
+  private operationQueue: Promise<void> = Promise.resolve();
+  private queuedOperations = 0;
 
   private notify() {
     const state = this.state;
@@ -34,47 +37,81 @@ export class CommandManager {
   }
 
   get state(): HistoryState {
+    const isBusy = this.queuedOperations > 0;
     return {
-      canUndo: this.past.length > 0,
-      canRedo: this.future.length > 0,
+      canUndo: this.past.length > 0 && !isBusy,
+      canRedo: this.future.length > 0 && !isBusy,
+      isBusy,
       undoLabel: this.past[this.past.length - 1]?.label,
       redoLabel: this.future[this.future.length - 1]?.label,
     };
   }
 
-  execute(command: Command) {
-    const stamped = { ...command, timestamp: Date.now() };
-    stamped.do();
-    this.past.push(stamped);
-    if (this.past.length > MAX_HISTORY) this.past.shift();
-    this.future = [];
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    this.queuedOperations += 1;
     this.notify();
+    const next = this.operationQueue.then(operation, operation);
+    this.operationQueue = next.then(() => undefined, () => undefined);
+    return next.finally(() => {
+      this.queuedOperations -= 1;
+      this.notify();
+    });
   }
 
-  /** Returns the label of the undone command so callers can report it. */
-  undo(): string | undefined {
-    const command = this.past.pop();
-    if (!command) {
-      return undefined;
-    }
-    command.undo();
-    this.future.push(command);
-    if (this.future.length > MAX_HISTORY) this.future.shift();
-    this.notify();
-    return command.label;
+  execute(command: Command): Promise<void> {
+    return this.enqueue(async () => {
+      const stamped = { ...command, timestamp: Date.now() };
+      await stamped.do();
+      this.past.push(stamped);
+      if (this.past.length > MAX_HISTORY) this.past.shift();
+      this.future = [];
+      this.notify();
+    });
   }
 
-  /** Returns the label of the redone command so callers can report it. */
-  redo(): string | undefined {
-    const command = this.future.pop();
-    if (!command) {
-      return undefined;
-    }
-    command.do();
-    this.past.push(command);
-    if (this.past.length > MAX_HISTORY) this.past.shift();
-    this.notify();
-    return command.label;
+  /**
+   * Adds a command whose initial effect has already completed. This is used by
+   * workflows such as file import, where the backend must finish before the
+   * renderer knows which concrete records an inverse would remove.
+   */
+  recordExecuted(command: Command): Promise<void> {
+    return this.enqueue(async () => {
+      const stamped = { ...command, timestamp: Date.now() };
+      this.past.push(stamped);
+      if (this.past.length > MAX_HISTORY) this.past.shift();
+      this.future = [];
+      this.notify();
+    });
+  }
+
+  /** Returns what the persisted inverse actually did so callers can report it. */
+  undo(): Promise<string | undefined> {
+    return this.enqueue(async () => {
+      const command = this.past[this.past.length - 1];
+      if (!command) return undefined;
+
+      const outcome = await command.undo();
+      this.past.pop();
+      this.future.push(command);
+      if (this.future.length > MAX_HISTORY) this.future.shift();
+      this.notify();
+      return outcome ?? (command.label ? `Undid: ${command.label}` : "Undone");
+    });
+  }
+
+  /** Returns what the persisted command actually did so callers can report it. */
+  redo(): Promise<string | undefined> {
+    return this.enqueue(async () => {
+      const command = this.future[this.future.length - 1];
+      if (!command) return undefined;
+
+      const outcome = await command.do();
+      this.future.pop();
+      this.past.push(command);
+      if (this.past.length > MAX_HISTORY) this.past.shift();
+      this.notify();
+      return outcome ?? (command.label ? `Redid: ${command.label}` : "Redone");
+    });
   }
 
   clear() {
@@ -84,11 +121,11 @@ export class CommandManager {
   }
 
   get canUndo() {
-    return this.past.length > 0;
+    return this.past.length > 0 && this.queuedOperations === 0;
   }
 
   get canRedo() {
-    return this.future.length > 0;
+    return this.future.length > 0 && this.queuedOperations === 0;
   }
 }
 

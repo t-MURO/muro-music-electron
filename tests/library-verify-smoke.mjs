@@ -29,7 +29,23 @@ const backend = createBackend({
 
 const writeAudioFile = (dir, name) => {
   const filePath = path.join(dir, name);
-  fs.writeFileSync(filePath, Buffer.alloc(64));
+  const sampleRate = 8_000;
+  const sampleCount = sampleRate / 10;
+  const dataSize = sampleCount * 2;
+  const buffer = Buffer.alloc(44 + dataSize);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataSize, 4);
+  buffer.write("WAVEfmt ", 8);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataSize, 40);
+  fs.writeFileSync(filePath, buffer);
   return filePath;
 };
 
@@ -53,11 +69,19 @@ const insertTrack = (db, { title, sourcePath, durationSeconds = 0 }) => {
 const run = async () => {
   const db = openDatabase(dbPath);
 
-  const presentPath = writeAudioFile(musicDir, "present.mp3");
-  const vanishingPath = writeAudioFile(musicDir, "vanishing.mp3");
+  const presentPath = writeAudioFile(musicDir, "present.wav");
+  const vanishingPath = writeAudioFile(musicDir, "vanishing.wav");
 
-  const presentId = insertTrack(db, { title: "Present", sourcePath: presentPath });
-  const missingId = insertTrack(db, { title: "Vanishing", sourcePath: vanishingPath });
+  const presentId = insertTrack(db, {
+    title: "Present",
+    sourcePath: presentPath,
+    durationSeconds: 0.1,
+  });
+  const missingId = insertTrack(db, {
+    title: "Vanishing",
+    sourcePath: vanishingPath,
+    durationSeconds: 0.1,
+  });
 
   // Everything is on disk to begin with.
   let result = await backend.invoke("verify_library_files", { dbPath });
@@ -65,7 +89,7 @@ const run = async () => {
   assert.equal(result.checked, 2);
 
   // Move one file out from under the library.
-  const relocatedPath = path.join(movedDir, "vanishing.mp3");
+  const relocatedPath = path.join(movedDir, "vanishing.wav");
   fs.renameSync(vanishingPath, relocatedPath);
 
   result = await backend.invoke("verify_library_files", { dbPath });
@@ -98,7 +122,7 @@ const run = async () => {
     () => backend.invoke("relink_track", {
       dbPath,
       trackId: missingId,
-      newPath: path.join(movedDir, "nope.mp3"),
+      newPath: path.join(movedDir, "nope.wav"),
     }),
     /does not exist/,
     "relinking to a missing file is rejected",
@@ -112,10 +136,25 @@ const run = async () => {
   );
 
   // Auto-relink: move the file again, then let the folder search find it.
-  const secondMovePath = path.join(movedDir, "nested", "vanishing.mp3");
+  const secondMovePath = path.join(movedDir, "nested", "vanishing.wav");
   fs.mkdirSync(path.dirname(secondMovePath), { recursive: true });
   fs.renameSync(relocatedPath, secondMovePath);
   await backend.invoke("verify_library_files", { dbPath });
+
+  const unknownCandidate = writeAudioFile(movedDir, "unknown-duration.wav");
+  const unknownId = insertTrack(db, {
+    title: "Unknown duration",
+    sourcePath: path.join(musicDir, "unknown-duration.wav"),
+    durationSeconds: 0,
+  });
+  const corruptCandidate = path.join(movedDir, "corrupt-duration.wav");
+  fs.writeFileSync(corruptCandidate, Buffer.alloc(64));
+  const corruptId = insertTrack(db, {
+    title: "Corrupt candidate",
+    sourcePath: path.join(musicDir, "corrupt-duration.wav"),
+    durationSeconds: 0.1,
+  });
+  db.prepare("UPDATE tracks SET is_missing = 1 WHERE id IN (?, ?)").run(unknownId, corruptId);
 
   const dryRun = await backend.invoke("auto_relink_missing", {
     dbPath,
@@ -139,12 +178,25 @@ const run = async () => {
   const reconnected = db.prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?").get(missingId);
   assert.equal(reconnected.source_path, secondMovePath);
   assert.equal(Number(reconnected.is_missing), 0);
+  assert.equal(
+    db.prepare("SELECT is_missing FROM tracks WHERE id = ?").get(unknownId).is_missing,
+    1,
+    "a track with no known duration is not matched by filename alone",
+  );
+  assert.equal(
+    db.prepare("SELECT is_missing FROM tracks WHERE id = ?").get(corruptId).is_missing,
+    1,
+    "an unreadable duration candidate is not matched by filename alone",
+  );
+  db.prepare("DELETE FROM tracks WHERE id IN (?, ?)").run(unknownId, corruptId);
+  fs.unlinkSync(unknownCandidate);
+  fs.unlinkSync(corruptCandidate);
 
   // A restored file flips the flag back on the next verification.
-  fs.renameSync(secondMovePath, path.join(movedDir, "vanishing.mp3"));
+  fs.renameSync(secondMovePath, path.join(movedDir, "vanishing.wav"));
   result = await backend.invoke("verify_library_files", { dbPath });
   assert.equal(result.missing, 1);
-  fs.renameSync(path.join(movedDir, "vanishing.mp3"), secondMovePath);
+  fs.renameSync(path.join(movedDir, "vanishing.wav"), secondMovePath);
   result = await backend.invoke("verify_library_files", { dbPath });
   assert.equal(result.restored, 1, "a returning file is un-flagged");
   assert.equal(result.missing, 0);

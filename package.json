@@ -46,6 +46,7 @@
     "test:renderer-dev": "node tests/run-renderer-dev-smoke.cjs",
     "test:ci:core": "npm run test:smoke && npm run test:acoustid && npm run test:protocol && npm run test:metadata-rating && npm run test:beatgrid && npm run test:mixplan && npm run test:playback-guard && npm run test:artist-separators && npm run test:search-index && npm run test:loudness && npm run test:library-verify && npm run test:library-watcher && npm run test:i18n && npm run test:library-export && npm run test:data-features && npm run test:cast && npm run test:dlna",
     "test:ci:ui": "npm run test:audio-seek && npm run test:renderer",
+    "verify:release": "npm run check && npm run test:ci:core && npm run test:ci:ui && vite build",
     "build": "npm run check && vite build",
     "prestart": "npm run fpcalc:prepare",
     "start": "electron .",

@@ -67,6 +67,8 @@ export {
   updatePlaylist,
   reorderPlaylists,
   deletePlaylist,
+  deletePlaylists,
+  restorePlaylists,
   addTracksToPlaylist,
   setPlaylistTracks,
   removeLastTracksFromPlaylist,

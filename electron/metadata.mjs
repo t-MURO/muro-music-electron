@@ -316,7 +316,7 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     ...replayGainFromTags(common),
   };
 
-  db.prepare(`
+  const insertResult = db.prepare(`
     INSERT OR IGNORE INTO tracks (
       id, title, artist, album, album_artist, genre_json, comment_json, label,
       filename, year, date, track_number, track_total, disc_number, disc_total,
@@ -344,6 +344,11 @@ export const importAudioFile = async (dbPath, filePath, cacheDir) => {
     )
   `).run(record);
 
+  // Another import path (manual import, watcher scan, or a second renderer
+  // request) may have inserted this source while metadata was being parsed.
+  // Never return a generated ID that SQLite rejected, because the renderer
+  // would otherwise display a track that does not exist in the database.
+  if (Number(insertResult.changes) === 0) return null;
   return rowToTrack({ ...record, last_played_at: null, play_count: 0 });
 };
 

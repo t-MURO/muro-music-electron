@@ -743,8 +743,18 @@ function App() {
 
   // Update refs for media control and track-end handlers
   useEffect(() => {
-    advanceToNextRef.current = advanceToNext;
-  }, [advanceToNext]);
+    advanceToNextRef.current = () => {
+      const playbackState = usePlaybackStore.getState();
+      if (playbackState.repeatMode === "one" && playbackState.currentTrack) {
+        const track = allTracksById.get(playbackState.currentTrack.id);
+        if (track) {
+          void playTrack(track);
+          return;
+        }
+      }
+      advanceToNext();
+    };
+  }, [advanceToNext, allTracksById, playTrack]);
 
   useEffect(() => {
     skipPreviousRef.current = handleSkipPrevious;
@@ -940,33 +950,6 @@ function App() {
     handleLoadAlbumMetadata,
     handleIdentifyWithAcoustId,
   } = useTrackEdit();
-
-  const handleSaveEditMetadata = useCallback(async (
-    trackIds: string[],
-    updates: TrackMetadataUpdates,
-  ) => {
-    if (!updates.coverArtPath) {
-      await handleSaveMetadata(trackIds, updates);
-      return;
-    }
-
-    const selectedIds = new Set(trackIds);
-    const albumCoverTrackIds = new Set(trackIds);
-    for (const album of groupTracksIntoAlbums(allTracks)) {
-      if (album.tracks.some((track) => selectedIds.has(track.id))) {
-        album.tracks.forEach((track) => albumCoverTrackIds.add(track.id));
-      }
-    }
-
-    const selectedTrackUpdates = { ...updates };
-    delete selectedTrackUpdates.coverArtPath;
-    delete selectedTrackUpdates.coverArtThumbPath;
-    await handleSaveMetadata(trackIds, selectedTrackUpdates);
-    await handleSaveMetadata([...albumCoverTrackIds], {
-      coverArtPath: updates.coverArtPath,
-      coverArtThumbPath: updates.coverArtThumbPath,
-    });
-  }, [allTracks, handleSaveMetadata]);
 
   const metadataSearchTrack = metadataSearchTrackId
     ? allTracksById.get(metadataSearchTrackId) ?? null
@@ -1750,7 +1733,7 @@ function App() {
           .map((id) => allTracks.find((t) => t.id === id))
           .filter((t): t is Track => t !== undefined)}
         onClose={closeEditModal}
-        onSave={handleSaveEditMetadata}
+        onSave={handleSaveMetadata}
         onFetchCoverArt={handleFetchCoverArt}
         onCacheCoverCandidate={handleCacheCoverCandidate}
       />

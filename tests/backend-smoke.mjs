@@ -501,6 +501,23 @@ try {
     paths: [secondValidImportPath],
   });
   assert.equal(secondValidImport.imported.length, 1);
+  const concurrentImportPath = path.join(directory, "concurrent-import.wav");
+  writeSilentWav(concurrentImportPath);
+  const concurrentImports = await Promise.all([
+    backend.invoke("import_files", { dbPath, paths: [concurrentImportPath] }),
+    backend.invoke("import_files", { dbPath, paths: [concurrentImportPath] }),
+  ]);
+  assert.equal(
+    concurrentImports.reduce((count, result) => count + result.imported.length, 0),
+    1,
+    "concurrent imports return only the row that SQLite persisted",
+  );
+  assert.equal(
+    db.prepare("SELECT COUNT(*) AS count FROM tracks WHERE source_path = ?")
+      .get(concurrentImportPath).count,
+    1,
+    "concurrent imports persist one canonical track",
+  );
   const selectedCoverPath = path.join(directory, "selected-cover.png");
   const highResolutionCover = await sharp({
     create: { width: 2000, height: 1500, channels: 3, background: "#c92f49" },
@@ -577,10 +594,15 @@ try {
   });
   await backend.invoke("reject_tracks", {
     dbPath,
-    trackIds: [validImport.imported[0].id, secondValidImport.imported[0].id],
+    trackIds: [
+      validImport.imported[0].id,
+      secondValidImport.imported[0].id,
+      concurrentImports.flatMap((result) => result.imported).at(0).id,
+    ],
   });
   fs.unlinkSync(validImportPath);
   fs.unlinkSync(secondValidImportPath);
+  fs.unlinkSync(concurrentImportPath);
 
   const firstSourcePath = path.join(directory, "smoke.mp3");
   const secondSourcePath = path.join(directory, "smoke-2.mp3");
@@ -668,6 +690,27 @@ try {
       { id: "playlist-1", folderId: "folder-1", sortOrder: 1 },
     ],
   });
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-2", "playlist-1"]);
+  assert.deepEqual(
+    await backend.invoke("delete_playlists", { dbPath, playlistIds: ["playlist-2"] }),
+    { deleted: 1 },
+  );
+  playlists = await backend.invoke("load_playlists", { dbPath });
+  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-1"]);
+  assert.deepEqual(
+    await backend.invoke("restore_playlists", {
+      dbPath,
+      playlists: [{
+        id: "playlist-2",
+        name: "Later Set",
+        folderId: "folder-1",
+        sortOrder: 0,
+        trackIds: [],
+      }],
+    }),
+    { restored: 1 },
+  );
   playlists = await backend.invoke("load_playlists", { dbPath });
   assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-2", "playlist-1"]);
   await backend.invoke("delete_playlist", { dbPath, playlistId: "playlist-2" });

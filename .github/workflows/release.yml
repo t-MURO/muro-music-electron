@@ -74,7 +74,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run keyfinder:download
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npx --no-install vite build
+          npm run verify:release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-packaged-resources.cjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -126,7 +126,7 @@ jobs:
         run: |
           npm run fpcalc:prepare
           npm run keyfinder:download
-          npx --no-install vite build
+          npm run verify:release
           node scripts/verify-packaged-resources.cjs
 
       - name: Build and publish DMG

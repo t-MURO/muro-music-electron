@@ -45,6 +45,7 @@ const writeSilentWave = (filePath, durationSeconds = 5) => {
   buffer.writeUInt32LE(dataSize, 40);
   fs.writeFileSync(filePath, buffer);
 };
+const smokeNow = Date.now();
 const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   id: `smoke-track-${index}`,
   title: `Smoke Track ${String(index).padStart(3, "0")}`,
@@ -58,7 +59,7 @@ const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   track_number: (index % 10) + 1,
   track_total: 10,
   year: 2000 + Math.floor(index / 10),
-  date_added: `2026-06-${String((index % 28) + 1).padStart(2, "0")}T12:00:00.000Z`,
+  date_added: new Date(smokeNow - index * 86_400_000).toISOString(),
   genre: index % 2 === 0 ? "Electronic" : "House",
   duration: "3:00",
   duration_seconds: 180,
@@ -507,10 +508,22 @@ app.whenReady().then(async () => {
     if (command === "scan_technical_metadata") {
       return { checked: 0, updated: 0, failed: 0, remaining: 0 };
     }
-    if (command === "reorder_playlists" || command === "delete_playlist") return undefined;
+    if (
+      command === "reorder_playlists" ||
+      command === "delete_playlist" ||
+      command === "create_playlist" ||
+      command === "update_playlist" ||
+      command === "set_playlist_tracks"
+    ) return undefined;
+    if (command === "delete_playlists") {
+      return { deleted: args.playlistIds?.length ?? 0 };
+    }
+    if (command === "restore_playlists") {
+      return { restored: args.playlists?.length ?? 0 };
+    }
     if (command === "update_track_metadata") {
       ratingUpdates.push(args);
-      return undefined;
+      return { updated: args.trackIds?.length ?? 0, filesWritten: 0, fileWriteErrors: [] };
     }
     if (command === "playback_get_state") return {
       is_playing: false,
@@ -519,7 +532,20 @@ app.whenReady().then(async () => {
       volume: 1,
       current_track: null,
     };
-    if (command === "cast_get_state" || command === "dlna_get_state") return {
+    if (command === "cast_get_state") return {
+      state: "idle",
+      deviceId: null,
+      deviceName: null,
+      media: null,
+      track: null,
+      lastError: null,
+      discovery: {
+        devices: [{ id: "cast-smoke", name: "Smoke Speaker", model: "Smoke Cast" }],
+        scanning: false,
+        error: null,
+      },
+    };
+    if (command === "dlna_get_state") return {
       state: "idle",
       deviceId: null,
       deviceName: null,
@@ -528,15 +554,59 @@ app.whenReady().then(async () => {
       lastError: null,
       discovery: { devices: [], scanning: false, error: null },
     };
-    if (
-      command === "playback_play_file" ||
-      command === "playback_set_seek_mode" ||
-      command === "generate_track_waveform"
-    ) return command === "generate_track_waveform" ? [] : undefined;
+    if (command === "cast_start_discovery") {
+      return {
+        devices: [{ id: "cast-smoke", name: "Smoke Speaker", model: "Smoke Cast" }],
+        scanning: false,
+        error: null,
+      };
+    }
+    if (command === "dlna_start_discovery") {
+      return { devices: [], scanning: false, error: null };
+    }
+    if (command === "cast_stop_discovery" || command === "dlna_stop_discovery") {
+      return undefined;
+    }
+    if (command === "cast_connect") {
+      const state = {
+        state: "connected",
+        deviceId: "cast-smoke",
+        deviceName: "Smoke Speaker",
+        media: null,
+        track: null,
+        lastError: null,
+      };
+      event.sender.send("muro:event", "muro://cast-state", state);
+      return state;
+    }
+    if (command === "cast_load_track") {
+      throw new Error("CAST_UNSUPPORTED_FORMAT: simulated unsupported format");
+    }
+    if (command === "cast_disconnect") {
+      const state = {
+        state: "idle",
+        deviceId: null,
+        deviceName: null,
+        media: null,
+        track: null,
+        lastError: null,
+        lastPositionSecs: 0,
+      };
+      event.sender.send("muro:event", "muro://cast-state", state);
+      return state;
+    }
+    if (command === "playback_play_file") return undefined;
+    if (command === "playback_set_seek_mode" || command === "generate_track_waveform") {
+      return command === "generate_track_waveform" ? [] : undefined;
+    }
     if (command === "playback_toggle") return false;
     if (command === "add_tracks_to_playlist") return undefined;
     if (command === "test_emit_media_control") {
       event.sender.send("muro:event", "muro://media-control", args.payload ?? args.action);
+      return undefined;
+    }
+    if (command === "test_emit_track_ended") {
+      event.sender.send("muro:event", "muro://track-ended", null);
       return undefined;
     }
     if (command === "test_emit_transition_state") {
@@ -1352,15 +1422,10 @@ app.whenReady().then(async () => {
         const albumCoverUpdate = [...metadataUpdates].reverse().find(
           (entry) => typeof entry.updates?.coverArtPath === "string"
         );
-        const expectedAlbumTrackIds = new Set(
-          Array.from({ length: 10 }, (_, index) => "smoke-track-" + index)
-        );
-        const coverAppliedToAlbumReady = Boolean(
-          albumCoverUpdate?.trackIds?.length === expectedAlbumTrackIds.size &&
-          albumCoverUpdate.trackIds.every((trackId) => expectedAlbumTrackIds.has(trackId)) &&
-          Object.keys(albumCoverUpdate.updates).every(
-            (field) => field === "coverArtPath" || field === "coverArtThumbPath"
-          )
+        const expectedSelectedTrackId = "smoke-track-" + (selectedAfterArrowDown ?? "1");
+        const coverAppliedToSelectionReady = Boolean(
+          albumCoverUpdate?.trackIds?.length === 1 &&
+          albumCoverUpdate.trackIds[0] === expectedSelectedTrackId
         );
         await window.muro.invoke("test_enable_brave_cover_fallback");
         document.querySelector('[data-selection-edit]')?.click();
@@ -1460,6 +1525,56 @@ app.whenReady().then(async () => {
           navigator.mediaSession?.metadata?.title === "Smoke Track 001" &&
           navigator.mediaSession.playbackState === "playing"
         );
+        scroller.querySelector('[data-track-index="2"]')?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        scroller.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "q",
+          code: "KeyQ",
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        playingTrackRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        scroller.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "r",
+          code: "KeyR",
+          bubbles: true,
+          cancelable: true,
+        }));
+        scroller.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "r",
+          code: "KeyR",
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const repeatOneButtonReady = document.querySelector('button[title="Repeat one"]') !== null;
+        const queuedTrackCountBeforeRepeat = document.querySelectorAll('[data-queue-track]').length;
+        await window.muro.invoke("test_emit_track_ended");
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const repeatOneReady = Boolean(
+          repeatOneButtonReady &&
+          queuedTrackCountBeforeRepeat > 0 &&
+          document.querySelectorAll('[data-queue-track]').length === queuedTrackCountBeforeRepeat &&
+          scroller.querySelector('[data-track-playing="true"]')
+            ?.getAttribute("data-track-index") === playingAfterSpace
+        );
+        const repeatOneDebug = {
+          repeatOneButtonReady,
+          queuedTrackCountBeforeRepeat,
+          playingAfterSpace,
+          playingAfterRepeat: scroller.querySelector('[data-track-playing="true"]')
+            ?.getAttribute("data-track-index") ?? null,
+        };
+        document.querySelector('button[title="Remove from queue"]')?.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const playerMetadata = document.querySelector("[data-player-track-metadata]");
         const playerRatingControl = playerMetadata?.querySelector('[role="slider"]');
         const fourthPlayerRatingStar = playerMetadata?.querySelector('[data-rating-star="4"]');
@@ -1506,6 +1621,17 @@ app.whenReady().then(async () => {
           : "";
         const pausedRowUsesGreyHighlight = pausedRowColor.startsWith("rgba(148, 163, 184,");
         const mediaSessionPausedReady = navigator.mediaSession?.playbackState === "paused";
+        document.querySelector("[data-output-button]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        document.querySelector('[data-output-device="cast:cast-smoke"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 160));
+        const remoteFallbackReady = Boolean(
+          document.querySelector("[data-output-button]")?.getAttribute("data-output-state") === "idle" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes("Local playback is ready and paused at the handoff position.")
+          )
+        );
         await window.muro.invoke("test_emit_media_control", { action: "next" });
         await new Promise((resolve) => setTimeout(resolve, 100));
         const mediaNextTrackIndex = scroller.querySelector('[data-track-playing="true"]')
@@ -1663,6 +1789,104 @@ app.whenReady().then(async () => {
             ?.textContent?.replace(/[^0-9]/g, "") ?? 0
         );
         const contextAddToPlaylistReady = playlistChoicesReady && emptyPlaylistCount > 0;
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "z",
+          code: "KeyZ",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const countAfterPlaylistUndo = Number(
+          document.querySelector('[data-playlist-id="smoke-empty-playlist"] .sidebar-count')
+            ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+        );
+        const truthfulPlaylistUndoReady = Boolean(
+          countAfterPlaylistUndo === 0 &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes('Restored "Empty Mix" to its previous 0 tracks.')
+          )
+        );
+        const visiblePlaylistRows = [...scroller.querySelectorAll("[data-track-index]")];
+        const existingNextPlaylistTitles = new Set([
+          "Smoke Track 000",
+          "Smoke Track 010",
+          "Smoke Track 020",
+        ]);
+        const rowTitle = (row) =>
+          row.querySelector('[data-column-key="title"]')?.textContent?.trim() ?? "";
+        const duplicatePlaylistRow = visiblePlaylistRows.find((row) =>
+          existingNextPlaylistTitles.has(rowTitle(row))
+        );
+        const novelPlaylistRow = visiblePlaylistRows.find((row) =>
+          !existingNextPlaylistTitles.has(rowTitle(row))
+        );
+        duplicatePlaylistRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        novelPlaylistRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        duplicatePlaylistRow?.dispatchEvent(new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 160,
+          clientY: 160,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-testid="add-to-playlist-menu-item"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        document.querySelector('[data-playlist-choice="smoke-next-playlist"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const addNonDuplicatesButton = [...document.querySelectorAll("button")]
+          .find((button) => button.textContent?.trim() === "Add non-duplicates");
+        addNonDuplicatesButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const mixedDuplicateAddedCount = Number(
+          document.querySelector('[data-playlist-id="smoke-next-playlist"] .sidebar-count')
+            ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+        );
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "z",
+          code: "KeyZ",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const mixedDuplicateUndoCount = Number(
+          document.querySelector('[data-playlist-id="smoke-next-playlist"] .sidebar-count')
+            ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+        );
+        const mixedDuplicateUndoReady = Boolean(
+          addNonDuplicatesButton &&
+          mixedDuplicateAddedCount === 4 &&
+          mixedDuplicateUndoCount === 3 &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes('Restored "Next Context" to its previous 3 tracks.')
+          )
+        );
+        const mixedDuplicateUndoDebug = {
+          button: Boolean(addNonDuplicatesButton),
+          duplicateTitle: duplicatePlaylistRow ? rowTitle(duplicatePlaylistRow) : null,
+          novelTitle: novelPlaylistRow ? rowTitle(novelPlaylistRow) : null,
+          addedCount: mixedDuplicateAddedCount,
+          undoCount: mixedDuplicateUndoCount,
+          messages: [...document.querySelectorAll(".fixed.bottom-4.right-4 p")]
+            .map((message) => message.textContent),
+        };
+        firstTrackRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
         const dragPlaylistTarget = document.querySelector(
           '[data-playlist-target="smoke-drag-playlist"]'
         );
@@ -2320,17 +2544,28 @@ app.whenReady().then(async () => {
         const recentlyAddedBelowPlayed =
           recentlyAddedNavigationIndex === recentlyPlayedNavigationIndex + 1;
         document.querySelector('[data-library-view="recentlyAdded"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        const recentlyAddedFirstTitle = document.querySelector(
-          '[data-track-index="0"] [data-column-key="title"]'
-        )?.textContent?.trim();
+        let recentlyAddedFirstTitle = null;
+        for (let attempt = 0; attempt < 20 && !recentlyAddedFirstTitle; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          recentlyAddedFirstTitle = document.querySelector(
+            '[data-track-index="0"] [data-column-key="title"]'
+          )?.textContent?.trim() ?? null;
+        }
         const recentlyAddedViewReady = Boolean(
           recentlyAddedBelowPlayed &&
           window.location.hash === "#/recently-added" &&
           document.querySelector('[data-library-view="recentlyAdded"]')?.getAttribute("aria-current") === "page" &&
           document.querySelector("h2")?.textContent?.trim() === "Recently Added" &&
-          recentlyAddedFirstTitle === "Smoke Track 027"
+          recentlyAddedFirstTitle === "Smoke Track 000"
         );
+        const recentlyAddedDebug = {
+          recentlyAddedBelowPlayed,
+          hash: window.location.hash,
+          current: document.querySelector('[data-library-view="recentlyAdded"]')
+            ?.getAttribute("aria-current") ?? null,
+          heading: document.querySelector("h2")?.textContent?.trim() ?? null,
+          firstTitle: recentlyAddedFirstTitle ?? null,
+        };
 
         window.location.hash = "#/collection/genres";
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -2624,7 +2859,7 @@ app.whenReady().then(async () => {
           manualCoverMenuReady,
           manualCoverFetchReady,
           manualCoverCopyReady,
-          coverAppliedToAlbumReady,
+          coverAppliedToSelectionReady,
           braveCoverPickerReady,
           rowThumbnailReady,
           ratingFitsCell,
@@ -2639,7 +2874,10 @@ app.whenReady().then(async () => {
           pausedAfterSecondSpace,
           pausedRowUsesGreyHighlight,
           mediaSessionPlayingReady,
+          repeatOneReady,
+          repeatOneDebug,
           mediaSessionPausedReady,
+          remoteFallbackReady,
           playerMetadataReady,
           playerRatingSetToFour,
           playerRatingClearsToZero,
@@ -2671,6 +2909,9 @@ app.whenReady().then(async () => {
           queuedFromMix,
           playlistDropTargetReady,
           contextAddToPlaylistReady,
+          truthfulPlaylistUndoReady,
+          mixedDuplicateUndoReady,
+          mixedDuplicateUndoDebug,
           dragAddToPlaylistReady,
           settingsNavigationReady,
           artistInformationSettingsReady,
@@ -2719,6 +2960,7 @@ app.whenReady().then(async () => {
           tableAlbumNavigationReady,
           tableTextOnlyNavigationReady,
           recentlyAddedViewReady,
+          recentlyAddedDebug,
           genreIndexReady,
           genreDrilldownReady,
           genreHistoryReady,
@@ -2913,11 +3155,16 @@ app.whenReady().then(async () => {
       if (
         !result.playlistDropTargetReady ||
         !result.contextAddToPlaylistReady ||
+        !result.truthfulPlaylistUndoReady ||
+        !result.mixedDuplicateUndoReady ||
         !result.dragAddToPlaylistReady
       ) {
         fail(
           `Adding tracks to playlists failed: dropTarget=${result.playlistDropTargetReady}, ` +
-          `contextMenu=${result.contextAddToPlaylistReady}, drag=${result.dragAddToPlaylistReady}`
+          `contextMenu=${result.contextAddToPlaylistReady}, ` +
+          `undo=${result.truthfulPlaylistUndoReady}, ` +
+          `duplicates=${result.mixedDuplicateUndoReady} ` +
+          `${JSON.stringify(result.mixedDuplicateUndoDebug)}, drag=${result.dragAddToPlaylistReady}`
         );
         return;
       }
@@ -3024,13 +3271,13 @@ app.whenReady().then(async () => {
         !result.manualCoverMenuReady ||
         !result.manualCoverFetchReady ||
         !result.manualCoverCopyReady ||
-        !result.coverAppliedToAlbumReady ||
+        !result.coverAppliedToSelectionReady ||
         !result.braveCoverPickerReady
       ) {
         fail(
           `Manual cover fetch failed: menu=${result.manualCoverMenuReady}, ` +
           `fetch=${result.manualCoverFetchReady}, copy=${result.manualCoverCopyReady}, ` +
-          `album=${result.coverAppliedToAlbumReady}, bravePicker=${result.braveCoverPickerReady}`
+          `selection=${result.coverAppliedToSelectionReady}, bravePicker=${result.braveCoverPickerReady}`
         );
         return;
       }
@@ -3063,11 +3310,22 @@ app.whenReady().then(async () => {
         );
         return;
       }
+      if (!result.repeatOneReady) {
+        fail(
+          "Repeat-one advanced the queue instead of replaying the current track: " +
+          JSON.stringify(result.repeatOneDebug)
+        );
+        return;
+      }
       if (!result.mediaSessionPlayingReady || !result.mediaSessionPausedReady) {
         fail(
           `Media Session integration failed: ` +
           `playing=${result.mediaSessionPlayingReady}, paused=${result.mediaSessionPausedReady}`
         );
+        return;
+      }
+      if (!result.remoteFallbackReady) {
+        fail("A failed remote load did not restore paused local playback");
         return;
       }
       if (result.mediaNextTrackIndex !== "2" || result.mediaPreviousTrackIndex !== "1") {
@@ -3122,7 +3380,10 @@ app.whenReady().then(async () => {
         return;
       }
       if (!result.recentlyAddedViewReady) {
-        fail("Recently Added navigation or newest-first ordering failed");
+        fail(
+          "Recently Added navigation or newest-first ordering failed: " +
+          JSON.stringify(result.recentlyAddedDebug)
+        );
         return;
       }
       if (!result.autocompleteFieldsReady) {
