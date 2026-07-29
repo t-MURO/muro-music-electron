@@ -13,7 +13,7 @@ type WatchedImportPayload = {
 };
 
 /**
- * Keeps the main process watching the configured folders and folds anything it
+ * Keeps the main process watching the configured folder and folds anything it
  * imports into the Inbox list without a full library reload.
  */
 export const useWatchedFolders = () => {

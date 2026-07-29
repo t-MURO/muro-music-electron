@@ -518,6 +518,113 @@ try {
     1,
     "concurrent imports persist one canonical track",
   );
+
+  const watchedImportPath = path.join(directory, "watched-library");
+  const outsideDropPath = path.join(directory, "outside-folder-drop");
+  fs.mkdirSync(watchedImportPath);
+  fs.mkdirSync(outsideDropPath);
+  const outsideDropTrackPath = path.join(outsideDropPath, "folder-drop.wav");
+  writeSilentWav(outsideDropTrackPath);
+  const outsideFolderImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [outsideDropPath],
+    nativeFolderDrop: true,
+    watchedFolders: [watchedImportPath],
+  });
+  assert.equal(outsideFolderImport.imported.length, 1);
+  assert.equal(
+    outsideFolderImport.imported[0].move_to_watched_folder_on_accept,
+    1,
+    "a folder dropped from outside the watched folder is marked for relocation",
+  );
+  const acceptedOutsideFolder = await backend.invoke("accept_tracks", {
+    dbPath,
+    trackIds: [outsideFolderImport.imported[0].id],
+    organize: false,
+    watchedFolders: [watchedImportPath],
+  });
+  const relocatedDropTrackPath = path.join(watchedImportPath, "folder-drop.wav");
+  assert.deepEqual(
+    acceptedOutsideFolder.moved.map((entry) => entry.sourcePath),
+    [relocatedDropTrackPath],
+    "accepting an outside folder drop moves it into the watched folder",
+  );
+  assert.equal(fs.existsSync(outsideDropTrackPath), false);
+  assert.equal(fs.existsSync(relocatedDropTrackPath), true);
+  assert.equal(
+    db.prepare(`
+      SELECT move_to_watched_folder_on_accept
+      FROM tracks WHERE id = ?
+    `).get(outsideFolderImport.imported[0].id).move_to_watched_folder_on_accept,
+    0,
+    "the one-time move marker is cleared after a successful relocation",
+  );
+  await backend.invoke("reject_tracks", {
+    dbPath,
+    trackIds: [outsideFolderImport.imported[0].id],
+  });
+  fs.unlinkSync(relocatedDropTrackPath);
+
+  const individualDropTrackPath = path.join(directory, "individual-drop.wav");
+  writeSilentWav(individualDropTrackPath);
+  const individualDropImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [individualDropTrackPath],
+    nativeFolderDrop: true,
+    watchedFolders: [watchedImportPath],
+  });
+  assert.equal(
+    individualDropImport.imported[0].move_to_watched_folder_on_accept,
+    0,
+    "an individually dropped file is not marked for relocation",
+  );
+  await backend.invoke("reject_tracks", {
+    dbPath,
+    trackIds: [individualDropImport.imported[0].id],
+  });
+
+  const noDestinationFolder = path.join(directory, "no-destination-folder-drop");
+  fs.mkdirSync(noDestinationFolder);
+  const noDestinationTrackPath = path.join(noDestinationFolder, "no-destination.wav");
+  writeSilentWav(noDestinationTrackPath);
+  const noDestinationImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [noDestinationFolder],
+    nativeFolderDrop: true,
+    watchedFolders: [],
+  });
+  assert.equal(
+    noDestinationImport.imported[0].move_to_watched_folder_on_accept,
+    0,
+    "a folder drop imports normally when no watched destination is configured",
+  );
+  await backend.invoke("reject_tracks", {
+    dbPath,
+    trackIds: [noDestinationImport.imported[0].id],
+  });
+
+  const watchedDropTrackPath = path.join(watchedImportPath, "already-watched.wav");
+  writeSilentWav(watchedDropTrackPath);
+  const watchedFolderImport = await backend.invoke("import_files", {
+    dbPath,
+    paths: [watchedImportPath],
+    nativeFolderDrop: true,
+    watchedFolders: [watchedImportPath],
+  });
+  const watchedDropTrack = watchedFolderImport.imported.find(
+    (track) => track.source_path === watchedDropTrackPath,
+  );
+  assert.ok(watchedDropTrack);
+  assert.equal(
+    watchedDropTrack.move_to_watched_folder_on_accept,
+    0,
+    "a dropped folder that is already watched stays in place",
+  );
+  await backend.invoke("reject_tracks", {
+    dbPath,
+    trackIds: [watchedDropTrack.id],
+  });
+
   const selectedCoverPath = path.join(directory, "selected-cover.png");
   const highResolutionCover = await sharp({
     create: { width: 2000, height: 1500, channels: 3, background: "#c92f49" },

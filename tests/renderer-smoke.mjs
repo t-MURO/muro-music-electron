@@ -131,6 +131,11 @@ let selectedBraveCoverId = null;
 let artistImageSaveCount = 0;
 let organizedLibraryExportArgs = null;
 let organizedLibraryReloaded = false;
+const settingsWatchedFolders = [
+  path.join(temporaryDirectory, "watched-one"),
+  path.join(temporaryDirectory, "watched-two"),
+];
+let settingsWatchedFolderSelection = 0;
 const shownItemPaths = [];
 const copiedCoverPaths = [];
 const ratingUpdates = [];
@@ -168,9 +173,17 @@ app.whenReady().then(async () => {
     return createLocalFileResponse(request, decodeURIComponent(url.pathname.slice(1)));
   });
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
-  ipcMain.handle("muro:open-dialog", () =>
-    libraryExportSmokeOnly ? temporaryDirectory : null
-  );
+  ipcMain.handle("muro:open-dialog", () => {
+    if (libraryExportSmokeOnly) return temporaryDirectory;
+    if (settingsSmokeOnly) {
+      const selected = settingsWatchedFolders[
+        Math.min(settingsWatchedFolderSelection, settingsWatchedFolders.length - 1)
+      ];
+      settingsWatchedFolderSelection += 1;
+      return selected;
+    }
+    return null;
+  });
   ipcMain.handle("muro:clipboard-has-image", () => false);
   ipcMain.handle("muro:cache-clipboard-cover-art", () => null);
   ipcMain.handle("muro:copy-image-to-clipboard", (_event, filePath) => {
@@ -825,6 +838,25 @@ app.whenReady().then(async () => {
           document.querySelector("[data-artist-separator-tool]") &&
           document.querySelector("[data-organized-library-export]")
         );
+        document.querySelector("[data-watch-add-folder]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const firstWatchedFolderReady = Boolean(
+          document.querySelector("[data-watch-add-folder]")?.textContent?.includes("Change folder") &&
+          document.querySelector("[data-watch-folder-destination-hint]") &&
+          document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])})
+        );
+        document.querySelector("[data-watch-add-folder]")?.click();
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        const persistedWatchedFolders = JSON.parse(
+          localStorage.getItem("muro-settings") ?? "null"
+        )?.state?.watchedFolders;
+        const singleWatchedFolderReady = Boolean(
+          document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[1])}) &&
+          !document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])}) &&
+          Array.isArray(persistedWatchedFolders) &&
+          persistedWatchedFolders.length === 1 &&
+          persistedWatchedFolders[0] === ${JSON.stringify(settingsWatchedFolders[1])}
+        );
 
         document.querySelector('[data-settings-tab="analysis"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
@@ -864,6 +896,8 @@ app.whenReady().then(async () => {
             providersReady &&
             showKeyReady &&
             libraryReady &&
+            firstWatchedFolderReady &&
+            singleWatchedFolderReady &&
             analysisReady &&
             djReady &&
             advancedReady &&
@@ -875,6 +909,9 @@ app.whenReady().then(async () => {
             providersReady,
             showKeyReady,
             libraryReady,
+            firstWatchedFolderReady,
+            singleWatchedFolderReady,
+            persistedWatchedFolders,
             analysisReady,
             djReady,
             advancedReady,

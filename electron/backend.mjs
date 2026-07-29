@@ -41,7 +41,11 @@ import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
 import { exportAllPlaylists, exportOrganizedLibrary } from "./libraryExport.mjs";
 import { createLibraryWatcher } from "./libraryWatcher.mjs";
-import { acceptInboxTracks } from "./inboxOrganizer.mjs";
+import {
+  acceptInboxTracks,
+  findContainingWatchedFolder,
+  isPathInsideOrEqual,
+} from "./inboxOrganizer.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -536,14 +540,67 @@ export const createBackend = ({
   const commands = {
     ...castService.commands,
     ...dlnaService.commands,
-    async import_files({ paths, dbPath }, sender) {
-      const audioPaths = await collectAudioPaths(Array.isArray(paths) ? paths : []);
+    async import_files({
+      paths,
+      dbPath,
+      nativeFolderDrop,
+      watchedFolders,
+      moveToWatchedFolderOnAcceptPaths,
+    }, sender) {
+      const inputPaths = Array.isArray(paths) ? paths : [];
+      const audioPaths = await collectAudioPaths(inputPaths);
+      const normalizedWatchedFolders = Array.isArray(watchedFolders)
+        ? watchedFolders
+            .map((folder) => String(folder ?? "").trim())
+            .filter(Boolean)
+            .map((folder) => path.resolve(folder))
+        : [];
+      const explicitlyMarkedPaths = new Set(
+        (Array.isArray(moveToWatchedFolderOnAcceptPaths)
+          ? moveToWatchedFolderOnAcceptPaths
+          : [])
+          .map((filePath) => String(filePath ?? "").trim())
+          .filter(Boolean)
+          .map((filePath) => path.resolve(filePath)),
+      );
+      const droppedFolders = [];
+      if (nativeFolderDrop) {
+        for (const inputPath of inputPaths) {
+          const resolvedPath = path.resolve(String(inputPath ?? ""));
+          try {
+            if ((await fs.promises.stat(resolvedPath)).isDirectory()) {
+              droppedFolders.push(resolvedPath);
+            }
+          } catch {
+            // The importer will report or ignore unreadable inputs normally.
+          }
+        }
+      }
       const imported = [];
       const failures = [];
       for (let index = 0; index < audioPaths.length; index += 1) {
         try {
-          const track = await importAudioFile(dbPath, audioPaths[index], cacheDir);
+          const audioPath = audioPaths[index];
+          const moveToWatchedFolderOnAccept =
+            explicitlyMarkedPaths.has(path.resolve(audioPath))
+            || (
+              normalizedWatchedFolders.length > 0
+              && droppedFolders.some((folder) => isPathInsideOrEqual(audioPath, folder))
+              && !findContainingWatchedFolder(audioPath, normalizedWatchedFolders)
+            );
+          const track = await importAudioFile(dbPath, audioPath, cacheDir, {
+            moveToWatchedFolderOnAccept,
+          });
           if (track) imported.push(track);
+          else if (moveToWatchedFolderOnAccept) {
+            // A previous import of the same staged file may have won a race.
+            // Preserve the folder-drop intent on that existing Inbox row.
+            openDatabase(dbPath).prepare(`
+              UPDATE tracks
+              SET move_to_watched_folder_on_accept = 1
+              WHERE source_path = ? AND import_status = 'staged'
+            `).run(audioPath);
+          }
         } catch (error) {
           console.warn(`Failed to import ${audioPaths[index]}:`, error);
           failures.push({

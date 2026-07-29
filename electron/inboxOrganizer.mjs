@@ -10,10 +10,9 @@ const normalizedPath = (value) => {
 
 const pathsEqual = (left, right) => normalizedPath(left) === normalizedPath(right);
 
-const isInsideFolder = (filePath, folderPath) => {
-  const relative = path.relative(path.resolve(folderPath), path.resolve(filePath));
-  return relative !== ""
-    && relative !== ".."
+export const isPathInsideOrEqual = (candidatePath, folderPath) => {
+  const relative = path.relative(path.resolve(folderPath), path.resolve(candidatePath));
+  return relative !== ".."
     && !relative.startsWith(`..${path.sep}`)
     && !path.isAbsolute(relative);
 };
@@ -25,7 +24,7 @@ export const findContainingWatchedFolder = (sourcePath, watchedFolders) =>
       .filter(Boolean)
       .map((folder) => path.resolve(folder)),
   )]
-    .filter((folder) => isInsideFolder(sourcePath, folder))
+    .filter((folder) => isPathInsideOrEqual(sourcePath, folder))
     .sort((left, right) => right.length - left.length)[0] ?? null;
 
 const sourceFileName = (track) => {
@@ -48,6 +47,14 @@ export const acceptedTrackDestination = (track, watchedFolder) => {
     artistFolder,
     albumFolder,
     sourceFileName(track),
+  );
+};
+
+export const acceptedTrackRootDestination = (track, watchedFolder) => {
+  const sourceName = path.basename(String(track.source_path ?? ""));
+  return path.join(
+    path.resolve(watchedFolder),
+    sourceName || sourceFileName(track),
   );
 };
 
@@ -135,7 +142,8 @@ export const acceptInboxTracks = async ({
   const db = openDatabase(dbPath);
   const placeholders = ids.map(() => "?").join(", ");
   const tracks = db.prepare(`
-    SELECT id, title, artist, album_artist, album, filename, source_path
+    SELECT id, title, artist, album_artist, album, filename, source_path,
+      move_to_watched_folder_on_accept
     FROM tracks
     WHERE id IN (${placeholders})
   `).all(...ids);
@@ -149,21 +157,67 @@ export const acceptInboxTracks = async ({
 
   const moved = [];
   const failures = [];
-  if (!organize) return { accepted: tracks.length, moved, failures };
+  const hasOutsideFolderImports = tracks.some(
+    (track) => Number(track.move_to_watched_folder_on_accept) === 1,
+  );
+  if (!organize && !hasOutsideFolderImports) {
+    return { accepted: tracks.length, moved, failures };
+  }
+
+  const watchedFolder = (Array.isArray(watchedFolders) ? watchedFolders : [])
+    .map((folder) => String(folder ?? "").trim())
+    .filter(Boolean)
+    .map((folder) => path.resolve(folder))[0] ?? null;
+  let watchedFolderAvailable = false;
+  if (watchedFolder) {
+    try {
+      watchedFolderAvailable = (await fs.promises.stat(watchedFolder)).isDirectory();
+    } catch {
+      watchedFolderAvailable = false;
+    }
+  }
 
   const updatePath = db.prepare(`
     UPDATE tracks
-    SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
+    SET source_path = ?, filename = ?, is_missing = 0,
+      move_to_watched_folder_on_accept = 0, updated_at = ?
+    WHERE id = ?
+  `);
+  const clearMoveOnAccept = db.prepare(`
+    UPDATE tracks
+    SET move_to_watched_folder_on_accept = 0, updated_at = ?
     WHERE id = ?
   `);
 
   for (const track of tracks) {
     const sourcePath = path.resolve(String(track.source_path ?? ""));
-    const watchedFolder = findContainingWatchedFolder(sourcePath, watchedFolders);
-    if (!watchedFolder) continue;
+    const moveToWatchedFolder = Number(track.move_to_watched_folder_on_accept) === 1;
+    const containingWatchedFolder = findContainingWatchedFolder(sourcePath, watchedFolders);
 
-    const requestedDestination = acceptedTrackDestination(track, watchedFolder);
-    if (pathsEqual(sourcePath, requestedDestination)) continue;
+    let requestedDestination;
+    if (moveToWatchedFolder) {
+      if (!watchedFolder || !watchedFolderAvailable) {
+        failures.push({
+          trackId: String(track.id),
+          sourcePath,
+          message: watchedFolder
+            ? "The watched folder is unavailable"
+            : "No watched folder is configured",
+        });
+        continue;
+      }
+      requestedDestination = organize
+        ? acceptedTrackDestination(track, watchedFolder)
+        : acceptedTrackRootDestination(track, watchedFolder);
+    } else {
+      if (!organize || !containingWatchedFolder) continue;
+      requestedDestination = acceptedTrackDestination(track, containingWatchedFolder);
+    }
+
+    if (pathsEqual(sourcePath, requestedDestination)) {
+      if (moveToWatchedFolder) clearMoveOnAccept.run(now, track.id);
+      continue;
+    }
 
     let destinationPath = null;
     try {

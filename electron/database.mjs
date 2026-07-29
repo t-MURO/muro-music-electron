@@ -44,6 +44,7 @@ const TRACK_SCHEMA = `
     source_path TEXT UNIQUE NOT NULL,
     search_text TEXT,
     import_status TEXT NOT NULL DEFAULT 'staged',
+    move_to_watched_folder_on_accept INTEGER NOT NULL DEFAULT 0,
     duration_seconds REAL,
     bitrate_kbps INTEGER,
     sample_rate_hz INTEGER,
@@ -244,6 +245,7 @@ const REQUIRED_TRACK_COLUMNS = {
   source_path: "TEXT",
   search_text: "TEXT",
   import_status: "TEXT DEFAULT 'staged'",
+  move_to_watched_folder_on_accept: "INTEGER NOT NULL DEFAULT 0",
   duration_seconds: "REAL",
   bitrate_kbps: "INTEGER",
   sample_rate_hz: "INTEGER",
@@ -501,13 +503,15 @@ export const rowToTrack = (row) => ({
   musicbrainz_albumid: row.musicbrainz_albumid || undefined,
   musicbrainz_releasegroupid: row.musicbrainz_releasegroupid || undefined,
   acoustid_id: row.acoustid_id || undefined,
+  move_to_watched_folder_on_accept:
+    Number(row.move_to_watched_folder_on_accept) === 1 ? 1 : 0,
 });
 
 const TRACK_SELECT = `
   SELECT id, title, artist, album_artist, album, track_number, track_total,
     key, bpm, year, date, added_at, updated_at, rating, duration_seconds,
     bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
-    import_status, source_path, cover_art_path,
+    import_status, move_to_watched_folder_on_accept, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
     comment_json, label, disc_number, disc_total, beat_grid_json,
     musicbrainz_trackid, musicbrainz_albumid, musicbrainz_releasegroupid, acoustid_id,

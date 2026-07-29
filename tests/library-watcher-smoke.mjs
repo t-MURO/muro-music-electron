@@ -5,6 +5,7 @@ import path from "node:path";
 import { closeDatabases, openDatabase } from "../electron/database.mjs";
 import { createLibraryWatcher } from "../electron/libraryWatcher.mjs";
 import { acceptInboxTracks } from "../electron/inboxOrganizer.mjs";
+import { importAudioFile } from "../electron/metadata.mjs";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "muro-watch-"));
 const dbPath = path.join(tempDir, "watch.db");
@@ -171,6 +172,40 @@ const run = async () => {
   assert.equal(organizedRow.import_status, "accepted", "the organized track is accepted");
   assert.equal(organizedRow.source_path, organizedOffline, "the database follows the moved file");
   assert.equal(organizedRow.filename, "offline (2).mp3", "the collision suffix is stored");
+
+  const outsideFolder = path.join(tempDir, "outside-drop");
+  fs.mkdirSync(outsideFolder);
+  const outsideFile = path.join(outsideFolder, "outside.mp3");
+  fs.writeFileSync(outsideFile, buildMinimalMp3());
+  const outsideTrack = await importAudioFile(dbPath, outsideFile, cacheDir, {
+    moveToWatchedFolderOnAccept: true,
+  });
+  assert.ok(outsideTrack, "the outside folder track imports into the Inbox");
+  db.prepare(`
+    UPDATE tracks
+    SET artist = 'Outside Artist', album_artist = NULL, album = 'Outside Album'
+    WHERE id = ?
+  `).run(outsideTrack.id);
+
+  const acceptedOutside = await acceptInboxTracks({
+    dbPath,
+    trackIds: [outsideTrack.id],
+    organize: true,
+    watchedFolders: [watchDir],
+  });
+  const organizedOutside = path.join(
+    watchDir,
+    "Outside Artist",
+    "Outside Album",
+    "outside.mp3",
+  );
+  assert.equal(acceptedOutside.moved.length, 1);
+  assert.equal(
+    fs.existsSync(organizedOutside),
+    true,
+    "an outside folder drop is organized beneath the sole watched folder",
+  );
+  assert.equal(fs.existsSync(outsideFile), false);
 
   console.log("library-watcher-smoke: all assertions passed");
 };

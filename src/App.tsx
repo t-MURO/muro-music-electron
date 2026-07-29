@@ -1294,7 +1294,13 @@ function App() {
   });
 
   // Native drag
-  const { isDragging, nativeDropStatus } = useNativeDrag(handleImportPaths);
+  const handleNativeDropImport = useCallback(
+    (paths: string[]) => {
+      void handleImportPaths(paths, { source: "native-drop" });
+    },
+    [handleImportPaths],
+  );
+  const { isDragging, nativeDropStatus } = useNativeDrag(handleNativeDropImport);
 
   // Context menu handlers
   const handleRowContextMenu = useCallback(

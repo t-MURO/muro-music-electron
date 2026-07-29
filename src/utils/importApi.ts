@@ -49,6 +49,7 @@ export type ImportedTrack = {
   musicbrainz_albumid?: string;
   musicbrainz_releasegroupid?: string;
   acoustid_id?: string;
+  move_to_watched_folder_on_accept?: number;
 };
 
 export type LibrarySnapshot = {
@@ -91,10 +92,21 @@ export type ImportFilesResult = {
 // Import Operations
 // ============================================================================
 
-export const importFiles = (dbPath: string, paths: string[]) => {
+export const importFiles = (
+  dbPath: string,
+  paths: string[],
+  options: {
+    nativeFolderDrop?: boolean;
+    watchedFolders?: string[];
+    moveToWatchedFolderOnAcceptPaths?: string[];
+  } = {},
+) => {
   return invoke<ImportFilesResult>("import_files", {
     paths,
     dbPath,
+    nativeFolderDrop: options.nativeFolderDrop ?? false,
+    watchedFolders: options.watchedFolders ?? [],
+    moveToWatchedFolderOnAcceptPaths: options.moveToWatchedFolderOnAcceptPaths ?? [],
   });
 };
 

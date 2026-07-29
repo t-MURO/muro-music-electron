@@ -1025,6 +1025,14 @@ export const SettingsPanel = ({
                         ))}
                       </ul>
                     )}
+                    {watched.watchedFolders.length > 0 && (
+                      <p
+                        className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]"
+                        data-watch-folder-destination-hint
+                      >
+                        {t("watch.destination.hint")}
+                      </p>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-3">
                       <button
@@ -1033,7 +1041,7 @@ export const SettingsPanel = ({
                         onClick={() => { void watched.addFolder(); }}
                         type="button"
                       >
-                        {t("watch.add")}
+                        {t(watched.watchedFolders.length > 0 ? "watch.change" : "watch.add")}
                       </button>
                       <button
                         className={secondaryButtonClass}

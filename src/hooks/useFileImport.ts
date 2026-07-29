@@ -1,7 +1,7 @@
 import { listen } from "@muro/desktop/events";
 import { useCallback, useEffect, useRef } from "react";
 import { commandManager, type Command } from "../command-manager/commandManager";
-import { useLibraryStore, useUIStore, notify } from "../stores";
+import { useLibraryStore, useSettingsStore, useUIStore, notify } from "../stores";
 import { useDbPath } from "./useDbPath";
 import {
   createPlaylist,
@@ -32,6 +32,10 @@ type UseFileImportArgs = {
   onPlaylistFolderDetected?: (directoryPath: string) => Promise<void>;
 };
 
+type ImportPathsOptions = {
+  source?: "picker" | "native-drop";
+};
+
 export const useFileImport = ({
   onImportComplete,
   onPlaylistFolderDetected,
@@ -46,6 +50,7 @@ export const useFileImport = ({
   const pendingPlaylistDrop = useUIStore((s) => s.pendingPlaylistDrop);
   const setPendingPlaylistDrop = useUIStore((s) => s.setPendingPlaylistDrop);
   const setImportProgress = useUIStore((s) => s.setImportProgress);
+  const watchedFolders = useSettingsStore((s) => s.watchedFolders);
 
   // Ref to access current pending drop
   const pendingPlaylistDropRef = useRef<PlaylistDropOperation | null>(null);
@@ -154,7 +159,7 @@ export const useFileImport = ({
   }, [setPendingPlaylistDrop]);
 
   const handleImportPaths = useCallback(
-    async (paths: string[]) => {
+    async (paths: string[], options: ImportPathsOptions = {}) => {
       if (paths.length === 0) {
         return;
       }
@@ -182,7 +187,10 @@ export const useFileImport = ({
         }
 
         const resolvedDbPath = await resolveDbPath();
-        const result = await importFiles(resolvedDbPath, paths);
+        const result = await importFiles(resolvedDbPath, paths, {
+          nativeFolderDrop: options.source === "native-drop",
+          watchedFolders,
+        });
         const imported = result.imported;
         if (imported.length === 0) {
           if (result.scanned === 0) {
@@ -210,10 +218,15 @@ export const useFileImport = ({
         let currentImported = imported;
         let convertedTracks = currentImported.map(importedTrackToTrack);
         const importedSourcePaths = imported.map((track) => track.source_path);
+        let moveToWatchedFolderOnAcceptPaths = imported
+          .filter((track) => track.move_to_watched_folder_on_accept === 1)
+          .map((track) => track.source_path);
         const command: Command = {
           label: `Import ${imported.length} tracks`,
           do: async () => {
-            const redoResult = await importFiles(resolvedDbPath, importedSourcePaths);
+            const redoResult = await importFiles(resolvedDbPath, importedSourcePaths, {
+              moveToWatchedFolderOnAcceptPaths,
+            });
             if (
               redoResult.failures.length > 0
               || redoResult.imported.length !== importedSourcePaths.length
@@ -221,6 +234,9 @@ export const useFileImport = ({
               throw new Error(t("history.import.restoreFailed"));
             }
             currentImported = redoResult.imported;
+            moveToWatchedFolderOnAcceptPaths = currentImported
+              .filter((track) => track.move_to_watched_folder_on_accept === 1)
+              .map((track) => track.source_path);
             convertedTracks = currentImported.map(importedTrackToTrack);
             setInboxTracks((current) => [...convertedTracks, ...current]);
             return t(
@@ -275,6 +291,7 @@ export const useFileImport = ({
       setInboxTracks,
       onImportComplete,
       onPlaylistFolderDetected,
+      watchedFolders,
     ]
   );
 

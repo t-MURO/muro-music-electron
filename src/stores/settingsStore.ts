@@ -87,7 +87,7 @@ type SettingsState = {
   /** ReplayGain 2.0 pins this at -18 LUFS; -14 matches streaming services. */
   replayGainReferenceLufs: number;
   watchFoldersEnabled: boolean;
-  /** Absolute paths watched for new audio; imports land in the Inbox. */
+  /** Sole absolute path watched for new audio; stored as an array for IPC compatibility. */
   watchedFolders: string[];
   /** Move accepted watched-folder imports into Album Artist / Album folders. */
   organizeAcceptedTracks: boolean;
@@ -226,10 +226,10 @@ export const useSettingsStore = create<SettingsStore>()(
       setWatchFoldersEnabled: (watchFoldersEnabled) => set({ watchFoldersEnabled }),
       setOrganizeAcceptedTracks: (organizeAcceptedTracks) =>
         set({ organizeAcceptedTracks }),
-      addWatchedFolder: (folder) => set((state) =>
-        state.watchedFolders.includes(folder)
-          ? {}
-          : { watchedFolders: [...state.watchedFolders, folder] }),
+      // There is intentionally only one watched folder. Choosing another one
+      // replaces it and makes the destination for outside folder-drop imports
+      // unambiguous.
+      addWatchedFolder: (folder) => set({ watchedFolders: [folder] }),
       removeWatchedFolder: (folder) => set((state) => ({
         watchedFolders: state.watchedFolders.filter((entry) => entry !== folder),
       })),
@@ -243,7 +243,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "muro-settings",
-      version: 4,
+      version: 5,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
@@ -292,10 +292,16 @@ export const useSettingsStore = create<SettingsStore>()(
         const savedCustomCodes = Array.isArray(persisted.analysisCustomCodes)
           ? persisted.analysisCustomCodes
           : [];
+        const watchedFolders = Array.isArray(persisted.watchedFolders)
+          ? persisted.watchedFolders.filter(
+              (folder): folder is string => typeof folder === "string" && folder.length > 0,
+            ).slice(0, 1)
+          : [];
 
         return {
           ...currentState,
           ...persisted,
+          watchedFolders,
           theme: normalizeThemeMode(persisted.theme),
           // Analysis settings are a nested group. Merge them with their defaults so
           // settings written by older versions cannot discard newer Key/BPM fields.
