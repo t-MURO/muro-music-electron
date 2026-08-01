@@ -131,12 +131,14 @@ let selectedBraveCoverId = null;
 let artistImageSaveCount = 0;
 let organizedLibraryExportArgs = null;
 let organizedLibraryReloaded = false;
+let itunesLibraryExportArgs = null;
 const settingsWatchedFolders = [
   path.join(temporaryDirectory, "watched-one"),
   path.join(temporaryDirectory, "watched-two"),
 ];
 let settingsWatchedFolderSelection = 0;
 const shownItemPaths = [];
+let nativeDraggedFilePaths = [];
 const copiedCoverPaths = [];
 const ratingUpdates = [];
 for (let index = 0; index < 5; index += 1) {
@@ -184,6 +186,12 @@ app.whenReady().then(async () => {
     }
     return null;
   });
+  ipcMain.handle("muro:save-dialog", (_event, options = {}) => {
+    if (settingsSmokeOnly && options.defaultPath === "Muro Music Library.xml") {
+      return path.join(temporaryDirectory, "Muro Music Library.xml");
+    }
+    return null;
+  });
   ipcMain.handle("muro:clipboard-has-image", () => false);
   ipcMain.handle("muro:cache-clipboard-cover-art", () => null);
   ipcMain.handle("muro:copy-image-to-clipboard", (_event, filePath) => {
@@ -207,6 +215,9 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("muro:show-item-in-folder", (_event, filePath) => {
     shownItemPaths.push(filePath);
+  });
+  ipcMain.on("muro:start-file-drag", (_event, filePaths) => {
+    nativeDraggedFilePaths = Array.isArray(filePaths) ? [...filePaths] : [];
   });
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
     if (command === "load_tracks") {
@@ -288,6 +299,23 @@ app.whenReady().then(async () => {
       ],
     };
     if (command === "load_recently_played") return [];
+    if (command === "list_playlist_history") {
+      return { entries: [], canUndo: false, canRedo: false };
+    }
+    if (command === "list_playlist_snapshots" || command === "list_metadata_history") return [];
+    if (command === "export_itunes_library") {
+      itunesLibraryExportArgs = { ...args };
+      return {
+        destinationPath: args.destinationPath,
+        tracksExported: smokeTracks.length,
+        missingTracksReferenced: 0,
+        playlistFoldersExported: 2,
+        playlistsExported: 5,
+        playlistEntriesExported: 253,
+        playlistEntriesSkipped: 0,
+      };
+    }
+    if (command === "test_get_itunes_library_export_args") return itunesLibraryExportArgs;
     if (command === "load_cached_artist_profiles") return [smokeArtistProfile];
     if (command === "get_artist_profile") return smokeArtistProfile;
     if (command === "search_artist_images") return [
@@ -852,7 +880,24 @@ app.whenReady().then(async () => {
         const libraryReady = Boolean(
           document.querySelector('[data-settings-page="library"]') &&
           document.querySelector("[data-artist-separator-tool]") &&
-          document.querySelector("[data-organized-library-export]")
+          document.querySelector("[data-organized-library-export]") &&
+          document.querySelector("[data-itunes-library-export]") &&
+          document.querySelector("[data-export-itunes-library]")
+        );
+        const itunesExportButton = document.querySelector("[data-export-itunes-library]");
+        itunesExportButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const itunesExportArgs = await window.muro.invoke("test_get_itunes_library_export_args");
+        const itunesExportStatus = document.querySelector(
+          "[data-itunes-library-export-status]"
+        );
+        const itunesExportReady = Boolean(
+          itunesExportButton &&
+          itunesExportArgs?.destinationPath === ${JSON.stringify(
+            path.join(temporaryDirectory, "Muro Music Library.xml")
+          )} &&
+          typeof itunesExportArgs?.dbPath === "string" &&
+          itunesExportStatus?.textContent?.includes("Exported 250 tracks and 5 playlists")
         );
         document.querySelector("[data-watch-add-folder]")?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
@@ -912,6 +957,7 @@ app.whenReady().then(async () => {
             providersReady &&
             showKeyReady &&
             libraryReady &&
+            itunesExportReady &&
             firstWatchedFolderReady &&
             singleWatchedFolderReady &&
             analysisReady &&
@@ -925,6 +971,9 @@ app.whenReady().then(async () => {
             providersReady,
             showKeyReady,
             libraryReady,
+            itunesExportReady,
+            itunesExportArgs,
+            itunesExportStatus: itunesExportStatus?.textContent?.trim() ?? null,
             firstWatchedFolderReady,
             singleWatchedFolderReady,
             persistedWatchedFolders,
@@ -1949,44 +1998,71 @@ app.whenReady().then(async () => {
           messages: [...document.querySelectorAll(".fixed.bottom-4.right-4 p")]
             .map((message) => message.textContent),
         };
-        firstTrackRow?.dispatchEvent(new MouseEvent("click", {
+        const nativeDragRows = [...scroller.querySelectorAll("[data-track-index]")].slice(0, 2);
+        nativeDragRows[0]?.dispatchEvent(new MouseEvent("click", {
           bubbles: true,
           cancelable: true,
           button: 0,
         }));
+        nativeDragRows[1]?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          ctrlKey: true,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
         const dragPlaylistTarget = document.querySelector(
           '[data-playlist-target="smoke-drag-playlist"]'
         );
         let dragAddToPlaylistReady = false;
-        if (firstTrackRow && dragPlaylistTarget) {
-          const originalElementFromPoint = document.elementFromPoint.bind(document);
-          document.elementFromPoint = () => dragPlaylistTarget;
-          firstTrackRow.dispatchEvent(new MouseEvent("mousedown", {
+        let nativeMultiFileDragReady = false;
+        let nativeDragDefaultPrevented = false;
+        if (nativeDragRows[0] && dragPlaylistTarget) {
+          const dataTransfer = new DataTransfer();
+          const dragStartEvent = new DragEvent("dragstart", {
             bubbles: true,
             cancelable: true,
-            button: 0,
+            dataTransfer,
             clientX: 100,
             clientY: 100,
-          }));
-          window.dispatchEvent(new MouseEvent("mousemove", {
+          });
+          nativeDragRows[0].dispatchEvent(dragStartEvent);
+          nativeDragDefaultPrevented = dragStartEvent.defaultPrevented;
+          dragPlaylistTarget.dispatchEvent(new DragEvent("dragenter", {
             bubbles: true,
-            buttons: 1,
+            cancelable: true,
+            dataTransfer,
             clientX: 120,
             clientY: 120,
           }));
-          window.dispatchEvent(new MouseEvent("mouseup", {
+          dragPlaylistTarget.dispatchEvent(new DragEvent("dragover", {
             bubbles: true,
-            button: 0,
+            cancelable: true,
+            dataTransfer,
             clientX: 120,
             clientY: 120,
           }));
-          document.elementFromPoint = originalElementFromPoint;
+          dragPlaylistTarget.dispatchEvent(new DragEvent("drop", {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+            clientX: 120,
+            clientY: 120,
+          }));
+          nativeDragRows[0].dispatchEvent(new DragEvent("dragend", {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer,
+          }));
           await new Promise((resolve) => setTimeout(resolve, 100));
           const dragPlaylistCount = Number(
             document.querySelector('[data-playlist-id="smoke-drag-playlist"] .sidebar-count')
               ?.textContent?.replace(/[^0-9]/g, "") ?? 0
           );
           dragAddToPlaylistReady = dragPlaylistCount > 0;
+          nativeMultiFileDragReady = nativeDragRows.every(
+            (row) => row.getAttribute("data-native-file-draggable") === "true"
+          );
         }
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -2987,6 +3063,8 @@ app.whenReady().then(async () => {
           mixedDuplicateUndoReady,
           mixedDuplicateUndoDebug,
           dragAddToPlaylistReady,
+          nativeMultiFileDragReady,
+          nativeDragDefaultPrevented,
           settingsNavigationReady,
           artistInformationSettingsReady,
           acoustIdSettingsReady,
@@ -3231,14 +3309,21 @@ app.whenReady().then(async () => {
         !result.contextAddToPlaylistReady ||
         !result.truthfulPlaylistUndoReady ||
         !result.mixedDuplicateUndoReady ||
-        !result.dragAddToPlaylistReady
+        !result.dragAddToPlaylistReady ||
+        !result.nativeMultiFileDragReady ||
+        !result.nativeDragDefaultPrevented ||
+        nativeDraggedFilePaths.length !== 2 ||
+        new Set(nativeDraggedFilePaths).size !== 2 ||
+        !nativeDraggedFilePaths.every((filePath) => fs.existsSync(filePath))
       ) {
         fail(
           `Adding tracks to playlists failed: dropTarget=${result.playlistDropTargetReady}, ` +
           `contextMenu=${result.contextAddToPlaylistReady}, ` +
           `undo=${result.truthfulPlaylistUndoReady}, ` +
           `duplicates=${result.mixedDuplicateUndoReady} ` +
-          `${JSON.stringify(result.mixedDuplicateUndoDebug)}, drag=${result.dragAddToPlaylistReady}`
+          `${JSON.stringify(result.mixedDuplicateUndoDebug)}, drag=${result.dragAddToPlaylistReady}, ` +
+          `native=${result.nativeMultiFileDragReady}, prevented=${result.nativeDragDefaultPrevented}, ` +
+          `paths=${JSON.stringify(nativeDraggedFilePaths)}`
         );
         return;
       }

@@ -94,7 +94,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "library",
     label: "Library & Files",
     description: "Database, export, and maintenance",
-    keywords: "database path files export organize separator cache index artwork backup restore history snapshots keyboard shortcuts",
+    keywords: "database path files export organize separator cache index artwork backup restore history snapshots keyboard shortcuts itunes music xml playlists",
     icon: Database,
   },
   {

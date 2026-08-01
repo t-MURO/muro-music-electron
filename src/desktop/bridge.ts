@@ -15,6 +15,7 @@ export type MuroBridge = {
   saveDialog(options: Record<string, unknown>): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   showItemInFolder(filePath: string): Promise<void>;
+  startFileDrag(filePaths: string[]): void;
   confirmDialog(message: string, options?: Record<string, unknown>): Promise<boolean>;
 };
 

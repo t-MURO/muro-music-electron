@@ -431,6 +431,24 @@ export const exportAllPlaylists = (
   destinationPath,
 });
 
+export type ItunesLibraryExportResult = {
+  destinationPath: string;
+  tracksExported: number;
+  missingTracksReferenced: number;
+  playlistFoldersExported: number;
+  playlistsExported: number;
+  playlistEntriesExported: number;
+  playlistEntriesSkipped: number;
+};
+
+export const exportItunesLibrary = (
+  dbPath: string,
+  destinationPath: string,
+) => invoke<ItunesLibraryExportResult>("export_itunes_library", {
+  dbPath,
+  destinationPath,
+});
+
 export type LibraryBackupResult = {
   destinationPath: string;
   bytes: number;

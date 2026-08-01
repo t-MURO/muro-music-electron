@@ -22,7 +22,9 @@ type TrackTableProps = {
     id: string,
     options?: { isMetaKey?: boolean; isShiftKey?: boolean }
   ) => void;
-  onRowMouseDown: (event: React.MouseEvent, id: string) => void;
+  onRowDragStart: (event: React.DragEvent<HTMLDivElement>, id: string) => void;
+  onRowDrag: (event: React.DragEvent<HTMLDivElement>) => void;
+  onRowDragEnd: () => void;
   onRowContextMenu: (
     event: React.MouseEvent,
     id: string,
@@ -54,7 +56,9 @@ export const TrackTable = memo(
     emptySecondaryActionLabel,
     onEmptySecondaryAction,
     onRowSelect,
-    onRowMouseDown,
+    onRowDragStart,
+    onRowDrag,
+    onRowDragEnd,
     onRowContextMenu,
     onRowDoubleClick,
     onTogglePlay,
@@ -235,11 +239,11 @@ export const TrackTable = memo(
       [onRowSelect]
     );
 
-    const handleRowMouseDownStable = useCallback(
-      (event: React.MouseEvent, id: string) => {
-        onRowMouseDown(event, id);
+    const handleRowDragStartStable = useCallback(
+      (event: React.DragEvent<HTMLDivElement>, id: string) => {
+        onRowDragStart(event, id);
       },
-      [onRowMouseDown]
+      [onRowDragStart]
     );
 
     const handleRowContextMenuStable = useCallback(
@@ -347,7 +351,9 @@ export const TrackTable = memo(
                   tableWidth={tableWidth}
                   virtualStart={virtualRow.start}
                   onRowSelect={handleRowSelectStable}
-                  onRowMouseDown={handleRowMouseDownStable}
+                  onRowDragStart={handleRowDragStartStable}
+                  onRowDrag={onRowDrag}
+                  onRowDragEnd={onRowDragEnd}
                   onRowContextMenu={handleRowContextMenuStable}
                   onRowDoubleClick={handleRowDoubleClickStable}
                   onOpenArtist={onOpenArtist}

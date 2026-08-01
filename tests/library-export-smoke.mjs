@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { closeDatabases, openDatabase } from "../electron/database.mjs";
 import {
+  exportItunesLibrary,
   exportOrganizedLibrary,
   sanitizeExportSegment,
 } from "../electron/libraryExport.mjs";
@@ -112,6 +113,47 @@ try {
   addPlaylistTrack.run("playlist-root", "track-1", 1);
   addPlaylistTrack.run("playlist-nested", "track-2", 0);
   addPlaylistTrack.run("playlist-nested", "track-missing", 1);
+
+  db.prepare(`
+    UPDATE tracks
+    SET genre_json = ?, comment_json = ?, rating = 4, play_count = 7,
+      bitrate_kbps = 320, sample_rate_hz = 44100, file_size_bytes = 123456,
+      last_played_at = '2026-07-31T12:00:00.000Z'
+    WHERE id = 'track-1'
+  `).run(JSON.stringify(["House & Techno"]), JSON.stringify(["Peak <time>"]));
+  db.prepare("UPDATE tracks SET is_missing = 1 WHERE id = 'track-missing'").run();
+
+  const itunesExportPath = path.join(destinationDirectory, "Muro Music Library.xml");
+  const itunesResult = await exportItunesLibrary({
+    dbPath,
+    destinationPath: itunesExportPath,
+  });
+  assert.deepEqual(itunesResult, {
+    destinationPath: itunesExportPath,
+    tracksExported: 4,
+    missingTracksReferenced: 1,
+    playlistFoldersExported: 2,
+    playlistsExported: 2,
+    playlistEntriesExported: 4,
+    playlistEntriesSkipped: 0,
+  });
+  const itunesXml = fs.readFileSync(itunesExportPath, "utf8");
+  assert.ok(itunesXml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+  assert.match(itunesXml, /Apple\/\/DTD PLIST 1\.0/);
+  assert.match(itunesXml, /<key>Tracks<\/key>/);
+  assert.match(itunesXml, /<key>Playlists<\/key>/);
+  assert.match(itunesXml, /<key>Rating<\/key>\s*<integer>80<\/integer>/);
+  assert.match(itunesXml, /<string>House &amp; Techno<\/string>/);
+  assert.match(itunesXml, /<string>Peak &lt;time&gt;<\/string>/);
+  assert.match(itunesXml, /<string>Fallback &amp; Artist<\/string>/);
+  assert.match(itunesXml, /<key>Location<\/key>\s*<string>file:\/\/localhost\/.*01%20-%20First\.mp3<\/string>/);
+  assert.match(itunesXml, /<key>Name<\/key>\s*<string>Deep\/Nested<\/string>/);
+  assert.match(itunesXml, /<key>Parent Persistent ID<\/key>\s*<string>[A-F0-9]{16}<\/string>/);
+  assert.match(itunesXml, /<key>Folder<\/key>\s*<true\/>/);
+  assert.equal(
+    (itunesXml.match(/<dict>/g) ?? []).length,
+    (itunesXml.match(/<\/dict>/g) ?? []).length,
+  );
 
   const progress = [];
   const result = await exportOrganizedLibrary({
@@ -228,4 +270,4 @@ try {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
 }
 
-console.log("Organized library export smoke test passed.");
+console.log("Library export smoke test passed.");

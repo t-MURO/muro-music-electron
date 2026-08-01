@@ -38,7 +38,11 @@ import { createAlbumCoverService } from "./albumCovers.mjs";
 import { createCastService } from "./cast/castService.mjs";
 import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
-import { exportAllPlaylists, exportOrganizedLibrary } from "./libraryExport.mjs";
+import {
+  exportAllPlaylists,
+  exportItunesLibrary,
+  exportOrganizedLibrary,
+} from "./libraryExport.mjs";
 import { createLibraryWatcher } from "./libraryWatcher.mjs";
 import {
   acceptInboxTracks,
@@ -862,6 +866,8 @@ export const createBackend = ({
       exportPlaylistFile(dbPath, playlistId, filePath),
     export_all_playlists: ({ dbPath, destinationPath }) =>
       exportAllPlaylists({ dbPath, destinationPath }),
+    export_itunes_library: ({ dbPath, destinationPath }) =>
+      exportItunesLibrary({ dbPath, destinationPath }),
     export_organized_library: ({ dbPath, destinationPath, useAsCurrentLibrary }, sender) =>
       exportOrganizedLibrary({
         dbPath,

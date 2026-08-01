@@ -4,6 +4,7 @@ import {
   createLibraryBackup,
   createPlaylistSnapshot,
   deletePlaylistSnapshot,
+  exportItunesLibrary,
   importedTrackToTrack,
   listMetadataHistory,
   listPlaylistHistory,
@@ -58,6 +59,7 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
   const [snapshots, setSnapshots] = useState<PlaylistSnapshotEntry[]>([]);
   const [metadata, setMetadata] = useState<MetadataHistoryEntry[]>([]);
   const [snapshotName, setSnapshotName] = useState("");
+  const [itunesExportStatus, setItunesExportStatus] = useState<string | null>(null);
 
   const refreshPlaylistData = useCallback(async () => {
     if (!dbPath) return;
@@ -173,6 +175,29 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
     window.location.reload();
   });
 
+  const handleItunesExport = () => run(async () => {
+    setItunesExportStatus(null);
+    const destinationPath = await save({
+      defaultPath: "Muro Music Library.xml",
+      filters: [{ name: "iTunes Library XML", extensions: ["xml"] }],
+    });
+    if (!destinationPath) return;
+    const result = await exportItunesLibrary(dbPath, destinationPath);
+    const skipped = result.playlistEntriesSkipped > 0
+      ? ` ${result.playlistEntriesSkipped.toLocaleString()} playlist entries that point to Inbox tracks were skipped.`
+      : "";
+    const missing = result.missingTracksReferenced > 0
+      ? ` ${result.missingTracksReferenced.toLocaleString()} missing tracks remain as file references.`
+      : "";
+    setItunesExportStatus(
+      `Exported ${result.tracksExported.toLocaleString()} tracks and `
+      + `${result.playlistsExported.toLocaleString()} playlists to ${result.destinationPath}.`
+      + skipped
+      + missing,
+    );
+    notify.success("iTunes-compatible library XML exported");
+  });
+
   const handlePlaylistChange = (operation: () => Promise<unknown>) => run(async () => {
     await operation();
     await refreshPlaylistData();
@@ -211,6 +236,34 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
           </button>
         </div>
         {status && <p className="mt-3 text-[12px] text-[var(--color-text-secondary)]">{status}</p>}
+      </section>
+
+      <section className={cardClass} data-itunes-library-export>
+        <h4 className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+          iTunes-compatible library XML
+        </h4>
+        <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
+          Exports track metadata, ratings, play counts, original file locations, playlist folders,
+          and all playlists in the XML property-list format used by iTunes and Music. Music and
+          artwork files are not copied or changed.
+        </p>
+        <button
+          className={`mt-3 ${primaryButtonClass}`}
+          disabled={busy || !dbPath}
+          onClick={handleItunesExport}
+          type="button"
+          data-export-itunes-library
+        >
+          Export library XML
+        </button>
+        {itunesExportStatus && (
+          <p
+            className="mt-3 text-[12px] text-[var(--color-text-secondary)]"
+            data-itunes-library-export-status
+          >
+            {itunesExportStatus}
+          </p>
+        )}
       </section>
 
       <section className={cardClass}>

@@ -1,5 +1,7 @@
 import fs from "node:fs";
+import crypto from "node:crypto";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { openDatabase, refreshSearchText } from "./database.mjs";
 
 const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
@@ -122,6 +124,324 @@ const buildPlaylistFolderPaths = (folders) => {
 
 const cleanPlaylistText = (value, fallback) =>
   String(value || fallback).replace(/[\r\n]+/g, " ").trim() || fallback;
+
+const cleanXmlText = (value) => String(value ?? "")
+  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&apos;");
+
+const appendPlistKey = (lines, level, key) => {
+  lines.push(`${"  ".repeat(level)}<key>${cleanXmlText(key)}</key>`);
+};
+
+const appendPlistString = (lines, level, key, value) => {
+  if (value == null || String(value).trim() === "") return;
+  appendPlistKey(lines, level, key);
+  lines.push(`${"  ".repeat(level)}<string>${cleanXmlText(value)}</string>`);
+};
+
+const appendPlistInteger = (lines, level, key, value, { minimum = 0 } = {}) => {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed) || parsed < minimum) return;
+  appendPlistKey(lines, level, key);
+  lines.push(`${"  ".repeat(level)}<integer>${parsed}</integer>`);
+};
+
+const appendPlistBoolean = (lines, level, key, value) => {
+  appendPlistKey(lines, level, key);
+  lines.push(`${"  ".repeat(level)}<${value ? "true" : "false"}/>`);
+};
+
+const plistDate = (value, epochSeconds = false) => {
+  if (value == null || value === "") return null;
+  const numeric = Number(value);
+  const date = epochSeconds && Number.isFinite(numeric)
+    ? new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000)
+    : new Date(value);
+  if (Number.isNaN(date.valueOf())) return null;
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+};
+
+const appendPlistDate = (lines, level, key, value) => {
+  if (!value) return;
+  appendPlistKey(lines, level, key);
+  lines.push(`${"  ".repeat(level)}<date>${value}</date>`);
+};
+
+const readJsonText = (value) => {
+  if (value == null || value === "") return "";
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter(Boolean).join(", ");
+    return parsed == null ? "" : String(parsed);
+  } catch {
+    return String(value);
+  }
+};
+
+const persistentId = (kind, value) => crypto
+  .createHash("sha256")
+  .update(`${kind}:${String(value)}`)
+  .digest("hex")
+  .slice(0, 16)
+  .toUpperCase();
+
+const itunesFileUrl = (filePath, directory = false) => {
+  const href = pathToFileURL(path.resolve(String(filePath))).href
+    .replace(/^file:\/\/\//, "file://localhost/");
+  return directory && !href.endsWith("/") ? `${href}/` : href;
+};
+
+const itunesKind = (filePath) => {
+  switch (path.extname(String(filePath)).toLowerCase()) {
+    case ".mp3": return "MPEG audio file";
+    case ".m4a": return "Apple MPEG-4 audio file";
+    case ".m4b": return "Protected MPEG-4 audio file";
+    case ".aac": return "AAC audio file";
+    case ".aif":
+    case ".aiff": return "AIFF audio file";
+    case ".wav": return "WAV audio file";
+    case ".flac": return "FLAC audio file";
+    case ".ogg": return "Ogg Vorbis audio file";
+    case ".opus": return "Opus audio file";
+    case ".wma": return "Windows Media audio file";
+    default: return "Audio file";
+  }
+};
+
+const commonMusicDirectory = (tracks) => {
+  const directories = tracks
+    .map((track) => path.dirname(path.resolve(String(track.source_path || ""))))
+    .filter(Boolean);
+  if (directories.length === 0) return null;
+
+  let common = directories[0];
+  const pathKey = (value) => process.platform === "win32"
+    ? value.toLocaleLowerCase()
+    : value;
+  while (
+    common
+    && !directories.every((directory) => {
+      const relative = path.relative(common, directory);
+      return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+    })
+  ) {
+    const parent = path.dirname(common);
+    if (pathKey(parent) === pathKey(common)) return path.parse(common).root;
+    common = parent;
+  }
+  return common || path.parse(directories[0]).root;
+};
+
+/**
+ * Write the library in the XML property-list shape produced by iTunes/Music.
+ * Only metadata, source-file URLs, playlist folders, and playlist membership
+ * are written. The source audio files are never copied or modified.
+ */
+export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
+  const db = openDatabase(dbPath);
+  const tracks = db.prepare(`
+    SELECT id, title, artist, album_artist, album, genre_json, comment_json,
+      year, track_number, track_total, disc_number, disc_total, bpm, rating,
+      source_path, duration_seconds, bitrate_kbps, sample_rate_hz,
+      file_size_bytes, added_at, updated_at, last_played_at, play_count,
+      is_missing
+    FROM tracks
+    WHERE import_status != 'staged'
+    ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE,
+      COALESCE(disc_number, 1), COALESCE(track_number, 0), title COLLATE NOCASE
+  `).all();
+  const folders = db.prepare(`
+    SELECT id, name, parent_id, sort_order
+    FROM playlist_folders
+    ORDER BY parent_id, sort_order, name COLLATE NOCASE
+  `).all();
+  const playlists = db.prepare(`
+    SELECT id, name, folder_id, sort_order
+    FROM playlists
+    ORDER BY folder_id, sort_order, name COLLATE NOCASE
+  `).all();
+  const playlistEntries = db.prepare(`
+    SELECT playlist_id, track_id
+    FROM playlist_tracks
+    ORDER BY playlist_id, position
+  `).all();
+
+  const destination = path.resolve(String(destinationPath ?? ""));
+  if (!destination.toLowerCase().endsWith(".xml")) {
+    throw new Error("The iTunes-compatible export must use an .xml file");
+  }
+
+  const numericTrackIdByMuroId = new Map(
+    tracks.map((track, index) => [String(track.id), index + 1]),
+  );
+  const entriesByPlaylistId = new Map();
+  let playlistEntriesExported = 0;
+  let playlistEntriesSkipped = 0;
+  for (const entry of playlistEntries) {
+    const trackId = numericTrackIdByMuroId.get(String(entry.track_id));
+    if (!trackId) {
+      playlistEntriesSkipped += 1;
+      continue;
+    }
+    const playlistId = String(entry.playlist_id);
+    const entries = entriesByPlaylistId.get(playlistId) ?? [];
+    entries.push(trackId);
+    entriesByPlaylistId.set(playlistId, entries);
+    playlistEntriesExported += 1;
+  }
+
+  const libraryPersistentId = persistentId("library", path.resolve(dbPath));
+  const folderPersistentIdById = new Map(
+    folders.map((folder) => [String(folder.id), persistentId("playlist-folder", folder.id)]),
+  );
+  const lines = [
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+    "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">",
+    "<plist version=\"1.0\">",
+    "<dict>",
+  ];
+  appendPlistInteger(lines, 1, "Major Version", 1);
+  appendPlistInteger(lines, 1, "Minor Version", 1);
+  appendPlistDate(lines, 1, "Date", plistDate(new Date()));
+  appendPlistString(lines, 1, "Application Version", "Muro Music");
+  appendPlistInteger(lines, 1, "Features", 5);
+  appendPlistString(lines, 1, "Library Persistent ID", libraryPersistentId);
+  const musicDirectory = commonMusicDirectory(tracks);
+  if (musicDirectory) {
+    appendPlistString(lines, 1, "Music Folder", itunesFileUrl(musicDirectory, true));
+  }
+
+  appendPlistKey(lines, 1, "Tracks");
+  lines.push("  <dict>");
+  tracks.forEach((track, index) => {
+    const numericTrackId = index + 1;
+    appendPlistKey(lines, 2, numericTrackId);
+    lines.push("    <dict>");
+    appendPlistInteger(lines, 3, "Track ID", numericTrackId);
+    appendPlistString(lines, 3, "Persistent ID", persistentId("track", track.id));
+    appendPlistString(lines, 3, "Name", track.title || "Unknown Title");
+    appendPlistString(lines, 3, "Artist", track.artist || "Unknown Artist");
+    appendPlistString(lines, 3, "Album Artist", track.album_artist);
+    appendPlistString(lines, 3, "Album", track.album || "Unknown Album");
+    appendPlistString(lines, 3, "Genre", readJsonText(track.genre_json));
+    appendPlistString(lines, 3, "Comments", readJsonText(track.comment_json));
+    appendPlistString(lines, 3, "Kind", itunesKind(track.source_path));
+    appendPlistInteger(lines, 3, "Size", track.file_size_bytes, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Total Time", Number(track.duration_seconds) * 1000, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Disc Number", track.disc_number, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Disc Count", track.disc_total, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Track Number", track.track_number, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Track Count", track.track_total, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Year", track.year, { minimum: 1 });
+    appendPlistInteger(lines, 3, "BPM", track.bpm, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Bit Rate", track.bitrate_kbps, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Sample Rate", track.sample_rate_hz, { minimum: 1 });
+    appendPlistInteger(
+      lines,
+      3,
+      "Rating",
+      Math.min(100, Math.max(0, Number(track.rating) * 20)),
+      { minimum: 1 },
+    );
+    appendPlistInteger(lines, 3, "Play Count", track.play_count, { minimum: 1 });
+    appendPlistDate(lines, 3, "Date Modified", plistDate(track.updated_at, true));
+    appendPlistDate(lines, 3, "Date Added", plistDate(track.added_at, true));
+    appendPlistDate(lines, 3, "Play Date UTC", plistDate(track.last_played_at));
+    appendPlistString(lines, 3, "Track Type", "File");
+    appendPlistString(lines, 3, "Location", itunesFileUrl(track.source_path));
+    lines.push("    </dict>");
+  });
+  lines.push("  </dict>");
+
+  appendPlistKey(lines, 1, "Playlists");
+  lines.push("  <array>");
+  lines.push("    <dict>");
+  appendPlistString(lines, 3, "Name", "Library");
+  appendPlistBoolean(lines, 3, "Master", true);
+  appendPlistInteger(lines, 3, "Playlist ID", 1);
+  appendPlistString(lines, 3, "Playlist Persistent ID", persistentId("master", libraryPersistentId));
+  appendPlistBoolean(lines, 3, "Visible", false);
+  appendPlistBoolean(lines, 3, "All Items", true);
+  appendPlistKey(lines, 3, "Playlist Items");
+  lines.push("      <array>");
+  tracks.forEach((_track, index) => {
+    lines.push("        <dict>");
+    appendPlistInteger(lines, 5, "Track ID", index + 1);
+    lines.push("        </dict>");
+  });
+  lines.push("      </array>");
+  lines.push("    </dict>");
+
+  let nextPlaylistId = 2;
+  for (const folder of folders) {
+    lines.push("    <dict>");
+    appendPlistString(lines, 3, "Name", folder.name || "Playlist Folder");
+    appendPlistInteger(lines, 3, "Playlist ID", nextPlaylistId++);
+    appendPlistString(
+      lines,
+      3,
+      "Playlist Persistent ID",
+      folderPersistentIdById.get(String(folder.id)),
+    );
+    if (folder.parent_id != null) {
+      appendPlistString(
+        lines,
+        3,
+        "Parent Persistent ID",
+        folderPersistentIdById.get(String(folder.parent_id)),
+      );
+    }
+    appendPlistBoolean(lines, 3, "Folder", true);
+    lines.push("    </dict>");
+  }
+
+  for (const playlist of playlists) {
+    lines.push("    <dict>");
+    appendPlistString(lines, 3, "Name", playlist.name || "Playlist");
+    appendPlistInteger(lines, 3, "Playlist ID", nextPlaylistId++);
+    appendPlistString(
+      lines,
+      3,
+      "Playlist Persistent ID",
+      persistentId("playlist", playlist.id),
+    );
+    if (playlist.folder_id != null) {
+      appendPlistString(
+        lines,
+        3,
+        "Parent Persistent ID",
+        folderPersistentIdById.get(String(playlist.folder_id)),
+      );
+    }
+    appendPlistBoolean(lines, 3, "All Items", true);
+    appendPlistKey(lines, 3, "Playlist Items");
+    lines.push("      <array>");
+    for (const trackId of entriesByPlaylistId.get(String(playlist.id)) ?? []) {
+      lines.push("        <dict>");
+      appendPlistInteger(lines, 5, "Track ID", trackId);
+      lines.push("        </dict>");
+    }
+    lines.push("      </array>");
+    lines.push("    </dict>");
+  }
+  lines.push("  </array>", "</dict>", "</plist>", "");
+
+  await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+  await fs.promises.writeFile(destination, lines.join("\n"), "utf8");
+  return {
+    destinationPath: destination,
+    tracksExported: tracks.length,
+    missingTracksReferenced: tracks.filter((track) => Number(track.is_missing) === 1).length,
+    playlistFoldersExported: folders.length,
+    playlistsExported: playlists.length,
+    playlistEntriesExported,
+    playlistEntriesSkipped,
+  };
+};
 
 export const exportAllPlaylists = async ({ dbPath, destinationPath }) => {
   const db = openDatabase(dbPath);

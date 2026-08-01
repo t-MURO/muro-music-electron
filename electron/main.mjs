@@ -20,6 +20,8 @@ const developmentKeyFinderBinaries = [
   path.resolve(appRoot, "../neo-key-finder/neo-keyfinder/src-tauri/binaries"),
 ].filter(Boolean);
 const productionRendererPath = path.join(appRoot, "dist", "index.html");
+const fallbackDragIconDataUrl =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -57,6 +59,28 @@ const registerTrustedHandler = (channel, listener) => {
   ipcMain.handle(channel, (event, ...args) => {
     assertTrustedRenderer(event);
     return listener(event, ...args);
+  });
+};
+
+const createFileDragIcon = () => {
+  const candidates = [developmentAppIcon];
+  try {
+    const assetsDirectory = path.join(appRoot, "dist", "assets");
+    const bundledLogo = fs
+      .readdirSync(assetsDirectory)
+      .find((name) => /^app-logo-.*\.png$/i.test(name));
+    if (bundledLogo) candidates.unshift(path.join(assetsDirectory, bundledLogo));
+  } catch {
+    // The development icon or data URL fallback will be used instead.
+  }
+
+  for (const candidate of candidates) {
+    const icon = nativeImage.createFromPath(candidate);
+    if (!icon.isEmpty()) return icon.resize({ width: 32, height: 32 });
+  }
+  return nativeImage.createFromDataURL(fallbackDragIconDataUrl).resize({
+    width: 32,
+    height: 32,
   });
 };
 
@@ -254,6 +278,33 @@ const startApplication = async () => {
       throw new Error("Track source file does not exist");
     }
     shell.showItemInFolder(path.normalize(filePath));
+  });
+  ipcMain.on("muro:start-file-drag", (event, values) => {
+    try {
+      assertTrustedRenderer(event);
+      const filePaths = [...new Set(
+        (Array.isArray(values) ? values : [])
+          .slice(0, 1000)
+          .filter((value) => typeof value === "string" && path.isAbsolute(value))
+          .map((value) => path.normalize(value))
+          .filter((value) => {
+            try {
+              return fs.statSync(value).isFile();
+            } catch {
+              return false;
+            }
+          }),
+      )];
+      if (filePaths.length === 0) return;
+
+      event.sender.startDrag({
+        file: filePaths[0],
+        files: filePaths,
+        icon: createFileDragIcon(),
+      });
+    } catch (error) {
+      console.error("Failed to start native file drag:", error);
+    }
   });
   registerTrustedHandler("muro:confirm-dialog", async (_event, message, options) => {
     const result = await dialog.showMessageBox(mainWindow, {

@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld("muro", {
   saveDialog: (options = {}) => ipcRenderer.invoke("muro:save-dialog", options),
   openExternal: (url) => ipcRenderer.invoke("muro:open-external", url),
   showItemInFolder: (filePath) => ipcRenderer.invoke("muro:show-item-in-folder", filePath),
+  startFileDrag: (filePaths) => ipcRenderer.send("muro:start-file-drag", filePaths),
   confirmDialog: (message, options = {}) =>
     ipcRenderer.invoke("muro:confirm-dialog", message, options),
 });

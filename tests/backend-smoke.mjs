@@ -1067,6 +1067,19 @@ try {
     path.join(allPlaylistsDestination, "Muro Playlists (2)"),
   );
 
+  const itunesLibraryPath = path.join(directory, "Muro Music Library.xml");
+  const itunesLibraryExport = await backend.invoke("export_itunes_library", {
+    dbPath,
+    destinationPath: itunesLibraryPath,
+  });
+  assert.equal(itunesLibraryExport.destinationPath, itunesLibraryPath);
+  assert.ok(itunesLibraryExport.tracksExported >= 2);
+  assert.equal(itunesLibraryExport.playlistsExported, 3);
+  assert.ok(itunesLibraryExport.playlistEntriesExported >= 3);
+  const itunesLibraryXml = fs.readFileSync(itunesLibraryPath, "utf8");
+  assert.match(itunesLibraryXml, /<key>Tracks<\/key>/);
+  assert.match(itunesLibraryXml, /<key>Playlists<\/key>/);
+
   await backend.invoke("delete_playlist_folder", { dbPath, folderId: "folder-1" });
   playlists = await backend.invoke("load_playlists", { dbPath });
   assert.equal(playlists.folders.length, 1);

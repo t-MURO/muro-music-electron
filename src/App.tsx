@@ -858,8 +858,14 @@ function App() {
     onPlaylistDragLeave,
     onPlaylistDragOver,
     onPlaylistDropEvent,
-    onRowMouseDown,
-  } = usePlaylistDrag({ selectedIds, onDropToPlaylist: handlePlaylistDrop });
+    onRowDragStart,
+    onRowDrag,
+    onRowDragEnd,
+  } = usePlaylistDrag({
+    tracks: sortedTracks,
+    selectedIds,
+    onDropToPlaylist: handlePlaylistDrop,
+  });
 
   // Playlist menu
   const {
@@ -2105,7 +2111,9 @@ function App() {
                                 : undefined
                           }
                           onRowSelect={handleRowSelect}
-                          onRowMouseDown={onRowMouseDown}
+                          onRowDragStart={onRowDragStart}
+                          onRowDrag={onRowDrag}
+                          onRowDragEnd={onRowDragEnd}
                           onRowContextMenu={handleRowContextMenu}
                           onRowDoubleClick={handlePlayTrack}
                           onTogglePlay={togglePlay}

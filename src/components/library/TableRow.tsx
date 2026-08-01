@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { Circle, FileWarning, Music2, Play } from "lucide-react";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import { t } from "../../i18n";
@@ -21,7 +21,9 @@ type TableRowProps = {
     id: string,
     options?: { isMetaKey?: boolean; isShiftKey?: boolean }
   ) => void;
-  onRowMouseDown: (event: React.MouseEvent, id: string) => void;
+  onRowDragStart: (event: React.DragEvent<HTMLDivElement>, id: string) => void;
+  onRowDrag: (event: React.DragEvent<HTMLDivElement>) => void;
+  onRowDragEnd: () => void;
   onRowContextMenu: (
     event: React.MouseEvent,
     id: string,
@@ -118,7 +120,9 @@ export const TableRow = memo(
     tableWidth,
     virtualStart,
     onRowSelect,
-    onRowMouseDown,
+    onRowDragStart,
+    onRowDrag,
+    onRowDragEnd,
     onRowContextMenu,
     onRowDoubleClick,
     onOpenArtist,
@@ -126,6 +130,7 @@ export const TableRow = memo(
     onAlbumContextMenu,
     onRatingChange,
   }: TableRowProps) => {
+    const dragStartedOnInteractiveControlRef = useRef(false);
     const coverPath = track.coverArtThumbPath || track.coverArtPath;
     const isActivelyPlaying = isPlayingTrack && isCurrentlyPlaying;
     const rowBaseClass = isActivelyPlaying
@@ -161,12 +166,24 @@ export const TableRow = memo(
         onDoubleClick={() => {
           onRowDoubleClick?.(track.id);
         }}
-        onMouseDown={(event) => {
+        draggable={!track.isMissing && Boolean(track.sourcePath)}
+        onMouseDownCapture={(event) => {
           const target = event.target as HTMLElement | null;
-          if (target?.closest("button, input, select, textarea")) {
+          dragStartedOnInteractiveControlRef.current = Boolean(
+            target?.closest("button, input, select, textarea, [contenteditable='true']")
+          );
+        }}
+        onDragStart={(event) => {
+          if (dragStartedOnInteractiveControlRef.current) {
+            event.preventDefault();
             return;
           }
-          onRowMouseDown(event, track.id);
+          onRowDragStart(event, track.id);
+        }}
+        onDrag={onRowDrag}
+        onDragEnd={() => {
+          dragStartedOnInteractiveControlRef.current = false;
+          onRowDragEnd();
         }}
         onContextMenu={(event) =>
           onRowContextMenu(event, track.id, index, isSelected)
@@ -174,6 +191,7 @@ export const TableRow = memo(
         data-track-index={index}
         data-track-selected={isSelected ? "true" : "false"}
         data-track-playing={isPlayingTrack ? "true" : "false"}
+        data-native-file-draggable={!track.isMissing && Boolean(track.sourcePath) ? "true" : "false"}
         role="row"
       >
         <div

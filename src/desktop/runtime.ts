@@ -867,6 +867,10 @@ export const invoke = <T>(
 export const convertFileSrc = (filePath: string): string =>
   `muro-file://local/${encodeURIComponent(filePath)}`;
 
+export const startFileDrag = (filePaths: string[]): void => {
+  bridge().startFileDrag(filePaths);
+};
+
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     // A Vite hot reload must never leave the previous module's Audio element
