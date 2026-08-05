@@ -150,6 +150,7 @@ export const EditTrackModal = ({
   const [clipboardImageAvailable, setClipboardImageAvailable] = useState(false);
   const [coverCandidates, setCoverCandidates] = useState<AlbumCoverCandidate[]>([]);
   const titleRef = useRef<HTMLInputElement | null>(null);
+  const saveInFlightRef = useRef(false);
   const suggestions = useMemo(() => {
     const people = libraryTracks.flatMap((track) => [track.artist, track.artists]);
     return {
@@ -182,6 +183,7 @@ export const EditTrackModal = ({
     setCoverMenuPosition(null);
     setCoverCandidates([]);
     setIsFetchingCover(false);
+    saveInFlightRef.current = false;
     setIsSaving(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, trackIdKey]);
@@ -354,6 +356,8 @@ export const EditTrackModal = ({
   );
 
   const handleSave = useCallback(async () => {
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setIsSaving(true);
 
     try {
@@ -397,6 +401,7 @@ export const EditTrackModal = ({
       console.error("Failed to save metadata:", error);
       notify.error(error instanceof Error ? error.message : "Could not save track metadata");
     } finally {
+      saveInFlightRef.current = false;
       setIsSaving(false);
     }
   }, [form, dirtyFields, isBatch, tracks, onSave, onClose]);
@@ -415,11 +420,19 @@ export const EditTrackModal = ({
     <div
       className="modal-overlay-animate fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-[var(--spacing-lg)] backdrop-blur-sm"
       data-edit-track-modal
-      onClick={onClose}
+      onPointerDown={(event) => {
+        if (event.target === event.currentTarget && event.button === 0) {
+          onClose();
+        }
+      }}
     >
-      <div
+      <form
         className="modal-panel-animate flex max-h-[85vh] w-full max-w-[640px] flex-col rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] shadow-[var(--shadow-lg)]"
         onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleSave();
+        }}
       >
         {/* Header */}
         <div className="border-b border-[var(--color-border)] p-[var(--spacing-lg)]">
@@ -668,9 +681,8 @@ export const EditTrackModal = ({
             </button>
             <button
               className="rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] font-semibold text-white transition-colors hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={handleSave}
               disabled={isSaving}
-              type="button"
+              type="submit"
             >
               {isSaving ? t("edit.saving") : t("edit.save")}
             </button>
@@ -718,7 +730,7 @@ export const EditTrackModal = ({
             onClose={() => setCoverCandidates([])}
           />
         )}
-      </div>
+      </form>
     </div>,
     document.body
   );

@@ -519,6 +519,34 @@ app.whenReady().then(async () => {
     if (command === "test_get_metadata_updates") {
       return ratingUpdates;
     }
+    if (command === "test_press_enter") {
+      const targetDebugger = event.sender.debugger;
+      if (!targetDebugger.isAttached()) {
+        targetDebugger.attach("1.3");
+      }
+      const enterKey = {
+        key: "Enter",
+        code: "Enter",
+        windowsVirtualKeyCode: 13,
+        nativeVirtualKeyCode: 13,
+      };
+      return targetDebugger
+        .sendCommand("Input.dispatchKeyEvent", {
+          ...enterKey,
+          type: "rawKeyDown",
+        })
+        .then(() => targetDebugger.sendCommand("Input.dispatchKeyEvent", {
+          ...enterKey,
+          type: "char",
+          text: "\r",
+          unmodifiedText: "\r",
+        }))
+        .then(() => targetDebugger.sendCommand("Input.dispatchKeyEvent", {
+          ...enterKey,
+          type: "keyUp",
+        }))
+        .then(() => true);
+    }
     if (command === "test_get_artist_separator_updates") {
       return ratingUpdates.filter((update) =>
         typeof update.updates?.artist === "string" ||
@@ -2974,18 +3002,79 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         document.querySelector('[data-selection-edit]')?.click();
         await waitForSelector('[data-edit-track-modal]');
+        const editModalBeforeDrag = document.querySelector('[data-edit-track-modal]');
         const revealRegressionArtist = document.querySelector(
           '[data-autocomplete-field="artist"]'
         );
-        if (revealRegressionArtist instanceof HTMLInputElement && nativeValueSetter) {
-          nativeValueSetter.call(revealRegressionArtist, "Reveal Regression Artist");
-          revealRegressionArtist.dispatchEvent(new Event("input", { bubbles: true }));
+        if (
+          editModalBeforeDrag &&
+          revealRegressionArtist instanceof HTMLInputElement
+        ) {
+          revealRegressionArtist.focus();
+          revealRegressionArtist.setSelectionRange(
+            0,
+            Math.min(3, revealRegressionArtist.value.length)
+          );
+          revealRegressionArtist.dispatchEvent(new PointerEvent("pointerdown", {
+            bubbles: true,
+            button: 0,
+            buttons: 1,
+            isPrimary: true,
+            pointerId: 1,
+            pointerType: "mouse",
+          }));
+          revealRegressionArtist.dispatchEvent(new MouseEvent("mousedown", {
+            bubbles: true,
+            button: 0,
+            buttons: 1,
+          }));
+          editModalBeforeDrag.dispatchEvent(new PointerEvent("pointerup", {
+            bubbles: true,
+            button: 0,
+            buttons: 0,
+            isPrimary: true,
+            pointerId: 1,
+            pointerType: "mouse",
+          }));
+          editModalBeforeDrag.dispatchEvent(new MouseEvent("mouseup", {
+            bubbles: true,
+            button: 0,
+          }));
+          editModalBeforeDrag.dispatchEvent(new MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+          }));
         }
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        [...(document.querySelector('[data-edit-track-modal]')?.querySelectorAll("button") ?? [])]
-          .find((button) => button.textContent?.trim() === "Save")
-          ?.click();
+        const editModalSurvivesOutsideSelectionRelease = Boolean(
+          document.querySelector('[data-edit-track-modal]')
+        );
+        const metadataUpdatesBeforeEnter = await window.muro.invoke("test_get_metadata_updates");
+        const enterSaveArtist = "Enter Save Artist";
+        const liveRevealRegressionArtist = document.querySelector(
+          '[data-autocomplete-field="artist"]'
+        );
+        if (liveRevealRegressionArtist instanceof HTMLInputElement && nativeValueSetter) {
+          nativeValueSetter.call(liveRevealRegressionArtist, enterSaveArtist);
+          liveRevealRegressionArtist.dispatchEvent(new Event("input", { bubbles: true }));
+          liveRevealRegressionArtist.focus();
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await window.muro.invoke("test_press_enter");
         await new Promise((resolve) => setTimeout(resolve, 180));
+        const metadataUpdatesAfterEnter = await window.muro.invoke("test_get_metadata_updates");
+        const enterSaveUpdate = metadataUpdatesAfterEnter.at(-1);
+        const editModalOpenAfterEnter = Boolean(
+          document.querySelector('[data-edit-track-modal]')
+        );
+        const enterSavesEditModal = Boolean(
+          !editModalOpenAfterEnter &&
+          metadataUpdatesAfterEnter.length === metadataUpdatesBeforeEnter.length + 1 &&
+          enterSaveUpdate?.trackIds?.length === 1 &&
+          enterSaveUpdate.trackIds[0] === "smoke-track-0" &&
+          enterSaveUpdate.updates?.artist === enterSaveArtist
+        );
         const recentScrollerAfterEdit = document.querySelector('[data-track-table-scroll]');
         const selectedAfterRevealRegressionEdit = recentScrollerAfterEdit
           ?.querySelector('[data-track-selected="true"]')
@@ -2994,6 +3083,22 @@ app.whenReady().then(async () => {
           selectedAfterRevealRegressionEdit === "0" &&
           (recentScrollerAfterEdit?.scrollTop ?? Infinity) < 48
         );
+
+        if (!document.querySelector('[data-edit-track-modal]')) {
+          document.querySelector('[data-selection-edit]')?.click();
+          await new Promise((resolve) => setTimeout(resolve, 80));
+        }
+        const directEditBackdrop = document.querySelector('[data-edit-track-modal]');
+        directEditBackdrop?.dispatchEvent(new PointerEvent("pointerdown", {
+          bubbles: true,
+          button: 0,
+          buttons: 1,
+          isPrimary: true,
+          pointerId: 2,
+          pointerType: "mouse",
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        const directBackdropDismissesEdit = !document.querySelector('[data-edit-track-modal]');
 
         document.querySelector('[data-selection-clear]')?.click();
         if (recentScrollerAfterEdit) {
@@ -3017,6 +3122,15 @@ app.whenReady().then(async () => {
             ?.getAttribute("data-track-index") ?? null,
           scrollAfterReturn: recentScrollerAfterReturn?.scrollTop ?? null,
           hashAfterReturn: window.location.hash,
+        });
+        const editModalInteractionDebug = JSON.stringify({
+          editModalSurvivesOutsideSelectionRelease,
+          metadataUpdatesBeforeEnter: metadataUpdatesBeforeEnter.length,
+          metadataUpdatesAfterEnter: metadataUpdatesAfterEnter.length,
+          enterSaveTrackIds: enterSaveUpdate?.trackIds ?? null,
+          enterSaveArtist: enterSaveUpdate?.updates?.artist ?? null,
+          editModalOpenAfterEnter,
+          directBackdropDismissesEdit,
         });
         return {
           childCount: root?.childElementCount ?? 0,
@@ -3202,6 +3316,10 @@ app.whenReady().then(async () => {
           metadataEditDidNotReplayReveal,
           viewReturnDidNotReplayReveal,
           revealRequestConsumptionDebug,
+          editModalSurvivesOutsideSelectionRelease,
+          enterSavesEditModal,
+          directBackdropDismissesEdit,
+          editModalInteractionDebug,
         };
       }
       return {
@@ -3477,6 +3595,17 @@ app.whenReady().then(async () => {
         fail(
           "Handled now-playing reveal replayed after editing or returning to Recently Added: " +
           result.revealRequestConsumptionDebug
+        );
+        return;
+      }
+      if (
+        !result.editModalSurvivesOutsideSelectionRelease ||
+        !result.enterSavesEditModal ||
+        !result.directBackdropDismissesEdit
+      ) {
+        fail(
+          "Edit modal Enter or backdrop interaction failed: " +
+          result.editModalInteractionDebug
         );
         return;
       }
