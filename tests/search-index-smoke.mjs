@@ -17,8 +17,10 @@ const dbPath = path.join(tempDir, "search.db");
 
 // The filename deliberately does not echo the title: search_text covers both,
 // so a shared word would hide whether a title edit actually reindexed.
+let nextFixtureNumber = 0;
 const insertTrack = (db, { title, artist, album, genre = [], key = null, bpm = null }) => {
   const id = randomUUID();
+  const filename = `fixture-${nextFixtureNumber += 1}.mp3`;
   db.prepare(`
     INSERT INTO tracks (
       id, title, artist, album, genre_json, key, bpm, filename,
@@ -33,8 +35,8 @@ const insertTrack = (db, { title, artist, album, genre = [], key = null, bpm = n
     JSON.stringify(genre),
     key,
     bpm,
-    `${id}.mp3`,
-    path.join(tempDir, `${id}.mp3`),
+    filename,
+    path.join(tempDir, filename),
     Math.floor(Date.now() / 1000),
   );
   refreshSearchText(db, id);
