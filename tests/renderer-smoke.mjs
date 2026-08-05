@@ -941,19 +941,29 @@ app.whenReady().then(async () => {
         links[1]?.textContent === "Guest Alias"
       );
       links[1]?.click();
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const secondLink = Boolean(
-        window.location.hash.includes("/collection/artists") &&
-        window.location.hash.includes("value=Guest+Artist") &&
-        document.querySelector('[data-artist-detail="Guest Artist"]')
-      );
+      let secondLink = false;
+      for (let attempt = 0; attempt < 40 && !secondLink; attempt += 1) {
+        secondLink = Boolean(
+          window.location.hash.includes("/collection/artists") &&
+          window.location.hash.includes("value=Guest+Artist") &&
+          document.querySelector('[data-artist-detail="Guest Artist"]')
+        );
+        if (!secondLink) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
       const debug = {
         text: cell?.textContent ?? null,
         links: [...links].map((link) => link.textContent),
         hash: window.location.hash,
       };
       window.location.hash = "#/";
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (
+          window.location.hash === "#/" &&
+          document.querySelector('[data-track-table-scroll]') &&
+          !document.querySelector('[data-artist-detail]')
+        ) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
       return { exact, secondLink, debug };
     })()`);
     if (!multiArtistPreflight.exact || !multiArtistPreflight.secondLink) {
@@ -977,7 +987,7 @@ app.whenReady().then(async () => {
       const scroller = document.querySelector('[data-track-table-scroll]');
       const headerScroller = document.querySelector('[data-track-table-header-scroll]');
       const searchShortcutHint = document.querySelector('[data-search-shortcut-hint]');
-      const waitForSelector = async (selector, attempts = 40) => {
+      const waitForSelector = async (selector, attempts = 120) => {
         for (let attempt = 0; attempt < attempts; attempt += 1) {
           const element = document.querySelector(selector);
           if (element) return element;
@@ -985,7 +995,7 @@ app.whenReady().then(async () => {
         }
         return null;
       };
-      const waitForCondition = async (predicate, attempts = 40) => {
+      const waitForCondition = async (predicate, attempts = 120) => {
         for (let attempt = 0; attempt < attempts; attempt += 1) {
           if (predicate()) return true;
           await new Promise((resolve) => setTimeout(resolve, 25));
@@ -1001,7 +1011,10 @@ app.whenReady().then(async () => {
           };
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-playlist-create]") &&
+          document.querySelector("[data-playlist-actions-menu]")
+        ));
         const createPlaylistButton = document.querySelector("[data-playlist-create]");
         const playlistActionsButton = document.querySelector("[data-playlist-actions-menu]");
         const unlabeledIconButtons = [...document.querySelectorAll("button")].filter(
@@ -1014,8 +1027,19 @@ app.whenReady().then(async () => {
           bubbles: true,
           relatedTarget: document.body,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await waitForCondition(() => {
+          const tooltip = document.querySelector("[data-global-button-tooltip]");
+          const rect = tooltip?.getBoundingClientRect();
+          return Boolean(
+            tooltip?.getAttribute("role") === "tooltip" &&
+            tooltip.textContent?.includes("More playlist actions") &&
+            rect &&
+            rect.left >= 0 &&
+            rect.right <= window.innerWidth &&
+            rect.top >= 0 &&
+            rect.bottom <= window.innerHeight
+          );
+        }, 80);
         const playlistActionsTooltip = document.querySelector("[data-global-button-tooltip]");
         const playlistActionsTooltipRect = playlistActionsTooltip?.getBoundingClientRect();
         const playlistActionsTooltipReady = Boolean(
@@ -1032,7 +1056,18 @@ app.whenReady().then(async () => {
           relatedTarget: document.body,
         }));
         playlistActionsButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-playlist-actions-menu]")
+            ?.getAttribute("aria-expanded") === "true" &&
+          document.querySelector("[data-playlist-import]")?.textContent
+            ?.includes("Import playlist file") &&
+          document.querySelector("[data-playlist-folder-import]")?.textContent
+            ?.includes("Import playlist folder") &&
+          document.querySelector("[data-playlist-export-all]")?.textContent
+            ?.includes("Export all playlists") &&
+          document.querySelector("[data-playlist-folder-create]")?.textContent
+            ?.includes("New playlist folder")
+        ));
         const importButton = document.querySelector("[data-playlist-import]");
         const folderImportButton = document.querySelector("[data-playlist-folder-import]");
         const exportAllButton = document.querySelector("[data-playlist-export-all]");
@@ -1046,7 +1081,11 @@ app.whenReady().then(async () => {
           folderCreateButton?.textContent?.includes("New playlist folder")
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() =>
+          !document.querySelector("[data-popover]") &&
+          document.querySelector("[data-playlist-actions-menu]")
+            ?.getAttribute("aria-expanded") !== "true"
+        );
         const playlistForExport = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
         playlistForExport?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -1054,7 +1093,7 @@ app.whenReady().then(async () => {
           clientX: 180,
           clientY: 220,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await waitForSelector("[data-playlist-export]");
         const exportButton = document.querySelector("[data-playlist-export]");
         const playlistTooltipsReady = Boolean(
           unlabeledIconButtons.length === 0 &&
@@ -1063,7 +1102,7 @@ app.whenReady().then(async () => {
           exportButton?.getAttribute("title") === "Export this playlist as an M3U8 file"
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() => !document.querySelector("[data-popover]"));
 
         window.location.hash = "#/settings";
         let searchInput = null;
@@ -1071,13 +1110,20 @@ app.whenReady().then(async () => {
           await new Promise((resolve) => setTimeout(resolve, 25));
           searchInput = document.querySelector("[data-settings-search]");
         }
+        await waitForCondition(() =>
+          document.querySelectorAll("[data-settings-section]").length === 6
+        );
         const initialCategoryCount = document.querySelectorAll("[data-settings-section]").length;
         if (searchInput instanceof HTMLInputElement) {
           Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
             ?.set?.call(searchInput, "AcoustID");
           searchInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          document.querySelectorAll("[data-settings-section]").length === 1 &&
+          Boolean(document.querySelector('[data-settings-section="metadata"]')) &&
+          Boolean(document.querySelector('[data-settings-page="metadata"]'))
+        );
         const filteredToMetadata = Boolean(
           document.querySelectorAll("[data-settings-section]").length === 1 &&
           document.querySelector('[data-settings-section="metadata"]') &&
@@ -1089,9 +1135,20 @@ app.whenReady().then(async () => {
             ?.set?.call(searchInput, "");
           searchInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          document.querySelectorAll("[data-settings-section]").length === 6
+        );
         document.querySelector('[data-settings-tab="metadata"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => [
+          "[data-acoustid-client-key]",
+          "[data-lastfm-api-key]",
+          "[data-theaudiodb-api-key]",
+          "[data-fanart-api-key]",
+          "[data-brave-search-api-key]",
+        ].every((selector) => {
+          const input = document.querySelector(selector);
+          return input instanceof HTMLInputElement && input.type === "password";
+        }));
         const providerInputs = [
           document.querySelector("[data-acoustid-client-key]"),
           document.querySelector("[data-lastfm-api-key]"),
@@ -1105,12 +1162,20 @@ app.whenReady().then(async () => {
         const acoustIdShowButton = [...document.querySelectorAll("button")]
           .find((button) => button.getAttribute("aria-label") === "Show AcoustID API key");
         acoustIdShowButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        await waitForCondition(() =>
+          document.querySelector("[data-acoustid-client-key]")?.getAttribute("type") === "text"
+        );
         const showKeyReady =
           document.querySelector("[data-acoustid-client-key]")?.getAttribute("type") === "text";
 
         document.querySelector('[data-settings-tab="library"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => Boolean(
+          document.querySelector('[data-settings-page="library"]') &&
+          document.querySelector("[data-artist-separator-tool]") &&
+          document.querySelector("[data-organized-library-export]") &&
+          document.querySelector("[data-itunes-library-export]") &&
+          document.querySelector("[data-export-itunes-library]")
+        ));
         const libraryReady = Boolean(
           document.querySelector('[data-settings-page="library"]') &&
           document.querySelector("[data-artist-separator-tool]") &&
@@ -1120,7 +1185,10 @@ app.whenReady().then(async () => {
         );
         const itunesExportButton = document.querySelector("[data-export-itunes-library]");
         itunesExportButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          document.querySelector("[data-itunes-library-export-status]")
+            ?.textContent?.includes("Exported 250 tracks and 5 playlists")
+        );
         const itunesExportArgs = await window.muro.invoke("test_get_itunes_library_export_args");
         const itunesExportStatus = document.querySelector(
           "[data-itunes-library-export-status]"
@@ -1134,14 +1202,33 @@ app.whenReady().then(async () => {
           itunesExportStatus?.textContent?.includes("Exported 250 tracks and 5 playlists")
         );
         document.querySelector("[data-watch-add-folder]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-watch-add-folder]")?.textContent
+            ?.includes("Change folder") &&
+          document.querySelector("[data-watch-folder-destination-hint]") &&
+          document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])})
+        ));
         const firstWatchedFolderReady = Boolean(
           document.querySelector("[data-watch-add-folder]")?.textContent?.includes("Change folder") &&
           document.querySelector("[data-watch-folder-destination-hint]") &&
           document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])})
         );
         document.querySelector("[data-watch-add-folder]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          let persistedFolders = null;
+          try {
+            persistedFolders = JSON.parse(
+              localStorage.getItem("muro-settings") ?? "null"
+            )?.state?.watchedFolders;
+          } catch {}
+          return Boolean(
+            document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[1])}) &&
+            !document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])}) &&
+            Array.isArray(persistedFolders) &&
+            persistedFolders.length === 1 &&
+            persistedFolders[0] === ${JSON.stringify(settingsWatchedFolders[1])}
+          );
+        });
         const persistedWatchedFolders = JSON.parse(
           localStorage.getItem("muro-settings") ?? "null"
         )?.state?.watchedFolders;
@@ -1163,7 +1250,16 @@ app.whenReady().then(async () => {
           !document.querySelector("[data-repair-library-structure]")
         );
         validateStructureButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-library-structure-modal]") &&
+          document.querySelector('[data-library-structure-track="smoke-track-0"]')
+            ?.textContent?.includes("Smoke Track 000") &&
+          document.querySelector("[data-library-structure-current-path]")
+            ?.textContent?.includes("Muro") &&
+          document.querySelector("[data-library-structure-expected-path]")
+            ?.textContent?.includes("Renamed Muro") &&
+          document.querySelector("[data-repair-library-structure]")
+        ), 80);
         const misplacedModal = document.querySelector("[data-library-structure-modal]");
         const misplacedRow = document.querySelector(
           '[data-library-structure-track="smoke-track-0"]'
@@ -1189,7 +1285,12 @@ app.whenReady().then(async () => {
           repairStructureButton
         );
         repairStructureButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() => Boolean(
+          !document.querySelector("[data-library-structure-modal]") &&
+          !document.querySelector("[data-show-misplaced-tracks]") &&
+          document.querySelector("[data-library-structure-status]")
+            ?.textContent?.includes("correct folders")
+        ), 80);
         const structureStateAfter = await window.muro.invoke(
           "test_get_library_structure_state"
         );
@@ -1206,7 +1307,11 @@ app.whenReady().then(async () => {
         );
 
         document.querySelector('[data-settings-tab="analysis"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-analysis-settings]") &&
+          document.querySelector("[data-analysis-notation]") &&
+          document.querySelector("[data-analysis-performance]")
+        ));
         const analysisReady = Boolean(
           document.querySelector("[data-analysis-settings]") &&
           document.querySelector("[data-analysis-notation]") &&
@@ -1214,10 +1319,18 @@ app.whenReady().then(async () => {
         );
 
         document.querySelector('[data-settings-tab="dj"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector("[data-dj-mix-feature-toggle]");
         const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
         featureToggle?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => {
+          const bars = document.querySelector("[data-mix-bars]");
+          return Boolean(
+            document.querySelector('[data-settings-page="dj"]') &&
+            document.querySelector("[data-dj-mix-settings]") &&
+            bars instanceof HTMLSelectElement &&
+            Array.from(bars.options, (option) => option.value).join(",") === "4,8,16,32"
+          );
+        });
         const mixBars = document.querySelector("[data-mix-bars]");
         const djReady = Boolean(
           document.querySelector('[data-settings-page="dj"]') &&
@@ -1227,7 +1340,10 @@ app.whenReady().then(async () => {
         );
 
         document.querySelector('[data-settings-tab="advanced"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          Boolean(document.querySelector('[data-settings-page="advanced"]')?.textContent
+            ?.includes("Danger zone"))
+        );
         const advancedReady = Boolean(
           document.querySelector('[data-settings-page="advanced"]')?.textContent
             ?.includes("Danger zone")
@@ -1298,14 +1414,28 @@ app.whenReady().then(async () => {
           if (!libraryTab) await new Promise((resolve) => setTimeout(resolve, 25));
         }
         libraryTab?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-use-export-as-current-library]") &&
+          document.querySelector("[data-export-organized-library]")
+        ));
         const useAsLibraryCheckbox = document.querySelector(
           "[data-use-export-as-current-library]"
         );
         useAsLibraryCheckbox?.click();
+        await waitForCondition(() =>
+          document.querySelector("[data-use-export-as-current-library]")?.checked === true
+        );
         const exportButton = document.querySelector("[data-export-organized-library]");
         exportButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitForCondition(() => {
+          const status = document.querySelector("[data-organized-library-export-status]")
+            ?.textContent;
+          return Boolean(
+            status?.includes("Copied 250 music files") &&
+            status.includes("exported 5 playlists") &&
+            status.includes("Muro is now using the exported files")
+          );
+        }, 120);
         const exportArgs = await window.muro.invoke("test_get_organized_library_export_args");
         const exportStatus = document.querySelector("[data-organized-library-export-status]");
 
@@ -1363,7 +1493,18 @@ app.whenReady().then(async () => {
         }
         const reviewCountReady = reviewButton?.textContent?.trim() === "Review 2 matches";
         reviewButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => {
+          const proposed = document.querySelector("[data-artist-separator-proposed]");
+          return Boolean(
+            document.querySelector("[data-artist-separator-modal]") &&
+            document.querySelector("[data-artist-separator-field]")
+              ?.textContent?.trim() === "Artist" &&
+            document.querySelector("[data-artist-separator-current]")
+              ?.textContent?.trim() === "Muro & Guest feat. DJ Test" &&
+            proposed instanceof HTMLInputElement &&
+            proposed.value === "Muro, Guest, DJ Test"
+          );
+        });
 
         const modal = document.querySelector("[data-artist-separator-modal]");
         const firstField = document.querySelector("[data-artist-separator-field]");
@@ -1377,7 +1518,17 @@ app.whenReady().then(async () => {
         );
 
         document.querySelector("[data-artist-separator-exception]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => {
+          const proposed = document.querySelector("[data-artist-separator-proposed]");
+          return Boolean(
+            document.querySelector("[data-artist-separator-field]")
+              ?.textContent?.trim() === "Album artist" &&
+            document.querySelector("[data-artist-separator-current]")
+              ?.textContent?.trim() === "Various Artists & Muro" &&
+            proposed instanceof HTMLInputElement &&
+            proposed.value === "Various Artists, Muro"
+          );
+        });
         const secondField = document.querySelector("[data-artist-separator-field]");
         const currentAlbumArtist = document.querySelector("[data-artist-separator-current]");
         const proposedAlbumArtist = document.querySelector("[data-artist-separator-proposed]");
@@ -1389,7 +1540,23 @@ app.whenReady().then(async () => {
         );
 
         document.querySelector("[data-artist-separator-apply]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        await waitForCondition(() => {
+          let exceptions = null;
+          try {
+            exceptions = JSON.parse(localStorage.getItem("muro-settings") ?? "null")
+              ?.state?.artistSeparatorExceptions;
+          } catch {}
+          return Boolean(
+            !document.querySelector("[data-artist-separator-modal]") &&
+            document.querySelector("[data-review-artist-separators]")
+              ?.hasAttribute("disabled") &&
+            Array.isArray(exceptions) &&
+            exceptions.length === 1 &&
+            exceptions[0] === "Muro & Guest feat. DJ Test" &&
+            document.querySelector("[data-artist-separator-exceptions]")?.textContent
+              ?.includes("Muro & Guest feat. DJ Test")
+          );
+        }, 80);
         const updates = await window.muro.invoke("test_get_artist_separator_updates");
         const savedAlbumArtistUpdate = updates[0];
         const persistedArtistExceptions = JSON.parse(
@@ -1452,38 +1619,55 @@ app.whenReady().then(async () => {
         }
 
         window.location.hash = "#/settings";
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        document.querySelector('[data-settings-tab="dj"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        const djSettingsTab = await waitForSelector('[data-settings-tab="dj"]');
+        djSettingsTab?.click();
+        await waitForSelector("[data-dj-mix-feature-toggle]");
         const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
         if (featureToggle instanceof HTMLInputElement && !featureToggle.checked) {
           featureToggle.click();
         }
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-dj-mix-feature-toggle]")?.checked === true &&
+          document.querySelector("[data-dj-mix-settings]") &&
+          document.querySelector("[data-mix-auto]")
+        ));
         const autoMixToggle = document.querySelector("[data-mix-auto]");
         if (autoMixToggle instanceof HTMLInputElement && !autoMixToggle.checked) {
           autoMixToggle.click();
         }
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          document.querySelector("[data-mix-auto]")?.checked === true
+        );
 
         window.location.hash = "#/";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          window.location.hash === "#/" &&
+          document.querySelector('[data-track-index="0"]')
+        ));
         document.querySelector('[data-track-index="0"]')?.dispatchEvent(new MouseEvent("dblclick", {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          document.querySelector('[data-track-index="0"][data-track-playing="true"]') !== null
+        );
         document.querySelector('[data-track-index="1"]')?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: 300,
           clientY: 240,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          [...document.querySelectorAll('[data-popover] button')]
+            .some((button) => button.textContent?.trim() === "Add to queue")
+        );
         const addToQueueButton = [...document.querySelectorAll('[data-popover] button')]
           .find((button) => button.textContent?.trim() === "Add to queue");
         addToQueueButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 1_200));
+        await waitForCondition(() => Boolean(
+          document.querySelector('[data-queue-track]') &&
+          document.querySelector('[data-track-playing="true"]')
+        ), 120);
         return {
           childCount: root.childElementCount,
           textLength: root.textContent?.trim().length ?? 0,
@@ -1532,8 +1716,27 @@ app.whenReady().then(async () => {
         !libraryHeaderButtons.some((button) => button.textContent?.trim() === "Add Music")
       );
       const compactTableButton = libraryHeader?.querySelector('[title="Toggle compact table"]');
+      const rowHeightBeforeCompact = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue('--table-row-height')
+      );
       compactTableButton?.click();
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await waitForCondition(() => {
+        const firstRow = scroller?.querySelector('[data-track-index="0"]');
+        const secondRow = scroller?.querySelector('[data-track-index="1"]');
+        const firstRect = firstRow?.getBoundingClientRect();
+        const secondRect = secondRow?.getBoundingClientRect();
+        const expectedHeight = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue('--table-row-height')
+        );
+        return Boolean(
+          firstRect &&
+          secondRect &&
+          Math.abs(expectedHeight - rowHeightBeforeCompact) >= 1 &&
+          Math.abs(firstRect.height - expectedHeight) < 1 &&
+          Math.abs(secondRect.height - expectedHeight) < 1 &&
+          Math.abs(secondRect.top - firstRect.bottom) < 1
+        );
+      });
       const compactFirstRow = scroller?.querySelector('[data-track-index="0"]');
       const compactSecondRow = scroller?.querySelector('[data-track-index="1"]');
       const compactFirstRect = compactFirstRow?.getBoundingClientRect();
@@ -1549,7 +1752,18 @@ app.whenReady().then(async () => {
         Math.abs(compactSecondRect.top - compactFirstRect.bottom) < 1
       );
       compactTableButton?.click();
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await waitForCondition(() => {
+        const restoredHeight = parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue('--table-row-height')
+        );
+        const firstRect = scroller?.querySelector('[data-track-index="0"]')
+          ?.getBoundingClientRect();
+        return Boolean(
+          firstRect &&
+          Math.abs(restoredHeight - rowHeightBeforeCompact) < 1 &&
+          Math.abs(firstRect.height - restoredHeight) < 1
+        );
+      });
       const requestedColumnLabels = [
         "Album Artist",
         "Genre",
@@ -1562,6 +1776,18 @@ app.whenReady().then(async () => {
         "Bit Depth",
         "File Size",
       ];
+      const requestedColumnKeys = [
+        "artists",
+        "genre",
+        "playCount",
+        "lastPlayedAt",
+        "sourcePath",
+        "discNumber",
+        "comment",
+        "sampleRate",
+        "bitDepth",
+        "fileSize",
+      ];
       const toggleRequestedColumns = () => {
         const labels = [...document.querySelectorAll('[data-columns-list] label')];
         for (const labelText of requestedColumnLabels) {
@@ -1570,7 +1796,7 @@ app.whenReady().then(async () => {
         }
       };
       libraryHeader?.querySelector('[data-library-columns]')?.click();
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await waitForSelector('[data-columns-list]');
       const columnsList = document.querySelector('[data-columns-list]');
       const availableColumnLabels = [
         ...(columnsList?.querySelectorAll('label') ?? []),
@@ -1585,7 +1811,17 @@ app.whenReady().then(async () => {
       );
       toggleRequestedColumns();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 180));
+      await waitForCondition(() => {
+        const row = scroller?.querySelector('[data-track-index="0"]');
+        return Boolean(
+          !document.querySelector('[data-columns-list]') &&
+          row &&
+          requestedColumnKeys.every((key) =>
+            document.querySelector('[role="columnheader"][data-column-key="' + key + '"]') &&
+            row.querySelector('[data-column-key="' + key + '"]')
+          )
+        );
+      }, 80);
       const firstExtendedRow = scroller?.querySelector('[data-track-index="0"]');
       const requestedColumnValuesReady = Boolean(
         requestedColumnLabels.length === 10 &&
@@ -1611,10 +1847,16 @@ app.whenReady().then(async () => {
         firstExtendedRow?.querySelector('[data-column-key="fileSize"]')?.textContent?.trim() === "10.0 MB"
       );
       libraryHeader?.querySelector('[data-library-columns]')?.click();
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await waitForSelector('[data-columns-list]');
       toggleRequestedColumns();
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 180));
+      await waitForCondition(() => Boolean(
+        !document.querySelector('[data-columns-list]') &&
+        requestedColumnKeys.every((key) =>
+          !document.querySelector('[role="columnheader"][data-column-key="' + key + '"]') &&
+          !scroller?.querySelector('[data-track-index="0"] [data-column-key="' + key + '"]')
+        )
+      ), 80);
       const windowChrome = document.querySelector('[data-window-chrome]');
       const windowBrand = document.querySelector('[data-window-brand]');
       const windowControls = document.querySelector(
@@ -1629,7 +1871,17 @@ app.whenReady().then(async () => {
       const playlistCreateButton = document.querySelector('[data-playlist-create]');
       const playlistActionsButton = document.querySelector('[data-playlist-actions-menu]');
       playlistActionsButton?.click();
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await waitForCondition(() => Boolean(
+        document.querySelector('[data-playlist-actions-menu]')
+          ?.getAttribute("aria-expanded") === "true" &&
+        document.querySelector('[data-playlist-import]')?.textContent
+          ?.includes("Import playlist file") &&
+        document.querySelector('[data-playlist-folder-import]')?.textContent
+          ?.includes("Import playlist folder") &&
+        document.querySelector('[data-playlist-export-all]')?.textContent
+          ?.includes("Export all playlists") &&
+        document.querySelector('[data-playlist-folder-create]')
+      ));
       const playlistImportButton = document.querySelector('[data-playlist-import]');
       const playlistFolderImportButton = document.querySelector('[data-playlist-folder-import]');
       const playlistExportAllButton = document.querySelector('[data-playlist-export-all]');
@@ -1648,7 +1900,11 @@ app.whenReady().then(async () => {
         playlistExportAllButton.textContent?.includes("Export all playlists")
       );
       document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 180));
+      await waitForCondition(() =>
+        !document.querySelector('[data-popover]') &&
+        document.querySelector('[data-playlist-actions-menu]')
+          ?.getAttribute("aria-expanded") !== "true"
+      );
       const collectionSection = document.querySelector('[data-sidebar-section="collection"]');
       const playlistSection = document.querySelector('[data-sidebar-section="playlists"]');
       const playlistsUnderCollection = Boolean(
@@ -1656,8 +1912,21 @@ app.whenReady().then(async () => {
         playlistSection &&
         collectionSection.contains(playlistSection)
       );
-      document.querySelector('[aria-label="Collapse queue"]')?.click();
-      await new Promise((resolve) => setTimeout(resolve, 320));
+      const collapseQueueButton = document.querySelector('[aria-label="Collapse queue"]');
+      const expandedQueueWidthBeforeCollapse =
+        collapseQueueButton?.closest('aside')?.getBoundingClientRect().width ?? 0;
+      collapseQueueButton?.click();
+      await waitForCondition(() => {
+        const button = document.querySelector('[aria-label="Expand queue"]');
+        const panel = button?.closest('aside');
+        return Boolean(
+          button &&
+          panel &&
+          panel.querySelectorAll('button').length === 1 &&
+          panel.querySelectorAll('svg').length === 1 &&
+          Math.abs(panel.getBoundingClientRect().width - 40) < 0.1
+        );
+      }, 80);
       const expandQueueButton = document.querySelector('[aria-label="Expand queue"]');
       const collapsedQueuePanel = expandQueueButton?.closest('aside');
       const collapsedQueueControlsReady = Boolean(
@@ -1667,7 +1936,15 @@ app.whenReady().then(async () => {
       );
       const collapsedQueueWidth = collapsedQueuePanel?.getBoundingClientRect().width ?? 0;
       expandQueueButton?.click();
-      await new Promise((resolve) => setTimeout(resolve, 320));
+      await waitForCondition(() => {
+        const button = document.querySelector('[aria-label="Collapse queue"]');
+        const panelWidth = button?.closest('aside')?.getBoundingClientRect().width ?? 0;
+        return Boolean(
+          button &&
+          expandedQueueWidthBeforeCollapse > 0 &&
+          Math.abs(panelWidth - expandedQueueWidthBeforeCollapse) < 0.1
+        );
+      }, 80);
       if (
         selectAll && scroller && headerScroller && searchShortcutHint &&
         scroller.scrollHeight > scroller.clientHeight
@@ -1696,12 +1973,12 @@ app.whenReady().then(async () => {
           clientX: 240,
           clientY: 180,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="search-album-metadata-menu-item"]');
         const tableAlbumMetadataMenuReady = Boolean(
           document.querySelector('[data-testid="search-album-metadata-menu-item"]')?.textContent?.includes("Search for album metadata")
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() => !document.querySelector('[data-popover]'));
         const ratingCell = firstTrackRow?.querySelector('[data-rating-cell]');
         const ratingControl = ratingCell?.querySelector('[role="slider"]');
         const thirdRatingStar = ratingCell?.querySelector('[data-rating-star="3"]');
@@ -1813,7 +2090,7 @@ app.whenReady().then(async () => {
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector('[data-testid="fetch-cover-art-menu-item"]');
         const fetchCoverMenuItem = document.querySelector('[data-testid="fetch-cover-art-menu-item"]');
         const pasteCoverMenuItem = document.querySelector('[data-testid="paste-cover-art-menu-item"]');
         const copyCoverMenuItem = document.querySelector('[data-testid="copy-cover-art-menu-item"]');
@@ -1825,7 +2102,9 @@ app.whenReady().then(async () => {
           pasteCoverMenuItem.disabled
         );
         fetchCoverMenuItem?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          document.querySelector('[data-cover-art-field] img')
+        ));
         const coverCounts = await window.muro.invoke("test_get_cover_counts");
         const manualCoverFetchReady = Boolean(
           coverCounts.manualCoverFetchCount === 1 &&
@@ -1837,11 +2116,18 @@ app.whenReady().then(async () => {
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => {
+          const item = document.querySelector('[data-testid="copy-cover-art-menu-item"]');
+          return item instanceof HTMLButtonElement && !item.disabled;
+        });
         const copyFetchedCoverItem = document.querySelector('[data-testid="copy-cover-art-menu-item"]');
         const copyCoverEnabled = copyFetchedCoverItem instanceof HTMLButtonElement && !copyFetchedCoverItem.disabled;
         copyFetchedCoverItem?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes("Cover art copied to the clipboard.")
+          )
+        );
         const copyCounts = await window.muro.invoke("test_get_cover_counts");
         const manualCoverCopyReady = Boolean(
           copyCoverEnabled &&
@@ -1851,9 +2137,9 @@ app.whenReady().then(async () => {
         [...document.querySelectorAll("button")]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => !document.querySelector('[data-edit-track-modal]'));
         document.querySelector('[data-selection-edit]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector('[data-edit-track-modal]');
         const albumCoverField = document.querySelector('[data-cover-art-field]');
         albumCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -1861,13 +2147,15 @@ app.whenReady().then(async () => {
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="fetch-cover-art-menu-item"]');
         document.querySelector('[data-testid="fetch-cover-art-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          document.querySelector('[data-cover-art-field] img')
+        ));
         [...(document.querySelector('[data-edit-track-modal]')?.querySelectorAll("button") ?? [])]
           .find((button) => button.textContent?.trim() === "Save")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 160));
+        await waitForCondition(() => !document.querySelector('[data-edit-track-modal]'));
         const metadataUpdates = await window.muro.invoke("test_get_metadata_updates");
         const albumCoverUpdate = [...metadataUpdates].reverse().find(
           (entry) => typeof entry.updates?.coverArtPath === "string"
@@ -1879,7 +2167,7 @@ app.whenReady().then(async () => {
         );
         await window.muro.invoke("test_enable_brave_cover_fallback");
         document.querySelector('[data-selection-edit]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector('[data-edit-track-modal]');
         const braveFallbackCoverField = document.querySelector('[data-cover-art-field]');
         braveFallbackCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
@@ -1887,9 +2175,11 @@ app.whenReady().then(async () => {
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="fetch-cover-art-menu-item"]');
         document.querySelector('[data-testid="fetch-cover-art-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        await waitForCondition(() =>
+          document.querySelectorAll('[data-album-cover-candidate]').length === 2
+        );
         const braveCoverCandidates = [...document.querySelectorAll('[data-album-cover-candidate]')];
         const secondBraveCoverButton = braveCoverCandidates[1]?.querySelector('[role="radio"]');
         secondBraveCoverButton?.click();
@@ -1897,7 +2187,13 @@ app.whenReady().then(async () => {
         const braveCoverSelectionReady =
           secondBraveCoverButton?.getAttribute("aria-checked") === "true";
         document.querySelector('[data-apply-album-cover]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        await waitForCondition(() => Boolean(
+          !document.querySelector('[data-album-cover-picker]') &&
+          document.querySelector('[data-cover-art-field] img') &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes("Cover selected from Brave Image Search")
+          )
+        ));
         const braveCoverCounts = await window.muro.invoke("test_get_cover_counts");
         const braveCoverPickerReady = Boolean(
           braveCoverCandidates.length === 2 &&
@@ -1910,11 +2206,22 @@ app.whenReady().then(async () => {
         [...(document.querySelector('[data-edit-track-modal]')?.querySelectorAll("button") ?? [])]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => !document.querySelector('[data-edit-track-modal]'));
         document.querySelector('[aria-label="Select all tracks"]')?.click();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         document.querySelector('[data-selection-edit]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => {
+          const modal = document.querySelector('[data-edit-track-modal]');
+          const artist = modal?.querySelector('[data-autocomplete-field="artist"]');
+          const albumArtist = modal?.querySelector('[data-autocomplete-field="albumArtist"]');
+          return Boolean(
+            modal?.textContent?.includes("250") &&
+            artist instanceof HTMLInputElement &&
+            artist.placeholder === "Mixed values" &&
+            albumArtist instanceof HTMLInputElement &&
+            albumArtist.value === "Muro"
+          );
+        });
         const batchEditModal = document.querySelector('[data-edit-track-modal]');
         const batchArtistInput = batchEditModal?.querySelector('[data-autocomplete-field="artist"]');
         const batchAlbumArtistInput = batchEditModal?.querySelector('[data-autocomplete-field="albumArtist"]');
@@ -1937,7 +2244,7 @@ app.whenReady().then(async () => {
         [...(batchEditModal?.querySelectorAll("button") ?? [])]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => !document.querySelector('[data-edit-track-modal]'));
         const restoreSelectedRow = document.querySelector(
           '[data-track-index="' + (selectedAfterArrowDown ?? "1") + '"]'
         );
@@ -2017,9 +2324,18 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const repeatOneButtonReady = document.querySelector('button[title="Repeat one"]') !== null;
         const queuedTrackCountBeforeRepeat = document.querySelectorAll('[data-queue-track]').length;
+        const mediaSessionMetadataBeforeRepeat = navigator.mediaSession?.metadata;
         await window.muro.invoke("test_emit_track_ended");
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        const repeatOneTransitionReady = await waitForCondition(() =>
+          navigator.mediaSession?.metadata !== mediaSessionMetadataBeforeRepeat &&
+          document.querySelectorAll('[data-queue-track]').length === queuedTrackCountBeforeRepeat &&
+          scroller.querySelector('[data-track-playing="true"]')
+            ?.getAttribute("data-track-index") === playingAfterSpace &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause" &&
+          navigator.mediaSession?.playbackState === "playing"
+        );
         const repeatOneReady = Boolean(
+          repeatOneTransitionReady &&
           repeatOneButtonReady &&
           queuedTrackCountBeforeRepeat > 0 &&
           document.querySelectorAll('[data-queue-track]').length === queuedTrackCountBeforeRepeat &&
@@ -2028,13 +2344,16 @@ app.whenReady().then(async () => {
         );
         const repeatOneDebug = {
           repeatOneButtonReady,
+          repeatOneTransitionReady,
           queuedTrackCountBeforeRepeat,
           playingAfterSpace,
           playingAfterRepeat: scroller.querySelector('[data-track-playing="true"]')
             ?.getAttribute("data-track-index") ?? null,
         };
         document.querySelector('button[title="Remove from queue"]')?.click();
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const queueClearedAfterRepeat = await waitForCondition(() =>
+          !document.querySelector('[data-queue-track]')
+        );
         const playerMetadata = document.querySelector("[data-player-track-metadata]");
         const playerRatingControl = playerMetadata?.querySelector('[role="slider"]');
         const fourthPlayerRatingStar = playerMetadata?.querySelector('[data-rating-star="4"]');
@@ -2109,24 +2428,37 @@ app.whenReady().then(async () => {
           )
         );
         await window.muro.invoke("test_emit_media_control", { action: "next" });
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
+        );
         const mediaNextTrackIndex = scroller.querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         await window.muro.invoke("test_emit_media_control", { action: "previous" });
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "1" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
+        );
         const mediaPreviousTrackIndex = scroller.querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "next", source: "global-shortcut" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
+        );
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "toggle", source: "global-shortcut" },
         });
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "pause", source: "media-session" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
+          navigator.mediaSession?.playbackState === "paused"
+        );
         const mediaPausedAfterSkip = Boolean(
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play"
@@ -2134,7 +2466,10 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "next", source: "global-shortcut" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "3" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
+        );
         const mediaNextAfterPauseIndex = scroller.querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         await window.muro.invoke("test_emit_media_control", {
@@ -2143,14 +2478,22 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "pause", source: "media-session" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "3" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
+          navigator.mediaSession?.playbackState === "paused"
+        );
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "toggle", source: "global-shortcut" },
         });
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "play", source: "media-session" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "3" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause" &&
+          navigator.mediaSession?.playbackState === "playing"
+        );
         const mediaResumeTrackIndex = scroller.querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         const mediaResumeButtonTitle = document.querySelector(".player-bar-play-button")
@@ -2168,16 +2511,26 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "previous", source: "global-shortcut" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2"
+        );
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "previous", source: "global-shortcut" },
         });
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        await waitForCondition(() =>
+          scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "1"
+        );
         const mediaPreviousAfterResumeIndex = scroller
           .querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         document.querySelector('[data-panel-view="mix"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          document.querySelectorAll('[data-mix-suggestion]').length >= 3 &&
+          Boolean(document.querySelector('[data-mix-filter-bpm]')) &&
+          Boolean(document.querySelector('[data-mix-filter-rating]')) &&
+          Boolean(document.querySelector('[data-mix-filter-genre]')) &&
+          Boolean(document.querySelector('[data-mix-sort]'))
+        );
         const mixSuggestions = Array.from(document.querySelectorAll('[data-mix-suggestion]'));
         const mixSuggestionCount = mixSuggestions.length;
         const firstMixReason = mixSuggestions[0]?.getAttribute("data-mix-reason");
@@ -2208,14 +2561,26 @@ app.whenReady().then(async () => {
         );
         const mixExpandButton = document.querySelector('[data-mix-expand]');
         mixExpandButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          const grid = document.querySelector('[style*="--queue-width"]');
+          return Boolean(
+            grid &&
+            parseFloat(getComputedStyle(grid).getPropertyValue("--queue-width")) >= 480
+          );
+        });
         const appGrid = document.querySelector('[style*="--queue-width"]');
         const expandedQueueWidth = appGrid
           ? parseFloat(getComputedStyle(appGrid).getPropertyValue("--queue-width"))
           : 0;
         const mixExpanded = expandedQueueWidth >= 480;
         document.querySelector('[data-mix-expand]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          const grid = document.querySelector('[style*="--queue-width"]');
+          return Boolean(
+            grid &&
+            parseFloat(getComputedStyle(grid).getPropertyValue("--queue-width")) < 480
+          );
+        });
         const camelotSegmentCount = document.querySelectorAll('[data-camelot-code]').length;
         const compatibleCamelotCount = document.querySelectorAll('[data-camelot-compatible="true"]').length;
         const camelotColorsReady =
@@ -2227,18 +2592,46 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          const suggestions = [...document.querySelectorAll('[data-mix-suggestion]')];
+          return Boolean(
+            document.querySelector('[data-camelot-selected="true"]')
+              ?.getAttribute("data-camelot-code") === "9A" &&
+            suggestions.length > 0 &&
+            suggestions.every((suggestion) => suggestion.getAttribute("data-mix-code") === "9A")
+          );
+        });
         const selectedCamelotCode = document.querySelector('[data-camelot-selected="true"]')
           ?.getAttribute("data-camelot-code");
         const filteredMixSuggestions = Array.from(document.querySelectorAll('[data-mix-suggestion]'));
         const wheelFilteredTo9A = filteredMixSuggestions.length > 0 && filteredMixSuggestions.every(
           (suggestion) => suggestion.getAttribute("data-mix-code") === "9A"
         );
-        filteredMixSuggestions[0]?.querySelector('[data-mix-play-next]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        const mixPlayNextButton = filteredMixSuggestions[0]?.querySelector('[data-mix-play-next]');
+        const queuedMixTitle = mixPlayNextButton?.getAttribute("aria-label")
+          ?.replace(/^Play /, "")
+          .replace(/ next$/, "") ?? null;
+        mixPlayNextButton?.click();
         document.querySelector('[data-panel-view="queue"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
-        const queuedFromMix = document.querySelectorAll('[data-queue-track]').length === 1;
+        const mixQueueTransitionReady = await waitForCondition(() => {
+          const queuedTracks = document.querySelectorAll('[data-queue-track]');
+          return Boolean(
+            queueClearedAfterRepeat &&
+            document.querySelector('[data-queue-section="queue"]') &&
+            queuedTracks.length === 1
+          );
+        });
+        const queuedFromMix = Boolean(
+          mixQueueTransitionReady &&
+          document.querySelectorAll('[data-queue-track]').length === 1
+        );
+        const queuedFromMixDebug = {
+          queueClearedAfterRepeat,
+          mixQueueTransitionReady,
+          queuedMixTitle,
+          queueTexts: [...document.querySelectorAll('[data-queue-track]')]
+            .map((track) => track.textContent?.trim() ?? null),
+        };
         const playlistDropTargetReady = Boolean(
           document.querySelector('[data-playlist-target="smoke-playlist"]') &&
           document.querySelector('[data-playlist-target="smoke-empty-playlist"]') &&
@@ -2250,16 +2643,26 @@ app.whenReady().then(async () => {
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="add-to-playlist-menu-item"]');
         document.querySelector('[data-testid="add-to-playlist-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => Boolean(
+          document.querySelector('[data-playlist-choices]') &&
+          document.querySelector('[data-playlist-choice="smoke-playlist"]') &&
+          document.querySelector('[data-playlist-choice="smoke-empty-playlist"]')
+        ));
         const playlistChoicesReady = Boolean(
           document.querySelector('[data-playlist-choices]') &&
           document.querySelector('[data-playlist-choice="smoke-playlist"]') &&
           document.querySelector('[data-playlist-choice="smoke-empty-playlist"]')
         );
         document.querySelector('[data-playlist-choice="smoke-empty-playlist"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Number(
+            document.querySelector('[data-playlist-id="smoke-empty-playlist"] .sidebar-count')
+              ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+          ) > 0 &&
+          !document.querySelector('[data-popover]')
+        );
         const emptyPlaylistCount = Number(
           document.querySelector('[data-playlist-id="smoke-empty-playlist"] .sidebar-count')
             ?.textContent?.replace(/[^0-9]/g, "") ?? 0
@@ -2272,7 +2675,15 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Number(
+            document.querySelector('[data-playlist-id="smoke-empty-playlist"] .sidebar-count')
+              ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+          ) === 0 &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes('Restored "Empty Mix" to its previous 0 tracks.')
+          )
+        );
         const countAfterPlaylistUndo = Number(
           document.querySelector('[data-playlist-id="smoke-empty-playlist"] .sidebar-count')
             ?.textContent?.replace(/[^0-9]/g, "") ?? 0
@@ -2316,15 +2727,26 @@ app.whenReady().then(async () => {
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="add-to-playlist-menu-item"]');
         document.querySelector('[data-testid="add-to-playlist-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-playlist-choice="smoke-next-playlist"]');
         document.querySelector('[data-playlist-choice="smoke-next-playlist"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          [...document.querySelectorAll("button")]
+            .some((button) => button.textContent?.trim() === "Add non-duplicates") &&
+          !document.querySelector('[data-popover]')
+        );
         const addNonDuplicatesButton = [...document.querySelectorAll("button")]
           .find((button) => button.textContent?.trim() === "Add non-duplicates");
         addNonDuplicatesButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Number(
+            document.querySelector('[data-playlist-id="smoke-next-playlist"] .sidebar-count')
+              ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+          ) === 4 &&
+          ![...document.querySelectorAll("button")]
+            .some((button) => button.textContent?.trim() === "Add non-duplicates")
+        );
         const mixedDuplicateAddedCount = Number(
           document.querySelector('[data-playlist-id="smoke-next-playlist"] .sidebar-count')
             ?.textContent?.replace(/[^0-9]/g, "") ?? 0
@@ -2336,7 +2758,15 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Number(
+            document.querySelector('[data-playlist-id="smoke-next-playlist"] .sidebar-count')
+              ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+          ) === 3 &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes('Restored "Next Context" to its previous 3 tracks.')
+          )
+        );
         const mixedDuplicateUndoCount = Number(
           document.querySelector('[data-playlist-id="smoke-next-playlist"] .sidebar-count')
             ?.textContent?.replace(/[^0-9]/g, "") ?? 0
@@ -2414,7 +2844,12 @@ app.whenReady().then(async () => {
             cancelable: true,
             dataTransfer,
           }));
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await waitForCondition(() =>
+            Number(
+              document.querySelector('[data-playlist-id="smoke-drag-playlist"] .sidebar-count')
+                ?.textContent?.replace(/[^0-9]/g, "") ?? 0
+            ) > 0
+          );
           const dragPlaylistCount = Number(
             document.querySelector('[data-playlist-id="smoke-drag-playlist"] .sidebar-count')
               ?.textContent?.replace(/[^0-9]/g, "") ?? 0
@@ -2430,43 +2865,48 @@ app.whenReady().then(async () => {
           clientX: window.innerWidth - 4,
           clientY: window.innerHeight - 4,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        const contextMenuViewportReady = await waitForCondition(() => {
+          const menu = document.querySelector('[data-popover]');
+          const rect = menu?.getBoundingClientRect();
+          return Boolean(
+            rect &&
+            rect.left >= 7 &&
+            rect.top >= 7 &&
+            rect.right <= window.innerWidth - 7 &&
+            rect.bottom <= window.innerHeight - 7 &&
+            menu?.getAttribute("data-popover-horizontal") === "left" &&
+            menu?.getAttribute("data-popover-vertical") === "up"
+          );
+        });
         const edgeContextMenu = document.querySelector('[data-popover]');
-        const edgeContextRect = edgeContextMenu?.getBoundingClientRect();
         const contextMenuOpened = Boolean(edgeContextMenu);
-        const contextMenuViewportReady = Boolean(
-          edgeContextRect &&
-          edgeContextRect.left >= 7 &&
-          edgeContextRect.top >= 7 &&
-          edgeContextRect.right <= window.innerWidth - 7 &&
-          edgeContextRect.bottom <= window.innerHeight - 7 &&
-          edgeContextMenu?.getAttribute("data-popover-horizontal") === "left" &&
-          edgeContextMenu?.getAttribute("data-popover-vertical") === "up"
-        );
         document.querySelector('[data-popover]')?.dispatchEvent(new PointerEvent("pointerdown", {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const contextMenuStayedOpenInside = Boolean(document.querySelector('[data-popover]'));
-        headerScroller.dispatchEvent(new PointerEvent("pointerdown", {
+        document.querySelector('[data-track-table-header-scroll]')?.dispatchEvent(new PointerEvent("pointerdown", {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 180));
-        const contextMenuClosedOutside = !document.querySelector('[data-popover]');
+        const contextMenuClosedOutside = await waitForCondition(
+          () => !document.querySelector('[data-popover]')
+        );
         firstTrackRow?.dispatchEvent(new MouseEvent("click", {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          firstTrackRow?.getAttribute("data-track-selected") === "true"
+        );
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="show-in-finder-menu-item"]');
         const showInFinderItem = document.querySelector('[data-testid="show-in-finder-menu-item"]');
         const expectedShowInFolderLabel =
           window.muro?.platform === "darwin" ? "Show in Finder" : "Show in folder";
@@ -2474,14 +2914,19 @@ app.whenReady().then(async () => {
           showInFinderItem?.textContent?.includes(expectedShowInFolderLabel)
         );
         showInFinderItem?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => !document.querySelector('[data-popover]'));
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-testid="search-metadata-menu-item"]') &&
+            document.querySelector('[data-testid="identify-acoustid-menu-item"]')
+          )
+        );
         const searchMetadataItem = document.querySelector('[data-testid="search-metadata-menu-item"]');
         const searchMetadataMenuReady = Boolean(
           searchMetadataItem?.textContent?.includes("Search for metadata")
@@ -2491,7 +2936,14 @@ app.whenReady().then(async () => {
           acoustIdMenuItem?.textContent?.includes("Identify with AcoustID")
         );
         acoustIdMenuItem?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-acoustid-modal]") &&
+            document.querySelector("[data-acoustid-row]") &&
+            document.querySelector("[data-acoustid-candidate-select]") &&
+            document.querySelector("[data-apply-acoustid]")
+          )
+        );
         const acoustIdModal = document.querySelector("[data-acoustid-modal]");
         const acoustIdModalReady = Boolean(
           acoustIdModal &&
@@ -2502,16 +2954,22 @@ app.whenReady().then(async () => {
         [...(acoustIdModal?.querySelectorAll("button") ?? [])]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => !document.querySelector("[data-acoustid-modal]"));
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="search-metadata-menu-item"]');
         document.querySelector('[data-testid="search-metadata-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-metadata-search-modal]") &&
+            document.querySelector("[data-metadata-candidate]") &&
+            document.querySelector("[data-apply-metadata]")
+          )
+        );
         const metadataSearchReady = Boolean(
           document.querySelector("[data-metadata-search-modal]") &&
           document.querySelector("[data-metadata-candidate]") &&
@@ -2536,16 +2994,22 @@ app.whenReady().then(async () => {
         [...document.querySelectorAll("button")]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => !document.querySelector("[data-metadata-search-modal]"));
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="delete-track-menu-item"]');
         document.querySelector('[data-testid="delete-track-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-delete-tracks-modal]') &&
+            document.querySelector('[data-delete-library-only]') &&
+            document.querySelector('[data-delete-from-disk]')
+          )
+        );
         const deleteModalReady = Boolean(
           document.querySelector('[data-delete-tracks-modal]') &&
           document.querySelector('[data-delete-library-only]') &&
@@ -2555,16 +3019,31 @@ app.whenReady().then(async () => {
           document.querySelector('[data-delete-library-only][data-delete-preferred="true"]')
         );
         document.querySelector('[data-delete-from-disk]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => {
+          try {
+            return (
+              !document.querySelector('[data-delete-tracks-modal]') &&
+              JSON.parse(localStorage.getItem("muro-settings") ?? "null")
+                ?.state?.lastDeleteMode === "disk"
+            );
+          } catch {
+            return false;
+          }
+        });
         firstTrackRow?.dispatchEvent(new MouseEvent("contextmenu", {
           bubbles: true,
           cancelable: true,
           clientX: 160,
           clientY: 160,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="delete-track-menu-item"]');
         document.querySelector('[data-testid="delete-track-menu-item"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => {
+          const preferredButton = document.querySelector(
+            '[data-delete-from-disk][data-delete-preferred="true"]'
+          );
+          return Boolean(preferredButton && document.activeElement === preferredButton);
+        });
         const preferredDiskButton = document.querySelector(
           '[data-delete-from-disk][data-delete-preferred="true"]'
         );
@@ -2577,6 +3056,7 @@ app.whenReady().then(async () => {
             ?.state?.lastDeleteMode ?? null;
         } catch {}
         window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+        await waitForCondition(() => !document.querySelector('[data-delete-tracks-modal]'));
         const playlistFolderReady = Boolean(
           document.querySelector('[data-playlist-folder="smoke-folder"]') &&
           document.querySelector('[data-playlist-folder-parent="smoke-folder"]')
@@ -2592,7 +3072,18 @@ app.whenReady().then(async () => {
           clientX: 180,
           clientY: 220,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => {
+          const menuText = Array.from(
+            document.querySelectorAll('[data-popover]'),
+            (node) => node.textContent ?? "",
+          );
+          const exportButton = document.querySelector("[data-playlist-export]");
+          return menuText.some((text) =>
+            text.includes("Export playlist") &&
+            text.includes("Move to") &&
+            text.includes("Playlists")
+          ) && exportButton?.getAttribute("title") === "Export this playlist as an M3U8 file";
+        });
         const playlistMenuTexts = Array.from(
           document.querySelectorAll('[data-popover]'),
           (node) => node.textContent ?? "",
@@ -2604,7 +3095,7 @@ app.whenReady().then(async () => {
           text.includes("Playlists")
         ) && playlistExportButton?.getAttribute("title") === "Export this playlist as an M3U8 file";
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() => !document.querySelector('[data-popover]'));
 
         const reorderSource = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
         const reorderTarget = document.querySelector('[data-playlist-id="smoke-drag-playlist"]');
@@ -2635,7 +3126,22 @@ app.whenReady().then(async () => {
             bubbles: true,
             dataTransfer,
           }));
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await waitForCondition(() => {
+            const updatedSource = document.querySelector(
+              '[data-playlist-id="smoke-empty-playlist"]'
+            );
+            const updatedTarget = document.querySelector(
+              '[data-playlist-id="smoke-drag-playlist"]'
+            );
+            return Boolean(
+              updatedSource &&
+              updatedTarget &&
+              (
+                updatedTarget.compareDocumentPosition(updatedSource) &
+                Node.DOCUMENT_POSITION_FOLLOWING
+              )
+            );
+          });
           const updatedSource = document.querySelector('[data-playlist-id="smoke-empty-playlist"]');
           const updatedTarget = document.querySelector('[data-playlist-id="smoke-drag-playlist"]');
           playlistReorderReady = Boolean(
@@ -2666,7 +3172,13 @@ app.whenReady().then(async () => {
           clientX: 190,
           clientY: 230,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-playlist-move-folder="smoke-nested-folder"]') &&
+            document.querySelector('[data-playlist-delete]')
+              ?.textContent?.includes("Delete 2 playlists")
+          )
+        );
         const bulkMoveButton = document.querySelector(
           '[data-playlist-move-folder="smoke-nested-folder"]'
         );
@@ -2675,7 +3187,12 @@ app.whenReady().then(async () => {
           bulkMoveButton && initialBulkDeleteButton?.textContent?.includes("Delete 2 playlists")
         );
         bulkMoveButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          document.querySelector('[data-playlist-id="smoke-empty-playlist"]')
+            ?.getAttribute("data-playlist-folder-parent") === "smoke-nested-folder" &&
+          document.querySelector('[data-playlist-id="smoke-drag-playlist"]')
+            ?.getAttribute("data-playlist-folder-parent") === "smoke-nested-folder"
+        );
         const bulkPlaylistMoveReady = Boolean(
           document.querySelector('[data-playlist-id="smoke-empty-playlist"]')
             ?.getAttribute("data-playlist-folder-parent") === "smoke-nested-folder" &&
@@ -2704,26 +3221,28 @@ app.whenReady().then(async () => {
           clientX: 190,
           clientY: 230,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          document.querySelector('[data-playlist-delete]')
+            ?.textContent?.includes("Delete 2 playlists")
+        );
         const bulkDeleteButton = document.querySelector('[data-playlist-delete]');
         bulkDeleteButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          !document.querySelector('[data-playlist-id="smoke-empty-playlist"]') &&
+          !document.querySelector('[data-playlist-id="smoke-drag-playlist"]')
+        );
         const bulkPlaylistDeleteReady = Boolean(
           !document.querySelector('[data-playlist-id="smoke-empty-playlist"]') &&
           !document.querySelector('[data-playlist-id="smoke-drag-playlist"]')
         );
 
         window.location.hash = "#/playlists/smoke-playlist";
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForSelector('[data-remove-from-playlist]');
         const playlistRemoveReady = Boolean(document.querySelector('[data-remove-from-playlist]'));
         window.location.hash = "#/settings";
-        for (
-          let attempt = 0;
-          attempt < 40 && document.querySelectorAll("[data-settings-section]").length !== 6;
-          attempt += 1
-        ) {
-          await new Promise((resolve) => setTimeout(resolve, 25));
-        }
+        await waitForCondition(
+          () => document.querySelectorAll("[data-settings-section]").length === 6
+        );
         const settingsNavigationReady = Boolean(
           document.querySelector("[data-settings-search]") &&
           document.querySelectorAll("[data-settings-section]").length === 6 &&
@@ -2735,7 +3254,17 @@ app.whenReady().then(async () => {
           document.querySelector('[data-settings-section="advanced"]')
         );
         document.querySelector('[data-settings-tab="metadata"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-artist-information-settings]") &&
+            document.querySelector("[data-acoustid-settings]") &&
+            document.querySelector("[data-lastfm-api-key]") &&
+            document.querySelector("[data-theaudiodb-api-key]") &&
+            document.querySelector("[data-fanart-api-key]") &&
+            document.querySelector("[data-brave-search-api-key]") &&
+            document.querySelector("[data-acoustid-client-key]")
+          )
+        );
         const lastFmApiKeyInput = document.querySelector("[data-lastfm-api-key]");
         const theAudioDbApiKeyInput = document.querySelector("[data-theaudiodb-api-key]");
         const fanartApiKeyInput = document.querySelector("[data-fanart-api-key]");
@@ -2758,11 +3287,18 @@ app.whenReady().then(async () => {
           acoustIdClientKeyInput.type === "password"
         );
         document.querySelector('[data-settings-tab="dj"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForSelector("[data-dj-mix-feature-toggle]");
         const featureToggle = document.querySelector("[data-dj-mix-feature-toggle]");
         const defaultOff = featureToggle instanceof HTMLInputElement && !featureToggle.checked;
         featureToggle?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          const bars = document.querySelector("[data-mix-bars]");
+          return Boolean(
+            document.querySelector("[data-dj-mix-settings]") &&
+            bars instanceof HTMLSelectElement &&
+            Array.from(bars.options, (option) => Number(option.value)).join(",") === "4,8,16,32"
+          );
+        });
         const mixBars = document.querySelector("[data-mix-bars]");
         const mixBarOptions = mixBars instanceof HTMLSelectElement
           ? Array.from(mixBars.options, (option) => Number(option.value))
@@ -2772,7 +3308,10 @@ app.whenReady().then(async () => {
           Boolean(document.querySelector("[data-dj-mix-settings]")) &&
           mixBarOptions.join(",") === "4,8,16,32";
         window.location.hash = "#/";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash === "#/" &&
+          document.querySelectorAll('[data-track-index]').length >= 2
+        );
         const mixRows = document.querySelectorAll('[data-track-index]');
         mixRows[0]?.dispatchEvent(new MouseEvent("click", {
           bubbles: true,
@@ -2788,7 +3327,7 @@ app.whenReady().then(async () => {
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const djMixManualSurfaceReady = Boolean(document.querySelector("[data-selection-mix]"));
         document.querySelector('[data-panel-view="mix"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForSelector("[data-mix-with-current]");
         const mixWithCurrentButtons = Array.from(
           document.querySelectorAll("[data-mix-with-current]"),
         );
@@ -2805,7 +3344,14 @@ app.whenReady().then(async () => {
           to_id: "smoke-track-2",
           to_title: "Smoke Track 002",
         });
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-mix-indicator="active"]')
+              ?.textContent?.includes("42%") &&
+            document.querySelector("[data-mix-progress]")
+              ?.getAttribute("aria-valuenow") === "42"
+          )
+        );
         const mixIndicator = document.querySelector('[data-mix-indicator="active"]');
         const mixProgress = document.querySelector("[data-mix-progress]");
         const mixIndicatorReady = Boolean(
@@ -2815,7 +3361,7 @@ app.whenReady().then(async () => {
           mixProgress?.getAttribute("aria-valuenow") === "42"
         );
         document.querySelector('[data-panel-view="queue"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-queue-section="queue"]');
         window.location.hash = "#/settings";
         const analysisSettingsTab = await waitForSelector('[data-settings-tab="analysis"]');
         analysisSettingsTab?.click();
@@ -2863,7 +3409,15 @@ app.whenReady().then(async () => {
           clientX: 220,
           clientY: 180,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          Boolean(
+            Array.from(
+              document.querySelectorAll("[data-popover]"),
+              (node) => node.textContent ?? "",
+            ).some((text) => text.includes("10 selected") && text.includes("Add to playlist")) &&
+            document.querySelector('[data-testid="search-album-metadata-menu-item"]')
+          )
+        );
         const albumCardContextMenuReady = Boolean(
           Array.from(document.querySelectorAll("[data-popover]"), (node) => node.textContent ?? "")
             .some((text) => text.includes("10 selected") && text.includes("Add to playlist"))
@@ -2873,7 +3427,16 @@ app.whenReady().then(async () => {
           searchAlbumMetadataItem?.textContent?.includes("Search for album metadata")
         );
         searchAlbumMetadataItem?.click();
-        await new Promise((resolve) => setTimeout(resolve, 160));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-album-metadata-modal]") &&
+            document.querySelector("[data-album-metadata-candidate]") &&
+            document.querySelectorAll("[data-album-metadata-field]").length === 12 &&
+            document.querySelectorAll('[data-album-track-match="matched"]').length === 10 &&
+            document.querySelector("[data-apply-album-metadata]")
+              ?.textContent?.includes("10 tracks")
+          )
+        );
         const albumMetadataModalReady = Boolean(
           document.querySelector("[data-album-metadata-modal]") &&
           document.querySelector("[data-album-metadata-candidate]") &&
@@ -2884,9 +3447,9 @@ app.whenReady().then(async () => {
         [...document.querySelectorAll("button")]
           .find((button) => button.textContent?.trim() === "Cancel")
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => !document.querySelector("[data-album-metadata-modal]"));
         document.querySelector(".album-card-open")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector("[data-album-detail]");
         const albumDetailReady = Boolean(document.querySelector("[data-album-detail]"));
         const albumDetailTrackCount = document.querySelectorAll("[data-album-track]").length;
         document.querySelector("[data-album-track]")?.dispatchEvent(new MouseEvent("contextmenu", {
@@ -2895,15 +3458,20 @@ app.whenReady().then(async () => {
           clientX: 300,
           clientY: 260,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() =>
+          Array.from(
+            document.querySelectorAll("[data-popover]"),
+            (node) => node.textContent ?? "",
+          ).some((text) => text.includes("Play next") && text.includes("Add to playlist"))
+        );
         const albumTrackContextMenuReady = Boolean(
           Array.from(document.querySelectorAll("[data-popover]"), (node) => node.textContent ?? "")
             .some((text) => text.includes("Play next") && text.includes("Add to playlist"))
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForCondition(() => !document.querySelector("[data-popover]"));
         document.querySelector(".album-back-button")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForSelector("[data-albums-view]");
         document.querySelector('[aria-label="List view"]')?.click();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const albumListReady = Boolean(document.querySelector(".album-collection--list"));
@@ -2913,18 +3481,24 @@ app.whenReady().then(async () => {
           clientX: 240,
           clientY: 200,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-testid="search-album-metadata-menu-item"]');
         const albumListMetadataMenuReady = Boolean(
           document.querySelector('[data-testid="search-album-metadata-menu-item"]')
         );
         document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() =>
+          !document.querySelector("[data-popover]") &&
+          Boolean(
+            document.querySelector("[data-history-back]") &&
+            document.querySelector("[data-history-forward]")
+          )
+        );
         const historyBackButton = document.querySelector("[data-history-back]");
         const historyForwardButton = document.querySelector("[data-history-forward]");
         const historyButtonsReady = Boolean(historyBackButton && historyForwardButton);
         const historyBackEnabled = historyBackButton instanceof HTMLButtonElement && !historyBackButton.disabled;
         historyBackButton?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector("[data-album-detail]");
         const historyBackReachedAlbumDetail = Boolean(document.querySelector("[data-album-detail]"));
         const historyForwardEnabledAfterBack =
           historyForwardButton instanceof HTMLButtonElement && !historyForwardButton.disabled;
@@ -2934,30 +3508,41 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector(".album-collection--list");
         const keyboardForwardReachedAlbumList = Boolean(document.querySelector(".album-collection--list"));
         window.dispatchEvent(new MouseEvent("mouseup", {
           button: 3,
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector("[data-album-detail]");
         const mouseBackReachedAlbumDetail = Boolean(document.querySelector("[data-album-detail]"));
         window.dispatchEvent(new MouseEvent("mouseup", {
           button: 4,
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForSelector(".album-collection--list");
         const mouseForwardReachedAlbumList = Boolean(document.querySelector(".album-collection--list"));
         document.querySelector(".album-card-open")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-album-detail]") &&
+            document.querySelector("[data-album-artist]") &&
+            document.querySelector("[data-album-genre]")
+          )
+        );
         const albumMetadataLinksReady = Boolean(
           document.querySelector("[data-album-artist]") &&
           document.querySelector("[data-album-genre]")
         );
         document.querySelector("[data-album-artist]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          window.location.hash.includes("/collection/artists") &&
+          window.location.hash.includes("value=Muro") &&
+          document.querySelector("h2")?.textContent?.trim() === "Muro" &&
+          Boolean(document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]'))
+        );
         const albumArtistNavigationReady =
           window.location.hash.includes("/collection/artists") &&
           window.location.hash.includes("value=Muro") &&
@@ -2974,7 +3559,14 @@ app.whenReady().then(async () => {
         );
 
         window.location.hash = "#/collection/artists";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-artist-index]") &&
+            document.querySelectorAll("[data-artist-card]").length === 2 &&
+            document.querySelector('[data-artist-card="Muro"]')
+              ?.getAttribute("data-artist-profile-cached") === "true"
+          )
+        );
         const artistCards = document.querySelectorAll("[data-artist-card]");
         const artistCard = document.querySelector('[data-artist-card="Muro"]');
         const artistIndexReady =
@@ -2984,13 +3576,23 @@ app.whenReady().then(async () => {
           artistCard?.textContent?.includes("250 tracks") &&
           artistCard?.textContent?.includes("25 albums");
         artistCard?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
+            document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "250"
+          )
+        );
         const artistDetailReady = Boolean(
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
           document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "250"
         );
         document.querySelector('[title="Search for another artist picture"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-artist-image-modal]") &&
+            document.querySelectorAll("[data-artist-image-candidate]").length === 4
+          )
+        );
         const artistImageChooserReady = Boolean(
           document.querySelector("[data-artist-image-modal]") &&
           document.querySelectorAll("[data-artist-image-candidate]").length === 4 &&
@@ -3002,7 +3604,13 @@ app.whenReady().then(async () => {
         );
         document.querySelector('[data-artist-image-candidate="fanart.tv"] [role="radio"]')?.click();
         document.querySelector("[data-apply-artist-image]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          !document.querySelector("[data-artist-image-modal]") &&
+          Boolean(
+            document.querySelector(".artist-detail-photo img")
+              ?.getAttribute("src")?.includes("app-logo.png")
+          )
+        );
         const artistImageCounts = await window.muro.invoke("test_get_cover_counts");
         const artistImageApplied = Boolean(
           !document.querySelector("[data-artist-image-modal]") &&
@@ -3013,29 +3621,47 @@ app.whenReady().then(async () => {
         );
 
         window.location.hash = "#/";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          window.location.hash === "#/" &&
+          document.querySelector('[data-library-view="library"]')
+            ?.getAttribute("aria-current") === "page" &&
+          document.querySelector("h2")?.textContent?.trim() === "All Songs" &&
+          !document.querySelector('[data-artist-detail]') &&
+          document.querySelector('[data-track-index="0"] [data-track-artist-link="true"]')
+        ));
         const tableArtistLink = document.querySelector('[data-track-index="0"] [data-track-artist-link="true"]');
         const tableArtistCell = tableArtistLink?.closest('[data-column-key="artist"]');
         const artistLinkRect = tableArtistLink?.getBoundingClientRect();
         const artistCellRect = tableArtistCell?.getBoundingClientRect();
         tableArtistCell?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const artistCellDoesNotNavigate = window.location.hash === "#/";
         tableArtistLink?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash.includes("/collection/artists") &&
+          window.location.hash.includes("value=Muro") &&
+          document.querySelector("h2")?.textContent?.trim() === "Muro"
+        );
         const tableArtistNavigationReady =
           window.location.hash.includes("/collection/artists") &&
           window.location.hash.includes("value=Muro") &&
           document.querySelector("h2")?.textContent?.trim() === "Muro";
 
         window.location.hash = "#/";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          window.location.hash === "#/" &&
+          document.querySelector('[data-library-view="library"]')
+            ?.getAttribute("aria-current") === "page" &&
+          document.querySelector("h2")?.textContent?.trim() === "All Songs" &&
+          !document.querySelector('[data-artist-detail]') &&
+          document.querySelector('[data-track-index="0"] [data-track-album-link="true"]')
+        ));
         const tableAlbumLink = document.querySelector('[data-track-index="0"] [data-track-album-link="true"]');
         const tableAlbumCell = tableAlbumLink?.closest('[data-column-key="album"]');
         const albumLinkRect = tableAlbumLink?.getBoundingClientRect();
         const albumCellRect = tableAlbumCell?.getBoundingClientRect();
         tableAlbumCell?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         const albumCellDoesNotNavigate = window.location.hash === "#/";
         const tableTextOnlyNavigationReady = Boolean(
           artistCellDoesNotNavigate &&
@@ -3044,14 +3670,28 @@ app.whenReady().then(async () => {
           albumLinkRect && albumCellRect && albumLinkRect.width < albumCellRect.width - 8
         );
         tableAlbumLink?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash.includes("/collection/albums") &&
+          window.location.hash.includes("album=") &&
+          Boolean(document.querySelector("[data-album-detail]"))
+        );
         const tableAlbumNavigationReady =
           window.location.hash.includes("/collection/albums") &&
           window.location.hash.includes("album=") &&
           Boolean(document.querySelector("[data-album-detail]"));
 
         window.location.hash = "#/";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash === "#/" &&
+          document.querySelector('[data-library-view="library"]')
+            ?.getAttribute("aria-current") === "page" &&
+          document.querySelector("h2")?.textContent?.trim() === "All Songs" &&
+          !document.querySelector('[data-album-detail]') &&
+          Boolean(
+            document.querySelector('[data-library-view="recentlyPlayed"]') &&
+            document.querySelector('[data-library-view="recentlyAdded"]')
+          )
+        );
 
         const libraryViewButtons = [...document.querySelectorAll('[data-library-view]')];
         const recentlyPlayedNavigationIndex = libraryViewButtons.findIndex(
@@ -3063,13 +3703,17 @@ app.whenReady().then(async () => {
         const recentlyAddedBelowPlayed =
           recentlyAddedNavigationIndex === recentlyPlayedNavigationIndex + 1;
         document.querySelector('[data-library-view="recentlyAdded"]')?.click();
-        let recentlyAddedFirstTitle = null;
-        for (let attempt = 0; attempt < 20 && !recentlyAddedFirstTitle; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 25));
-          recentlyAddedFirstTitle = document.querySelector(
-            '[data-track-index="0"] [data-column-key="title"]'
-          )?.textContent?.trim() ?? null;
-        }
+        await waitForCondition(() => Boolean(
+          window.location.hash === "#/recently-added" &&
+          document.querySelector('[data-library-view="recentlyAdded"]')
+            ?.getAttribute("aria-current") === "page" &&
+          document.querySelector("h2")?.textContent?.trim() === "Recently Added" &&
+          document.querySelector('[data-track-index="0"] [data-column-key="title"]')
+            ?.textContent?.trim() === "Smoke Track 000"
+        ));
+        const recentlyAddedFirstTitle = document.querySelector(
+          '[data-track-index="0"] [data-column-key="title"]'
+        )?.textContent?.trim() ?? null;
         const recentlyAddedViewReady = Boolean(
           recentlyAddedBelowPlayed &&
           window.location.hash === "#/recently-added" &&
@@ -3087,7 +3731,11 @@ app.whenReady().then(async () => {
         };
 
         window.location.hash = "#/collection/genres";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          document.querySelectorAll(
+            '[data-collection-index="genres"] [data-collection-value]'
+          ).length === 2
+        );
         const genreItems = document.querySelectorAll('[data-collection-index="genres"] [data-collection-value]');
         const electronicGenre = document.querySelector('[data-collection-value="Electronic"]');
         const houseGenre = document.querySelector('[data-collection-value="House"]');
@@ -3096,18 +3744,27 @@ app.whenReady().then(async () => {
           electronicGenre?.getAttribute("data-collection-count") === "125" &&
           houseGenre?.getAttribute("data-collection-count") === "125";
         electronicGenre?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash.includes("/collection/genres") &&
+          window.location.hash.includes("value=Electronic") &&
+          document.querySelector("h2")?.textContent?.trim() === "Electronic" &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "125"
+        );
         const genreDrilldownReady =
           window.location.hash.includes("/collection/genres") &&
           window.location.hash.includes("value=Electronic") &&
           document.querySelector("h2")?.textContent?.trim() === "Electronic" &&
           document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "125";
         window.history.back();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForSelector('[data-collection-index="genres"]');
         const genreHistoryReady = Boolean(document.querySelector('[data-collection-index="genres"]'));
 
         window.location.hash = "#/collection/labels";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          document.querySelectorAll(
+            '[data-collection-index="labels"] [data-collection-value]'
+          ).length === 2
+        );
         const labelItems = document.querySelectorAll('[data-collection-index="labels"] [data-collection-value]');
         const muroRecordsLabel = document.querySelector(
           '[data-collection-index="labels"] [data-collection-value="Muro Records"]'
@@ -3116,7 +3773,12 @@ app.whenReady().then(async () => {
           labelItems.length === 2 &&
           muroRecordsLabel?.getAttribute("data-collection-count") === "125";
         muroRecordsLabel?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash.includes("/collection/labels") &&
+          window.location.hash.includes("value=Muro+Records") &&
+          document.querySelector("h2")?.textContent?.trim() === "Muro Records" &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "125"
+        );
         const labelDrilldownReady =
           window.location.hash.includes("/collection/labels") &&
           window.location.hash.includes("value=Muro+Records") &&
@@ -3124,7 +3786,11 @@ app.whenReady().then(async () => {
           document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "125";
 
         window.location.hash = "#/collection/keys";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          document.querySelectorAll(
+            '[data-collection-index="keys"] [data-collection-value]'
+          ).length === 5
+        );
         const keyItems = document.querySelectorAll('[data-collection-index="keys"] [data-collection-value]');
         const camelot8A = document.querySelector('[data-collection-index="keys"] [data-collection-value="8A"]');
         const keyIndexReady =
@@ -3132,7 +3798,12 @@ app.whenReady().then(async () => {
           camelot8A?.getAttribute("data-collection-count") === "84" &&
           camelot8A?.getAttribute("data-collection-color") === "#E9AEE1";
         camelot8A?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash.includes("/collection/keys") &&
+          window.location.hash.includes("value=8A") &&
+          document.querySelector("h2")?.textContent?.trim() === "8A" &&
+          document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "84"
+        );
         const keyDrilldownReady =
           window.location.hash.includes("/collection/keys") &&
           window.location.hash.includes("value=8A") &&
@@ -3155,9 +3826,24 @@ app.whenReady().then(async () => {
           valueSetter?.call(smartCrateName, "Warm-up House");
           smartCrateName.dispatchEvent(new Event("input", { bubbles: true }));
         }
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          const saveButton = document.querySelector('[data-smart-crate-save]');
+          return Boolean(
+            smartCrateName instanceof HTMLInputElement &&
+            smartCrateName.value === "Warm-up House" &&
+            saveButton instanceof HTMLButtonElement &&
+            !saveButton.disabled
+          );
+        });
         document.querySelector('[data-smart-crate-save]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        await waitForCondition(() =>
+          !document.querySelector('[data-smart-crate-modal]') &&
+          Boolean(
+            document.querySelector('[data-smart-crate-id]') &&
+            window.location.hash.includes("/smart-crates/") &&
+            document.querySelector("h2")?.textContent?.trim() === "Warm-up House"
+          )
+        );
         const smartCrateItem = document.querySelector('[data-smart-crate-id]');
         const smartCrateCreated = Boolean(
           smartCrateItem &&
@@ -3173,16 +3859,36 @@ app.whenReady().then(async () => {
             ?.state?.smartCrates?.length ?? 0;
         } catch {}
         document.querySelector('[data-panel-view="queue"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
-        document.querySelector('[aria-label="Clear queue"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await waitForSelector('[data-queue-section="queue"]');
+        const clearQueueButton = document.querySelector('[aria-label="Clear queue"]');
+        clearQueueButton?.click();
+        const queueClearedReady = await waitForCondition(() =>
+          !document.querySelector("[data-queue-track]")
+        );
         window.location.hash = "#/playlists/smoke-next-playlist";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          window.location.hash === "#/playlists/smoke-next-playlist" &&
+          document.querySelector("h2")?.textContent?.trim() === "Next Context" &&
+          document.querySelectorAll('[data-remove-from-playlist]').length === 3 &&
+          document.querySelector('[data-track-index="0"] [data-column-key="title"]')
+            ?.textContent?.trim() === "Smoke Track 000"
+        ));
         document.querySelector('[data-track-index="0"]')?.dispatchEvent(new MouseEvent("dblclick", {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => {
+          const queue = document.querySelector('[data-queue-section="queue"]');
+          const playingNext = document.querySelector('[data-queue-section="playing-next"]');
+          const rows = Array.from(document.querySelectorAll("[data-playing-next-track]"));
+          return Boolean(
+            queue &&
+            playingNext &&
+            rows.length === 2 &&
+            rows[0]?.textContent?.includes("Smoke Track 010") &&
+            rows[1]?.textContent?.includes("Smoke Track 020")
+          );
+        });
         const queueSection = document.querySelector('[data-queue-section="queue"]');
         const playingNextSection = document.querySelector('[data-queue-section="playing-next"]');
         const stackedQueueSectionsReady = Boolean(
@@ -3194,6 +3900,7 @@ app.whenReady().then(async () => {
           document.querySelectorAll("[data-playing-next-track]")
         );
         const playingNextViewReady = Boolean(
+          queueClearedReady &&
           stackedQueueSectionsReady &&
           initialPlayingNextRows.length === 2 &&
           initialPlayingNextRows[0]?.textContent?.includes("Smoke Track 010") &&
@@ -3202,6 +3909,7 @@ app.whenReady().then(async () => {
         const playingNextDebug = JSON.stringify({
           queueSectionFound: Boolean(queueSection),
           playingNextSectionFound: Boolean(playingNextSection),
+          queueClearedReady,
           stacked: stackedQueueSectionsReady,
           rowCount: initialPlayingNextRows.length,
           rows: initialPlayingNextRows.map((row) => row.textContent?.trim().slice(0, 48)),
@@ -3239,7 +3947,13 @@ app.whenReady().then(async () => {
             clientY: secondBounds.bottom + 4,
           }));
         }
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() => {
+          const rows = Array.from(document.querySelectorAll("[data-playing-next-track]"));
+          return Boolean(
+            rows[0]?.textContent?.includes("Smoke Track 020") &&
+            rows[1]?.textContent?.includes("Smoke Track 010")
+          );
+        });
         const reorderedPlayingNextRows = Array.from(
           document.querySelectorAll("[data-playing-next-track]")
         );
@@ -3283,28 +3997,63 @@ app.whenReady().then(async () => {
             clientY: queueBounds.top + queueBounds.height / 2,
           }));
         }
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector("[data-queue-track]")
+              ?.textContent?.includes("Smoke Track 010") &&
+            document.querySelectorAll("[data-playing-next-track]").length === 1 &&
+            document.querySelector("[data-playing-next-track]")
+              ?.textContent?.includes("Smoke Track 020")
+          )
+        );
         const priorityQueueVisible = Boolean(
           document.querySelector("[data-queue-track]")?.textContent?.includes("Smoke Track 010") &&
           document.querySelectorAll("[data-playing-next-track]").length === 1 &&
           document.querySelector("[data-playing-next-track]")?.textContent?.includes("Smoke Track 020")
         );
         document.querySelector('button[title="Next"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-track-index="1"][data-track-playing="true"]') &&
+            document.querySelector('[data-track-index="1"]')
+              ?.textContent?.includes("Smoke Track 010")
+          )
+        );
         const queueHasPriority = Boolean(
           document.querySelector('[data-track-index="1"][data-track-playing="true"]') &&
           document.querySelector('[data-track-index="1"]')?.textContent?.includes("Smoke Track 010")
         );
         document.querySelector('button[title="Next"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await waitForCondition(() =>
+          Boolean(
+            document.querySelector('[data-track-index="2"][data-track-playing="true"]') &&
+            document.querySelector('[data-track-index="2"]')
+              ?.textContent?.includes("Smoke Track 020")
+          )
+        );
         const playingNextFollowsQueue = Boolean(
           document.querySelector('[data-track-index="2"][data-track-playing="true"]') &&
           document.querySelector('[data-track-index="2"]')?.textContent?.includes("Smoke Track 020")
         );
         window.location.hash = "#/";
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() => Boolean(
+          window.location.hash === "#/" &&
+          document.querySelector('[data-library-view="library"]')
+            ?.getAttribute("aria-current") === "page" &&
+          document.querySelector("h2")?.textContent?.trim() === "All Songs" &&
+          document.querySelector('[data-now-playing-link]')
+            ?.textContent?.includes("Smoke Track 020")
+        ));
         document.querySelector('[data-now-playing-link]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 140));
+        await waitForCondition(() =>
+          window.location.hash.includes("/playlists/smoke-next-playlist") &&
+          Boolean(
+            document.querySelector(
+              '[data-track-index="2"][data-track-playing="true"][data-track-selected="true"]'
+            )
+          ) &&
+          document.activeElement?.matches('[data-track-table-scroll]')
+        );
         const revealedPlayingTrack = document.querySelector(
           '[data-track-index="2"][data-track-playing="true"][data-track-selected="true"]',
         );
@@ -3329,7 +4078,12 @@ app.whenReady().then(async () => {
 
         document.querySelector('[data-selection-clear]')?.click();
         document.querySelector('[data-library-view="recentlyAdded"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        await waitForCondition(() =>
+          window.location.hash === "#/recently-added" &&
+          document.querySelector('[data-library-view="recentlyAdded"]')
+            ?.getAttribute("aria-current") === "page" &&
+          Boolean(document.querySelector('[data-track-index="0"]'))
+        );
         const recentScroller = document.querySelector('[data-track-table-scroll]');
         if (recentScroller) {
           recentScroller.scrollTop = 0;
@@ -3404,7 +4158,7 @@ app.whenReady().then(async () => {
         }
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         await window.muro.invoke("test_press_enter");
-        await new Promise((resolve) => setTimeout(resolve, 180));
+        await waitForCondition(() => !document.querySelector('[data-edit-track-modal]'));
         const metadataUpdatesAfterEnter = await window.muro.invoke("test_get_metadata_updates");
         const enterSaveUpdate = metadataUpdatesAfterEnter.at(-1);
         const editModalOpenAfterEnter = Boolean(
@@ -3426,9 +4180,10 @@ app.whenReady().then(async () => {
           (recentScrollerAfterEdit?.scrollTop ?? Infinity) < 48
         );
 
-        if (!document.querySelector('[data-edit-track-modal]')) {
+        let directEditModalReady = Boolean(document.querySelector('[data-edit-track-modal]'));
+        if (!directEditModalReady) {
           document.querySelector('[data-selection-edit]')?.click();
-          await new Promise((resolve) => setTimeout(resolve, 80));
+          directEditModalReady = Boolean(await waitForSelector('[data-edit-track-modal]'));
         }
         const directEditBackdrop = document.querySelector('[data-edit-track-modal]');
         directEditBackdrop?.dispatchEvent(new PointerEvent("pointerdown", {
@@ -3439,8 +4194,12 @@ app.whenReady().then(async () => {
           pointerId: 2,
           pointerType: "mouse",
         }));
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        const directBackdropDismissesEdit = !document.querySelector('[data-edit-track-modal]');
+        const directBackdropClosed = directEditBackdrop
+          ? await waitForCondition(() => !document.querySelector('[data-edit-track-modal]'))
+          : false;
+        const directBackdropDismissesEdit = Boolean(
+          directEditModalReady && directEditBackdrop && directBackdropClosed
+        );
 
         document.querySelector('[data-selection-clear]')?.click();
         if (recentScrollerAfterEdit) {
@@ -3448,11 +4207,30 @@ app.whenReady().then(async () => {
           recentScrollerAfterEdit.dispatchEvent(new Event("scroll"));
         }
         document.querySelector('[data-library-view="library"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await waitForCondition(() =>
+          window.location.hash === "#/" &&
+          document.querySelector('[data-library-view="library"]')
+            ?.getAttribute("aria-current") === "page"
+        );
         document.querySelector('[data-library-view="recentlyAdded"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 120));
+        const viewReturnSettled = await waitForCondition(() => {
+          const returnedScroller = document.querySelector('[data-track-table-scroll]');
+          return Boolean(
+            window.location.hash === "#/recently-added" &&
+            document.querySelector('[data-library-view="recentlyAdded"]')
+              ?.getAttribute("aria-current") === "page" &&
+            document.querySelector("h2")?.textContent?.trim() === "Recently Added" &&
+            returnedScroller &&
+            !returnedScroller.querySelector('[data-track-selected="true"]') &&
+            returnedScroller.scrollTop < 48
+          );
+        });
         const recentScrollerAfterReturn = document.querySelector('[data-track-table-scroll]');
         const viewReturnDidNotReplayReveal = Boolean(
+          viewReturnSettled &&
+          window.location.hash === "#/recently-added" &&
+          document.querySelector('[data-library-view="recentlyAdded"]')
+            ?.getAttribute("aria-current") === "page" &&
           !recentScrollerAfterReturn?.querySelector('[data-track-selected="true"]') &&
           (recentScrollerAfterReturn?.scrollTop ?? Infinity) < 48
         );
@@ -3575,6 +4353,7 @@ app.whenReady().then(async () => {
           selectedCamelotCode,
           wheelFilteredTo9A,
           queuedFromMix,
+          queuedFromMixDebug,
           playlistDropTargetReady,
           contextAddToPlaylistReady,
           truthfulPlaylistUndoReady,
@@ -3827,7 +4606,8 @@ app.whenReady().then(async () => {
           `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
           `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
           `scores=${result.mixScoresReady}, compact=${result.compactMixSuggestionsReady}, ` +
-          `expanded=${result.mixExpanded}, queued=${result.queuedFromMix}`
+          `expanded=${result.mixExpanded}, queued=${result.queuedFromMix}, ` +
+          `queueDebug=${JSON.stringify(result.queuedFromMixDebug)}`
         );
         return;
       }
