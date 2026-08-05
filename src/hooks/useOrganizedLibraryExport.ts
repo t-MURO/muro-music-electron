@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "../desktop/events";
-import { notify, useLibraryStore } from "../stores";
+import { notify, useLibraryStore, useSettingsStore } from "../stores";
 import {
   exportOrganizedLibrary,
   importedTrackToTrack,
@@ -21,6 +21,7 @@ export const useOrganizedLibraryExport = () => {
   const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
+  const setLibraryRoot = useSettingsStore((state) => state.addWatchedFolder);
   const pendingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -66,7 +67,8 @@ export const useOrganizedLibraryExport = () => {
       let rendererReloadError: string | null = null;
       if (result.librarySwitched) {
         try {
-          const snapshot = await loadTracks(dbPath);
+          setLibraryRoot(result.exportRoot);
+          const snapshot = await loadTracks(dbPath, result.exportRoot);
           setTracks(snapshot.library.map(importedTrackToTrack));
           setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
         } catch (error) {
@@ -111,7 +113,7 @@ export const useOrganizedLibraryExport = () => {
       pendingRef.current = false;
       setPending(false);
     }
-  }, [resolveDbPath, setInboxTracks, setTracks]);
+  }, [resolveDbPath, setInboxTracks, setLibraryRoot, setTracks]);
 
   return {
     organizedLibraryExportPending: pending,

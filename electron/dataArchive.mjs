@@ -8,8 +8,8 @@ import { capturePlaylistState } from "./history.mjs";
 import { closeDatabase, openDatabase } from "./database.mjs";
 
 const ARCHIVE_FORMAT = "muro-library-backup";
-const ARCHIVE_VERSION = 2;
-const SUPPORTED_ARCHIVE_VERSIONS = new Set([1, ARCHIVE_VERSION]);
+const ARCHIVE_VERSION = 3;
+const SUPPORTED_ARCHIVE_VERSIONS = new Set([1, 2, ARCHIVE_VERSION]);
 const MAX_SETTINGS_BYTES = 10 * 1024 * 1024;
 const MAX_SMART_CRATES_BYTES = 10 * 1024 * 1024;
 const SENSITIVE_SETTING_KEYS = new Set([
@@ -18,6 +18,9 @@ const SENSITIVE_SETTING_KEYS = new Set([
   "fanartApiKey",
   "braveSearchApiKey",
   "acoustIdClientKey",
+  // The selected library root belongs to this computer. Restoring it on a
+  // different operating system would reintroduce the old absolute prefix.
+  "watchedFolders",
 ]);
 
 const safeJson = (value, fallback = null) => {
@@ -131,6 +134,14 @@ export const createLibraryBackup = async ({
 
   try {
     await db.backup(snapshotPath);
+    const portableSnapshot = new Database(snapshotPath);
+    try {
+      portableSnapshot.prepare(
+        "DELETE FROM app_metadata WHERE key = 'library_root'",
+      ).run();
+    } finally {
+      portableSnapshot.close();
+    }
     const artworkPaths = collectArtworkPaths(db);
     const artworkIndex = [];
     const archiveEntries = {
@@ -280,6 +291,9 @@ export const restoreLibraryBackup = async ({
   const restoredDbPath = path.join(tempDir, "muro.db");
   const recoveryPath = `${resolvedDbPath}.before-restore-${Date.now()}.bak`;
   let originalMoved = false;
+  const currentLibraryRoot = openDatabase(resolvedDbPath)
+    .prepare("SELECT value FROM app_metadata WHERE key = 'library_root'")
+    .get()?.value ?? null;
 
   try {
     await fs.promises.writeFile(restoredDbPath, Buffer.from(databaseBytes));
@@ -326,7 +340,15 @@ export const restoreLibraryBackup = async ({
     await fs.promises.rename(restoredDbPath, resolvedDbPath);
 
     const restoredDb = openDatabase(resolvedDbPath);
-    restoredDb.transaction(() => restoreArtworkReferences(restoredDb, artworkMap))();
+    restoredDb.transaction(() => {
+      restoreArtworkReferences(restoredDb, artworkMap);
+      if (currentLibraryRoot) {
+        restoredDb.prepare(`
+          INSERT INTO app_metadata(key, value) VALUES ('library_root', ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).run(currentLibraryRoot);
+      }
+    })();
     return {
       archivePath: resolvedArchivePath,
       recoveryPath: originalMoved ? recoveryPath : null,

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDatabase } from "./database.mjs";
+import { openDatabase, resolveTrackPath } from "./database.mjs";
 import { AUDIO_EXTENSIONS } from "./metadata.mjs";
 
 export const PLAYLIST_EXTENSIONS = new Set([".m3u", ".m3u8", ".pls"]);
@@ -118,7 +118,16 @@ export const readPlaylistForImport = async (dbPath, filePath) => {
     .prepare("SELECT id, source_path FROM tracks")
     .all();
   const trackIdByPath = new Map(
-    rows.map((row) => [normalizePlaylistPath(row.source_path), String(row.id)]),
+    rows.flatMap((row) => {
+      try {
+        return [[
+          normalizePlaylistPath(resolveTrackPath(dbPath, row.source_path)),
+          String(row.id),
+        ]];
+      } catch {
+        return [];
+      }
+    }),
   );
   return {
     name: path.basename(resolvedPath, path.extname(resolvedPath)),

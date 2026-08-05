@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { strFromU8, unzipSync } from "fflate";
 import { createBackend } from "../electron/backend.mjs";
-import { openDatabase } from "../electron/database.mjs";
+import { loadTracks, openDatabase } from "../electron/database.mjs";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "muro-data-features-"));
 const dbPath = path.join(root, "muro.db");
@@ -48,6 +49,11 @@ try {
     now,
     now,
     artworkPath,
+  );
+  await backend.invoke("load_tracks", { dbPath, libraryRoot: root });
+  assert.equal(
+    db.prepare("SELECT source_path FROM tracks WHERE id = 'track-1'").get().source_path,
+    "track.mp3",
   );
 
   await backend.invoke("create_playlist", {
@@ -123,7 +129,11 @@ try {
     dbPath,
     destinationPath: backupPath,
     settingsJson: JSON.stringify({
-      state: { theme: "dark", braveSearchApiKey: "must-not-leave-this-device" },
+      state: {
+        theme: "dark",
+        braveSearchApiKey: "must-not-leave-this-device",
+        watchedFolders: [root],
+      },
       version: 4,
     }),
     smartCratesJson: JSON.stringify({
@@ -138,6 +148,7 @@ try {
       version: 0,
     }),
   });
+  assert.equal(backup.manifest.version, 3);
   assert.equal(backup.manifest.counts.playlists, 1);
   assert.equal(backup.manifest.counts.artworkFiles, 1);
   assert.equal(backup.manifest.counts.smartCrates, 1);
@@ -146,6 +157,28 @@ try {
   const archivedSettings = strFromU8(archiveEntries["settings/muro-settings.json"]);
   assert.doesNotMatch(archivedSettings, /must-not-leave-this-device/);
   assert.doesNotMatch(archivedSettings, /braveSearchApiKey/);
+  assert.doesNotMatch(archivedSettings, /watchedFolders/);
+  const archivedDbPath = path.join(root, "archived.db");
+  fs.writeFileSync(archivedDbPath, Buffer.from(archiveEntries["database/muro.db"]));
+  const archivedDb = new Database(archivedDbPath, { readonly: true });
+  try {
+    assert.equal(
+      archivedDb.prepare(
+        "SELECT value FROM app_metadata WHERE key = 'library_root'",
+      ).get(),
+      undefined,
+      "a portable backup does not contain the source computer's root prefix",
+    );
+  } finally {
+    archivedDb.close();
+  }
+  const archivedTrack = loadTracks(archivedDbPath).library[0];
+  assert.equal(archivedTrack.source_path, "track.mp3");
+  assert.equal(
+    archivedTrack.is_missing,
+    1,
+    "portable paths remain unavailable until the destination chooses its root",
+  );
   assert.match(
     strFromU8(archiveEntries["settings/muro-smart-crates.json"]),
     /Backup crate/,
@@ -153,6 +186,10 @@ try {
 
   openDatabase(dbPath).prepare("DELETE FROM playlists").run();
   openDatabase(dbPath).prepare("UPDATE tracks SET title = 'After backup'").run();
+  const destinationRoot = path.join(root, "restored-library-root");
+  openDatabase(dbPath).prepare(`
+    UPDATE app_metadata SET value = ? WHERE key = 'library_root'
+  `).run(destinationRoot);
   const restored = await backend.invoke("restore_library_backup", {
     dbPath,
     archivePath: backupPath,
@@ -163,6 +200,13 @@ try {
   assert.equal(
     restoredDb.prepare("SELECT title FROM tracks WHERE id = ?").get("track-1").title,
     "Original title",
+  );
+  assert.equal(
+    restoredDb.prepare(
+      "SELECT value FROM app_metadata WHERE key = 'library_root'",
+    ).get().value,
+    destinationRoot,
+    "restore keeps the destination computer's root prefix",
   );
   const restoredArtwork = restoredDb.prepare(
     "SELECT cover_art_path FROM tracks WHERE id = ?",

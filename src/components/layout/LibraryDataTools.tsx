@@ -225,7 +225,8 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
         <p className="mt-1 text-[12px] leading-relaxed text-[var(--color-text-secondary)]">
           A .murobackup archive contains a consistent SQLite snapshot, playlists, Smart Crates,
           non-secret settings, artwork selections and files, plus a versioned manifest. API keys
-          and music files are not copied.
+          and music files are not copied. Device-specific paths, including the local music-library
+          folder, remain configured on this computer.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button className={primaryButtonClass} disabled={busy || !dbPath} onClick={handleBackup} type="button">

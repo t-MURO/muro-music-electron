@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { resolveStoredTrackPath } from "./libraryPaths.mjs";
 
 const execFileAsync = promisify(execFile);
 const ACOUSTID_LOOKUP_URL = "https://api.acoustid.org/v2/lookup";
@@ -188,7 +189,14 @@ export const createAcoustIdService = ({
         SELECT id, source_path, title, artist, album FROM tracks WHERE id = ?
       `).get(cleanText(trackId));
       if (!track) throw new Error("Track was not found in the library");
-      const stat = await fs.promises.stat(track.source_path);
+      const libraryRoot = db.prepare(
+        "SELECT value FROM app_metadata WHERE key = 'library_root'",
+      ).get()?.value;
+      const sourcePath = resolveStoredTrackPath(track.source_path, libraryRoot);
+      if (!path.isAbsolute(sourcePath)) {
+        throw new Error("Choose the music library folder to identify this track");
+      }
+      const stat = await fs.promises.stat(sourcePath);
       const cached = db.prepare(`
         SELECT source_mtime_ms, source_size, duration_seconds, fingerprint,
           result_json, looked_up_at
@@ -211,7 +219,7 @@ export const createAcoustIdService = ({
 
       const fingerprint = sourceMatches && cached.fingerprint
         ? { duration: Number(cached.duration_seconds), fingerprint: cached.fingerprint }
-        : await createFingerprint(track.source_path);
+        : await createFingerprint(sourcePath);
       const timestamp = Math.floor(now() / 1_000);
       db.prepare(`
         INSERT INTO acoustid_fingerprints(

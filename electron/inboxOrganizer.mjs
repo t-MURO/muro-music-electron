@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { openDatabase } from "./database.mjs";
+import {
+  configureLibraryRoot,
+  openDatabase,
+  resolveTrackPath,
+  storeTrackPath,
+} from "./database.mjs";
 import { sanitizeExportSegment } from "./libraryExport.mjs";
 
 const normalizedPath = (value) => {
@@ -168,6 +173,7 @@ export const acceptInboxTracks = async ({
     .map((folder) => String(folder ?? "").trim())
     .filter(Boolean)
     .map((folder) => path.resolve(folder))[0] ?? null;
+  if (watchedFolder) configureLibraryRoot(dbPath, watchedFolder);
   let watchedFolderAvailable = false;
   if (watchedFolder) {
     try {
@@ -190,7 +196,7 @@ export const acceptInboxTracks = async ({
   `);
 
   for (const track of tracks) {
-    const sourcePath = path.resolve(String(track.source_path ?? ""));
+    const sourcePath = resolveTrackPath(dbPath, track.source_path);
     const moveToWatchedFolder = Number(track.move_to_watched_folder_on_accept) === 1;
     const containingWatchedFolder = findContainingWatchedFolder(sourcePath, watchedFolders);
 
@@ -222,7 +228,12 @@ export const acceptInboxTracks = async ({
     let destinationPath = null;
     try {
       destinationPath = await moveWithoutOverwrite(sourcePath, requestedDestination);
-      updatePath.run(destinationPath, path.basename(destinationPath), now, track.id);
+      updatePath.run(
+        storeTrackPath(dbPath, destinationPath),
+        path.basename(destinationPath),
+        now,
+        track.id,
+      );
       moved.push({
         trackId: String(track.id),
         sourcePath: destinationPath,

@@ -107,6 +107,13 @@ paths, paths relative to the playlist file, or `file:` URLs. Existing library
 tracks are reused; available files that are not yet known to Muro are imported
 into the Inbox.
 
+The single music-library folder is also the portable path root. Files beneath
+it are stored in the database as relative paths with `/` separators on every
+operating system. At runtime Muro prefixes the root configured on that
+computer, so the same database can resolve a copied library on Windows, macOS,
+or Linux without rewriting every track row. Legacy and Inbox files outside the
+root retain absolute paths until they are moved or relinked.
+
 Importing a playlist folder scans every subdirectory. Muro creates one parent
 playlist folder named after the selected directory, recreates the nested
 folder hierarchy below it, and places each imported playlist in its matching

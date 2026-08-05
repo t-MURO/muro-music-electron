@@ -6,8 +6,8 @@ import type { AlbumCoverCandidate, ArtistImageCandidate, ArtistProfile } from ".
 // Library Operations
 // ============================================================================
 
-export const loadTracks = (dbPath: string) => {
-  return invoke<LibrarySnapshot>("load_tracks", { dbPath });
+export const loadTracks = (dbPath: string, libraryRoot?: string) => {
+  return invoke<LibrarySnapshot>("load_tracks", { dbPath, libraryRoot });
 };
 
 export const clearTracks = (dbPath: string) => {
@@ -246,8 +246,8 @@ export const scanTechnicalMetadata = (dbPath: string, limit = 25) =>
 // Playlist Operations
 // ============================================================================
 
-export const loadPlaylists = (dbPath: string) => {
-  return invoke<PlaylistSnapshot>("load_playlists", { dbPath });
+export const loadPlaylists = (dbPath: string, libraryRoot?: string) => {
+  return invoke<PlaylistSnapshot>("load_playlists", { dbPath, libraryRoot });
 };
 
 export const createPlaylist = (
@@ -453,6 +453,7 @@ export type LibraryBackupResult = {
   destinationPath: string;
   bytes: number;
   manifest: {
+    version: number;
     backupId: string;
     createdAt: string;
     counts: {
@@ -600,10 +601,15 @@ export const backfillCoverArt = (dbPath: string) => {
 // Recently Played Operations
 // ============================================================================
 
-export const loadRecentlyPlayed = (dbPath: string, limit: number = 50) => {
+export const loadRecentlyPlayed = (
+  dbPath: string,
+  limit: number = 50,
+  libraryRoot?: string,
+) => {
   return invoke<import("./importApi").ImportedTrack[]>("load_recently_played", {
     dbPath,
     limit,
+    libraryRoot,
   });
 };
 

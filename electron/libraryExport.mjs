@@ -2,7 +2,13 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { openDatabase, refreshSearchText } from "./database.mjs";
+import {
+  configureLibraryRoot,
+  openDatabase,
+  refreshSearchText,
+  resolveTrackPath,
+  storeTrackPath,
+} from "./database.mjs";
 
 const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 
@@ -253,7 +259,10 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
     WHERE import_status != 'staged'
     ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE,
       COALESCE(disc_number, 1), COALESCE(track_number, 0), title COLLATE NOCASE
-  `).all();
+  `).all().map((track) => ({
+    ...track,
+    source_path: resolveTrackPath(dbPath, track.source_path),
+  }));
   const folders = db.prepare(`
     SELECT id, name, parent_id, sort_order
     FROM playlist_folders
@@ -494,7 +503,7 @@ export const exportAllPlaylists = async ({ dbPath, destinationPath }) => {
       const artist = cleanPlaylistText(entry.artist, "Unknown Artist");
       const title = cleanPlaylistText(entry.title, "Unknown Title");
       lines.push(`#EXTINF:${duration},${artist} - ${title}`);
-      lines.push(String(entry.source_path));
+      lines.push(resolveTrackPath(dbPath, entry.source_path));
       playlistEntriesExported += 1;
     }
 
@@ -551,7 +560,7 @@ export const exportOrganizedLibrary = async ({
   for (let index = 0; index < tracks.length; index += 1) {
     const track = tracks[index];
     const trackId = String(track.id);
-    const sourcePath = path.resolve(String(track.source_path || ""));
+    const sourcePath = resolveTrackPath(dbPath, track.source_path);
     const sourceKey = process.platform === "win32"
       ? sourcePath.toLocaleLowerCase()
       : sourcePath;
@@ -678,10 +687,16 @@ export const exportOrganizedLibrary = async ({
               throw new Error(`No exported file was recorded for track ${trackId}`);
             }
             const sourcePath = path.join(exportRoot, relativePath);
-            updateSourcePath.run(sourcePath, path.basename(sourcePath), now, trackId);
+            updateSourcePath.run(
+              storeTrackPath(dbPath, sourcePath, exportRoot),
+              path.basename(sourcePath),
+              now,
+              trackId,
+            );
             refreshSearchText(db, trackId);
           }
         })();
+        configureLibraryRoot(dbPath, exportRoot);
         librarySwitched = true;
       } catch (error) {
         librarySwitchError = error instanceof Error ? error.message : String(error);

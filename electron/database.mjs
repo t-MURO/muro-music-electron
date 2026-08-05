@@ -1,9 +1,16 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  normalizeLibraryRoot,
+  portablePathKey,
+  resolveStoredTrackPath,
+  toStoredTrackPath,
+} from "./libraryPaths.mjs";
 
 const connections = new Map();
 const SEARCH_TEXT_VERSION = 2;
+const LIBRARY_ROOT_METADATA_KEY = "library_root";
 
 const TRACK_SCHEMA = `
   CREATE TABLE IF NOT EXISTS tracks (
@@ -404,6 +411,88 @@ export const openDatabase = (dbPath) => {
   return db;
 };
 
+export const getLibraryRoot = (dbPath) => {
+  const value = openDatabase(dbPath)
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(LIBRARY_ROOT_METADATA_KEY)?.value;
+  return normalizeLibraryRoot(value);
+};
+
+/**
+ * Store the machine-specific library root and convert paths already beneath it
+ * to portable, forward-slash relative values. Absolute paths outside the root
+ * remain supported for Inbox and legacy imports.
+ */
+export const configureLibraryRoot = (dbPath, requestedRoot) => {
+  const root = normalizeLibraryRoot(requestedRoot);
+  if (!root) return { libraryRoot: getLibraryRoot(dbPath), migrated: 0 };
+
+  const db = openDatabase(dbPath);
+  db.prepare(`
+    INSERT INTO app_metadata(key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(LIBRARY_ROOT_METADATA_KEY, root);
+
+  const rows = db.prepare("SELECT id, source_path FROM tracks").all();
+  const used = new Map(
+    rows.map((row) => [portablePathKey(row.source_path), String(row.id)]),
+  );
+  const update = db.prepare("UPDATE tracks SET source_path = ? WHERE id = ?");
+  let migrated = 0;
+
+  db.transaction(() => {
+    for (const row of rows) {
+      const stored = String(row.source_path ?? "");
+      const portable = toStoredTrackPath(stored, root);
+      if (!portable || portable === stored) continue;
+
+      const collision = used.get(portablePathKey(portable));
+      if (collision && collision !== String(row.id)) continue;
+      used.delete(portablePathKey(stored));
+      update.run(portable, row.id);
+      used.set(portablePathKey(portable), String(row.id));
+      migrated += 1;
+    }
+    const updatePlaylist = db.prepare(
+      "UPDATE playlists SET source_path = ? WHERE id = ?",
+    );
+    for (const playlist of db.prepare(`
+      SELECT id, source_path
+      FROM playlists
+      WHERE source_path IS NOT NULL AND source_path <> ''
+    `).all()) {
+      const stored = String(playlist.source_path);
+      const portable = toStoredTrackPath(stored, root);
+      if (!portable || portable === stored) continue;
+      updatePlaylist.run(portable, playlist.id);
+      migrated += 1;
+    }
+  })();
+
+  return { libraryRoot: root, migrated };
+};
+
+export const resolveLibraryPath = (dbPath, storedPath, libraryRoot) =>
+  resolveStoredTrackPath(
+    storedPath,
+    normalizeLibraryRoot(libraryRoot) ?? getLibraryRoot(dbPath),
+  );
+
+export const storeLibraryPath = (dbPath, filePath, libraryRoot) =>
+  toStoredTrackPath(
+    filePath,
+    normalizeLibraryRoot(libraryRoot) ?? getLibraryRoot(dbPath),
+  );
+
+export const resolveTrackPath = (dbPath, storedPath, libraryRoot) => {
+  const resolved = resolveLibraryPath(dbPath, storedPath, libraryRoot);
+  if (!path.isAbsolute(resolved)) {
+    throw new Error("Choose the music library folder to use this track");
+  }
+  return resolved;
+};
+export const storeTrackPath = storeLibraryPath;
+
 /** FTS5 treats bare punctuation and operator words as syntax, so each term is
  * reduced to a quoted literal with a prefix wildcard. An empty result means the
  * query had nothing searchable in it. */
@@ -482,7 +571,7 @@ const formatDuration = (seconds) => {
   return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
 };
 
-export const rowToTrack = (row) => ({
+export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   id: String(row.id),
   title: row.title || "Unknown Title",
   artist: row.artist || "Unknown Artist",
@@ -505,7 +594,9 @@ export const rowToTrack = (row) => ({
     ? row.file_size_bytes
     : undefined,
   rating: row.rating || 0,
-  source_path: row.source_path || "",
+  source_path: dbPath
+    ? resolveLibraryPath(dbPath, row.source_path, libraryRoot)
+    : row.source_path || "",
   cover_art_path: row.cover_art_path || undefined,
   cover_art_thumb_path: row.cover_art_thumb_path || undefined,
   genre: jsonList(row.genre_json),
@@ -522,7 +613,11 @@ export const rowToTrack = (row) => ({
   replaygain_album_gain_db: row.replaygain_album_gain_db ?? undefined,
   replaygain_album_peak: row.replaygain_album_peak ?? undefined,
   loudness_source: row.loudness_source ?? undefined,
-  is_missing: Number(row.is_missing) === 1 ? 1 : 0,
+  is_missing:
+    Number(row.is_missing) === 1
+    || (dbPath && !path.isAbsolute(resolveLibraryPath(dbPath, row.source_path, libraryRoot)))
+      ? 1
+      : 0,
   musicbrainz_trackid: row.musicbrainz_trackid || undefined,
   musicbrainz_albumid: row.musicbrainz_albumid || undefined,
   musicbrainz_releasegroupid: row.musicbrainz_releasegroupid || undefined,
@@ -544,26 +639,30 @@ const TRACK_SELECT = `
     is_missing
   FROM tracks`;
 
-export const loadTracks = (dbPath) => {
+export const loadTracks = (dbPath, libraryRoot) => {
+  if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
   const rows = openDatabase(dbPath)
     .prepare(`${TRACK_SELECT} ORDER BY added_at DESC`)
     .all();
   const snapshot = { library: [], inbox: [] };
   for (const row of rows) {
     (row.import_status === "staged" ? snapshot.inbox : snapshot.library).push(
-      rowToTrack(row)
+      rowToTrack(row, { dbPath, libraryRoot })
     );
   }
   return snapshot;
 };
 
-export const loadRecentlyPlayed = (dbPath, limit = 50) =>
-  openDatabase(dbPath)
+export const loadRecentlyPlayed = (dbPath, limit = 50, libraryRoot) => {
+  if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
+  return openDatabase(dbPath)
     .prepare(`${TRACK_SELECT} WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?`)
     .all(Math.max(0, Number(limit) || 0))
-    .map(rowToTrack);
+    .map((row) => rowToTrack(row, { dbPath, libraryRoot }));
+};
 
-export const loadPlaylists = (dbPath) => {
+export const loadPlaylists = (dbPath, libraryRoot) => {
+  if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
   const db = openDatabase(dbPath);
   const trackIdsByPlaylist = new Map();
   for (const row of db.prepare(`
@@ -586,7 +685,9 @@ export const loadPlaylists = (dbPath) => {
     name: playlist.name,
     folder_id: playlist.folder_id == null ? null : String(playlist.folder_id),
     sort_order: Number(playlist.sort_order) || 0,
-    source_path: playlist.source_path == null ? null : String(playlist.source_path),
+    source_path: playlist.source_path == null
+      ? null
+      : resolveLibraryPath(dbPath, playlist.source_path),
     source_mtime_ms: playlist.source_mtime_ms == null
       ? null
       : Number(playlist.source_mtime_ms),

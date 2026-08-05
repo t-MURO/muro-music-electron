@@ -2,13 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   closeDatabases,
+  configureLibraryRoot,
   loadPlaylists,
   loadRecentlyPlayed,
   loadTracks,
   openDatabase,
   rebuildSearchIndex,
   refreshSearchText,
+  resolveLibraryPath,
+  resolveTrackPath,
   searchTrackIds,
+  storeTrackPath,
 } from "./database.mjs";
 import { createLibraryBackup, restoreLibraryBackup } from "./dataArchive.mjs";
 import {
@@ -295,7 +299,7 @@ const exportPlaylistFile = async (dbPath, playlistId, filePath) => {
   for (const row of rows) {
     const duration = Math.max(-1, Math.round(Number(row.duration_seconds) || -1));
     lines.push(`#EXTINF:${duration},${row.artist || "Unknown Artist"} - ${row.title || "Unknown Title"}`);
-    lines.push(row.source_path);
+    lines.push(resolveTrackPath(dbPath, row.source_path));
   }
   await fs.promises.mkdir(path.dirname(path.resolve(filePath)), { recursive: true });
   await fs.promises.writeFile(filePath, `${lines.join("\r\n")}\r\n`, "utf8");
@@ -374,8 +378,9 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
   let filesWritten = 0;
   const fileWriteErrors = [];
   for (const id of trackIds) {
-    const sourcePath = sourceQuery.get(id)?.source_path;
-    if (!sourcePath) continue;
+    const storedSourcePath = sourceQuery.get(id)?.source_path;
+    if (!storedSourcePath) continue;
+    const sourcePath = resolveTrackPath(dbPath, storedSourcePath);
     try {
       await writeMetadataToFile(sourcePath, updates);
       errorUpdate.run(null, id);
@@ -449,6 +454,9 @@ export const createBackend = ({
             .filter(Boolean)
             .map((folder) => path.resolve(folder))
         : [];
+      if (normalizedWatchedFolders[0]) {
+        configureLibraryRoot(dbPath, normalizedWatchedFolders[0]);
+      }
       const explicitlyMarkedPaths = new Set(
         (Array.isArray(moveToWatchedFolderOnAcceptPaths)
           ? moveToWatchedFolderOnAcceptPaths
@@ -493,7 +501,7 @@ export const createBackend = ({
               UPDATE tracks
               SET move_to_watched_folder_on_accept = 1
               WHERE source_path = ? AND import_status = 'staged'
-            `).run(audioPath);
+            `).run(storeTrackPath(dbPath, audioPath));
           }
         } catch (error) {
           console.warn(`Failed to import ${audioPaths[index]}:`, error);
@@ -515,9 +523,10 @@ export const createBackend = ({
       };
     },
 
-    load_tracks: ({ dbPath }) => loadTracks(dbPath),
-    load_playlists: ({ dbPath }) => loadPlaylists(dbPath),
-    load_recently_played: ({ dbPath, limit }) => loadRecentlyPlayed(dbPath, limit),
+    load_tracks: ({ dbPath, libraryRoot }) => loadTracks(dbPath, libraryRoot),
+    load_playlists: ({ dbPath, libraryRoot }) => loadPlaylists(dbPath, libraryRoot),
+    load_recently_played: ({ dbPath, limit, libraryRoot }) =>
+      loadRecentlyPlayed(dbPath, limit, libraryRoot),
     create_library_backup: ({ dbPath, destinationPath, settingsJson, smartCratesJson }) =>
       createLibraryBackup({ dbPath, destinationPath, settingsJson, smartCratesJson }),
     restore_library_backup: ({ dbPath, archivePath }) =>
@@ -619,19 +628,20 @@ export const createBackend = ({
         for (const id of ids) {
           const row = findTrack.get(id);
           if (!row) continue;
+          const sourcePath = resolveTrackPath(dbPath, row.source_path);
           try {
-            await fs.promises.unlink(row.source_path);
-            await waveformCache.invalidateSource(row.source_path);
+            await fs.promises.unlink(sourcePath);
+            await waveformCache.invalidateSource(sourcePath);
             deletedTrackIds.push(id);
           } catch (error) {
             if (error?.code === "ENOENT") {
-              await waveformCache.invalidateSource(row.source_path);
+              await waveformCache.invalidateSource(sourcePath);
               deletedTrackIds.push(id);
               continue;
             }
             failures.push({
               trackId: id,
-              path: row.source_path,
+              path: sourcePath,
               message: error instanceof Error ? error.message : String(error),
             });
           }
@@ -652,7 +662,7 @@ export const createBackend = ({
     }) => {
       const db = openDatabase(dbPath);
       const linkedSourcePath = sourcePath
-        ? path.resolve(String(sourcePath))
+        ? storeTrackPath(dbPath, path.resolve(String(sourcePath)))
         : null;
       const result = withPlaylistHistory(db, `Create playlist: ${String(name).trim()}`, () => {
         const targetFolderId = folderId || null;
@@ -767,7 +777,9 @@ export const createBackend = ({
             name,
             playlist.folderId ? String(playlist.folderId) : null,
             Number(playlist.sortOrder) || 0,
-            playlist.sourcePath ? path.resolve(String(playlist.sourcePath)) : null,
+            playlist.sourcePath
+              ? storeTrackPath(dbPath, path.resolve(String(playlist.sourcePath)))
+              : null,
             playlist.sourceMtimeMs == null ? null : Number(playlist.sourceMtimeMs),
             playlist.sourceSize == null ? null : Number(playlist.sourceSize),
             playlist.sourceSyncError == null ? null : String(playlist.sourceSyncError),
@@ -1020,7 +1032,8 @@ export const createBackend = ({
       let stillMissing = 0;
       db.transaction(() => {
         for (const row of rows) {
-          const exists = Boolean(row.source_path) && fs.existsSync(row.source_path);
+          const sourcePath = resolveLibraryPath(dbPath, row.source_path);
+          const exists = path.isAbsolute(sourcePath) && fs.existsSync(sourcePath);
           const wasMissing = Number(row.is_missing) === 1;
           if (!exists) {
             stillMissing += 1;
@@ -1049,7 +1062,7 @@ export const createBackend = ({
         title: row.title || "",
         artist: row.artist || "",
         album: row.album || "",
-        source_path: row.source_path || "",
+        source_path: resolveLibraryPath(dbPath, row.source_path),
         filename: row.filename || "",
         duration_seconds: row.duration_seconds || 0,
       })),
@@ -1066,16 +1079,17 @@ export const createBackend = ({
       }
 
       const db = openDatabase(dbPath);
+      const storedPath = storeTrackPath(dbPath, resolved);
       const clash = db
         .prepare("SELECT id FROM tracks WHERE source_path = ? AND id != ?")
-        .get(resolved, trackId);
+        .get(storedPath, trackId);
       if (clash) throw new Error("Another track already uses that file");
 
       db.prepare(`
         UPDATE tracks
         SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
         WHERE id = ?
-      `).run(resolved, path.basename(resolved), Math.floor(Date.now() / 1000), trackId);
+      `).run(storedPath, path.basename(resolved), Math.floor(Date.now() / 1000), trackId);
       refreshSearchText(db, trackId);
       return { relinked: true, sourcePath: resolved };
     },
@@ -1103,7 +1117,8 @@ export const createBackend = ({
       const candidatePaths = await collectAudioPaths([root]);
       const knownPaths = new Set(
         db.prepare("SELECT source_path FROM tracks WHERE is_missing = 0").all()
-          .map((row) => row.source_path),
+          .map((row) => resolveLibraryPath(dbPath, row.source_path))
+          .filter((sourcePath) => path.isAbsolute(sourcePath)),
       );
 
       const byName = new Map();
@@ -1124,7 +1139,9 @@ export const createBackend = ({
       const taken = new Set();
 
       for (const track of missing) {
-        const name = String(track.filename || path.basename(track.source_path || "")).toLowerCase();
+        const name = String(
+          track.filename || path.basename(resolveLibraryPath(dbPath, track.source_path)),
+        ).toLowerCase();
         if (!name) continue;
         const bucket = byName.get(name);
         if (!bucket) continue;
@@ -1152,7 +1169,12 @@ export const createBackend = ({
         const now = Math.floor(Date.now() / 1000);
         db.transaction(() => {
           for (const match of matches) {
-            update.run(match.sourcePath, path.basename(match.sourcePath), now, match.trackId);
+            update.run(
+              storeTrackPath(dbPath, match.sourcePath),
+              path.basename(match.sourcePath),
+              now,
+              match.trackId,
+            );
             refreshSearchText(db, match.trackId);
           }
         })();
@@ -1202,7 +1224,10 @@ export const createBackend = ({
           AND COALESCE(is_missing, 0) = 0
         ORDER BY added_at DESC
         LIMIT ?
-      `).all(max).map((row) => ({ id: String(row.id), source_path: row.source_path }));
+      `).all(max).map((row) => ({
+        id: String(row.id),
+        source_path: resolveTrackPath(dbPath, row.source_path),
+      }));
     },
 
     /**
@@ -1271,7 +1296,12 @@ export const createBackend = ({
         keyFinder.generateWaveform(sourcePath, normalizedPoints)
       ),
     get_track_source_path: ({ dbPath, trackId }) =>
-      openDatabase(dbPath).prepare("SELECT source_path FROM tracks WHERE id = ?").get(trackId)?.source_path ?? null,
+      (() => {
+        const stored = openDatabase(dbPath)
+          .prepare("SELECT source_path FROM tracks WHERE id = ?")
+          .get(trackId)?.source_path;
+        return stored ? resolveTrackPath(dbPath, stored) : null;
+      })(),
     record_track_play: ({ dbPath, trackId }) => {
       const db = openDatabase(dbPath);
       return db.transaction(() => {
@@ -1434,8 +1464,9 @@ export const createBackend = ({
       );
       let count = 0;
       for (const row of rows) {
+        const sourcePath = resolveTrackPath(dbPath, row.source_path);
         try {
-          const metadata = await extractCoverMetadata(row.source_path, cacheDir);
+          const metadata = await extractCoverMetadata(sourcePath, cacheDir);
           update.run(
             metadata.cached?.fullPath ?? null,
             metadata.cached?.thumbPath ?? null,
@@ -1445,7 +1476,7 @@ export const createBackend = ({
           );
           if (metadata.cached) count += 1;
         } catch (error) {
-          console.warn(`Failed to extract cover from ${row.source_path}:`, error);
+          console.warn(`Failed to extract cover from ${sourcePath}:`, error);
         }
       }
       return count;
@@ -1466,8 +1497,9 @@ export const createBackend = ({
       let updated = 0;
       let failed = 0;
       for (const row of rows) {
+        const sourcePath = resolveTrackPath(dbPath, row.source_path);
         try {
-          const technical = await extractTechnicalMetadata(row.source_path);
+          const technical = await extractTechnicalMetadata(sourcePath);
           update.run(
             technical.sampleRateHz,
             technical.bitDepth,
@@ -1479,7 +1511,7 @@ export const createBackend = ({
           // Mark an unreadable file as scanned so it does not block future batches.
           update.run(0, 0, 0, row.id);
           failed += 1;
-          console.warn(`Failed to extract technical metadata from ${row.source_path}:`, error);
+          console.warn(`Failed to extract technical metadata from ${sourcePath}:`, error);
         }
       }
       const remaining = db.prepare(`

@@ -82,6 +82,12 @@ const run = async () => {
     sourcePath: vanishingPath,
     durationSeconds: 0.1,
   });
+  await backend.invoke("load_tracks", { dbPath, libraryRoot: tempDir });
+  assert.equal(
+    db.prepare("SELECT source_path FROM tracks WHERE id = ?").get(presentId).source_path,
+    "music/present.wav",
+    "verification starts from a portable stored path",
+  );
 
   // Everything is on disk to begin with.
   let result = await backend.invoke("verify_library_files", { dbPath });
@@ -114,7 +120,11 @@ const run = async () => {
   // Relinking by hand.
   await backend.invoke("relink_track", { dbPath, trackId: missingId, newPath: relocatedPath });
   const relinked = db.prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?").get(missingId);
-  assert.equal(relinked.source_path, relocatedPath, "the track points at the new file");
+  assert.equal(
+    relinked.source_path,
+    "moved/vanishing.wav",
+    "manual relinking stores a forward-slash path relative to the root",
+  );
   assert.equal(Number(relinked.is_missing), 0, "and is no longer flagged");
 
   // Relinking to a path that does not exist must fail rather than corrupt the row.
@@ -176,7 +186,7 @@ const run = async () => {
   });
   assert.equal(applied.relinked, 1, "the real run reconnects the track");
   const reconnected = db.prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?").get(missingId);
-  assert.equal(reconnected.source_path, secondMovePath);
+  assert.equal(reconnected.source_path, "moved/nested/vanishing.wav");
   assert.equal(Number(reconnected.is_missing), 0);
   assert.equal(
     db.prepare("SELECT is_missing FROM tracks WHERE id = ?").get(unknownId).is_missing,

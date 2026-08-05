@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { closeDatabases, openDatabase } from "../electron/database.mjs";
+import { pathToFileURL } from "node:url";
+import {
+  closeDatabases,
+  loadTracks,
+  openDatabase,
+} from "../electron/database.mjs";
 import {
   exportItunesLibrary,
   exportOrganizedLibrary,
@@ -237,34 +242,63 @@ try {
   assert.deepEqual(switchedPaths, [
     {
       id: "track-1",
-      source_path: path.join(
-        secondResult.exportRoot,
+      source_path: [
         "Album-Artist",
         "Album-Name",
         "Disc 1",
         path.basename(firstSource),
-      ),
+      ].join("/"),
     },
     {
       id: "track-2",
-      source_path: path.join(
-        secondResult.exportRoot,
+      source_path: [
         "Album-Artist",
         "Album-Name",
         "Disc 2",
         path.basename(secondSource),
-      ),
+      ].join("/"),
     },
     {
       id: "track-3",
-      source_path: path.join(
-        secondResult.exportRoot,
+      source_path: [
         "Fallback & Artist",
         "Single Album",
         path.basename(fallbackSource),
-      ),
+      ].join("/"),
     },
   ]);
+  assert.equal(
+    db.prepare("SELECT value FROM app_metadata WHERE key = 'library_root'").get().value,
+    secondResult.exportRoot,
+  );
+  assert.deepEqual(
+    loadTracks(dbPath).library.map((track) => track.source_path).sort(),
+    [firstExport, secondExport, fallbackExport]
+      .map((originalExportPath) =>
+        originalExportPath.replace(result.exportRoot, secondResult.exportRoot)
+      )
+      .sort(),
+    "the runtime resolves stored portable paths against the switched library root",
+  );
+
+  const portableItunesExportPath = path.join(
+    destinationDirectory,
+    "Portable Muro Music Library.xml",
+  );
+  await exportItunesLibrary({
+    dbPath,
+    destinationPath: portableItunesExportPath,
+  });
+  const portableItunesXml = fs.readFileSync(portableItunesExportPath, "utf8");
+  const switchedFirstPath = firstExport.replace(result.exportRoot, secondResult.exportRoot);
+  const switchedFirstUrl = pathToFileURL(switchedFirstPath).href.replace(
+    /^file:\/\/\//,
+    "file://localhost/",
+  );
+  assert.ok(
+    portableItunesXml.includes(`<string>${switchedFirstUrl}</string>`),
+    "the iTunes export resolves portable track paths against the current library root",
+  );
 } finally {
   closeDatabases();
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });

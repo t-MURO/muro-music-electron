@@ -5,7 +5,12 @@ import { randomUUID } from "node:crypto";
 import { parseFile } from "music-metadata";
 import sharp from "sharp";
 import { TagLib } from "taglib-wasm";
-import { normalizeSearchText, openDatabase, rowToTrack } from "./database.mjs";
+import {
+  normalizeSearchText,
+  openDatabase,
+  rowToTrack,
+  storeTrackPath,
+} from "./database.mjs";
 
 export const AUDIO_EXTENSIONS = new Set([
   ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".aiff", ".aif", ".alac",
@@ -250,7 +255,8 @@ export const importAudioFile = async (
   { moveToWatchedFolderOnAccept = false } = {},
 ) => {
   const db = openDatabase(dbPath);
-  if (db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(filePath)) return null;
+  const storedSourcePath = storeTrackPath(dbPath, filePath);
+  if (db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(storedSourcePath)) return null;
 
   const metadata = await parseFile(filePath, { duration: true, skipCovers: false });
   const { common, format } = metadata;
@@ -306,7 +312,7 @@ export const importAudioFile = async (
     musicbrainz_albumstatus: first(common.musicbrainz_albumstatus) ?? null,
     musicbrainz_albumtype: first(common.musicbrainz_albumtype) ?? null,
     acoustid_id: first(common.acoustid_id) ?? null,
-    source_path: filePath,
+    source_path: storedSourcePath,
     search_text: searchText,
     import_status: "staged",
     move_to_watched_folder_on_accept: moveToWatchedFolderOnAccept ? 1 : 0,
@@ -355,7 +361,10 @@ export const importAudioFile = async (
   // Never return a generated ID that SQLite rejected, because the renderer
   // would otherwise display a track that does not exist in the database.
   if (Number(insertResult.changes) === 0) return null;
-  return rowToTrack({ ...record, last_played_at: null, play_count: 0 });
+  return rowToTrack(
+    { ...record, last_played_at: null, play_count: 0 },
+    { dbPath },
+  );
 };
 
 const propertyMap = {

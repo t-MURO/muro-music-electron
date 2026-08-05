@@ -1,6 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { openDatabase } from "./database.mjs";
+import {
+  openDatabase,
+  resolveLibraryPath,
+  resolveTrackPath,
+  storeLibraryPath,
+  storeTrackPath,
+} from "./database.mjs";
 import { AUDIO_EXTENSIONS, importAudioFile } from "./metadata.mjs";
 import { normalizePlaylistPath, parsePlaylistFile } from "./playlistFiles.mjs";
 
@@ -45,9 +51,12 @@ export const syncLinkedPlaylist = async ({
   `).get(playlistId);
   if (!playlist?.source_path) return null;
 
-  const sourcePath = path.resolve(String(playlist.source_path));
+  const sourcePath = resolveLibraryPath(dbPath, playlist.source_path);
   let stats;
   try {
+    if (!path.isAbsolute(sourcePath)) {
+      throw new Error("Choose the music library folder to sync this playlist");
+    }
     stats = await fs.promises.stat(sourcePath);
     if (!stats.isFile()) throw new Error("Playlist source is not a file");
   } catch {
@@ -113,7 +122,16 @@ export const syncLinkedPlaylist = async ({
 
   const trackIdByPath = new Map(
     db.prepare("SELECT id, source_path FROM tracks").all()
-      .map((row) => [normalizePlaylistPath(row.source_path), String(row.id)]),
+      .flatMap((row) => {
+        try {
+          return [[
+            normalizePlaylistPath(resolveTrackPath(dbPath, row.source_path)),
+            String(row.id),
+          ]];
+        } catch {
+          return [];
+        }
+      }),
   );
   const imported = [];
   const orderedTrackIds = [];
@@ -143,7 +161,7 @@ export const syncLinkedPlaylist = async ({
           } else {
             const existing = db.prepare(
               "SELECT id FROM tracks WHERE source_path = ?",
-            ).get(entry);
+            ).get(storeTrackPath(dbPath, entry));
             trackId = existing ? String(existing.id) : null;
           }
         } catch {
@@ -191,7 +209,7 @@ export const syncLinkedPlaylist = async ({
         source_sync_error = ?, last_synced_at = ?
       WHERE id = ?
     `).run(
-      sourcePath,
+      storeLibraryPath(dbPath, sourcePath),
       stats.mtimeMs,
       stats.size,
       sourceSyncError,
@@ -312,7 +330,8 @@ export const createPlaylistSyncService = ({ cacheDir, emit, getSender }) => {
     const nextByPath = new Map();
     const nextByDirectory = new Map();
     for (const row of rows) {
-      const sourcePath = path.resolve(String(row.source_path));
+      const sourcePath = resolveLibraryPath(dbPath, row.source_path);
+      if (!path.isAbsolute(sourcePath)) continue;
       const normalizedSource = normalizePlaylistPath(sourcePath);
       const pathIds = nextByPath.get(normalizedSource) ?? [];
       pathIds.push(String(row.id));

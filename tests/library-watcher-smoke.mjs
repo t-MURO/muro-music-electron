@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { closeDatabases, openDatabase } from "../electron/database.mjs";
+import {
+  closeDatabases,
+  loadTracks,
+  openDatabase,
+} from "../electron/database.mjs";
 import { createLibraryWatcher } from "../electron/libraryWatcher.mjs";
 import { acceptInboxTracks } from "../electron/inboxOrganizer.mjs";
 import { importAudioFile } from "../electron/metadata.mjs";
@@ -86,7 +90,7 @@ const run = async () => {
   );
 
   const row = db.prepare("SELECT import_status FROM tracks WHERE source_path = ?").get(
-    path.resolve(dropped),
+    "dropped.mp3",
   );
   assert.ok(row, "the dropped file reached the database");
   assert.equal(row.import_status, "staged", "watched imports land in the Inbox, not the library");
@@ -96,7 +100,7 @@ const run = async () => {
   await wait(3_000);
   const count = db
     .prepare("SELECT COUNT(*) AS n FROM tracks WHERE source_path = ?")
-    .get(path.resolve(dropped)).n;
+    .get("dropped.mp3").n;
   assert.equal(count, 1, "re-touching a watched file does not duplicate it");
 
   // A manual scan finds files that appeared while nothing was watching.
@@ -112,10 +116,10 @@ const run = async () => {
   assert.equal(rescan.imported, 0, "a second scan is a no-op");
 
   const droppedRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
-    path.resolve(dropped),
+    "dropped.mp3",
   );
   const offlineRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
-    path.resolve(offline),
+    "offline.mp3",
   );
   db.prepare(`
     UPDATE tracks
@@ -170,8 +174,18 @@ const run = async () => {
     WHERE id = ?
   `).get(offlineRow.id);
   assert.equal(organizedRow.import_status, "accepted", "the organized track is accepted");
-  assert.equal(organizedRow.source_path, organizedOffline, "the database follows the moved file");
+  assert.equal(
+    organizedRow.source_path,
+    "Fallback Artist/Second Album/offline (2).mp3",
+    "the database stores a forward-slash path relative to the library root",
+  );
   assert.equal(organizedRow.filename, "offline (2).mp3", "the collision suffix is stored");
+  const loadedOffline = loadTracks(dbPath).library.find((track) => track.id === offlineRow.id);
+  assert.equal(
+    loadedOffline?.source_path,
+    organizedOffline,
+    "loaded tracks expose the native absolute path needed for playback",
+  );
 
   const outsideFolder = path.join(tempDir, "outside-drop");
   fs.mkdirSync(outsideFolder);
@@ -206,6 +220,11 @@ const run = async () => {
     "an outside folder drop is organized beneath the sole watched folder",
   );
   assert.equal(fs.existsSync(outsideFile), false);
+  assert.equal(
+    db.prepare("SELECT source_path FROM tracks WHERE id = ?").get(outsideTrack.id).source_path,
+    "Outside Artist/Outside Album/outside.mp3",
+    "outside imports become portable after they are moved into the library root",
+  );
 
   console.log("library-watcher-smoke: all assertions passed");
 };

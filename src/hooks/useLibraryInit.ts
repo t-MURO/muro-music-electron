@@ -29,6 +29,7 @@ export const useLibraryInit = () => {
   const dbPath = useSettingsStore((s) => s.dbPath);
   const dbFileName = useSettingsStore((s) => s.dbFileName);
   const useAutoDbPath = useSettingsStore((s) => s.useAutoDbPath);
+  const libraryRoot = useSettingsStore((s) => s.watchedFolders[0]);
 
   const resolveDbPath = useDbPath();
 
@@ -73,9 +74,9 @@ export const useLibraryInit = () => {
       try {
         const resolvedPath = await resolveDbPath();
         const [snapshot, playlistSnapshot, recentlyPlayedSnapshot] = await Promise.all([
-          loadTracks(resolvedPath),
-          loadPlaylists(resolvedPath),
-          loadRecentlyPlayed(resolvedPath, 50),
+          loadTracks(resolvedPath, libraryRoot),
+          loadPlaylists(resolvedPath, libraryRoot),
+          loadRecentlyPlayed(resolvedPath, 50, libraryRoot),
         ]);
         if (!isMounted) {
           return;
@@ -112,7 +113,15 @@ export const useLibraryInit = () => {
     return () => {
       isMounted = false;
     };
-  }, [resolveDbPath, setTracks, setInboxTracks, setPlaylists, setPlaylistFolders, setRecentlyPlayedTracks]);
+  }, [
+    libraryRoot,
+    resolveDbPath,
+    setTracks,
+    setInboxTracks,
+    setPlaylists,
+    setPlaylistFolders,
+    setRecentlyPlayedTracks,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +135,7 @@ export const useLibraryInit = () => {
         const result = await scanTechnicalMetadata(resolvedPath, TECHNICAL_SCAN_BATCH_SIZE);
         if (cancelled) return;
         if (result.updated > 0) {
-          const snapshot = await loadTracks(resolvedPath);
+          const snapshot = await loadTracks(resolvedPath, libraryRoot);
           if (cancelled) return;
           setTracks(snapshot.library.map(importedTrackToTrack));
           setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
@@ -141,7 +150,7 @@ export const useLibraryInit = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [resolveDbPath, setInboxTracks, setTracks]);
+  }, [libraryRoot, resolveDbPath, setInboxTracks, setTracks]);
 
   // Backfill handlers
   const handleBackfillSearchText = useCallback(async () => {
@@ -177,7 +186,7 @@ export const useLibraryInit = () => {
       setCoverArtBackfillStatus(`Rebuilt high-resolution cover art for ${updated} tracks.`);
       // Reload tracks to get the new cover art paths
       const resolvedPath = await resolveDbPath();
-      const snapshot = await loadTracks(resolvedPath);
+      const snapshot = await loadTracks(resolvedPath, libraryRoot);
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch (error) {
@@ -187,7 +196,7 @@ export const useLibraryInit = () => {
     } finally {
       setCoverArtBackfillPending(false);
     }
-  }, [dbPath, resolveDbPath, setTracks, setInboxTracks]);
+  }, [dbPath, libraryRoot, resolveDbPath, setTracks, setInboxTracks]);
 
   // Clear songs handler
   const handleClearSongs = useCallback(async () => {
