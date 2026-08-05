@@ -2956,6 +2956,68 @@ app.whenReady().then(async () => {
             : null,
         });
         const nowPlayingReturnsToSource = nowPlayingHashOk && nowPlayingRowOk && nowPlayingFocusOk;
+
+        document.querySelector('[data-selection-clear]')?.click();
+        document.querySelector('[data-library-view="recentlyAdded"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const recentScroller = document.querySelector('[data-track-table-scroll]');
+        if (recentScroller) {
+          recentScroller.scrollTop = 0;
+          recentScroller.dispatchEvent(new Event("scroll"));
+        }
+        const recentFirstRow = recentScroller?.querySelector('[data-track-index="0"]');
+        recentFirstRow?.dispatchEvent(new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+        }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        document.querySelector('[data-selection-edit]')?.click();
+        await waitForSelector('[data-edit-track-modal]');
+        const revealRegressionArtist = document.querySelector(
+          '[data-autocomplete-field="artist"]'
+        );
+        if (revealRegressionArtist instanceof HTMLInputElement && nativeValueSetter) {
+          nativeValueSetter.call(revealRegressionArtist, "Reveal Regression Artist");
+          revealRegressionArtist.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        [...(document.querySelector('[data-edit-track-modal]')?.querySelectorAll("button") ?? [])]
+          .find((button) => button.textContent?.trim() === "Save")
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        const recentScrollerAfterEdit = document.querySelector('[data-track-table-scroll]');
+        const selectedAfterRevealRegressionEdit = recentScrollerAfterEdit
+          ?.querySelector('[data-track-selected="true"]')
+          ?.getAttribute("data-track-index") ?? null;
+        const metadataEditDidNotReplayReveal = Boolean(
+          selectedAfterRevealRegressionEdit === "0" &&
+          (recentScrollerAfterEdit?.scrollTop ?? Infinity) < 48
+        );
+
+        document.querySelector('[data-selection-clear]')?.click();
+        if (recentScrollerAfterEdit) {
+          recentScrollerAfterEdit.scrollTop = 0;
+          recentScrollerAfterEdit.dispatchEvent(new Event("scroll"));
+        }
+        document.querySelector('[data-library-view="library"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        document.querySelector('[data-library-view="recentlyAdded"]')?.click();
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const recentScrollerAfterReturn = document.querySelector('[data-track-table-scroll]');
+        const viewReturnDidNotReplayReveal = Boolean(
+          !recentScrollerAfterReturn?.querySelector('[data-track-selected="true"]') &&
+          (recentScrollerAfterReturn?.scrollTop ?? Infinity) < 48
+        );
+        const revealRequestConsumptionDebug = JSON.stringify({
+          selectedAfterEdit: selectedAfterRevealRegressionEdit,
+          scrollAfterEdit: recentScrollerAfterEdit?.scrollTop ?? null,
+          selectedAfterReturn: recentScrollerAfterReturn
+            ?.querySelector('[data-track-selected="true"]')
+            ?.getAttribute("data-track-index") ?? null,
+          scrollAfterReturn: recentScrollerAfterReturn?.scrollTop ?? null,
+          hashAfterReturn: window.location.hash,
+        });
         return {
           childCount: root?.childElementCount ?? 0,
           textLength: root?.textContent?.trim().length ?? 0,
@@ -3137,6 +3199,9 @@ app.whenReady().then(async () => {
           nowPlayingRowOk,
           nowPlayingFocusOk,
           nowPlayingDebug,
+          metadataEditDidNotReplayReveal,
+          viewReturnDidNotReplayReveal,
+          revealRequestConsumptionDebug,
         };
       }
       return {
@@ -3405,6 +3470,13 @@ app.whenReady().then(async () => {
           "Now-playing link did not return to and reveal the current track's source list " +
           `(hash=${result.nowPlayingHashOk}, row=${result.nowPlayingRowOk}, ` +
           `focus=${result.nowPlayingFocusOk}, debug=${result.nowPlayingDebug})`
+        );
+        return;
+      }
+      if (!result.metadataEditDidNotReplayReveal || !result.viewReturnDidNotReplayReveal) {
+        fail(
+          "Handled now-playing reveal replayed after editing or returning to Recently Added: " +
+          result.revealRequestConsumptionDebug
         );
         return;
       }

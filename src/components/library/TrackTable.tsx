@@ -43,6 +43,7 @@ type TrackTableProps = {
   onSortChange?: (key: ColumnConfig["key"]) => void;
   onRatingChange: (id: string, rating: number) => void;
   revealRequest?: { trackId: string; requestId: number } | null;
+  onRevealHandled: (requestId: number) => void;
 };
 
 export const TrackTable = memo(
@@ -72,6 +73,7 @@ export const TrackTable = memo(
     onSortChange,
     onRatingChange,
     revealRequest,
+    onRevealHandled,
   }: TrackTableProps) => {
     // Read state from stores
     const selectedIds = useUIStore((s) => s.selectedIds);
@@ -85,6 +87,7 @@ export const TrackTable = memo(
     const playingTrackId = currentTrack?.id;
     const tableHeaderScrollRef = useRef<HTMLDivElement | null>(null);
     const tableContainerRef = useRef<HTMLDivElement | null>(null);
+    const handledRevealRequestIdRef = useRef<number | null>(null);
     const [rowHeight, setRowHeight] = useState(48);
 
     useEffect(() => {
@@ -143,19 +146,26 @@ export const TrackTable = memo(
 
     useLayoutEffect(() => {
       if (!revealRequest) return;
+      if (handledRevealRequestIdRef.current === revealRequest.requestId) return;
       const index = tracks.findIndex((track) => track.id === revealRequest.trackId);
       if (index < 0) return;
 
+      handledRevealRequestIdRef.current = revealRequest.requestId;
       onRowSelect(index, revealRequest.trackId);
       rowVirtualizer.scrollToIndex(index, { align: "center" });
       // Focus synchronously: rAF callbacks can starve indefinitely while the
       // window is hidden or occluded, so focus must not wait on a frame.
       tableContainerRef.current?.focus({ preventScroll: true });
-      const frame = requestAnimationFrame(() => {
-        rowVirtualizer.scrollToIndex(index, { align: "center" });
+      // The request is consumed synchronously below. Keep the second-pass
+      // virtualizer correction alive for the next frame; it is guarded by the
+      // mounted scroll element rather than by the now-cleared request prop.
+      requestAnimationFrame(() => {
+        if (tableContainerRef.current) {
+          rowVirtualizer.scrollToIndex(index, { align: "center" });
+        }
       });
-      return () => cancelAnimationFrame(frame);
-    }, [onRowSelect, revealRequest, rowVirtualizer, tracks]);
+      onRevealHandled(revealRequest.requestId);
+    }, [onRevealHandled, onRowSelect, revealRequest, rowVirtualizer, tracks]);
 
     const virtualRows = rowVirtualizer.getVirtualItems();
 

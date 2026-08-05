@@ -197,7 +197,9 @@ function App() {
   const [revealTrackRequest, setRevealTrackRequest] = useState<{
     trackId: string;
     requestId: number;
+    targetPath: string;
   } | null>(null);
+  const revealTrackRequestIdRef = useRef(0);
   const [folderMenu, setFolderMenu] = useState<{
     folderId: string;
     position: { x: number; y: number };
@@ -633,14 +635,27 @@ function App() {
     const source = playbackSourceRef.current;
     const destination = source?.trackIds.includes(activeTrackId) ? source.path : "/";
     setSearchQuery("");
-    setRevealTrackRequest((current) => ({
+    revealTrackRequestIdRef.current += 1;
+    setRevealTrackRequest({
       trackId: activeTrackId,
-      requestId: (current?.requestId ?? 0) + 1,
-    }));
+      requestId: revealTrackRequestIdRef.current,
+      targetPath: destination,
+    });
     if (`${location.pathname}${location.search}` !== destination) {
       navigate(destination);
     }
   }, [location.pathname, location.search, navigate, setSearchQuery]);
+
+  const handleRevealTrackHandled = useCallback((requestId: number) => {
+    setRevealTrackRequest((current) => (
+      current?.requestId === requestId ? null : current
+    ));
+  }, []);
+
+  const activeRevealTrackRequest = revealTrackRequest?.targetPath
+    === `${location.pathname}${location.search}`
+    ? revealTrackRequest
+    : null;
 
   const getPlaybackContext = useCallback((activeTrackId: string | null) => {
     const remembered = playbackContextIdsRef.current
@@ -2052,7 +2067,8 @@ function App() {
                         onTracksContextMenu={handleAlbumTracksContextMenu}
                         onImportFiles={handleEmptyImport}
                         onImportFolder={handleEmptyImportFolder}
-                        revealRequest={revealTrackRequest}
+                        revealRequest={activeRevealTrackRequest}
+                        onRevealHandled={handleRevealTrackHandled}
                       />
                     </Suspense>
                   ) : (
@@ -2126,7 +2142,8 @@ function App() {
                           onHeaderContextMenu={openColumnsMenu}
                           onSortChange={handleSortChange}
                           onRatingChange={handleRatingChange}
-                          revealRequest={revealTrackRequest}
+                          revealRequest={activeRevealTrackRequest}
+                          onRevealHandled={handleRevealTrackHandled}
                         />
                         <TrackSelectionBar
                           selectedCount={selectedVisibleTrackIds.length}

@@ -11,7 +11,7 @@ import {
   Play,
   Plus,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Album } from "../../utils/albums";
 import { filterAlbumsBySearch } from "../../utils/albums";
 
@@ -36,6 +36,7 @@ type AlbumsViewProps = {
   onImportFiles: () => void;
   onImportFolder: () => void;
   revealRequest?: { trackId: string; requestId: number } | null;
+  onRevealHandled: (requestId: number) => void;
 };
 
 const formatDuration = (seconds: number) => {
@@ -140,6 +141,7 @@ const AlbumDetail = ({
   onOpenGenre,
   onTracksContextMenu,
   revealRequest,
+  onRevealHandled,
 }: {
   album: Album;
   currentTrackId: string | null;
@@ -154,7 +156,9 @@ const AlbumDetail = ({
   onOpenGenre: (genre: string) => void;
   onTracksContextMenu: (event: React.MouseEvent, trackIds: string[]) => void;
   revealRequest?: { trackId: string; requestId: number } | null;
+  onRevealHandled: (requestId: number) => void;
 }) => {
+  const handledRevealRequestIdRef = useRef<number | null>(null);
   const trackIds = album.tracks.map((track) => track.id);
   const currentAlbumIsActive = album.tracks.some((track) => track.id === currentTrackId);
   const currentAlbumIsPlaying = isPlaying && currentAlbumIsActive;
@@ -162,13 +166,17 @@ const AlbumDetail = ({
 
   useEffect(() => {
     if (!revealRequest || !album.tracks.some((track) => track.id === revealRequest.trackId)) return;
+    if (handledRevealRequestIdRef.current === revealRequest.requestId) return;
     // Run synchronously: rAF callbacks can starve indefinitely while the
     // window is hidden or occluded, so the reveal must not wait on a frame.
     const row = Array.from(document.querySelectorAll<HTMLElement>("[data-album-track]"))
       .find((element) => element.dataset.albumTrack === revealRequest.trackId);
-    row?.scrollIntoView({ block: "center", behavior: "smooth" });
-    row?.focus({ preventScroll: true });
-  }, [album.tracks, revealRequest]);
+    if (!row) return;
+    handledRevealRequestIdRef.current = revealRequest.requestId;
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+    row.focus({ preventScroll: true });
+    onRevealHandled(revealRequest.requestId);
+  }, [album.tracks, onRevealHandled, revealRequest]);
 
   return (
     <div className="album-detail" data-album-detail={album.id}>
@@ -269,6 +277,7 @@ export const AlbumsView = ({
   onImportFiles,
   onImportFolder,
   revealRequest,
+  onRevealHandled,
 }: AlbumsViewProps) => {
   const [sort, setSort] = useState<AlbumSort>("title");
   const [layout, setLayout] = useState<AlbumLayout>(() =>
@@ -317,6 +326,7 @@ export const AlbumsView = ({
         onOpenGenre={onOpenGenre}
         onTracksContextMenu={onTracksContextMenu}
         revealRequest={revealRequest}
+        onRevealHandled={onRevealHandled}
       />
     );
   }
