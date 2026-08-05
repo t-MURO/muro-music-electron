@@ -98,6 +98,12 @@ import {
   listTrackFormats,
   filterAlbumsBySearch,
   groupTracksIntoAlbums,
+  artistIdentityKey,
+  legacyArtistCredit,
+  albumArtistDisplay,
+  formatArtistCredits,
+  reviewedCommaSeparatedArtistCredits,
+  type ArtistTarget,
 } from "./utils";
 import { confirm, open, save } from "@muro/desktop/dialogs";
 import { openExternal, showItemInFolder } from "./desktop/shell";
@@ -193,7 +199,7 @@ function App() {
   const [metadataSearchTrackId, setMetadataSearchTrackId] = useState<string | null>(null);
   const [albumMetadataTrackIds, setAlbumMetadataTrackIds] = useState<string[]>([]);
   const [acoustIdTrackIds, setAcoustIdTrackIds] = useState<string[]>([]);
-  const [artistImageArtistName, setArtistImageArtistName] = useState<string | null>(null);
+  const [artistImageTarget, setArtistImageTarget] = useState<ArtistTarget | null>(null);
   const [artistSeparatorReview, setArtistSeparatorReview] =
     useState<ArtistSeparatorReviewSession | null>(null);
   const [artistSeparatorApplying, setArtistSeparatorApplying] = useState(false);
@@ -301,11 +307,19 @@ function App() {
   }, [activateSortView, view]);
 
   const isAlbumsView = view === "collection:albums";
+  const collectionParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
   const collectionFilterValue = collectionMatch?.params.facet
-    ? new URLSearchParams(location.search).get("value")
+    ? collectionParams.get("value")
     : null;
-  const isArtistIndex = view === "collection:artists" && !collectionFilterValue;
-  const isArtistDetail = view === "collection:artists" && Boolean(collectionFilterValue);
+  const collectionFilterArtistId = view === "collection:artists"
+    ? collectionParams.get("artistId")
+    : null;
+  const hasArtistFilter = Boolean(collectionFilterValue || collectionFilterArtistId);
+  const isArtistIndex = view === "collection:artists" && !hasArtistFilter;
+  const isArtistDetail = view === "collection:artists" && hasArtistFilter;
   const collectionIndexFacet = !collectionFilterValue && view === "collection:genres"
     ? "genres"
     : !collectionFilterValue && view === "collection:labels"
@@ -314,7 +328,7 @@ function App() {
         ? "keys"
         : null;
   const selectedAlbumId = isAlbumsView
-    ? new URLSearchParams(location.search).get("album")
+    ? collectionParams.get("album")
     : null;
 
   const handleSelectAlbum = useCallback(
@@ -330,10 +344,17 @@ function App() {
     [navigate]
   );
 
-  const handleOpenCollectionValue = useCallback((facet: "artists" | "genres" | "labels" | "keys", value: string) => {
+  const handleOpenCollectionValue = useCallback((facet: "genres" | "labels" | "keys", value: string) => {
     const params = new URLSearchParams();
     params.set("value", value);
     navigate({ pathname: `/collection/${facet}`, search: params.toString() });
+  }, [navigate]);
+
+  const handleOpenArtist = useCallback((artist: ArtistTarget) => {
+    const params = new URLSearchParams();
+    params.set("value", artist.name);
+    params.set("artistId", artistIdentityKey(artist));
+    navigate({ pathname: "/collection/artists", search: params.toString() });
   }, [navigate]);
 
   const handleOpenArtistSource = useCallback((url: string) => {
@@ -367,6 +388,7 @@ function App() {
     recentlyPlayedTracks,
     smartCrates,
     collectionFilterValue,
+    collectionFilterArtistId,
   });
 
   // Filtering and sorting
@@ -380,10 +402,6 @@ function App() {
     selectImage: selectArtistProfileImage,
   } = useArtistProfiles();
   const albums = useMemo(() => groupTracksIntoAlbums(tracks), [tracks]);
-  const handleOpenTableArtist = useCallback(
-    (artist: string) => handleOpenCollectionValue("artists", artist),
-    [handleOpenCollectionValue],
-  );
   const handleOpenTableAlbum = useCallback(
     (trackId: string) => {
       const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
@@ -414,9 +432,26 @@ function App() {
       ? artistIndexItems.filter((item) => item.name.toLocaleLowerCase().includes(query))
       : artistIndexItems;
   }, [artistIndexItems, searchQuery]);
-  const selectedArtistName = isArtistDetail ? collectionFilterValue?.trim() ?? "" : "";
-  const selectedArtistKey = normalizeArtistProfileKey(selectedArtistName);
-  const selectedArtistProfile = artistProfiles[selectedArtistKey];
+  const selectedArtistTarget = isArtistDetail
+    ? artistIndexItems.find(
+        (artist) => artistIdentityKey(artist) === collectionFilterArtistId,
+      )
+      ?? artistIndexItems.find(
+        (artist) => artist.name.trim().toLocaleLowerCase()
+          === collectionFilterValue?.trim().toLocaleLowerCase(),
+      )
+    : undefined;
+  const selectedArtistName = isArtistDetail
+    ? collectionFilterValue?.trim()
+      || selectedArtistTarget?.name
+      || ""
+    : "";
+  const selectedArtistNameKey = normalizeArtistProfileKey(selectedArtistName);
+  const selectedArtistKey = selectedArtistTarget
+    ? artistIdentityKey(selectedArtistTarget)
+    : selectedArtistNameKey;
+  const selectedArtistProfile =
+    artistProfiles[selectedArtistKey] ?? artistProfiles[selectedArtistNameKey];
   const selectedArtistProfileLoading = artistProfileLoadingKeys.has(selectedArtistKey);
   const selectedArtistProfileError = artistProfileErrors[selectedArtistKey];
   const selectedArtistAlbumCount = useMemo(() => new Set(
@@ -427,16 +462,20 @@ function App() {
 
   useEffect(() => {
     if (!selectedArtistName) return;
-    void loadArtistProfile(selectedArtistName);
-  }, [loadArtistProfile, selectedArtistName]);
+    void loadArtistProfile(selectedArtistName, false, selectedArtistTarget);
+  }, [loadArtistProfile, selectedArtistName, selectedArtistTarget]);
+
+  const handleSearchArtistImages = useCallback((artistName: string) => (
+    searchArtistProfileImages(artistName, artistImageTarget ?? undefined)
+  ), [artistImageTarget, searchArtistProfileImages]);
 
   const handleSelectArtistImage = useCallback(async (
     artistName: string,
     candidate: ArtistImageCandidate,
   ) => {
-    await selectArtistProfileImage(artistName, candidate);
+    await selectArtistProfileImage(artistName, candidate, artistImageTarget ?? undefined);
     notify.success(t("toast.artist.imageUpdated"));
-  }, [selectArtistProfileImage]);
+  }, [artistImageTarget, selectArtistProfileImage]);
 
   const filterFormats = useMemo(
     () => listTrackFormats(displayedTracks),
@@ -1080,9 +1119,20 @@ function App() {
     if (!candidate || artistSeparatorApplying) return;
     setArtistSeparatorApplying(true);
     try {
+      const credits = reviewedCommaSeparatedArtistCredits(value);
+      const reviewedValue = formatArtistCredits(credits);
       await handleSaveMetadata(
         [candidate.trackId],
-        candidate.field === "albumArtist" ? { artists: value } : { artist: value },
+        candidate.field === "albumArtist"
+          ? {
+              albumArtist: reviewedValue,
+              artists: reviewedValue,
+              albumArtistCredits: credits,
+            }
+          : {
+              artist: reviewedValue,
+              artistCredits: credits,
+            },
       );
       advanceArtistSeparatorReview(true);
     } catch (error) {
@@ -1414,8 +1464,8 @@ function App() {
   const menuIsSingleAlbum = menuAlbumTracks.length > 1
     && menuAlbumTracks.every((track) => (
       track.album.trim().toLocaleLowerCase() === menuAlbumTracks[0].album.trim().toLocaleLowerCase()
-      && (track.artists || track.artist).trim().toLocaleLowerCase()
-        === (menuAlbumTracks[0].artists || menuAlbumTracks[0].artist).trim().toLocaleLowerCase()
+      && albumArtistDisplay(track).trim().toLocaleLowerCase()
+        === albumArtistDisplay(menuAlbumTracks[0]).trim().toLocaleLowerCase()
     ));
 
   const handleOpenAlbumMetadataSearch = useCallback(() => {
@@ -1855,9 +1905,9 @@ function App() {
         onApply={handleApplyAcoustIdMatches}
       />
       <ArtistImageModal
-        artistName={artistImageArtistName}
-        onClose={() => setArtistImageArtistName(null)}
-        onSearch={searchArtistProfileImages}
+        artistName={artistImageTarget?.name ?? null}
+        onClose={() => setArtistImageTarget(null)}
+        onSearch={handleSearchArtistImages}
         onApply={handleSelectArtistImage}
         onOpenSource={handleOpenArtistSource}
       />
@@ -2072,7 +2122,7 @@ function App() {
                     <ArtistIndexView
                       items={artistIndexResults}
                       profiles={artistProfiles}
-                      onSelect={(artistName) => handleOpenCollectionValue("artists", artistName)}
+                      onSelect={handleOpenArtist}
                     />
                   ) : collectionIndexFacet ? (
                     <CollectionIndexView
@@ -2094,7 +2144,10 @@ function App() {
                         onTogglePlay={togglePlay}
                         onPlayNext={playNext}
                         onAddToQueue={addToQueue}
-                        onOpenArtist={(artist) => handleOpenCollectionValue("artists", artist)}
+                        onOpenArtist={(artistName) => {
+                          const artist = legacyArtistCredit(artistName);
+                          if (artist) handleOpenArtist(artist);
+                        }}
                         onOpenGenre={(genre) => handleOpenCollectionValue("genres", genre)}
                         onTracksContextMenu={handleAlbumTracksContextMenu}
                         onImportFiles={handleEmptyImport}
@@ -2114,8 +2167,16 @@ function App() {
                             error={selectedArtistProfileError}
                             trackCount={displayedTracks.length}
                             albumCount={selectedArtistAlbumCount}
-                            onRefresh={() => { void loadArtistProfile(selectedArtistName, true); }}
-                            onChangePicture={() => setArtistImageArtistName(selectedArtistName)}
+                            onRefresh={() => {
+                              void loadArtistProfile(
+                                selectedArtistName,
+                                true,
+                                selectedArtistTarget,
+                              );
+                            }}
+                            onChangePicture={() => setArtistImageTarget(
+                              selectedArtistTarget ?? legacyArtistCredit(selectedArtistName),
+                            )}
                             onOpenSource={handleOpenArtistSource}
                           />
                         )}
@@ -2165,7 +2226,7 @@ function App() {
                           onRowContextMenu={handleRowContextMenu}
                           onRowDoubleClick={handlePlayTrack}
                           onTogglePlay={togglePlay}
-                          onOpenArtist={handleOpenTableArtist}
+                          onOpenArtist={handleOpenArtist}
                           onOpenAlbum={handleOpenTableAlbum}
                           onAlbumContextMenu={handleTableAlbumContextMenu}
                           onColumnResize={handleColumnResize}

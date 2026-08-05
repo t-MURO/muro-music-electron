@@ -5,8 +5,20 @@ import { convertFileSrc } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
 import { ClipboardCopy, ClipboardPaste, Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
 import { t } from "../../i18n";
-import { notify } from "../../stores";
-import type { AlbumCoverCandidate, Track, TrackMetadataUpdates } from "../../types";
+import { notify, useSettingsStore } from "../../stores";
+import { artistSeparatorExceptionKey } from "../../lib/metadata/artistSeparators";
+import type {
+  AlbumCoverCandidate,
+  Track,
+  TrackMetadataUpdates,
+} from "../../types";
+import {
+  albumArtistCredits,
+  editedArtistCredits,
+  explicitAlbumArtistDisplay,
+  legacyArtistCredits,
+  trackArtistCredits,
+} from "../../utils/artistCredits";
 import { cacheClipboardCoverArt, clipboardHasImage, copyImageToClipboard } from "../../desktop/clipboard";
 import { AlbumCoverPickerModal } from "./AlbumCoverPickerModal";
 import { Popover, PopoverHeader, PopoverItem } from "./Popover";
@@ -78,7 +90,7 @@ const EMPTY_FORM: FormState = {
 const trackToForm = (track: Track): FormState => ({
   title: track.title ?? "",
   artist: track.artist ?? "",
-  artists: track.artists ?? "",
+  artists: explicitAlbumArtistDisplay(track),
   album: track.album ?? "",
   trackNumber: track.trackNumber != null ? String(track.trackNumber) : "",
   trackTotal: track.trackTotal != null ? String(track.trackTotal) : "",
@@ -139,6 +151,13 @@ export const EditTrackModal = ({
   onCacheCoverCandidate,
 }: EditTrackModalProps) => {
   const isBatch = tracks.length > 1;
+  const artistSeparatorExceptions = useSettingsStore(
+    (state) => state.artistSeparatorExceptions,
+  );
+  const artistSeparatorExceptionKeys = useMemo(
+    () => new Set(artistSeparatorExceptions.map(artistSeparatorExceptionKey)),
+    [artistSeparatorExceptions],
+  );
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [dirtyFields, setDirtyFields] = useState<Set<string>>(new Set());
   const [mixedFields, setMixedFields] = useState<Set<keyof FormState>>(new Set());
@@ -152,7 +171,13 @@ export const EditTrackModal = ({
   const titleRef = useRef<HTMLInputElement | null>(null);
   const saveInFlightRef = useRef(false);
   const suggestions = useMemo(() => {
-    const people = libraryTracks.flatMap((track) => [track.artist, track.artists]);
+    const people = libraryTracks.flatMap((track) => [
+      track.artist,
+      ...trackArtistCredits(track).flatMap((credit) => [credit.name, credit.creditedName]),
+      explicitAlbumArtistDisplay(track),
+      ...albumArtistCredits(track, { fallbackToTrack: false })
+        .flatMap((credit) => [credit.name, credit.creditedName]),
+    ]);
     return {
       artist: buildSuggestions(people),
       albumArtist: buildSuggestions(people),
@@ -277,7 +302,7 @@ export const EditTrackModal = ({
     try {
       const result = await onFetchCoverArt(track.id, {
         album: form.album.trim() || track.album,
-        artist: form.artists.trim() || form.artist.trim() || track.artists || track.artist,
+        artist: form.artists.trim() || form.artist.trim() || explicitAlbumArtistDisplay(track) || track.artist,
       });
       if (!result) {
         notify.info(t("edit.coverArtFetchNotFound"));
@@ -387,6 +412,32 @@ export const EditTrackModal = ({
         assignUpdate(updates, "label", form);
       }
 
+      const firstTrack = tracks[0];
+      const creditsForEditedValue = (
+        value: string,
+        previous = [] as ReturnType<typeof trackArtistCredits>,
+      ) => artistSeparatorExceptionKeys.has(artistSeparatorExceptionKey(value))
+        ? legacyArtistCredits(value)
+        : editedArtistCredits(value, previous);
+      if (isBatch) {
+        if (dirtyFields.has("artist")) {
+          updates.artistCredits = creditsForEditedValue(form.artist);
+        }
+        if (dirtyFields.has("artists")) {
+          updates.albumArtistCredits = creditsForEditedValue(form.artists);
+        }
+      } else if (firstTrack) {
+        updates.artistCredits = form.artist === firstTrack.artist
+          ? firstTrack.artistCredits
+          : creditsForEditedValue(form.artist, trackArtistCredits(firstTrack));
+        updates.albumArtistCredits = form.artists === explicitAlbumArtistDisplay(firstTrack)
+          ? firstTrack.albumArtistCredits
+          : creditsForEditedValue(
+              form.artists,
+              albumArtistCredits(firstTrack, { fallbackToTrack: false }),
+            );
+      }
+
       // Cover art is embedded only when it was explicitly changed. This avoids
       // rewriting a large image when saving an unrelated text-field edit.
       if (dirtyFields.has("coverArtPath") && form.coverArtPath !== null) {
@@ -404,7 +455,15 @@ export const EditTrackModal = ({
       saveInFlightRef.current = false;
       setIsSaving(false);
     }
-  }, [form, dirtyFields, isBatch, tracks, onSave, onClose]);
+  }, [
+    artistSeparatorExceptionKeys,
+    dirtyFields,
+    form,
+    isBatch,
+    onClose,
+    onSave,
+    tracks,
+  ]);
 
   if (!isOpen || typeof document === "undefined") {
     return null;
@@ -724,7 +783,11 @@ export const EditTrackModal = ({
         {coverCandidates.length > 0 && (
           <AlbumCoverPickerModal
             album={form.album.trim() || tracks[0]?.album || ""}
-            artist={form.artists.trim() || form.artist.trim() || tracks[0]?.artists || tracks[0]?.artist || ""}
+            artist={form.artists.trim()
+              || form.artist.trim()
+              || (tracks[0] ? explicitAlbumArtistDisplay(tracks[0]) : "")
+              || tracks[0]?.artist
+              || ""}
             candidates={coverCandidates}
             onApply={handleCacheCoverCandidate}
             onClose={() => setCoverCandidates([])}
@@ -823,6 +886,7 @@ function assignUpdate(
       updates.artist = form.artist;
       break;
     case "artists":
+      updates.albumArtist = form.artists;
       updates.artists = form.artists;
       break;
     case "album":

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { t } from "../i18n";
 import { filterTracksBySmartCrate } from "../utils/smartCrates";
 import { toCamelotCode } from "../utils/camelot";
+import { trackHasArtist } from "../utils/artistCredits";
 import { useLocaleVersion } from "./useLocaleVersion";
 import type { Playlist, SmartCrate, Track } from "../types";
 import { useSettingsStore } from "../stores";
@@ -67,6 +68,7 @@ type UseViewConfigArgs = {
   recentlyPlayedTracks: Track[];
   smartCrates: SmartCrate[];
   collectionFilterValue?: string | null;
+  collectionFilterArtistId?: string | null;
 };
 
 export const useViewConfig = ({
@@ -77,6 +79,7 @@ export const useViewConfig = ({
   recentlyPlayedTracks,
   smartCrates,
   collectionFilterValue,
+  collectionFilterArtistId,
 }: UseViewConfigArgs): ViewConfig => {
   // Titles and empty states are translated inside the memo, so the language
   // has to invalidate it.
@@ -257,9 +260,18 @@ export const useViewConfig = ({
       };
       const normalizedFilter = collectionFilterValue?.trim().toLocaleLowerCase() ?? "";
       const collectionTracks = libraryTracks.filter((track) => {
+        if (collectionFacet === "artists") {
+          if (!collectionFilterArtistId && !normalizedFilter) {
+            return trackHasArtist(track, {});
+          }
+          return trackHasArtist(track, {
+            artistId: collectionFilterArtistId,
+            name: collectionFilterValue,
+          });
+        }
+
         let value = "";
         if (collectionFacet === "genres") value = track.genre ?? "";
-        else if (collectionFacet === "artists") value = track.artist;
         else if (collectionFacet === "albums") value = track.album;
         else if (collectionFacet === "labels") value = track.label ?? "";
         else if (collectionFacet === "keys") value = track.key ?? "";
@@ -343,6 +355,7 @@ export const useViewConfig = ({
       },
     };
   }, [
+    collectionFilterArtistId,
     collectionFilterValue,
     inboxTracks,
     libraryTracks,

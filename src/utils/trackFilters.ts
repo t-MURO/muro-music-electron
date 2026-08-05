@@ -1,4 +1,5 @@
 import type { Track } from "../types";
+import { explicitAlbumArtistDisplay } from "./artistCredits";
 
 export type MissingMetadataField =
   | "albumArtist"
@@ -55,7 +56,7 @@ export const trackFormat = (track: Pick<Track, "sourcePath">) => {
 
 const isMetadataMissing = (track: Track, field: MissingMetadataField) => {
   switch (field) {
-    case "albumArtist": return !hasText(track.artists);
+    case "albumArtist": return !hasText(explicitAlbumArtistDisplay(track));
     case "album": return !hasText(track.album);
     case "genre": return !hasText(track.genre);
     case "year": return !hasPositiveNumber(track.year);

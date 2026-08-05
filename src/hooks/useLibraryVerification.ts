@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { invoke } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
-import { notify, useLibraryStore } from "../stores";
+import { notify, useLibraryStore, useSettingsStore } from "../stores";
 import { importedTrackToTrack, loadTracks } from "../utils";
 import { t } from "../i18n";
 import { useDbPath } from "./useDbPath";
@@ -45,16 +45,19 @@ export const useLibraryVerification = () => {
   const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
+  const artistSeparatorExceptions = useSettingsStore(
+    (state) => state.artistSeparatorExceptions,
+  );
 
   const reloadLibrary = useCallback(async (dbPath: string) => {
     try {
-      const snapshot = await loadTracks(dbPath);
+      const snapshot = await loadTracks(dbPath, undefined, artistSeparatorExceptions);
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch {
       // The next library load picks the change up.
     }
-  }, [setInboxTracks, setTracks]);
+  }, [artistSeparatorExceptions, setInboxTracks, setTracks]);
 
   const refreshMissing = useCallback(async () => {
     const dbPath = await resolveDbPath();

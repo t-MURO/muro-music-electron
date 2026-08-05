@@ -3,12 +3,15 @@ import path from "node:path";
 import {
   closeDatabases,
   configureLibraryRoot,
+  loadArtistCredits,
   loadPlaylists,
   loadRecentlyPlayed,
   loadTracks,
+  migrateStructuredArtistCredits,
   openDatabase,
   rebuildSearchIndex,
   refreshSearchText,
+  replaceTrackArtistCredits,
   resolveLibraryPath,
   resolveTrackPath,
   searchTrackIds,
@@ -65,6 +68,7 @@ const allowedUpdates = {
   title: "title",
   artist: "artist",
   artists: "album_artist",
+  albumArtist: "album_artist",
   album: "album",
   trackNumber: "track_number",
   trackTotal: "track_total",
@@ -143,9 +147,28 @@ const quotedMusicBrainzTerm = (value) => `"${String(value ?? "")
   .trim()
   .replace(/([\\"])/g, "\\$1")}"`;
 
-const artistCreditName = (credit) => Array.isArray(credit)
-  ? credit.map((entry) => `${entry?.name ?? entry?.artist?.name ?? ""}${entry?.joinphrase ?? ""}`).join("").trim()
-  : "";
+const artistCreditParts = (credit) => (Array.isArray(credit) ? credit : []).flatMap((entry) => {
+  const creditedName = String(entry?.name ?? entry?.artist?.name ?? "").trim();
+  if (!creditedName) return [];
+  const canonicalName = String(entry?.artist?.name ?? creditedName).trim() || creditedName;
+  const musicBrainzId = String(entry?.artist?.id ?? "").trim();
+  return [{
+    name: canonicalName,
+    creditedName,
+    joinPhrase: String(entry?.joinphrase ?? ""),
+    musicBrainzId: /^[0-9a-f-]{36}$/i.test(musicBrainzId) ? musicBrainzId : null,
+  }];
+});
+
+const fallbackArtistCredit = (displayText) => {
+  const name = String(displayText ?? "").trim();
+  return name ? [{ name, creditedName: name, joinPhrase: "", musicBrainzId: null }] : [];
+};
+
+const artistCreditName = (credit) => artistCreditParts(credit)
+  .map((entry) => `${entry.creditedName}${entry.joinPhrase}`)
+  .join("")
+  .trim();
 
 const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) => {
   const cleanTitle = String(title ?? "").trim();
@@ -169,7 +192,10 @@ const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) =
       : [null];
     for (const release of releases) {
       const releaseTitle = String(release?.title ?? "").trim();
-      const releaseArtist = artistCreditName(release?.["artist-credit"]);
+      const recordingArtistCredits = artistCreditParts(recording?.["artist-credit"]);
+      const recordingArtist = artistCreditName(recording?.["artist-credit"]) || cleanArtist;
+      const releaseArtistCredits = artistCreditParts(release?.["artist-credit"]);
+      const releaseArtist = artistCreditName(release?.["artist-credit"]) || recordingArtist;
       const tags = Array.isArray(recording?.tags) ? [...recording.tags] : [];
       tags.sort((left, right) => Number(right?.count ?? 0) - Number(left?.count ?? 0));
       candidates.push({
@@ -179,9 +205,17 @@ const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) =
         releaseId: release?.id ?? null,
         releaseGroupId: release?.["release-group"]?.id ?? null,
         title: String(recording?.title ?? cleanTitle),
-        artist: artistCreditName(recording?.["artist-credit"]) || cleanArtist,
+        artist: recordingArtist,
+        artistCredits: recordingArtistCredits.length > 0
+          ? recordingArtistCredits
+          : fallbackArtistCredit(recordingArtist),
         album: releaseTitle,
-        albumArtist: releaseArtist || artistCreditName(recording?.["artist-credit"]) || cleanArtist,
+        albumArtist: releaseArtist,
+        albumArtistCredits: releaseArtistCredits.length > 0
+          ? releaseArtistCredits
+          : recordingArtistCredits.length > 0
+            ? recordingArtistCredits
+            : fallbackArtistCredit(releaseArtist),
         year: /^\d{4}/.test(String(release?.date ?? "")) ? Number(String(release.date).slice(0, 4)) : null,
         country: release?.country ?? null,
         status: release?.status ?? null,
@@ -226,19 +260,24 @@ const searchAlbumMetadata = async ({ album, artist }, fetchMusicBrainz) => {
   const response = await fetchMusicBrainz(url);
   if (!response.ok) throw new Error(`MusicBrainz album search failed (${response.status})`);
   const payload = await response.json();
-  return (Array.isArray(payload?.releases) ? payload.releases : []).map((release) => ({
-    id: release.id,
-    score: Number(release?.score ?? 0),
-    title: String(release?.title ?? cleanAlbum),
-    artist: artistCreditName(release?.["artist-credit"]) || cleanArtist,
-    releaseGroupId: release?.["release-group"]?.id ?? null,
-    year: releaseYear(release),
-    country: release?.country ?? null,
-    status: release?.status ?? null,
-    barcode: release?.barcode ?? null,
-    trackCount: releaseTrackCount(release),
-    disambiguation: release?.disambiguation ?? null,
-  })).sort((left, right) => right.score - left.score || (left.year ?? 9999) - (right.year ?? 9999));
+  return (Array.isArray(payload?.releases) ? payload.releases : []).map((release) => {
+    const credits = artistCreditParts(release?.["artist-credit"]);
+    const artist = artistCreditName(release?.["artist-credit"]) || cleanArtist;
+    return {
+      id: release.id,
+      score: Number(release?.score ?? 0),
+      title: String(release?.title ?? cleanAlbum),
+      artist,
+      artistCredits: credits.length > 0 ? credits : fallbackArtistCredit(artist),
+      releaseGroupId: release?.["release-group"]?.id ?? null,
+      year: releaseYear(release),
+      country: release?.country ?? null,
+      status: release?.status ?? null,
+      barcode: release?.barcode ?? null,
+      trackCount: releaseTrackCount(release),
+      disambiguation: release?.disambiguation ?? null,
+    };
+  }).sort((left, right) => right.score - left.score || (left.year ?? 9999) - (right.year ?? 9999));
 };
 
 const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
@@ -252,11 +291,16 @@ const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
   const release = await response.json();
   const media = Array.isArray(release?.media) ? release.media : [];
   const genres = Array.isArray(release?.genres) ? [...release.genres] : [];
+  const releaseArtistCredits = artistCreditParts(release?.["artist-credit"]);
+  const releaseArtist = artistCreditName(release?.["artist-credit"]);
   genres.sort((left, right) => Number(right?.count ?? 0) - Number(left?.count ?? 0));
   return {
     id: release.id,
     title: String(release?.title ?? ""),
-    artist: artistCreditName(release?.["artist-credit"]),
+    artist: releaseArtist,
+    artistCredits: releaseArtistCredits.length > 0
+      ? releaseArtistCredits
+      : fallbackArtistCredit(releaseArtist),
     releaseGroupId: release?.["release-group"]?.id ?? null,
     year: releaseYear(release),
     country: release?.country ?? null,
@@ -266,18 +310,28 @@ const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
     discTotal: media.length || null,
     tracks: media.flatMap((medium, mediumIndex) => {
       const tracks = Array.isArray(medium?.tracks) ? medium.tracks : [];
-      return tracks.map((track, trackIndex) => ({
-        id: track.id ?? `${mediumIndex + 1}:${trackIndex + 1}`,
-        recordingId: track?.recording?.id ?? null,
-        title: String(track?.title ?? track?.recording?.title ?? ""),
-        artist: artistCreditName(track?.["artist-credit"])
-          || artistCreditName(track?.recording?.["artist-credit"])
-          || artistCreditName(release?.["artist-credit"]),
-        trackNumber: Number(track?.position ?? trackIndex + 1),
-        trackTotal: Number(medium?.["track-count"] ?? tracks.length),
-        discNumber: Number(medium?.position ?? mediumIndex + 1),
-        discTotal: media.length,
-      }));
+      return tracks.map((track, trackIndex) => {
+        const creditSource = Array.isArray(track?.["artist-credit"])
+          ? track["artist-credit"]
+          : Array.isArray(track?.recording?.["artist-credit"])
+            ? track.recording["artist-credit"]
+            : release?.["artist-credit"];
+        const artistCredits = artistCreditParts(creditSource);
+        const artist = artistCreditName(creditSource) || releaseArtist;
+        return {
+          id: track.id ?? `${mediumIndex + 1}:${trackIndex + 1}`,
+          recordingId: track?.recording?.id ?? null,
+          title: String(track?.title ?? track?.recording?.title ?? ""),
+          artist,
+          artistCredits: artistCredits.length > 0
+            ? artistCredits
+            : fallbackArtistCredit(artist),
+          trackNumber: Number(track?.position ?? trackIndex + 1),
+          trackTotal: Number(medium?.["track-count"] ?? tracks.length),
+          discNumber: Number(medium?.position ?? mediumIndex + 1),
+          discTotal: media.length,
+        };
+      });
     }),
   };
 };
@@ -325,18 +379,86 @@ const metadataValueFromDatabase = (key, value) => {
   }
 };
 
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+
+const normalizedArtistCredits = (value) => (Array.isArray(value) ? value : []).map((credit) => {
+  const creditedName = String(credit?.creditedName ?? credit?.credited_name ?? credit?.name ?? "");
+  const name = String(credit?.name ?? creditedName).trim() || creditedName.trim();
+  return {
+    ...(credit?.artistId || credit?.artist_id
+      ? { artistId: String(credit.artistId ?? credit.artist_id) }
+      : {}),
+    name,
+    creditedName,
+    joinPhrase: String(credit?.joinPhrase ?? credit?.join_phrase ?? ""),
+    ...(credit?.musicBrainzId || credit?.musicbrainz_id
+      ? { musicBrainzId: String(credit.musicBrainzId ?? credit.musicbrainz_id) }
+      : {}),
+    ...(credit?.role ? { role: String(credit.role) } : {}),
+  };
+});
+
+const displayArtistCredits = (credits) => normalizedArtistCredits(credits)
+  .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
+  .join("");
+
+const legacyCreditForDisplay = (displayText) => {
+  const creditedName = String(displayText ?? "");
+  const name = creditedName.trim();
+  return name ? [{ name, creditedName, joinPhrase: "" }] : [];
+};
+
+const canonicalMetadataUpdates = (updates) => {
+  const normalized = { ...(updates ?? {}) };
+  if (hasOwn(normalized, "albumArtist")) {
+    normalized.artists = normalized.albumArtist;
+    delete normalized.albumArtist;
+  }
+  if (hasOwn(normalized, "artistCredits") && !hasOwn(normalized, "artist")) {
+    normalized.artist = displayArtistCredits(normalized.artistCredits);
+  }
+  if (hasOwn(normalized, "albumArtistCredits") && !hasOwn(normalized, "artists")) {
+    normalized.artists = displayArtistCredits(normalized.albumArtistCredits);
+  }
+  return normalized;
+};
+
+const artistCreditPlan = (updates, scope) => {
+  const displayKey = scope === "track" ? "artist" : "artists";
+  const creditsKey = scope === "track" ? "artistCredits" : "albumArtistCredits";
+  if (!hasOwn(updates, displayKey) && !hasOwn(updates, creditsKey)) return null;
+  const displayText = String(updates[displayKey] ?? "");
+  const credits = hasOwn(updates, creditsKey)
+    ? normalizedArtistCredits(updates[creditsKey])
+    : legacyCreditForDisplay(displayText);
+  return { scope, displayKey, creditsKey, displayText, credits };
+};
+
+const comparableArtistCredits = (credits) => normalizedArtistCredits(credits).map((credit) => ({
+  name: credit.name,
+  creditedName: credit.creditedName,
+  joinPhrase: credit.joinPhrase,
+  musicBrainzId: credit.musicBrainzId ?? null,
+  role: credit.role ?? null,
+}));
+
 const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") => {
-  if (!trackIds.length || Object.keys(updates).length === 0) {
+  const normalizedUpdates = canonicalMetadataUpdates(updates);
+  if (!trackIds.length || Object.keys(normalizedUpdates).length === 0) {
     return { updated: 0, filesWritten: 0, fileWriteErrors: [] };
   }
   const db = openDatabase(dbPath);
-  const entries = Object.entries(updates)
+  const entries = Object.entries(normalizedUpdates)
     .filter(([key]) => allowedUpdates[key])
     .map(([key, value]) => [
       allowedUpdates[key],
       key === "genre" || key === "comment" ? listJson(value) : value,
     ]);
   if (!entries.length) return { updated: 0, filesWritten: 0, fileWriteErrors: [] };
+  const creditPlans = [
+    artistCreditPlan(normalizedUpdates, "track"),
+    artistCreditPlan(normalizedUpdates, "album"),
+  ].filter(Boolean);
 
   const updateDatabase = db.transaction(() => {
     const historyInsert = db.prepare(`
@@ -346,12 +468,13 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
     const selectCurrent = db.prepare(
       `SELECT ${entries.map(([column]) => column).join(", ")} FROM tracks WHERE id = ?`,
     );
+    const priorCredits = loadArtistCredits(db, trackIds);
     const changedAt = new Date().toISOString();
     for (const id of trackIds) {
       const current = selectCurrent.get(id);
       if (!current) continue;
       const changes = {};
-      for (const [key, requestedValue] of Object.entries(updates)) {
+      for (const [key, requestedValue] of Object.entries(normalizedUpdates)) {
         const column = allowedUpdates[key];
         if (!column) continue;
         const before = metadataValueFromDatabase(key, current[column]);
@@ -363,6 +486,31 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
           changes[key] = { before, after };
         }
       }
+      const prior = priorCredits.get(String(id)) ?? {
+        artist_credits: [],
+        album_artist_credits: [],
+      };
+      for (const plan of creditPlans) {
+        const column = allowedUpdates[plan.displayKey];
+        const beforeDisplay = String(current[column] ?? "");
+        const beforeCredits = plan.scope === "track"
+          ? prior.artist_credits
+          : prior.album_artist_credits;
+        const normalizedBeforeCredits = beforeCredits.length > 0
+          ? comparableArtistCredits(beforeCredits)
+          : comparableArtistCredits(legacyCreditForDisplay(beforeDisplay));
+        const normalizedAfterCredits = comparableArtistCredits(plan.credits);
+        if (JSON.stringify(normalizedBeforeCredits) === JSON.stringify(normalizedAfterCredits)) {
+          continue;
+        }
+        const change = changes[plan.displayKey] ?? {
+          before: beforeDisplay,
+          after: plan.displayText,
+        };
+        change.beforeCredits = normalizedBeforeCredits;
+        change.afterCredits = normalizedAfterCredits;
+        changes[plan.displayKey] = change;
+      }
       if (Object.keys(changes).length) {
         historyInsert.run(id, changedAt, String(source || "user"), JSON.stringify(changes));
       }
@@ -371,10 +519,37 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
     const placeholders = trackIds.map(() => "?").join(", ");
     db.prepare(`UPDATE tracks SET ${set}, updated_at = ? WHERE id IN (${placeholders})`)
       .run(...entries.map(([, value]) => value), Math.floor(Date.now() / 1000), ...trackIds);
-    for (const id of trackIds) refreshSearchText(db, id);
+    for (const id of trackIds) {
+      for (const plan of creditPlans) {
+        if (!plan.displayText.trim() || plan.credits.length === 0) {
+          db.prepare(`
+            DELETE FROM track_artist_credit_sets
+            WHERE track_id = ? AND scope = ?
+          `).run(id, plan.scope);
+          continue;
+        }
+        replaceTrackArtistCredits(db, {
+          trackId: id,
+          scope: plan.scope,
+          displayText: plan.displayText,
+          credits: plan.credits,
+          provenance: String(source || "user"),
+          confidence: 100,
+          needsReview: false,
+        });
+      }
+      refreshSearchText(db, id);
+    }
   });
   updateDatabase();
 
+  const fileUpdates = { ...normalizedUpdates };
+  if (hasOwn(normalizedUpdates, "artists")) {
+    fileUpdates.albumArtist = normalizedUpdates.artists;
+  }
+  for (const plan of creditPlans) {
+    fileUpdates[plan.creditsKey] = plan.credits;
+  }
   const sourceQuery = db.prepare("SELECT source_path FROM tracks WHERE id = ?");
   const errorUpdate = db.prepare("UPDATE tracks SET last_write_error = ? WHERE id = ?");
   let filesWritten = 0;
@@ -384,7 +559,7 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
     if (!storedSourcePath) continue;
     const sourcePath = resolveTrackPath(dbPath, storedSourcePath);
     try {
-      await writeMetadataToFile(sourcePath, updates);
+      await writeMetadataToFile(sourcePath, fileUpdates);
       errorUpdate.run(null, id);
       filesWritten += 1;
     } catch (error) {
@@ -525,10 +700,13 @@ export const createBackend = ({
       };
     },
 
-    load_tracks: ({ dbPath, libraryRoot }) => loadTracks(dbPath, libraryRoot),
+    load_tracks: ({ dbPath, libraryRoot, artistSeparatorExceptions }) =>
+      loadTracks(dbPath, libraryRoot, artistSeparatorExceptions),
     load_playlists: ({ dbPath, libraryRoot }) => loadPlaylists(dbPath, libraryRoot),
-    load_recently_played: ({ dbPath, limit, libraryRoot }) =>
-      loadRecentlyPlayed(dbPath, limit, libraryRoot),
+    load_recently_played: ({ dbPath, limit, libraryRoot, artistSeparatorExceptions }) =>
+      loadRecentlyPlayed(dbPath, limit, libraryRoot, artistSeparatorExceptions),
+    migrate_artist_credits: ({ dbPath, artistSeparatorExceptions }) =>
+      migrateStructuredArtistCredits(dbPath, artistSeparatorExceptions),
     create_library_backup: ({ dbPath, destinationPath, settingsJson, smartCratesJson }) =>
       createLibraryBackup({ dbPath, destinationPath, settingsJson, smartCratesJson }),
     restore_library_backup: ({ dbPath, archivePath }) =>
@@ -539,8 +717,19 @@ export const createBackend = ({
       }),
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
-    get_artist_profile: ({ dbPath, artistName, force, fanartApiKey, lastFmApiKey, theAudioDbApiKey }) =>
+    get_artist_profile: ({
+      dbPath,
+      artistName,
+      artistId,
+      musicBrainzId,
+      force,
+      fanartApiKey,
+      lastFmApiKey,
+      theAudioDbApiKey,
+    }) =>
       artistProfiles.getProfile(openDatabase(dbPath), artistName, {
+        artistId,
+        musicBrainzId,
         force: Boolean(force),
         fanartApiKey,
         lastFmApiKey,
@@ -549,19 +738,26 @@ export const createBackend = ({
     search_artist_images: ({
       dbPath,
       artistName,
+      artistId,
+      musicBrainzId,
       braveSearchApiKey,
       fanartApiKey,
       lastFmApiKey,
       theAudioDbApiKey,
     }) =>
       artistProfiles.searchImages(openDatabase(dbPath), artistName, {
+        artistId,
+        musicBrainzId,
         braveSearchApiKey,
         fanartApiKey,
         lastFmApiKey,
         theAudioDbApiKey,
       }),
-    set_artist_image: ({ dbPath, artistName, candidate }) =>
-      artistProfiles.setImage(openDatabase(dbPath), artistName, candidate),
+    set_artist_image: ({ dbPath, artistName, artistId, musicBrainzId, candidate }) =>
+      artistProfiles.setImage(openDatabase(dbPath), artistName, candidate, {
+        artistId,
+        musicBrainzId,
+      }),
     scan_artist_profiles: ({ dbPath, fanartApiKey, lastFmApiKey, theAudioDbApiKey, limit }) =>
       artistProfiles.scanProfiles(openDatabase(dbPath), {
         fanartApiKey,
@@ -971,10 +1167,18 @@ export const createBackend = ({
       if (!allowedUpdates[field] || !Object.hasOwn(changes, field)) {
         throw new Error("That field is not part of this metadata change");
       }
+      const change = changes[field];
+      const rollbackUpdates = { [field]: change.before };
+      if (field === "artist" && Array.isArray(change.beforeCredits)) {
+        rollbackUpdates.artistCredits = change.beforeCredits;
+      }
+      if ((field === "artists" || field === "albumArtist") && Array.isArray(change.beforeCredits)) {
+        rollbackUpdates.albumArtistCredits = change.beforeCredits;
+      }
       return updateTrackMetadata(
         dbPath,
         [String(row.track_id)],
-        { [field]: changes[field].before },
+        rollbackUpdates,
         "rollback",
       );
     },

@@ -4,6 +4,10 @@ import { DatabaseZap, LoaderCircle, SearchX } from "lucide-react";
 import { t } from "../../i18n";
 import type { Track, TrackMetadataUpdates } from "../../types";
 import type { MetadataSearchCandidate } from "../../utils/database";
+import {
+  albumArtistDisplay,
+  coerceArtistCredits,
+} from "../../utils/artistCredits";
 
 type MetadataSearchModalProps = {
   track: Track | null;
@@ -77,7 +81,7 @@ export const MetadataSearchModal = ({
     const values: Array<Omit<MetadataFieldRow, "current" | "proposed" | "changed"> & { currentValue: string | number | null }> = [
       { key: "title", label: t("edit.field.title"), currentValue: track.title, value: selected.title || null },
       { key: "artist", label: t("edit.field.artist"), currentValue: track.artist, value: selected.artist || null },
-      { key: "artists", label: t("edit.field.albumArtist"), currentValue: track.artists || track.artist, value: selected.albumArtist || null },
+      { key: "artists", label: t("edit.field.albumArtist"), currentValue: albumArtistDisplay(track), value: selected.albumArtist || null },
       { key: "album", label: t("edit.field.album"), currentValue: track.album, value: selected.album || null },
       { key: "year", label: t("edit.field.year"), currentValue: track.year ?? null, value: selected.year },
       { key: "genre", label: t("edit.field.genre"), currentValue: track.genre ?? null, value: selected.genre },
@@ -108,7 +112,22 @@ export const MetadataSearchModal = ({
     for (const row of fieldRows) {
       if (!selectedFields.has(row.key) || row.value === null) continue;
       if (row.key === "year") updates.year = Number(row.value);
-      else updates[row.key] = String(row.value);
+      else if (row.key === "artist") {
+        updates.artist = String(row.value);
+        updates.artistCredits = coerceArtistCredits(
+          selected.artistCredits,
+          String(row.value),
+        );
+      } else if (row.key === "artists") {
+        updates.albumArtist = String(row.value);
+        updates.artists = String(row.value);
+        updates.albumArtistCredits = coerceArtistCredits(
+          selected.albumArtistCredits,
+          String(row.value),
+        );
+      } else {
+        updates[row.key] = String(row.value);
+      }
     }
     setIsApplying(true);
     try {

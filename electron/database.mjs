@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -9,8 +10,123 @@ import {
 } from "./libraryPaths.mjs";
 
 const connections = new Map();
-const SEARCH_TEXT_VERSION = 2;
+const SEARCH_TEXT_VERSION = 3;
 const LIBRARY_ROOT_METADATA_KEY = "library_root";
+const ARTIST_CREDIT_MIGRATION_METADATA_KEY = "artist_credit_migration_v1";
+const ARTIST_CREDIT_SCOPES = new Set(["track", "album"]);
+const LEGACY_ARTIST_SEPARATOR_PATTERN = /\s*,\s*|\s+&\s+|\s+feat\.?\s+/giu;
+
+export const normalizeArtistName = (value) => String(value ?? "")
+  .normalize("NFKC")
+  .trim()
+  .replace(/\s+/g, " ")
+  .toLocaleLowerCase();
+
+const canonicalArtistName = (value) => String(value ?? "")
+  .normalize("NFKC")
+  .trim()
+  .replace(/\s+/g, " ");
+
+const escapeRegularExpression = (value) =>
+  String(value).replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
+
+const protectedArtistExceptionRanges = (displayText, exceptions) => {
+  const ranges = [];
+  const unique = [...new Set(
+    Array.from(exceptions ?? [], (exception) => String(exception ?? "").trim())
+      .filter(Boolean),
+  )].sort((left, right) => right.length - left.length);
+
+  for (const exception of unique) {
+    const flexiblePattern = exception
+      .split(/\s+/u)
+      .map(escapeRegularExpression)
+      .join("\\s+");
+    const matcher = new RegExp(flexiblePattern, "giu");
+    let match;
+    while ((match = matcher.exec(displayText)) !== null) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+      if (match[0].length === 0) matcher.lastIndex += 1;
+    }
+  }
+  return ranges;
+};
+
+/**
+ * Recover ordered credits from a legacy display string without changing a
+ * single display character. Exceptions are atomic names: an exact normalized
+ * match disables splitting, while an occurrence inside a larger credit string
+ * protects only that substring.
+ */
+export const parseLegacyArtistCredits = (displayText, exceptions = []) => {
+  const display = String(displayText ?? "");
+  if (!display.trim()) return [];
+
+  const exceptionKeys = new Set(
+    Array.from(exceptions ?? [], normalizeArtistName).filter(Boolean),
+  );
+  if (exceptionKeys.has(normalizeArtistName(display))) {
+    return [{
+      name: canonicalArtistName(display),
+      creditedName: display,
+      joinPhrase: "",
+    }];
+  }
+
+  const protectedRanges = protectedArtistExceptionRanges(display, exceptions);
+  const separators = [];
+  LEGACY_ARTIST_SEPARATOR_PATTERN.lastIndex = 0;
+  let match;
+  while ((match = LEGACY_ARTIST_SEPARATOR_PATTERN.exec(display)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (!protectedRanges.some((range) => start < range.end && end > range.start)) {
+      separators.push({ start, end, text: match[0] });
+    }
+  }
+
+  if (separators.length === 0) {
+    return [{
+      name: canonicalArtistName(display),
+      creditedName: display,
+      joinPhrase: "",
+    }];
+  }
+
+  const credits = [];
+  let cursor = 0;
+  for (const separator of separators) {
+    const creditedName = display.slice(cursor, separator.start);
+    if (!creditedName.trim()) {
+      return [{
+        name: canonicalArtistName(display),
+        creditedName: display,
+        joinPhrase: "",
+      }];
+    }
+    credits.push({
+      name: canonicalArtistName(creditedName),
+      creditedName,
+      joinPhrase: separator.text,
+    });
+    cursor = separator.end;
+  }
+
+  const creditedName = display.slice(cursor);
+  if (!creditedName.trim()) {
+    return [{
+      name: canonicalArtistName(display),
+      creditedName: display,
+      joinPhrase: "",
+    }];
+  }
+  credits.push({
+    name: canonicalArtistName(creditedName),
+    creditedName,
+    joinPhrase: "",
+  });
+  return credits;
+};
 
 const TRACK_SCHEMA = `
   CREATE TABLE IF NOT EXISTS tracks (
@@ -116,6 +232,73 @@ const ARTIST_PROFILE_SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS artist_profiles_fetched_at_idx
     ON artist_profiles(fetched_at DESC);
+`;
+
+const ARTIST_CREDIT_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS artist_entities (
+    id TEXT PRIMARY KEY
+      CHECK(
+        length(id) = 36
+        AND substr(id, 9, 1) = '-'
+        AND substr(id, 14, 1) = '-'
+        AND substr(id, 19, 1) = '-'
+        AND substr(id, 24, 1) = '-'
+        AND id NOT GLOB '*[^0-9A-Fa-f-]*'
+      ),
+    canonical_name TEXT NOT NULL CHECK(length(trim(canonical_name)) > 0),
+    normalized_name TEXT NOT NULL CHECK(length(trim(normalized_name)) > 0),
+    musicbrainz_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS artist_entities_normalized_name_idx
+    ON artist_entities(normalized_name);
+  CREATE UNIQUE INDEX IF NOT EXISTS artist_entities_musicbrainz_id_uidx
+    ON artist_entities(musicbrainz_id COLLATE NOCASE)
+    WHERE musicbrainz_id IS NOT NULL AND trim(musicbrainz_id) <> '';
+
+  CREATE TABLE IF NOT EXISTS track_artist_credit_sets (
+    track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL CHECK(scope IN ('track', 'album')),
+    display_text TEXT NOT NULL,
+    provenance TEXT NOT NULL,
+    confidence INTEGER NOT NULL CHECK(confidence BETWEEN 0 AND 100),
+    needs_review INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0, 1)),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY(track_id, scope)
+  ) WITHOUT ROWID;
+
+  CREATE TABLE IF NOT EXISTS track_artist_credits (
+    track_id TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK(scope IN ('track', 'album')),
+    position INTEGER NOT NULL CHECK(position >= 0),
+    artist_id TEXT NOT NULL REFERENCES artist_entities(id) ON DELETE RESTRICT,
+    credited_name TEXT NOT NULL CHECK(length(trim(credited_name)) > 0),
+    join_phrase TEXT NOT NULL DEFAULT '',
+    role TEXT CHECK(role IS NULL OR length(trim(role)) > 0),
+    PRIMARY KEY(track_id, scope, position),
+    FOREIGN KEY(track_id, scope)
+      REFERENCES track_artist_credit_sets(track_id, scope) ON DELETE CASCADE
+  ) WITHOUT ROWID;
+  CREATE INDEX IF NOT EXISTS track_artist_credits_artist_idx
+    ON track_artist_credits(artist_id, scope, track_id);
+
+  CREATE TRIGGER IF NOT EXISTS tracks_artist_credits_invalidate
+  AFTER UPDATE OF artist ON tracks
+  WHEN OLD.artist IS NOT NEW.artist
+  BEGIN
+    DELETE FROM track_artist_credit_sets
+    WHERE track_id = NEW.id AND scope = 'track';
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS tracks_album_artist_credits_invalidate
+  AFTER UPDATE OF album_artist ON tracks
+  WHEN OLD.album_artist IS NOT NEW.album_artist
+  BEGIN
+    DELETE FROM track_artist_credit_sets
+    WHERE track_id = NEW.id AND scope = 'album';
+  END;
 `;
 
 const ALBUM_COVER_CACHE_SCHEMA = `
@@ -303,6 +486,7 @@ export const openDatabase = (dbPath) => {
   db.exec(ALBUM_COVER_CACHE_SCHEMA);
   db.exec(ACOUSTID_CACHE_SCHEMA);
   db.exec(HISTORY_SCHEMA);
+  db.exec(ARTIST_CREDIT_SCHEMA);
   const playlistColumns = new Set(
     db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
   );
@@ -409,6 +593,511 @@ export const openDatabase = (dbPath) => {
 
   connections.set(resolved, db);
   return db;
+};
+
+const musicBrainzArtistId = (value) => {
+  const candidate = String(value ?? "").trim();
+  return candidate || null;
+};
+
+const creditValue = (credit, ...keys) => {
+  for (const key of keys) {
+    if (credit?.[key] !== undefined && credit[key] !== null) return credit[key];
+  }
+  return undefined;
+};
+
+const normalizedCreditInput = (credit) => {
+  const raw = typeof credit === "string" ? { creditedName: credit } : credit;
+  if (!raw || typeof raw !== "object") {
+    throw new TypeError("Artist credits must be strings or objects");
+  }
+  const creditedName = String(
+    creditValue(raw, "creditedName", "credited_name", "name", "canonicalName", "canonical_name")
+      ?? "",
+  );
+  const canonicalName = canonicalArtistName(
+    creditValue(raw, "name", "canonicalName", "canonical_name") ?? creditedName,
+  );
+  if (!creditedName.trim() || !canonicalName) {
+    throw new Error("Artist credits require a non-empty name");
+  }
+  const joinPhrase = String(creditValue(raw, "joinPhrase", "join_phrase") ?? "");
+  const roleValue = creditValue(raw, "role");
+  const role = roleValue == null || !String(roleValue).trim()
+    ? null
+    : String(roleValue).trim();
+  return {
+    artistId: String(creditValue(raw, "artistId", "artist_id") ?? "").trim() || null,
+    canonicalName,
+    normalizedName: normalizeArtistName(canonicalName),
+    creditedName,
+    joinPhrase,
+    role,
+    musicBrainzId: musicBrainzArtistId(
+      creditValue(raw, "musicBrainzId", "musicbrainzId", "musicbrainz_id"),
+    ),
+  };
+};
+
+const ensureArtistEntity = (db, credit, timestamp) => {
+  let row;
+  let matchedByMusicBrainzId = false;
+  if (credit.musicBrainzId) {
+    row = db.prepare(`
+      SELECT id, canonical_name, normalized_name, musicbrainz_id
+      FROM artist_entities
+      WHERE musicbrainz_id = ? COLLATE NOCASE
+      LIMIT 1
+    `).get(credit.musicBrainzId);
+    matchedByMusicBrainzId = Boolean(row);
+  }
+  if (!row && credit.artistId) {
+    row = db.prepare(`
+      SELECT id, canonical_name, normalized_name, musicbrainz_id
+      FROM artist_entities
+      WHERE id = ?
+    `).get(credit.artistId);
+    const storedMusicBrainzId = musicBrainzArtistId(row?.musicbrainz_id);
+    if (
+      row
+      && credit.musicBrainzId
+      && storedMusicBrainzId
+      && storedMusicBrainzId.toLocaleLowerCase()
+        !== credit.musicBrainzId.toLocaleLowerCase()
+    ) {
+      row = undefined;
+    }
+  }
+  if (!row) {
+    row = credit.musicBrainzId
+      ? db.prepare(`
+          SELECT id, canonical_name, normalized_name, musicbrainz_id
+          FROM artist_entities
+          WHERE normalized_name = ?
+            AND (musicbrainz_id IS NULL OR trim(musicbrainz_id) = '')
+          ORDER BY created_at, id
+          LIMIT 1
+        `).get(credit.normalizedName)
+      : db.prepare(`
+          SELECT id, canonical_name, normalized_name, musicbrainz_id
+          FROM artist_entities
+          WHERE normalized_name = ?
+            AND (musicbrainz_id IS NULL OR trim(musicbrainz_id) = '')
+          ORDER BY created_at, id
+          LIMIT 1
+        `).get(credit.normalizedName);
+  }
+
+  if (row) {
+    const hasDistinctCanonicalName = credit.canonicalName
+      !== canonicalArtistName(credit.creditedName);
+    if (
+      matchedByMusicBrainzId
+      && hasDistinctCanonicalName
+      && (
+        row.canonical_name !== credit.canonicalName
+        || row.normalized_name !== credit.normalizedName
+      )
+    ) {
+      db.prepare(`
+        UPDATE artist_entities
+        SET canonical_name = ?, normalized_name = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        credit.canonicalName,
+        credit.normalizedName,
+        timestamp,
+        row.id,
+      );
+      row.canonical_name = credit.canonicalName;
+      row.normalized_name = credit.normalizedName;
+    }
+    if (credit.musicBrainzId && !musicBrainzArtistId(row.musicbrainz_id)) {
+      db.prepare(`
+        UPDATE artist_entities
+        SET musicbrainz_id = ?, updated_at = ?
+        WHERE id = ?
+      `).run(credit.musicBrainzId, timestamp, row.id);
+      row.musicbrainz_id = credit.musicBrainzId;
+    }
+    return row;
+  }
+
+  const id = randomUUID();
+  db.prepare(`
+    INSERT INTO artist_entities(
+      id, canonical_name, normalized_name, musicbrainz_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    credit.canonicalName,
+    credit.normalizedName,
+    credit.musicBrainzId,
+    timestamp,
+    timestamp,
+  );
+  return {
+    id,
+    canonical_name: credit.canonicalName,
+    normalized_name: credit.normalizedName,
+    musicbrainz_id: credit.musicBrainzId,
+  };
+};
+
+/**
+ * Atomically replace one track- or album-artist credit set. The caller keeps
+ * the legacy scalar authoritative by updating tracks.artist/album_artist
+ * first; the invalidation triggers clear stale sets before this replacement.
+ */
+export const replaceTrackArtistCredits = (
+  db,
+  {
+    trackId,
+    scope,
+    displayText,
+    credits,
+    provenance = "user",
+    confidence = 100,
+    needsReview = false,
+  },
+) => {
+  const normalizedTrackId = String(trackId ?? "").trim();
+  const normalizedScope = String(scope ?? "").trim();
+  const display = String(displayText ?? "");
+  if (!normalizedTrackId) throw new Error("Artist credits require a track id");
+  if (!ARTIST_CREDIT_SCOPES.has(normalizedScope)) {
+    throw new Error("Artist credit scope must be track or album");
+  }
+  if (!display.trim()) throw new Error("Artist credits require display text");
+
+  const normalizedCredits = (Array.isArray(credits) ? credits : [])
+    .map(normalizedCreditInput);
+  if (normalizedCredits.length === 0) {
+    throw new Error("Artist credit sets require at least one credit");
+  }
+  const rendered = normalizedCredits
+    .map((credit) => credit.creditedName + credit.joinPhrase)
+    .join("");
+  if (rendered !== display) {
+    throw new Error("Artist credit names and join phrases must reproduce display text exactly");
+  }
+
+  const numericConfidence = Number(confidence);
+  const boundedConfidence = Number.isFinite(numericConfidence)
+    ? Math.max(0, Math.min(100, Math.round(numericConfidence)))
+    : 100;
+  const normalizedProvenance = String(provenance ?? "").trim() || "user";
+
+  const replace = () => {
+    if (!db.prepare("SELECT 1 FROM tracks WHERE id = ?").get(normalizedTrackId)) {
+      throw new Error("Artist credit track was not found");
+    }
+    const timestamp = Math.floor(Date.now() / 1000);
+    const entities = normalizedCredits.map((credit) => ({
+      credit,
+      entity: ensureArtistEntity(db, credit, timestamp),
+    }));
+    db.prepare(`
+      DELETE FROM track_artist_credits
+      WHERE track_id = ? AND scope = ?
+    `).run(normalizedTrackId, normalizedScope);
+    db.prepare(`
+      INSERT INTO track_artist_credit_sets(
+        track_id, scope, display_text, provenance, confidence, needs_review,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(track_id, scope) DO UPDATE SET
+        display_text = excluded.display_text,
+        provenance = excluded.provenance,
+        confidence = excluded.confidence,
+        needs_review = excluded.needs_review,
+        updated_at = excluded.updated_at
+    `).run(
+      normalizedTrackId,
+      normalizedScope,
+      display,
+      normalizedProvenance,
+      boundedConfidence,
+      needsReview ? 1 : 0,
+      timestamp,
+      timestamp,
+    );
+    const insert = db.prepare(`
+      INSERT INTO track_artist_credits(
+        track_id, scope, position, artist_id, credited_name, join_phrase, role
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    entities.forEach(({ credit, entity }, position) => {
+      insert.run(
+        normalizedTrackId,
+        normalizedScope,
+        position,
+        entity.id,
+        credit.creditedName,
+        credit.joinPhrase,
+        credit.role,
+      );
+    });
+    refreshSearchText(db, normalizedTrackId);
+    return {
+      trackId: normalizedTrackId,
+      scope: normalizedScope,
+      displayText: display,
+      provenance: normalizedProvenance,
+      confidence: boundedConfidence,
+      needsReview: Boolean(needsReview),
+      credits: entities.map(({ credit, entity }) => ({
+        artistId: String(entity.id),
+        name: String(entity.canonical_name),
+        creditedName: credit.creditedName,
+        joinPhrase: credit.joinPhrase,
+        ...(entity.musicbrainz_id
+          ? { musicBrainzId: String(entity.musicbrainz_id) }
+          : {}),
+        ...(credit.role ? { role: credit.role } : {}),
+      })),
+    };
+  };
+  return db.inTransaction ? replace() : db.transaction(replace)();
+};
+
+const artistCreditRows = (db, trackIds) => {
+  const baseQuery = `
+    SELECT
+      credit_sets.track_id,
+      credit_sets.scope,
+      credits.position,
+      credits.artist_id,
+      credits.credited_name,
+      credits.join_phrase,
+      credits.role,
+      entities.canonical_name,
+      entities.musicbrainz_id
+    FROM track_artist_credit_sets AS credit_sets
+    JOIN tracks
+      ON tracks.id = credit_sets.track_id
+    JOIN track_artist_credits AS credits
+      ON credits.track_id = credit_sets.track_id
+      AND credits.scope = credit_sets.scope
+    JOIN artist_entities AS entities
+      ON entities.id = credits.artist_id
+    WHERE credit_sets.display_text = CASE credit_sets.scope
+      WHEN 'track' THEN tracks.artist
+      ELSE tracks.album_artist
+    END
+  `;
+  if (trackIds === undefined) {
+    return db.prepare(baseQuery + `
+      ORDER BY credit_sets.track_id, credit_sets.scope, credits.position
+    `).all();
+  }
+
+  const ids = [...new Set(
+    (Array.isArray(trackIds) ? trackIds : [trackIds])
+      .map((trackId) => String(trackId ?? "").trim())
+      .filter(Boolean),
+  )];
+  if (ids.length === 0) return [];
+  const rows = [];
+  for (let offset = 0; offset < ids.length; offset += 500) {
+    const chunk = ids.slice(offset, offset + 500);
+    const placeholders = chunk.map(() => "?").join(", ");
+    rows.push(...db.prepare(
+      baseQuery
+      + " AND credit_sets.track_id IN (" + placeholders + ")"
+      + " ORDER BY credit_sets.track_id, credit_sets.scope, credits.position",
+    ).all(...chunk));
+  }
+  return rows;
+};
+
+/**
+ * Return hydrated renderer DTO arrays keyed by track id.
+ */
+export const loadArtistCredits = (db, trackIds) => {
+  const byTrack = new Map();
+  for (const row of artistCreditRows(db, trackIds)) {
+    const trackId = String(row.track_id);
+    const payload = byTrack.get(trackId) ?? {
+      artist_credits: [],
+      album_artist_credits: [],
+    };
+    const credit = {
+      artistId: String(row.artist_id),
+      name: String(row.canonical_name),
+      creditedName: String(row.credited_name),
+      joinPhrase: String(row.join_phrase ?? ""),
+      ...(row.musicbrainz_id
+        ? { musicBrainzId: String(row.musicbrainz_id) }
+        : {}),
+      ...(row.role ? { role: String(row.role) } : {}),
+    };
+    if (row.scope === "album") payload.album_artist_credits.push(credit);
+    else payload.artist_credits.push(credit);
+    byTrack.set(trackId, payload);
+  }
+  return byTrack;
+};
+
+/**
+ * Idempotently populate missing or stale structured sets from legacy scalar
+ * metadata. The original display string is always retained byte-for-byte.
+ */
+export const ensureStructuredArtistCredits = (
+  dbPath,
+  exceptions = [],
+  { overrideExactExceptions = false } = {},
+) => {
+  const db = openDatabase(dbPath);
+  const exceptionList = Array.from(exceptions ?? [], (value) => String(value ?? ""))
+    .filter((value) => value.trim());
+  const existingSets = new Map();
+  for (const row of db.prepare(`
+    SELECT
+      credit_sets.track_id,
+      credit_sets.scope,
+      credit_sets.display_text,
+      credit_sets.provenance,
+      credits.position,
+      credits.credited_name,
+      credits.join_phrase
+    FROM track_artist_credit_sets AS credit_sets
+    LEFT JOIN track_artist_credits AS credits
+      ON credits.track_id = credit_sets.track_id
+      AND credits.scope = credit_sets.scope
+    ORDER BY credit_sets.track_id, credit_sets.scope, credits.position
+  `).all()) {
+    const key = String(row.track_id) + "\0" + String(row.scope);
+    const set = existingSets.get(key) ?? {
+      displayText: String(row.display_text),
+      provenance: String(row.provenance),
+      credits: [],
+    };
+    if (row.position != null) {
+      set.credits.push({
+        creditedName: String(row.credited_name),
+        joinPhrase: String(row.join_phrase ?? ""),
+      });
+    }
+    existingSets.set(key, set);
+  }
+  const tracks = db.prepare(`
+    SELECT
+      id,
+      artist,
+      album_artist,
+      musicbrainz_artistid,
+      musicbrainz_albumartistid
+    FROM tracks
+  `).all();
+  const result = {
+    tracksChecked: tracks.length,
+    setsCreated: 0,
+    setsReplaced: 0,
+    creditsCreated: 0,
+  };
+
+  const populate = () => {
+    for (const track of tracks) {
+      const candidates = [
+        ["track", track.artist, track.musicbrainz_artistid],
+        ["album", track.album_artist, track.musicbrainz_albumartistid],
+      ];
+      for (const [scope, rawDisplay, legacyMusicBrainzId] of candidates) {
+        const displayText = String(rawDisplay ?? "");
+        if (!displayText.trim()) continue;
+        const key = String(track.id) + "\0" + scope;
+        const credits = parseLegacyArtistCredits(displayText, exceptionList);
+        const exactException = exceptionList.some(
+          (exception) => normalizeArtistName(exception) === normalizeArtistName(displayText),
+        );
+        const existingSet = existingSets.get(key);
+        const sameParsedCredits = existingSet
+          && existingSet.credits.length === credits.length
+          && existingSet.credits.every((credit, index) => (
+            credit.creditedName === credits[index].creditedName
+            && credit.joinPhrase === credits[index].joinPhrase
+          ));
+        if (
+          existingSet
+          && (
+            (existingSet.provenance !== "legacy"
+              && !(overrideExactExceptions && exactException))
+            || (
+              existingSet.displayText === displayText
+              && sameParsedCredits
+            )
+          )
+        ) {
+          continue;
+        }
+        if (credits.length === 1) {
+          const id = musicBrainzArtistId(legacyMusicBrainzId);
+          if (id) credits[0].musicBrainzId = id;
+        }
+        replaceTrackArtistCredits(db, {
+          trackId: String(track.id),
+          scope,
+          displayText,
+          credits,
+          provenance: "legacy",
+          confidence: credits.length > 1 ? 75 : 100,
+          needsReview: credits.length > 1,
+        });
+        if (existingSet === undefined) result.setsCreated += 1;
+        else result.setsReplaced += 1;
+        result.creditsCreated += credits.length;
+        existingSets.set(key, {
+          displayText,
+          provenance: "legacy",
+          credits: credits.map((credit) => ({
+            creditedName: credit.creditedName,
+            joinPhrase: credit.joinPhrase,
+          })),
+        });
+      }
+    }
+  };
+  if (db.inTransaction) populate();
+  else db.transaction(populate)();
+  return result;
+};
+
+/**
+ * Run the legacy-credit migration only for a new database or changed exception
+ * set. This avoids a persistent whole-library write during ordinary loads while
+ * still giving existing libraries durable artist identities after upgrade.
+ */
+export const migrateStructuredArtistCredits = (dbPath, exceptions = []) => {
+  const db = openDatabase(dbPath);
+  const migrationState = JSON.stringify({
+    version: 1,
+    exceptions: [...new Set(
+      Array.from(exceptions ?? [], normalizeArtistName).filter(Boolean),
+    )].sort(),
+  });
+  const storedState = db.prepare(
+    "SELECT value FROM app_metadata WHERE key = ?",
+  ).get(ARTIST_CREDIT_MIGRATION_METADATA_KEY)?.value;
+  if (storedState === migrationState) {
+    return {
+      skipped: true,
+      tracksChecked: 0,
+      setsCreated: 0,
+      setsReplaced: 0,
+      creditsCreated: 0,
+    };
+  }
+
+  const result = ensureStructuredArtistCredits(dbPath, exceptions, {
+    overrideExactExceptions: true,
+  });
+  db.prepare(`
+    INSERT INTO app_metadata(key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(ARTIST_CREDIT_MIGRATION_METADATA_KEY, migrationState);
+  return { skipped: false, ...result };
 };
 
 export const getLibraryRoot = (dbPath) => {
@@ -575,6 +1264,10 @@ export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   id: String(row.id),
   title: row.title || "Unknown Title",
   artist: row.artist || "Unknown Artist",
+  artist_credits: Array.isArray(row.artist_credits) ? row.artist_credits : [],
+  album_artist: row.album_artist || undefined,
+  album_artist_credits:
+    Array.isArray(row.album_artist_credits) ? row.album_artist_credits : [],
   artists: row.album_artist || undefined,
   album: row.album || "Unknown Album",
   track_number: row.track_number ?? undefined,
@@ -633,32 +1326,79 @@ const TRACK_SELECT = `
     import_status, move_to_watched_folder_on_accept, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
     comment_json, label, disc_number, disc_total, beat_grid_json,
-    musicbrainz_trackid, musicbrainz_albumid, musicbrainz_releasegroupid, acoustid_id,
+    musicbrainz_trackid, musicbrainz_albumid, musicbrainz_artistid,
+    musicbrainz_albumartistid, musicbrainz_releasegroupid, acoustid_id,
     loudness_lufs, replaygain_track_gain_db, replaygain_track_peak,
     replaygain_album_gain_db, replaygain_album_peak, loudness_source,
     is_missing
   FROM tracks`;
 
-export const loadTracks = (dbPath, libraryRoot) => {
+const legacyCreditPayload = (displayText, exceptions, legacyMusicBrainzId) => {
+  const parsed = parseLegacyArtistCredits(displayText, exceptions);
+  const onlyMusicBrainzId = parsed.length === 1
+    ? musicBrainzArtistId(legacyMusicBrainzId)
+    : null;
+  return parsed.map((credit) => ({
+    artistId: "legacy:" + normalizeArtistName(credit.name),
+    name: credit.name,
+    creditedName: credit.creditedName,
+    joinPhrase: credit.joinPhrase,
+    ...(onlyMusicBrainzId ? { musicBrainzId: onlyMusicBrainzId } : {}),
+  }));
+};
+
+const hydratedArtistCreditPayload = (row, structured, exceptions) => ({
+  artist_credits: structured?.artist_credits?.length
+    ? structured.artist_credits
+    : legacyCreditPayload(row.artist || "Unknown Artist", exceptions, row.musicbrainz_artistid),
+  album_artist_credits: structured?.album_artist_credits?.length
+    ? structured.album_artist_credits
+    : legacyCreditPayload(row.album_artist, exceptions, row.musicbrainz_albumartistid),
+});
+
+export const loadTracks = (dbPath, libraryRoot, artistSeparatorExceptions = []) => {
   if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
-  const rows = openDatabase(dbPath)
+  const db = openDatabase(dbPath);
+  const rows = db
     .prepare(`${TRACK_SELECT} ORDER BY added_at DESC`)
     .all();
+  const creditsByTrack = loadArtistCredits(db, rows.map((row) => row.id));
   const snapshot = { library: [], inbox: [] };
   for (const row of rows) {
     (row.import_status === "staged" ? snapshot.inbox : snapshot.library).push(
-      rowToTrack(row, { dbPath, libraryRoot })
+      rowToTrack({
+        ...row,
+        ...hydratedArtistCreditPayload(
+          row,
+          creditsByTrack.get(String(row.id)),
+          artistSeparatorExceptions,
+        ),
+      }, { dbPath, libraryRoot })
     );
   }
   return snapshot;
 };
 
-export const loadRecentlyPlayed = (dbPath, limit = 50, libraryRoot) => {
+export const loadRecentlyPlayed = (
+  dbPath,
+  limit = 50,
+  libraryRoot,
+  artistSeparatorExceptions = [],
+) => {
   if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
-  return openDatabase(dbPath)
+  const db = openDatabase(dbPath);
+  const rows = db
     .prepare(`${TRACK_SELECT} WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?`)
-    .all(Math.max(0, Number(limit) || 0))
-    .map((row) => rowToTrack(row, { dbPath, libraryRoot }));
+    .all(Math.max(0, Number(limit) || 0));
+  const creditsByTrack = loadArtistCredits(db, rows.map((row) => row.id));
+  return rows.map((row) => rowToTrack({
+    ...row,
+    ...hydratedArtistCreditPayload(
+      row,
+      creditsByTrack.get(String(row.id)),
+      artistSeparatorExceptions,
+    ),
+  }, { dbPath, libraryRoot }));
 };
 
 export const loadPlaylists = (dbPath, libraryRoot) => {
@@ -737,8 +1477,14 @@ export const refreshSearchText = (db, trackId) => {
   const parse = (raw) => {
     try { return JSON.parse(raw || "[]"); } catch { return []; }
   };
+  const structuredCredits = loadArtistCredits(db, [trackId]).get(String(trackId));
+  const individualArtistNames = [
+    ...(structuredCredits?.artist_credits ?? []),
+    ...(structuredCredits?.album_artist_credits ?? []),
+  ].flatMap((credit) => [credit.name, credit.creditedName]);
   const searchText = normalizeSearchText(
     row.title, row.artist, row.album, row.album_artist,
+    individualArtistNames,
     parse(row.genre_json), parse(row.comment_json), row.label, row.filename,
     row.year, row.track_number, row.disc_number, row.key, row.bpm
   );

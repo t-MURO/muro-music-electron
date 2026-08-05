@@ -2,6 +2,10 @@ import type { Track } from "../../types";
 
 const ARTIST_SEPARATOR_PATTERN = /\s+(?:&|feat\.?)\s+/gi;
 
+const explicitAlbumArtistDisplay = (track: Track) => (
+  track.albumArtist?.trim() ? track.albumArtist : track.artists ?? ""
+);
+
 export const artistSeparatorExceptionKey = (artist: string): string =>
   String(artist ?? "")
     .normalize("NFKC")
@@ -51,7 +55,7 @@ export const findArtistSeparatorCandidates = (
       });
     }
 
-    const albumArtist = track.artists?.trim();
+    const albumArtist = explicitAlbumArtistDisplay(track).trim();
     const proposedAlbumArtist = albumArtist
       ? proposeCommaSeparatedArtists(albumArtist)
       : null;

@@ -1,4 +1,5 @@
 import type { ColumnConfig, Track } from "../types";
+import { explicitAlbumArtistDisplay } from "./artistCredits";
 
 /**
  * Gets a sortable value from a track based on the column key.
@@ -24,7 +25,7 @@ export const getSortableValue = (
     case "bpm":
       return track.bpm ?? null;
     case "artists":
-      return track.artists ?? null;
+      return explicitAlbumArtistDisplay(track) || null;
     case "key":
       return track.key ?? null;
     case "format": {

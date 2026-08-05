@@ -90,8 +90,55 @@ const cachedProfileNeedsRefresh = (
     || nowMs - cached.fetchedAtMs >= ttlMs;
 };
 
-const findStoredMusicBrainzId = (db, artistName) => {
-  const row = db.prepare(`
+const requestedMusicBrainzId = ({ artistId = "", musicBrainzId = "" } = {}) => {
+  const explicit = String(musicBrainzId ?? "").match(MUSICBRAINZ_ID)?.[0];
+  if (explicit) return explicit;
+  const identity = String(artistId ?? "");
+  return identity.startsWith("mbid:")
+    ? identity.slice("mbid:".length).match(MUSICBRAINZ_ID)?.[0] ?? null
+    : null;
+};
+
+const artistProfileKey = (artistName, identity = {}) => {
+  const musicBrainzId = requestedMusicBrainzId(identity);
+  if (musicBrainzId) return `mbid:${musicBrainzId.toLocaleLowerCase()}`;
+  const artistId = String(identity?.artistId ?? "").trim();
+  if (artistId && !artistId.startsWith("legacy:")) return artistId;
+  return normalizeArtistKey(artistName);
+};
+
+const findStoredMusicBrainzId = (db, artistName, identity = {}) => {
+  const explicit = requestedMusicBrainzId(identity);
+  if (explicit) return explicit;
+  const localArtistId = String(identity?.artistId ?? "").trim();
+  if (localArtistId && !localArtistId.includes(":")) {
+    const localEntity = db.prepare(`
+      SELECT musicbrainz_id
+      FROM artist_entities
+      WHERE id = ?
+        AND musicbrainz_id IS NOT NULL
+        AND TRIM(musicbrainz_id) != ''
+      LIMIT 1
+    `).get(localArtistId);
+    const localId = String(localEntity?.musicbrainz_id ?? "").match(MUSICBRAINZ_ID)?.[0];
+    if (localId) return localId;
+  }
+  const artistKey = normalizeArtistKey(artistName);
+  const structured = db.prepare(`
+    SELECT entities.musicbrainz_id
+    FROM artist_entities AS entities
+    JOIN track_artist_credits AS credits
+      ON credits.artist_id = entities.id
+    WHERE entities.normalized_name = ?
+      AND entities.musicbrainz_id IS NOT NULL
+      AND TRIM(entities.musicbrainz_id) != ''
+    ORDER BY credits.scope = 'track' DESC, credits.position
+    LIMIT 1
+  `).get(artistKey);
+  const structuredId = String(structured?.musicbrainz_id ?? "").match(MUSICBRAINZ_ID)?.[0];
+  if (structuredId) return structuredId;
+
+  const legacy = db.prepare(`
     SELECT musicbrainz_artistid
     FROM tracks
     WHERE LOWER(TRIM(artist)) = LOWER(TRIM(?))
@@ -99,7 +146,7 @@ const findStoredMusicBrainzId = (db, artistName) => {
       AND musicbrainz_artistid != ''
     LIMIT 1
   `).get(artistName);
-  return String(row?.musicbrainz_artistid ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null;
+  return String(legacy?.musicbrainz_artistid ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null;
 };
 
 const artistScore = (artist) => Number(artist?.score ?? 0);
@@ -795,9 +842,18 @@ export const createArtistProfileService = ({
     db,
     requestedName,
     artistKey,
-    { fanartApiKey = "", lastFmApiKey = "", theAudioDbApiKey = "" } = {},
+    {
+      artistId = "",
+      musicBrainzId: suppliedMusicBrainzId = "",
+      fanartApiKey = "",
+      lastFmApiKey = "",
+      theAudioDbApiKey = "",
+    } = {},
   ) => {
-    let musicBrainzId = findStoredMusicBrainzId(db, requestedName);
+    let musicBrainzId = findStoredMusicBrainzId(db, requestedName, {
+      artistId,
+      musicBrainzId: suppliedMusicBrainzId,
+    });
     if (!musicBrainzId) {
       const searchUrl = new URL("https://musicbrainz.org/ws/2/artist/");
       searchUrl.search = new URLSearchParams({
@@ -1005,10 +1061,17 @@ export const createArtistProfileService = ({
   const getProfile = async (
     db,
     artistName,
-    { force = false, fanartApiKey = "", lastFmApiKey = "", theAudioDbApiKey = "" } = {},
+    {
+      force = false,
+      artistId = "",
+      musicBrainzId = "",
+      fanartApiKey = "",
+      lastFmApiKey = "",
+      theAudioDbApiKey = "",
+    } = {},
   ) => {
     const requestedName = String(artistName ?? "").trim();
-    const artistKey = normalizeArtistKey(requestedName);
+    const artistKey = artistProfileKey(requestedName, { artistId, musicBrainzId });
     if (!artistKey) throw new Error("Artist name is required");
 
     const cached = readCachedProfile(db, artistKey);
@@ -1030,6 +1093,8 @@ export const createArtistProfileService = ({
     const pending = (async () => {
       try {
         const fetchedProfile = await fetchProfile(db, requestedName, artistKey, {
+          artistId,
+          musicBrainzId,
           fanartApiKey,
           lastFmApiKey,
           theAudioDbApiKey,
@@ -1054,6 +1119,8 @@ export const createArtistProfileService = ({
     db,
     artistName,
     {
+      artistId = "",
+      musicBrainzId = "",
       braveSearchApiKey = "",
       fanartApiKey = "",
       lastFmApiKey = "",
@@ -1065,6 +1132,8 @@ export const createArtistProfileService = ({
     let profileError = null;
     try {
       profile = await getProfile(db, requestedName, {
+        artistId,
+        musicBrainzId,
         fanartApiKey,
         lastFmApiKey,
         theAudioDbApiKey,
@@ -1163,9 +1232,9 @@ export const createArtistProfileService = ({
       ));
   };
 
-  const setImage = async (db, artistName, candidate) => {
+  const setImage = async (db, artistName, candidate, identity = {}) => {
     const requestedName = String(artistName ?? "").trim();
-    const artistKey = normalizeArtistKey(requestedName);
+    const artistKey = artistProfileKey(requestedName, identity);
     if (!artistKey) throw new Error("Artist name is required");
     const cached = readCachedProfile(db, artistKey);
     if (!cached?.profile) {
@@ -1217,17 +1286,45 @@ export const createArtistProfileService = ({
   ) => {
     if (scanInFlight.has(db)) return scanInFlight.get(db);
     const pending = (async () => {
-      const artistRows = db.prepare(`
-        SELECT artist, MAX(COALESCE(added_at, 0)) AS newest_track
-        FROM tracks
-        WHERE artist IS NOT NULL AND TRIM(artist) != ''
-        GROUP BY LOWER(TRIM(artist))
-        ORDER BY newest_track DESC, artist COLLATE NOCASE
-      `).all();
+      const artistRows = [
+        ...db.prepare(`
+          SELECT
+            entities.canonical_name AS artist,
+            entities.normalized_name AS artist_key,
+            MAX(COALESCE(tracks.added_at, 0)) AS newest_track
+          FROM artist_entities AS entities
+          JOIN track_artist_credits AS credits
+            ON credits.artist_id = entities.id
+            AND credits.scope = 'track'
+          JOIN tracks
+            ON tracks.id = credits.track_id
+          GROUP BY entities.id
+        `).all(),
+        ...db.prepare(`
+          SELECT
+            tracks.artist,
+            LOWER(TRIM(tracks.artist)) AS artist_key,
+            MAX(COALESCE(tracks.added_at, 0)) AS newest_track
+          FROM tracks
+          WHERE tracks.artist IS NOT NULL
+            AND TRIM(tracks.artist) != ''
+            AND NOT EXISTS (
+              SELECT 1
+              FROM track_artist_credit_sets AS credit_sets
+              WHERE credit_sets.track_id = tracks.id
+                AND credit_sets.scope = 'track'
+                AND credit_sets.display_text = tracks.artist
+            )
+          GROUP BY LOWER(TRIM(tracks.artist))
+        `).all(),
+      ].sort((left, right) => (
+        Number(right.newest_track ?? 0) - Number(left.newest_track ?? 0)
+        || String(left.artist ?? "").localeCompare(String(right.artist ?? ""))
+      ));
       const seen = new Set();
       const artists = artistRows.flatMap((row) => {
         const name = String(row.artist ?? "").trim();
-        const artistKey = normalizeArtistKey(name);
+        const artistKey = normalizeArtistKey(row.artist_key || name);
         if (!artistKey || seen.has(artistKey)) return [];
         seen.add(artistKey);
         return [{ name, artistKey }];

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ArtistImageCandidate, ArtistProfile } from "../types";
 import {
+  artistIdentityKey,
+  type ArtistTarget,
+} from "../utils/artistCredits";
+import {
   getArtistProfile,
   loadCachedArtistProfiles,
   scanArtistProfiles,
@@ -79,8 +83,14 @@ export const useArtistProfiles = () => {
     };
   }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
-  const loadProfile = useCallback(async (artistName: string, force = false) => {
-    const artistKey = normalizeArtistProfileKey(artistName);
+  const loadProfile = useCallback(async (
+    artistName: string,
+    force = false,
+    identity?: ArtistTarget,
+  ) => {
+    const artistKey = identity
+      ? artistIdentityKey(identity)
+      : normalizeArtistProfileKey(artistName);
     if (!artistKey) return null;
     setLoadingKeys((current) => new Set(current).add(artistKey));
     setErrors((current) => {
@@ -94,6 +104,9 @@ export const useArtistProfiles = () => {
         fanartApiKey,
         lastFmApiKey,
         theAudioDbApiKey,
+      }, {
+        artistId: identity?.artistId,
+        musicBrainzId: identity?.musicBrainzId,
       });
       setProfiles((current) => ({ ...current, [artistKey]: profile }));
       return profile;
@@ -112,20 +125,32 @@ export const useArtistProfiles = () => {
     }
   }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
-  const searchImages = useCallback(async (artistName: string) => {
+  const searchImages = useCallback(async (artistName: string, identity?: ArtistTarget) => {
     const dbPath = await resolveDbPath();
     return searchArtistImages(dbPath, artistName, {
       braveSearchApiKey,
       fanartApiKey,
       lastFmApiKey,
       theAudioDbApiKey,
+    }, {
+      artistId: identity?.artistId,
+      musicBrainzId: identity?.musicBrainzId,
     });
   }, [braveSearchApiKey, fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
 
-  const selectImage = useCallback(async (artistName: string, candidate: ArtistImageCandidate) => {
-    const artistKey = normalizeArtistProfileKey(artistName);
+  const selectImage = useCallback(async (
+    artistName: string,
+    candidate: ArtistImageCandidate,
+    identity?: ArtistTarget,
+  ) => {
+    const artistKey = identity
+      ? artistIdentityKey(identity)
+      : normalizeArtistProfileKey(artistName);
     const dbPath = await resolveDbPath();
-    const profile = await setArtistImage(dbPath, artistName, candidate);
+    const profile = await setArtistImage(dbPath, artistName, candidate, {
+      artistId: identity?.artistId,
+      musicBrainzId: identity?.musicBrainzId,
+    });
     setProfiles((current) => ({ ...current, [artistKey]: profile }));
     return profile;
   }, [resolveDbPath]);

@@ -1,4 +1,5 @@
 export type {
+  ArtistCredit,
   Track,
   TrackMetadataUpdates,
   Playlist,

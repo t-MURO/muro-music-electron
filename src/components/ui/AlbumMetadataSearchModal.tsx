@@ -7,6 +7,10 @@ import type {
   AlbumMetadataRelease,
   AlbumMetadataTrack,
 } from "../../utils/database";
+import {
+  albumArtistDisplay,
+  coerceArtistCredits,
+} from "../../utils/artistCredits";
 
 type AlbumFieldKey =
   | "album" | "artists" | "year" | "label" | "genre"
@@ -138,12 +142,25 @@ export const AlbumMetadataSearchModal = ({
       if (!remote || !selectedTrackIds.has(local.id)) return [];
       const values: TrackMetadataUpdates = {};
       if (selectedFields.has("album")) values.album = release.title;
-      if (selectedFields.has("artists")) values.artists = release.artist;
+      if (selectedFields.has("artists")) {
+        values.albumArtist = release.artist;
+        values.artists = release.artist;
+        values.albumArtistCredits = coerceArtistCredits(
+          release.albumArtistCredits ?? release.artistCredits,
+          release.artist,
+        );
+      }
       if (selectedFields.has("year") && release.year) values.year = release.year;
       if (selectedFields.has("label") && release.label) values.label = release.label;
       if (selectedFields.has("genre") && release.genre) values.genre = release.genre;
       if (selectedFields.has("title")) values.title = remote.title;
-      if (selectedFields.has("artist")) values.artist = remote.artist;
+      if (selectedFields.has("artist")) {
+        values.artist = remote.artist;
+        values.artistCredits = coerceArtistCredits(
+          remote.artistCredits,
+          remote.artist,
+        );
+      }
       if (selectedFields.has("trackNumber")) values.trackNumber = remote.trackNumber;
       if (selectedFields.has("trackTotal")) values.trackTotal = remote.trackTotal;
       if (selectedFields.has("discNumber")) values.discNumber = remote.discNumber;
@@ -172,7 +189,7 @@ export const AlbumMetadataSearchModal = ({
       <div className="modal-panel-animate flex max-h-[88vh] w-full max-w-[920px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] shadow-[var(--shadow-lg)]" onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start gap-3 border-b border-[var(--color-border)] p-5">
           <Disc3 className="mt-0.5 h-5 w-5 text-[var(--color-accent)]" />
-          <div><h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Search for album metadata</h2><p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{first.artists || first.artist} — {first.album} · {tracks.length} tracks</p></div>
+          <div><h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">Search for album metadata</h2><p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{albumArtistDisplay(first)} — {first.album} · {tracks.length} tracks</p></div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -197,7 +214,7 @@ export const AlbumMetadataSearchModal = ({
                       {FIELD_LABELS.map((field) => <label key={field.key} className="flex cursor-pointer items-center gap-1.5 text-[10px] text-[var(--color-text-secondary)]"><input type="checkbox" checked={selectedFields.has(field.key)} onChange={(event) => setSelectedFields((current) => { const next = new Set(current); if (event.target.checked) next.add(field.key); else next.delete(field.key); return next; })} data-album-metadata-field={field.key} />{field.label}</label>)}
                     </div>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 border-t border-[var(--color-border-light)] px-3 py-2 text-[9px] text-[var(--color-text-muted)] md:grid-cols-4">
-                      <span>Album: <strong className="text-[var(--color-text-secondary)]">{first.album} → {release.title}</strong></span><span>Artist: <strong className="text-[var(--color-text-secondary)]">{first.artists || first.artist} → {release.artist}</strong></span><span>Year: <strong className="text-[var(--color-text-secondary)]">{first.year ?? "—"} → {release.year ?? "—"}</strong></span><span>Label: <strong className="text-[var(--color-text-secondary)]">{first.label ?? "—"} → {release.label ?? "—"}</strong></span>
+                      <span>Album: <strong className="text-[var(--color-text-secondary)]">{first.album} → {release.title}</strong></span><span>Artist: <strong className="text-[var(--color-text-secondary)]">{albumArtistDisplay(first)} → {release.artist}</strong></span><span>Year: <strong className="text-[var(--color-text-secondary)]">{first.year ?? "—"} → {release.year ?? "—"}</strong></span><span>Label: <strong className="text-[var(--color-text-secondary)]">{first.label ?? "—"} → {release.label ?? "—"}</strong></span>
                     </div>
                   </section>
 

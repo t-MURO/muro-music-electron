@@ -1,4 +1,5 @@
 import type { Track } from "../types";
+import { albumArtistDisplay } from "./artistCredits";
 
 export type Album = {
   id: string;
@@ -16,7 +17,7 @@ export type Album = {
 const normalize = (value: string) => value.trim().toLocaleLowerCase();
 
 const getAlbumArtist = (track: Track) =>
-  track.artists?.trim() || track.artist.trim() || "Unknown artist";
+  albumArtistDisplay(track).trim() || "Unknown artist";
 
 const compareAlbumTracks = (left: Track, right: Track) => {
   const leftDisc = left.discNumber ?? 1;

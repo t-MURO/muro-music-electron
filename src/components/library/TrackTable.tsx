@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import type { ColumnConfig, Track } from "../../types";
+import type { ArtistTarget } from "../../utils/artistCredits";
 import { TableHeader } from "./TableHeader";
 import { TableEmptyState } from "./TableEmptyState";
 import { TableRow } from "./TableRow";
@@ -33,7 +34,7 @@ type TrackTableProps = {
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
   onTogglePlay?: () => void;
-  onOpenArtist?: (artist: string) => void;
+  onOpenArtist?: (artist: ArtistTarget) => void;
   onOpenAlbum?: (trackId: string) => void;
   onAlbumContextMenu?: (event: React.MouseEvent, trackId: string) => void;
   onColumnResize: (key: ColumnConfig["key"], width: number) => void;

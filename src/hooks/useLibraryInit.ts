@@ -6,8 +6,9 @@ import {
   backfillSearchText,
   clearTracks,
   loadPlaylists,
-  loadRecentlyPlayed,
-  loadTracks,
+    loadRecentlyPlayed,
+    loadTracks,
+    migrateArtistCredits,
   importedTrackToTrack,
   scanTechnicalMetadata,
 } from "../utils";
@@ -30,6 +31,7 @@ export const useLibraryInit = () => {
   const dbFileName = useSettingsStore((s) => s.dbFileName);
   const useAutoDbPath = useSettingsStore((s) => s.useAutoDbPath);
   const libraryRoot = useSettingsStore((s) => s.watchedFolders[0]);
+  const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
 
   const resolveDbPath = useDbPath();
 
@@ -73,10 +75,11 @@ export const useLibraryInit = () => {
     const loadLibrary = async () => {
       try {
         const resolvedPath = await resolveDbPath();
+        await migrateArtistCredits(resolvedPath, artistSeparatorExceptions);
         const [snapshot, playlistSnapshot, recentlyPlayedSnapshot] = await Promise.all([
-          loadTracks(resolvedPath, libraryRoot),
+          loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions),
           loadPlaylists(resolvedPath, libraryRoot),
-          loadRecentlyPlayed(resolvedPath, 50, libraryRoot),
+          loadRecentlyPlayed(resolvedPath, 50, libraryRoot, artistSeparatorExceptions),
         ]);
         if (!isMounted) {
           return;
@@ -114,6 +117,7 @@ export const useLibraryInit = () => {
       isMounted = false;
     };
   }, [
+    artistSeparatorExceptions,
     libraryRoot,
     resolveDbPath,
     setTracks,
@@ -135,7 +139,7 @@ export const useLibraryInit = () => {
         const result = await scanTechnicalMetadata(resolvedPath, TECHNICAL_SCAN_BATCH_SIZE);
         if (cancelled) return;
         if (result.updated > 0) {
-          const snapshot = await loadTracks(resolvedPath, libraryRoot);
+          const snapshot = await loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions);
           if (cancelled) return;
           setTracks(snapshot.library.map(importedTrackToTrack));
           setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
@@ -150,7 +154,7 @@ export const useLibraryInit = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [libraryRoot, resolveDbPath, setInboxTracks, setTracks]);
+  }, [artistSeparatorExceptions, libraryRoot, resolveDbPath, setInboxTracks, setTracks]);
 
   // Backfill handlers
   const handleBackfillSearchText = useCallback(async () => {
@@ -186,7 +190,7 @@ export const useLibraryInit = () => {
       setCoverArtBackfillStatus(`Rebuilt high-resolution cover art for ${updated} tracks.`);
       // Reload tracks to get the new cover art paths
       const resolvedPath = await resolveDbPath();
-      const snapshot = await loadTracks(resolvedPath, libraryRoot);
+      const snapshot = await loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions);
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch (error) {
@@ -196,7 +200,7 @@ export const useLibraryInit = () => {
     } finally {
       setCoverArtBackfillPending(false);
     }
-  }, [dbPath, libraryRoot, resolveDbPath, setTracks, setInboxTracks]);
+  }, [artistSeparatorExceptions, dbPath, libraryRoot, resolveDbPath, setTracks, setInboxTracks]);
 
   // Clear songs handler
   const handleClearSongs = useCallback(async () => {

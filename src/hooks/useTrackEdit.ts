@@ -18,6 +18,7 @@ import {
 } from "../utils/database";
 import { useDbPath } from "./useDbPath";
 import type { AlbumCoverCandidate } from "../types";
+import { albumArtistDisplay } from "../utils/artistCredits";
 
 type MetadataWriteResult = {
   updated: number;
@@ -138,7 +139,7 @@ export const useTrackEdit = () => {
       if (!first) return Promise.resolve([]);
       return searchAlbumMetadata({
         album: first.album,
-        artist: first.artists || first.artist,
+        artist: albumArtistDisplay(first),
       });
     },
     [],

@@ -1,5 +1,5 @@
 import { invoke } from "@muro/desktop/runtime";
-import type { Track } from "../types";
+import type { ArtistCredit, Track } from "../types";
 import { BEAT_GRID_VERSION, type BeatGrid } from "../lib/beatgrid/types";
 
 // ============================================================================
@@ -10,6 +10,9 @@ export type ImportedTrack = {
   id: string;
   title: string;
   artist: string;
+  artist_credits?: ArtistCredit[];
+  album_artist?: string;
+  album_artist_credits?: ArtistCredit[];
   artists?: string;
   album: string;
   track_number?: number;
@@ -159,7 +162,10 @@ export const importedTrackToTrack = (imported: ImportedTrack): Track => ({
   id: imported.id,
   title: imported.title,
   artist: imported.artist,
-  artists: imported.artists,
+  artistCredits: imported.artist_credits ?? [],
+  albumArtist: imported.album_artist ?? imported.artists,
+  albumArtistCredits: imported.album_artist_credits ?? [],
+  artists: imported.album_artist ?? imported.artists,
   album: imported.album,
   trackNumber: imported.track_number,
   trackTotal: imported.track_total,

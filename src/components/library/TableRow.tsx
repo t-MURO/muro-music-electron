@@ -3,7 +3,14 @@ import { Circle, FileWarning, Music2, Play } from "lucide-react";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import { t } from "../../i18n";
 import type { ColumnConfig, Track } from "../../types";
+import {
+  albumArtistCredits,
+  explicitAlbumArtistDisplay,
+  trackArtistCredits,
+  type ArtistTarget,
+} from "../../utils/artistCredits";
 import { getCamelotColor } from "../../utils/camelot";
+import { ArtistCreditLinks } from "./ArtistCreditLinks";
 import { RatingCell } from "./RatingCell";
 
 type TableRowProps = {
@@ -31,7 +38,7 @@ type TableRowProps = {
     isSelected: boolean
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
-  onOpenArtist?: (artist: string) => void;
+  onOpenArtist?: (artist: ArtistTarget) => void;
   onOpenAlbum?: (trackId: string) => void;
   onAlbumContextMenu?: (event: React.MouseEvent, trackId: string) => void;
   onRatingChange: (id: string, rating: number) => void;
@@ -48,7 +55,7 @@ const formatFileSize = (bytes: number) => {
 const getColumnDisplayValue = (track: Track, key: ColumnConfig["key"]) => {
   switch (key) {
     case "artists":
-      return track.artists ?? "";
+      return explicitAlbumArtistDisplay(track);
     case "trackNumber":
       return track.trackNumber === undefined || track.trackNumber === null
         ? ""
@@ -234,7 +241,9 @@ export const TableRow = memo(
           const numericClass = column.key === "bpm" || column.key === "duration" || column.key === "bitrate" || column.key === "discNumber" || column.key === "playCount" || column.key === "sampleRate" || column.key === "bitDepth" || column.key === "fileSize" ? "tabular-nums" : "";
           const camelotColor = column.key === "key" ? getCamelotColor(value) : null;
           const keyClass = column.key === "key" && value && !camelotColor ? "font-semibold text-[var(--color-accent)]" : "";
-          const isArtistLink = column.key === "artist" && Boolean(value) && Boolean(onOpenArtist);
+          const isArtistLink = (
+            column.key === "artist" || column.key === "artists"
+          ) && Boolean(value) && Boolean(onOpenArtist);
           const isAlbumLink = column.key === "album" && Boolean(value) && Boolean(onOpenAlbum);
           return (
             <div
@@ -273,22 +282,26 @@ export const TableRow = memo(
                 >
                   {value.trim()}
                 </span>
-              ) : isArtistLink || isAlbumLink ? (
+              ) : isArtistLink ? (
+                <ArtistCreditLinks
+                  display={value}
+                  credits={column.key === "artist"
+                    ? trackArtistCredits(track)
+                    : albumArtistCredits(track, { fallbackToTrack: false })}
+                  kind={column.key === "artists" ? "album" : "track"}
+                  onOpenArtist={onOpenArtist!}
+                />
+              ) : isAlbumLink ? (
                 <button
                   type="button"
                   className="min-w-0 max-w-full truncate text-left transition-colors hover:text-[var(--color-accent)] hover:underline focus-visible:text-[var(--color-accent)] focus-visible:underline focus-visible:outline-none"
-                  title={isArtistLink ? `Open artist ${value}` : `Open album ${value}`}
+                  title={`Open album ${value}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (isArtistLink) {
-                      onOpenArtist?.(track.artist);
-                    } else {
-                      onOpenAlbum?.(track.id);
-                    }
+                    onOpenAlbum?.(track.id);
                   }}
                   onDoubleClick={(event) => event.stopPropagation()}
-                  data-track-artist-link={isArtistLink ? "true" : undefined}
-                  data-track-album-link={isAlbumLink ? "true" : undefined}
+                  data-track-album-link="true"
                 >
                   {value}
                 </button>

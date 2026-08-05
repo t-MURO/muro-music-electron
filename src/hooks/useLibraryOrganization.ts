@@ -18,6 +18,9 @@ export type LibraryStructureRepairOutcome = {
 
 export const useLibraryOrganization = () => {
   const libraryRoot = useSettingsStore((state) => state.watchedFolders[0] ?? "");
+  const artistSeparatorExceptions = useSettingsStore(
+    (state) => state.artistSeparatorExceptions,
+  );
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const resolveDbPath = useDbPath();
@@ -33,13 +36,17 @@ export const useLibraryOrganization = () => {
 
   const reloadLibrary = useCallback(async (dbPath: string) => {
     try {
-      const snapshot = await loadTracks(dbPath, libraryRoot);
+      const snapshot = await loadTracks(
+        dbPath,
+        libraryRoot,
+        artistSeparatorExceptions,
+      );
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch {
       // The next normal library refresh will pick up the repaired paths.
     }
-  }, [libraryRoot, setInboxTracks, setTracks]);
+  }, [artistSeparatorExceptions, libraryRoot, setInboxTracks, setTracks]);
 
   const validate = useCallback(async () => {
     if (!libraryRoot) {

@@ -6,6 +6,7 @@ import path from "node:path";
 import { TagLib } from "taglib-wasm";
 import { closeDatabase } from "../electron/database.mjs";
 import {
+  artistMetadataFromCommon,
   importAudioFile,
   normalizedRatingFromStars,
   readRatingFromFile,
@@ -98,8 +99,188 @@ try {
     reopened.dispose();
   }
 
+  const completeArtistCredits = [{
+    artistId: "44444444-4444-4444-8444-444444444444",
+    name: "Artist One",
+    creditedName: "Artist One",
+    joinPhrase: " feat. ",
+    musicBrainzId: "11111111-1111-4111-8111-111111111111",
+  }, {
+    artistId: "55555555-5555-4555-8555-555555555555",
+    name: "Artist Two",
+    creditedName: "Artist Two",
+    joinPhrase: " & ",
+    musicBrainzId: "22222222-2222-4222-8222-222222222222",
+  }, {
+    artistId: "66666666-6666-4666-8666-666666666666",
+    name: "Artist Three",
+    creditedName: "Artist Three",
+    joinPhrase: "",
+    musicBrainzId: "77777777-7777-4777-8777-777777777777",
+  }];
+  const completeAlbumArtistCredits = [{
+    name: "Album Artist",
+    creditedName: "Album Artist",
+    joinPhrase: "",
+    musicBrainzId: "33333333-3333-4333-8333-333333333333",
+  }];
+  await writeMetadataToFile(mp3Path, {
+    artist: "Artist One feat. Artist Two & Artist Three",
+    artistCredits: completeArtistCredits,
+    albumArtist: "Album Artist",
+    albumArtistCredits: completeAlbumArtistCredits,
+  });
+  const creditedFile = await taglib.open(mp3Path);
+  try {
+    const properties = creditedFile.properties();
+    assert.deepEqual(properties.artist, ["Artist One feat. Artist Two & Artist Three"]);
+    assert.deepEqual(properties.ARTISTS, ["Artist One", "Artist Two", "Artist Three"]);
+    assert.deepEqual(properties.musicbrainzArtistId, [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      "77777777-7777-4777-8777-777777777777",
+    ]);
+    assert.deepEqual(properties.albumArtist, ["Album Artist"]);
+    assert.deepEqual(properties.ALBUMARTISTS, ["Album Artist"]);
+    assert.deepEqual(properties.musicbrainzReleaseArtistId, [
+      "33333333-3333-4333-8333-333333333333",
+    ]);
+  } finally {
+    creditedFile.dispose();
+  }
+
+  const partialArtistCredits = [{
+    artistId: "88888888-8888-4888-8888-888888888888",
+    name: "Track Artist Without ID",
+    creditedName: "Track Artist Without ID",
+    joinPhrase: " with ",
+  }, {
+    artistId: "99999999-9999-4999-8999-999999999999",
+    name: "Track Artist With ID",
+    creditedName: "Track Artist With ID",
+    joinPhrase: "",
+    musicBrainzId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  }];
+  const partialAlbumArtistCredits = [{
+    artistId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    name: "Album Artist Without ID",
+    creditedName: "Album Artist Without ID",
+    joinPhrase: " & ",
+  }, {
+    artistId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    name: "Album Artist With ID",
+    creditedName: "Album Artist With ID",
+    joinPhrase: "",
+    musicBrainzId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  }];
+  const partialArtistDisplay = "Track Artist Without ID with Track Artist With ID";
+  const partialAlbumArtistDisplay = "Album Artist Without ID & Album Artist With ID";
+  await writeMetadataToFile(mp3Path, {
+    artist: partialArtistDisplay,
+    artistCredits: partialArtistCredits,
+    albumArtist: partialAlbumArtistDisplay,
+    albumArtistCredits: partialAlbumArtistCredits,
+  });
+  const partialCreditFile = await taglib.open(mp3Path);
+  try {
+    const properties = partialCreditFile.properties();
+    assert.deepEqual(properties.artist, [partialArtistDisplay]);
+    assert.deepEqual(properties.ARTISTS, [
+      "Track Artist Without ID",
+      "Track Artist With ID",
+    ]);
+    assert.deepEqual(properties.musicbrainzArtistId ?? [], []);
+    assert.deepEqual(properties.albumArtist, [partialAlbumArtistDisplay]);
+    assert.deepEqual(properties.ALBUMARTISTS, [
+      "Album Artist Without ID",
+      "Album Artist With ID",
+    ]);
+    assert.deepEqual(properties.musicbrainzReleaseArtistId ?? [], []);
+  } finally {
+    partialCreditFile.dispose();
+  }
+
+  const mismatchedCommon = artistMetadataFromCommon({
+    artist: partialArtistDisplay,
+    artists: ["Track Artist Without ID", "Track Artist With ID"],
+    musicbrainz_artistid: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+    albumartist: partialAlbumArtistDisplay,
+    albumartists: ["Album Artist Without ID", "Album Artist With ID"],
+    musicbrainz_albumartistid: ["dddddddd-dddd-4ddd-8ddd-dddddddddddd"],
+  });
+  assert.deepEqual(mismatchedCommon.artistMusicbrainzIds, [
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  ]);
+  assert.deepEqual(mismatchedCommon.albumArtistMusicbrainzIds, [
+    "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  ]);
+  assert.equal(mismatchedCommon.artistCredits.some((credit) => credit.musicBrainzId), false);
+  assert.equal(
+    mismatchedCommon.albumArtistCredits.some((credit) => credit.musicBrainzId),
+    false,
+  );
+  const inconsistentCommon = artistMetadataFromCommon({
+    artist: "  Exact Track Artist feat. Alias  ",
+    artists: ["Exact Track Artist", "Different Track Artist"],
+    musicbrainz_artistid: [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+    ],
+    albumartist: "  Exact Album Artist & Alias  ",
+    albumartists: ["Exact Album Artist", "Different Album Artist"],
+    musicbrainz_albumartistid: [
+      "33333333-3333-4333-8333-333333333333",
+      "44444444-4444-4444-8444-444444444444",
+    ],
+  });
+  assert.equal(inconsistentCommon.artist, "  Exact Track Artist feat. Alias  ");
+  assert.deepEqual(inconsistentCommon.artistCredits, [{
+    name: "Exact Track Artist feat. Alias",
+    creditedName: "  Exact Track Artist feat. Alias  ",
+    joinPhrase: "",
+  }]);
+  assert.equal(inconsistentCommon.albumArtist, "  Exact Album Artist & Alias  ");
+  assert.deepEqual(inconsistentCommon.albumArtistCredits, [{
+    name: "Exact Album Artist & Alias",
+    creditedName: "  Exact Album Artist & Alias  ",
+    joinPhrase: "",
+  }]);
+  const scalarCommon = artistMetadataFromCommon({
+    artist: "Solo Track Artist",
+    musicbrainz_artistid: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    albumartist: "Solo Album Artist",
+    musicbrainz_albumartistid: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  });
+  assert.equal(
+    scalarCommon.artistCredits[0]?.musicBrainzId,
+    "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  );
+  assert.equal(
+    scalarCommon.albumArtistCredits[0]?.musicBrainzId,
+    "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  );
+
   const imported = await importAudioFile(dbPath, mp3Path, path.join(directory, "covers"));
   assert.equal(imported.rating, 5, "new imports should read TagLib's cross-format rating");
+  assert.equal(imported.artist, partialArtistDisplay);
+  assert.equal(imported.artists, partialAlbumArtistDisplay);
+  const withoutEntityIds = (credits) => credits.map(({ artistId, ...credit }) => {
+    assert.match(artistId, /^[0-9a-f-]{36}$/i);
+    return credit;
+  });
+  const withoutInputIds = (credits) => credits.map(({
+    artistId: _artistId,
+    musicBrainzId: _musicBrainzId,
+    ...credit
+  }) => credit);
+  assert.deepEqual(
+    withoutEntityIds(imported.artist_credits),
+    withoutInputIds(partialArtistCredits),
+  );
+  assert.deepEqual(
+    withoutEntityIds(imported.album_artist_credits),
+    withoutInputIds(partialAlbumArtistCredits),
+  );
 
   const expectedPopmValues = [0, 13, 1, 54, 64, 118, 128, 186, 196, 242, 255];
   for (let stars = 0.5; stars <= 5; stars += 0.5) {

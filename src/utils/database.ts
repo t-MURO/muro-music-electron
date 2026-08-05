@@ -1,13 +1,26 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { LibrarySnapshot, PlaylistSnapshot } from "./importApi";
-import type { AlbumCoverCandidate, ArtistImageCandidate, ArtistProfile } from "../types";
+import type {
+  AlbumCoverCandidate,
+  ArtistImageCandidate,
+  ArtistProfile,
+} from "../types";
+import type { ArtistCreditInput } from "./artistCredits";
 
 // ============================================================================
 // Library Operations
 // ============================================================================
 
-export const loadTracks = (dbPath: string, libraryRoot?: string) => {
-  return invoke<LibrarySnapshot>("load_tracks", { dbPath, libraryRoot });
+export const loadTracks = (
+  dbPath: string,
+  libraryRoot?: string,
+  artistSeparatorExceptions?: string[],
+) => {
+  return invoke<LibrarySnapshot>("load_tracks", {
+    dbPath,
+    libraryRoot,
+    artistSeparatorExceptions,
+  });
 };
 
 export const clearTracks = (dbPath: string) => {
@@ -108,14 +121,21 @@ export const updateTrackBeatGrid = (dbPath: string, trackId: string, beatGridJso
 export const loadCachedArtistProfiles = (dbPath: string) =>
   invoke<ArtistProfile[]>("load_cached_artist_profiles", { dbPath });
 
+export type ArtistProfileIdentity = {
+  artistId?: string;
+  musicBrainzId?: string;
+};
+
 export const getArtistProfile = (
   dbPath: string,
   artistName: string,
   force = false,
   providerKeys: ArtistProfileProviderKeys = {},
+  identity: ArtistProfileIdentity = {},
 ) => invoke<ArtistProfile>("get_artist_profile", {
   dbPath,
   artistName,
+  ...identity,
   force,
   ...providerKeys,
 });
@@ -124,9 +144,11 @@ export const searchArtistImages = (
   dbPath: string,
   artistName: string,
   providerKeys: ArtistProfileProviderKeys = {},
+  identity: ArtistProfileIdentity = {},
 ) => invoke<ArtistImageCandidate[]>("search_artist_images", {
   dbPath,
   artistName,
+  ...identity,
   ...providerKeys,
 });
 
@@ -134,7 +156,13 @@ export const setArtistImage = (
   dbPath: string,
   artistName: string,
   candidate: ArtistImageCandidate,
-) => invoke<ArtistProfile>("set_artist_image", { dbPath, artistName, candidate });
+  identity: ArtistProfileIdentity = {},
+) => invoke<ArtistProfile>("set_artist_image", {
+  dbPath,
+  artistName,
+  candidate,
+  ...identity,
+});
 
 export type ArtistProfileProviderKeys = {
   braveSearchApiKey?: string;
@@ -195,8 +223,10 @@ export type MetadataSearchCandidate = {
   releaseGroupId: string | null;
   title: string;
   artist: string;
+  artistCredits?: ArtistCreditInput[];
   album: string;
   albumArtist: string;
+  albumArtistCredits?: ArtistCreditInput[];
   year: number | null;
   country: string | null;
   status: string | null;
@@ -236,6 +266,7 @@ export type AlbumMetadataCandidate = {
   score: number;
   title: string;
   artist: string;
+  artistCredits?: ArtistCreditInput[];
   releaseGroupId: string | null;
   year: number | null;
   country: string | null;
@@ -250,6 +281,7 @@ export type AlbumMetadataTrack = {
   recordingId: string | null;
   title: string;
   artist: string;
+  artistCredits?: ArtistCreditInput[];
   trackNumber: number;
   trackTotal: number;
   discNumber: number;
@@ -260,6 +292,8 @@ export type AlbumMetadataRelease = {
   id: string;
   title: string;
   artist: string;
+  artistCredits?: ArtistCreditInput[];
+  albumArtistCredits?: ArtistCreditInput[];
   releaseGroupId: string | null;
   year: number | null;
   country: string | null;
@@ -641,6 +675,22 @@ export const backfillCoverArt = (dbPath: string) => {
   return invoke<number>("backfill_cover_art", { dbPath });
 };
 
+export type ArtistCreditMigrationResult = {
+  skipped: boolean;
+  tracksChecked: number;
+  setsCreated: number;
+  setsReplaced: number;
+  creditsCreated: number;
+};
+
+export const migrateArtistCredits = (
+  dbPath: string,
+  artistSeparatorExceptions: string[] = [],
+) => invoke<ArtistCreditMigrationResult>("migrate_artist_credits", {
+  dbPath,
+  artistSeparatorExceptions,
+});
+
 // ============================================================================
 // Recently Played Operations
 // ============================================================================
@@ -649,11 +699,13 @@ export const loadRecentlyPlayed = (
   dbPath: string,
   limit: number = 50,
   libraryRoot?: string,
+  artistSeparatorExceptions?: string[],
 ) => {
   return invoke<import("./importApi").ImportedTrack[]>("load_recently_played", {
     dbPath,
     limit,
     libraryRoot,
+    artistSeparatorExceptions,
   });
 };
 

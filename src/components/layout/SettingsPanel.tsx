@@ -357,12 +357,16 @@ export const SettingsPanel = ({
   onUseDefaultLocation,
 }: SettingsPanelProps) => {
   const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
+  const addArtistSeparatorException = useSettingsStore(
+    (s) => s.addArtistSeparatorException,
+  );
   const removeArtistSeparatorException = useSettingsStore(
     (s) => s.removeArtistSeparatorException,
   );
   const clearArtistSeparatorExceptions = useSettingsStore(
     (s) => s.clearArtistSeparatorExceptions,
   );
+  const [artistSeparatorExceptionInput, setArtistSeparatorExceptionInput] = useState("");
   const gaplessEnabled = useSettingsStore((s) => s.gaplessEnabled);
   const crossfadeSeconds = useSettingsStore((s) => s.crossfadeSeconds);
   const replayGainMode = useSettingsStore((s) => s.replayGainMode);
@@ -879,6 +883,37 @@ export const SettingsPanel = ({
                                   artistSeparatorCandidateCount === 1 ? "match" : "matches"
                                 }`}
                           </button>
+                          <form
+                            className="mt-3 flex gap-2"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              const artist = artistSeparatorExceptionInput.trim();
+                              if (!artist) return;
+                              addArtistSeparatorException(artist);
+                              setArtistSeparatorExceptionInput("");
+                            }}
+                          >
+                            <input
+                              className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-[11px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
+                              value={artistSeparatorExceptionInput}
+                              onChange={(event) => setArtistSeparatorExceptionInput(event.target.value)}
+                              placeholder="Exact artist name to keep together"
+                              aria-label="Artist separator exception"
+                              data-artist-separator-exception-input
+                            />
+                            <button
+                              className={secondaryButtonClass}
+                              disabled={!artistSeparatorExceptionInput.trim()}
+                              type="submit"
+                              data-add-artist-separator-exception
+                            >
+                              Add exception
+                            </button>
+                          </form>
+                          <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--color-text-muted)]">
+                            Use an exact exception for one artist name that contains a comma,
+                            &amp;, or “feat.”, such as “Tyler, The Creator”.
+                          </p>
                           {artistSeparatorExceptions.length > 0 && (
                             <div
                               className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-bg-secondary)] p-3"

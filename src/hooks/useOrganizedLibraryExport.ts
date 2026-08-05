@@ -22,6 +22,9 @@ export const useOrganizedLibraryExport = () => {
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const setLibraryRoot = useSettingsStore((state) => state.addWatchedFolder);
+  const artistSeparatorExceptions = useSettingsStore(
+    (state) => state.artistSeparatorExceptions,
+  );
   const pendingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -68,7 +71,11 @@ export const useOrganizedLibraryExport = () => {
       if (result.librarySwitched) {
         try {
           setLibraryRoot(result.exportRoot);
-          const snapshot = await loadTracks(dbPath, result.exportRoot);
+          const snapshot = await loadTracks(
+            dbPath,
+            result.exportRoot,
+            artistSeparatorExceptions,
+          );
           setTracks(snapshot.library.map(importedTrackToTrack));
           setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
         } catch (error) {
@@ -113,7 +120,13 @@ export const useOrganizedLibraryExport = () => {
       pendingRef.current = false;
       setPending(false);
     }
-  }, [resolveDbPath, setInboxTracks, setLibraryRoot, setTracks]);
+  }, [
+    artistSeparatorExceptions,
+    resolveDbPath,
+    setInboxTracks,
+    setLibraryRoot,
+    setTracks,
+  ]);
 
   return {
     organizedLibraryExportPending: pending,

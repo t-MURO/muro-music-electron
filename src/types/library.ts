@@ -1,10 +1,22 @@
 import type { MessageKey } from "../i18n";
 import type { BeatGrid } from "../lib/beatgrid/types";
 
+export type ArtistCredit = {
+  artistId: string;
+  name: string;
+  creditedName: string;
+  joinPhrase: string;
+  musicBrainzId?: string;
+};
+
 export type Track = {
   id: string;
   title: string;
   artist: string;
+  artistCredits: ArtistCredit[];
+  albumArtist?: string;
+  albumArtistCredits: ArtistCredit[];
+  /** @deprecated Use albumArtist. Kept while older desktop payloads remain supported. */
   artists?: string;
   album: string;
   trackNumber?: number;
@@ -53,6 +65,10 @@ export type Track = {
 export type TrackMetadataUpdates = {
   title?: string;
   artist?: string;
+  artistCredits?: ArtistCredit[];
+  albumArtist?: string;
+  albumArtistCredits?: ArtistCredit[];
+  /** @deprecated Use albumArtist. */
   artists?: string;
   album?: string;
   trackNumber?: number;

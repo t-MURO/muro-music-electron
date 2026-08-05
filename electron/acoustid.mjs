@@ -19,10 +19,65 @@ const serviceErrorMessage = (payload, fallback) => {
 };
 const cleanId = (value) => /^[0-9a-f-]{36}$/i.test(cleanText(value)) ? cleanText(value) : null;
 const normalized = (value) => cleanText(value).toLocaleLowerCase();
-const artistCredit = (value) => (Array.isArray(value) ? value : [])
-  .map((artist) => cleanText(artist?.name))
-  .filter(Boolean)
-  .join(", ");
+export const normalizeAcoustIdArtistCredits = (value) => {
+  const source = Array.isArray(value) ? value : [];
+  const credits = source.flatMap((raw) => {
+    if (!raw || typeof raw !== "object") return [];
+    const canonicalName = cleanText(
+      raw?.artist?.name
+      ?? raw.canonicalName
+      ?? raw.canonical_name
+      ?? raw.name,
+    );
+    const creditedName = cleanText(
+      raw.creditedName
+      ?? raw.credited_name
+      ?? raw.name,
+    ) || canonicalName;
+    const name = canonicalName || creditedName;
+    if (!name) return [];
+    const musicBrainzId = cleanId(
+      raw.musicbrainzId
+      ?? raw.musicBrainzId
+      ?? raw.musicbrainz_id
+      ?? raw.artistId
+      ?? raw.artist_id
+      ?? raw.id
+      ?? raw?.artist?.id,
+    );
+    const joinValue = raw.joinPhrase ?? raw.join_phrase ?? raw.joinphrase;
+    return [{
+      name,
+      creditedName,
+      joinPhrase: joinValue == null ? null : String(joinValue),
+      ...(musicBrainzId ? { musicBrainzId } : {}),
+    }];
+  });
+
+  return credits.map((credit, index) => ({
+    ...credit,
+    joinPhrase: credit.joinPhrase ?? (index < credits.length - 1 ? ", " : ""),
+  }));
+};
+
+export const displayAcoustIdArtistCredits = (credits) => (
+  normalizeAcoustIdArtistCredits(credits)
+    .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
+    .join("")
+);
+const embeddedReleaseGroup = (release) => (
+  release?.releasegroup
+  ?? release?.releaseGroup
+  ?? release?.["release-group"]
+  ?? null
+);
+const firstNonEmptyArtistCredits = (...sources) => {
+  for (const source of sources) {
+    const credits = normalizeAcoustIdArtistCredits(source);
+    if (credits.length > 0) return credits;
+  }
+  return [];
+};
 const yearFromDate = (value) => {
   const year = Number(cleanText(value).slice(0, 4));
   return Number.isInteger(year) && year >= 1000 && year <= 9999 ? year : null;
@@ -64,11 +119,21 @@ const candidateFromRelease = ({ result, recording, release, releaseGroup, track 
   const recordingId = cleanId(recording?.id);
   if (!recordingId) return null;
   const releaseId = cleanId(release?.id);
-  const releaseGroupId = cleanId(release?.releasegroup?.id ?? releaseGroup?.id);
+  const nestedReleaseGroup = embeddedReleaseGroup(release);
+  const releaseGroupId = cleanId(nestedReleaseGroup?.id ?? releaseGroup?.id);
   const title = cleanText(recording?.title);
-  const artist = artistCredit(recording?.artists);
+  const artistCredits = normalizeAcoustIdArtistCredits(recording?.artists);
+  const artist = displayAcoustIdArtistCredits(artistCredits);
   const album = cleanText(release?.title ?? releaseGroup?.title);
-  const albumArtist = artistCredit(release?.artists ?? releaseGroup?.artists) || artist;
+  const releaseArtistCredits = firstNonEmptyArtistCredits(
+    release?.artists,
+    nestedReleaseGroup?.artists,
+    releaseGroup?.artists,
+  );
+  const albumArtistCredits = releaseArtistCredits.length > 0
+    ? releaseArtistCredits
+    : artistCredits.map((credit) => ({ ...credit }));
+  const albumArtist = displayAcoustIdArtistCredits(albumArtistCredits) || artist;
   if (!title && !artist) return null;
   return {
     id: `${cleanText(result?.id)}:${recordingId}:${releaseId ?? releaseGroupId ?? "recording"}`,
@@ -79,8 +144,10 @@ const candidateFromRelease = ({ result, recording, release, releaseGroup, track 
     releaseGroupId,
     title,
     artist,
+    artistCredits,
     album,
     albumArtist,
+    albumArtistCredits,
     year: yearFromDate(release?.date ?? releaseGroup?.firstreleasedate),
     country: cleanText(release?.country) || null,
     status: cleanText(release?.status) || null,
@@ -100,7 +167,17 @@ export const parseAcoustIdCandidates = (payload, track = {}) => {
       const releaseGroups = Array.isArray(recording?.releasegroups) ? recording.releasegroups : [];
       if (releases.length > 0) {
         for (const release of releases) {
-          const candidate = candidateFromRelease({ result, recording, release, releaseGroup: null, track });
+          const nestedReleaseGroupId = cleanId(embeddedReleaseGroup(release)?.id);
+          const matchedReleaseGroup = nestedReleaseGroupId
+            ? releaseGroups.find((group) => cleanId(group?.id) === nestedReleaseGroupId) ?? null
+            : null;
+          const candidate = candidateFromRelease({
+            result,
+            recording,
+            release,
+            releaseGroup: matchedReleaseGroup,
+            track,
+          });
           if (candidate) candidates.push(candidate);
         }
       } else if (releaseGroups.length > 0) {

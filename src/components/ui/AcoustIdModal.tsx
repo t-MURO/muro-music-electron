@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, CheckCircle2, Fingerprint, LoaderCircle, SearchX } from "lucide-react";
 import type { Track, TrackMetadataUpdates } from "../../types";
 import type { AcoustIdCandidate, AcoustIdIdentificationResult } from "../../utils/database";
+import { coerceArtistCredits } from "../../utils/artistCredits";
 
 type IdentificationStatus = "pending" | "fingerprinting" | "matched" | "no-match" | "failed";
 type IdentificationRow = {
@@ -124,8 +125,21 @@ export const AcoustIdModal = ({ tracks, onClose, onIdentify, onApply }: AcoustId
       musicBrainzReleaseGroupId: candidate.releaseGroupId || undefined,
     };
     if (selectedFields.has("title") && candidate.title) updates.title = candidate.title;
-    if (selectedFields.has("artist") && candidate.artist) updates.artist = candidate.artist;
-    if (selectedFields.has("artists") && candidate.albumArtist) updates.artists = candidate.albumArtist;
+    if (selectedFields.has("artist") && candidate.artist) {
+      updates.artist = candidate.artist;
+      updates.artistCredits = coerceArtistCredits(
+        candidate.artistCredits,
+        candidate.artist,
+      );
+    }
+    if (selectedFields.has("artists") && candidate.albumArtist) {
+      updates.albumArtist = candidate.albumArtist;
+      updates.artists = candidate.albumArtist;
+      updates.albumArtistCredits = coerceArtistCredits(
+        candidate.albumArtistCredits,
+        candidate.albumArtist,
+      );
+    }
     if (selectedFields.has("album") && candidate.album) updates.album = candidate.album;
     if (selectedFields.has("year") && candidate.year) updates.year = candidate.year;
     return [{ trackId: row.track.id, updates }];

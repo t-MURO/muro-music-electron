@@ -141,14 +141,40 @@ const backend = createBackend({
         id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         title: "Retry Track",
         score: 100,
-        "artist-credit": [{ name: "Retry Artist" }],
+        "artist-credit": [{
+          name: "Retry Artist",
+          artist: {
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Retry Artist",
+          },
+          joinphrase: " feat. ",
+        }, {
+          name: "Guest Alias",
+          artist: {
+            id: "22222222-2222-4222-8222-222222222222",
+            name: "Guest Artist",
+          },
+        }],
         releases: [{
           id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           title: "Retry Album",
           date: "2026-01-01",
           country: "DE",
           status: "Official",
-          "artist-credit": [{ name: "Retry Artist" }],
+          "artist-credit": [{
+            name: "Retry Artist",
+            artist: {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Retry Artist",
+            },
+            joinphrase: " & ",
+          }, {
+            name: "Release Artist",
+            artist: {
+              id: "33333333-3333-4333-8333-333333333333",
+              name: "Release Artist",
+            },
+          }],
           "release-group": { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
         }],
       }],
@@ -166,6 +192,30 @@ try {
   assert.equal(metadataFetchAttempts, 2, "metadata search should retry transient network failures");
   assert.equal(metadataResults[0].title, "Retry Track");
   assert.equal(metadataResults[0].albumMatch, true);
+  assert.equal(metadataResults[0].artist, "Retry Artist feat. Guest Alias");
+  assert.deepEqual(metadataResults[0].artistCredits, [{
+    name: "Retry Artist",
+    creditedName: "Retry Artist",
+    joinPhrase: " feat. ",
+    musicBrainzId: "11111111-1111-4111-8111-111111111111",
+  }, {
+    name: "Guest Artist",
+    creditedName: "Guest Alias",
+    joinPhrase: "",
+    musicBrainzId: "22222222-2222-4222-8222-222222222222",
+  }]);
+  assert.equal(metadataResults[0].albumArtist, "Retry Artist & Release Artist");
+  assert.deepEqual(metadataResults[0].albumArtistCredits, [{
+    name: "Retry Artist",
+    creditedName: "Retry Artist",
+    joinPhrase: " & ",
+    musicBrainzId: "11111111-1111-4111-8111-111111111111",
+  }, {
+    name: "Release Artist",
+    creditedName: "Release Artist",
+    joinPhrase: "",
+    musicBrainzId: "33333333-3333-4333-8333-333333333333",
+  }]);
   await assert.rejects(
     backend.invoke("search_track_metadata", {
       title: "Offline Track",
@@ -1413,6 +1463,71 @@ try {
     "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
   );
   assert.ok(fs.existsSync(artistProfile.imagePath), "artist image should be cached on disk");
+  const homonymousIdentityProfile = await artistProfileService.getProfile(db, "Muro", {
+    musicBrainzId: fallbackArtistId,
+  });
+  assert.equal(homonymousIdentityProfile.musicBrainzId, fallbackArtistId);
+  assert.equal(homonymousIdentityProfile.name, "Fallback Muro");
+  assert.equal(
+    homonymousIdentityProfile.artistKey,
+    "mbid:" + fallbackArtistId,
+    "the clicked MBID must keep a homonymous profile separate from the name-only cache",
+  );
+  const homonymousArtistKey = "mbid:" + fallbackArtistId;
+  const sameNameProfileBeforeIdentityImageEdit = db.prepare(`
+    SELECT profile_json
+    FROM artist_profiles
+    WHERE artist_key = 'muro'
+  `).get().profile_json;
+  const identityImageCandidates = await artistProfileService.searchImages(db, "Muro", {
+    musicBrainzId: fallbackArtistId,
+    fanartApiKey: "smoke-fanart-key",
+  });
+  assert.equal(
+    identityImageCandidates.find((candidate) => candidate.current)?.imageUrl,
+    "https://assets.fanart.tv/fallback-best.jpg",
+    "identity-aware image search should use the homonymous MBID profile as current",
+  );
+  const identityAlternateFanart = identityImageCandidates.find(
+    (candidate) => candidate.imageUrl === "https://assets.fanart.tv/fallback-low.jpg",
+  );
+  assert.ok(identityAlternateFanart, "identity-aware image search should return alternate images");
+  const identitySelectedProfile = await artistProfileService.setImage(
+    db,
+    "Muro",
+    identityAlternateFanart,
+    { musicBrainzId: fallbackArtistId },
+  );
+  assert.equal(identitySelectedProfile.artistKey, homonymousArtistKey);
+  assert.equal(identitySelectedProfile.imageSelection, "manual");
+  assert.equal(identitySelectedProfile.imageUrl, "https://assets.fanart.tv/fallback-low.jpg");
+  assert.equal(
+    db.prepare(`
+      SELECT profile_json
+      FROM artist_profiles
+      WHERE artist_key = 'muro'
+    `).get().profile_json,
+    sameNameProfileBeforeIdentityImageEdit,
+    "saving an identity image must not overwrite the same-name profile",
+  );
+  assert.equal(
+    JSON.parse(db.prepare(`
+      SELECT profile_json
+      FROM artist_profiles
+      WHERE artist_key = ?
+    `).get(homonymousArtistKey).profile_json).imageUrl,
+    "https://assets.fanart.tv/fallback-low.jpg",
+  );
+  const refreshedIdentityManualProfile = await artistProfileService.getProfile(db, "Muro", {
+    force: true,
+    musicBrainzId: fallbackArtistId,
+    fanartApiKey: "smoke-fanart-key",
+  });
+  assert.equal(
+    refreshedIdentityManualProfile.imageUrl,
+    "https://assets.fanart.tv/fallback-low.jpg",
+    "identity profile refreshes should preserve the manually selected image",
+  );
   const artistFetchCount = artistFetchCalls.length;
   const cachedArtistProfile = await artistProfileService.getProfile(db, "Muro");
   assert.equal(cachedArtistProfile.cacheState, "fresh");
@@ -1612,8 +1727,17 @@ try {
     "cached Last.fm profiles should not be fetched again",
   );
   assert.deepEqual(
-    artistProfileService.loadCachedProfiles(db).map((profile) => profile.artistKey),
-    ["fallback muro", "lastfm muro", "muro", "premium muro", "unknown underground artist"],
+    artistProfileService.loadCachedProfiles(db)
+      .map((profile) => profile.artistKey)
+      .sort(),
+    [
+      "fallback muro",
+      "lastfm muro",
+      "mbid:" + fallbackArtistId,
+      "muro",
+      "premium muro",
+      "unknown underground artist",
+    ].sort(),
   );
   db.prepare("UPDATE artist_profiles SET fetched_at = 0 WHERE artist_key = ?").run("muro");
   const fetchCountBeforeStaleBackgroundScan = artistFetchCalls.length;

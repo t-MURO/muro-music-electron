@@ -8,6 +8,7 @@ import { TagLib } from "taglib-wasm";
 import {
   normalizeSearchText,
   openDatabase,
+  replaceTrackArtistCredits,
   rowToTrack,
   storeTrackPath,
 } from "./database.mjs";
@@ -21,6 +22,197 @@ const getTagLib = () => (taglibPromise ??= TagLib.initialize());
 
 const first = (value) => Array.isArray(value) ? value[0] : value;
 const values = (value) => (Array.isArray(value) ? value : value == null ? [] : [value]);
+const propertyValues = (properties, key) => (
+  Array.isArray(properties[key]) ? properties[key].map(String) : []
+);
+
+const rawArtistValue = (value) => String(value ?? "");
+const cleanArtistValue = (value) => rawArtistValue(value).trim();
+const nonBlankArtistValue = (value) => {
+  const raw = rawArtistValue(value);
+  return raw.trim() ? raw : "";
+};
+const artistValueList = (value) => values(value)
+  .map(nonBlankArtistValue)
+  .filter(Boolean);
+const cleanValueList = (value) => values(value)
+  .map(cleanArtistValue)
+  .filter(Boolean);
+
+const creditValue = (credit, ...keys) => {
+  for (const key of keys) {
+    if (credit?.[key] != null) return credit[key];
+  }
+  return undefined;
+};
+
+const inferredJoinPhrases = (display, names) => {
+  if (names.length === 0) return [];
+  const exactDisplay = nonBlankArtistValue(display);
+  if (names.length === 1) return exactDisplay === names[0] ? [""] : null;
+
+  const starts = [];
+  let cursor = 0;
+  for (const name of names) {
+    const start = exactDisplay.indexOf(name, cursor);
+    if (start < 0 || (starts.length === 0 && start !== 0)) {
+      return null;
+    }
+    starts.push(start);
+    cursor = start + name.length;
+  }
+
+  return names.map((name, index) => {
+    const end = starts[index] + name.length;
+    return index < names.length - 1
+      ? exactDisplay.slice(end, starts[index + 1])
+      : exactDisplay.slice(end);
+  });
+};
+
+/** Normalize the snake_case and camelCase credit DTOs used by metadata providers. */
+export const normalizeArtistCredits = (
+  input,
+  { display = "", names = [], musicbrainzIds = [] } = {},
+) => {
+  const source = Array.isArray(input) ? input : [];
+  if (source.length > 0) {
+    const normalized = source.flatMap((raw) => {
+      const credit = typeof raw === "string" ? { creditedName: raw } : raw;
+      if (!credit || typeof credit !== "object") return [];
+      const canonicalName = cleanArtistValue(creditValue(
+        credit,
+        "canonicalName",
+        "canonical_name",
+        "name",
+      ));
+      const creditedName = nonBlankArtistValue(creditValue(
+        credit,
+        "creditedName",
+        "credited_name",
+      )) || canonicalName;
+      const name = canonicalName || cleanArtistValue(creditedName);
+      if (!name) return [];
+      const joinValue = creditValue(credit, "joinPhrase", "join_phrase");
+      const musicBrainzId = cleanArtistValue(creditValue(
+        credit,
+        "musicBrainzId",
+        "musicbrainzId",
+        "musicbrainz_id",
+      ));
+      return [{
+        name,
+        creditedName,
+        joinPhrase: joinValue == null ? null : String(joinValue),
+        ...(musicBrainzId ? { musicBrainzId } : {}),
+      }];
+    });
+    return normalized.map((credit, index) => ({
+      ...credit,
+      joinPhrase: credit.joinPhrase ?? (index < normalized.length - 1 ? ", " : ""),
+    }));
+  }
+
+  const normalizedNames = artistValueList(names);
+  const exactDisplay = nonBlankArtistValue(display);
+  if (normalizedNames.length === 0 && exactDisplay) {
+    normalizedNames.push(exactDisplay);
+  }
+  const ids = cleanValueList(musicbrainzIds);
+  const positionalIds = ids.length === normalizedNames.length ? ids : [];
+  const joinPhrases = inferredJoinPhrases(exactDisplay, normalizedNames);
+  if (exactDisplay && joinPhrases === null) {
+    const name = cleanArtistValue(exactDisplay);
+    return name ? [{
+      name,
+      creditedName: exactDisplay,
+      joinPhrase: "",
+      ...(normalizedNames.length === 1 && ids.length === 1
+        ? { musicBrainzId: ids[0] }
+        : {}),
+    }] : [];
+  }
+  return normalizedNames.map((name, index) => ({
+    name: cleanArtistValue(name),
+    creditedName: name,
+    joinPhrase: joinPhrases?.[index] ?? (index < normalizedNames.length - 1 ? ", " : ""),
+    ...(positionalIds[index] ? { musicBrainzId: positionalIds[index] } : {}),
+  }));
+};
+
+export const displayArtistCredits = (credits) => {
+  const normalized = normalizeArtistCredits(credits);
+  return normalized
+    .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
+    .join("");
+};
+
+export const artistMetadataFromCommon = (common = {}, propertyMetadata = {}) => {
+  const propertyArtistNames = artistValueList(propertyMetadata.artistNames);
+  const propertyArtistMusicbrainzIds = cleanValueList(propertyMetadata.artistMusicbrainzIds);
+  const artistNames = propertyArtistNames.length > 0
+    ? propertyArtistNames
+    : artistValueList(common.artists);
+  const artistMusicbrainzIds = propertyArtistMusicbrainzIds.length > 0
+    ? propertyArtistMusicbrainzIds
+    : cleanValueList(common.musicbrainz_artistid);
+  const artist = nonBlankArtistValue(common.artist)
+    || artistNames.join(", ")
+    || "Unknown Artist";
+  const propertyAlbumArtistNames = artistValueList(propertyMetadata.albumArtistNames);
+  const propertyAlbumArtistMusicbrainzIds = cleanValueList(
+    propertyMetadata.albumArtistMusicbrainzIds,
+  );
+  const albumArtistNames = propertyAlbumArtistNames.length > 0
+    ? propertyAlbumArtistNames
+    : artistValueList(common.albumartists);
+  const albumArtistMusicbrainzIds = propertyAlbumArtistMusicbrainzIds.length > 0
+    ? propertyAlbumArtistMusicbrainzIds
+    : cleanValueList(common.musicbrainz_albumartistid);
+  const albumArtist = nonBlankArtistValue(common.albumartist)
+    || albumArtistNames.join(", ");
+
+  return {
+    artist,
+    artistCredits: normalizeArtistCredits([], {
+      display: artist,
+      names: artistNames.length > 0 ? artistNames : [artist],
+      musicbrainzIds: artistMusicbrainzIds,
+    }),
+    artistMusicbrainzIds,
+    albumArtist: albumArtist || undefined,
+    albumArtistCredits: normalizeArtistCredits([], {
+      display: albumArtist,
+      names: albumArtistNames.length > 0
+        ? albumArtistNames
+        : albumArtist ? [albumArtist] : [],
+      musicbrainzIds: albumArtistMusicbrainzIds,
+    }),
+    albumArtistMusicbrainzIds,
+  };
+};
+
+export const readArtistPropertiesFromFile = async (sourcePath) => {
+  let file;
+  try {
+    const taglib = await getTagLib();
+    file = await taglib.open(sourcePath);
+    const properties = file.properties();
+    return {
+      artistNames: propertyValues(properties, "ARTISTS"),
+      artistMusicbrainzIds: propertyValues(properties, "musicbrainzArtistId"),
+      albumArtistNames: propertyValues(properties, "ALBUMARTISTS"),
+      albumArtistMusicbrainzIds: propertyValues(
+        properties,
+        "musicbrainzReleaseArtistId",
+      ),
+    };
+  } catch {
+    return {};
+  } finally {
+    file?.dispose();
+  }
+};
 
 const cleanComment = (comment) =>
   typeof comment === "string" ? comment : comment?.text;
@@ -260,13 +452,17 @@ export const importAudioFile = async (
 
   const metadata = await parseFile(filePath, { duration: true, skipCovers: false });
   const { common, format } = metadata;
+  const artistPropertyMetadata = await readArtistPropertiesFromFile(filePath);
   const genres = values(common.genre).filter(Boolean).map(String);
   const comments = values(common.comment).map(cleanComment).filter(Boolean).map(String);
-  const artists = values(common.artists).filter(Boolean).map(String);
+  const {
+    artist,
+    artistCredits,
+    albumArtist,
+    albumArtistCredits,
+  } = artistMetadataFromCommon(common, artistPropertyMetadata);
   const title = common.title || fallbackTitle(filePath);
-  const artist = common.artist || artists.join(", ") || "Unknown Artist";
   const album = common.album || "Unknown Album";
-  const albumArtist = common.albumartist || undefined;
   const label = first(common.label) || undefined;
   const cached = await cacheEmbeddedCover(common.picture, cacheDir, filePath);
   const now = Math.floor(Date.now() / 1000);
@@ -304,8 +500,8 @@ export const importAudioFile = async (
     rating,
     raw_tags_json: cleanRawTags(metadata.native),
     musicbrainz_albumid: first(common.musicbrainz_albumid) ?? null,
-    musicbrainz_artistid: first(common.musicbrainz_artistid) ?? null,
-    musicbrainz_albumartistid: first(common.musicbrainz_albumartistid) ?? null,
+    musicbrainz_artistid: artistCredits[0]?.musicBrainzId ?? null,
+    musicbrainz_albumartistid: albumArtistCredits[0]?.musicBrainzId ?? null,
     musicbrainz_releasegroupid: first(common.musicbrainz_releasegroupid) ?? null,
     musicbrainz_trackid: first(common.musicbrainz_trackid) ?? null,
     musicbrainz_releasetrackid: first(common.musicbrainz_releasetrackid) ?? null,
@@ -328,7 +524,7 @@ export const importAudioFile = async (
     ...replayGainFromTags(common),
   };
 
-  const insertResult = db.prepare(`
+  const insertTrack = db.prepare(`
     INSERT OR IGNORE INTO tracks (
       id, title, artist, album, album_artist, genre_json, comment_json, label,
       filename, year, date, track_number, track_total, disc_number, disc_total,
@@ -354,21 +550,59 @@ export const importAudioFile = async (
       @replaygain_track_gain_db, @replaygain_track_peak,
       @replaygain_album_gain_db, @replaygain_album_peak, @loudness_source
     )
-  `).run(record);
+  `);
 
-  // Another import path (manual import, watcher scan, or a second renderer
-  // request) may have inserted this source while metadata was being parsed.
-  // Never return a generated ID that SQLite rejected, because the renderer
-  // would otherwise display a track that does not exist in the database.
-  if (Number(insertResult.changes) === 0) return null;
-  return rowToTrack(
+  const persistTrack = () => {
+    const insertResult = insertTrack.run(record);
+
+    // Another import path (manual import, watcher scan, or a second renderer
+    // request) may have inserted this source while metadata was being parsed.
+    // Never return a generated ID that SQLite rejected, because the renderer
+    // would otherwise display a track that does not exist in the database.
+    if (Number(insertResult.changes) === 0) return null;
+
+    const trackCreditSet = replaceTrackArtistCredits(db, {
+      trackId: id,
+      scope: "track",
+      displayText: artist,
+      credits: artistCredits,
+      provenance: "file-tags",
+      confidence: 100,
+      needsReview: false,
+    });
+    const albumCreditSet = albumArtist && albumArtistCredits.length > 0
+      ? replaceTrackArtistCredits(db, {
+        trackId: id,
+        scope: "album",
+        displayText: albumArtist,
+        credits: albumArtistCredits,
+        provenance: "file-tags",
+        confidence: 100,
+        needsReview: false,
+      })
+      : null;
+    return {
+      artistCredits: trackCreditSet.credits,
+      albumArtistCredits: albumCreditSet?.credits ?? [],
+    };
+  };
+  const storedCredits = db.inTransaction
+    ? persistTrack()
+    : db.transaction(persistTrack)();
+
+  if (!storedCredits) return null;
+  const importedTrack = rowToTrack(
     { ...record, last_played_at: null, play_count: 0 },
     { dbPath },
   );
+  return {
+    ...importedTrack,
+    artist_credits: storedCredits.artistCredits,
+    album_artist_credits: storedCredits.albumArtistCredits,
+  };
 };
 
 const propertyMap = {
-  artists: "ALBUMARTIST",
   trackTotal: "TRACKTOTAL",
   discNumber: "DISCNUMBER",
   discTotal: "DISCTOTAL",
@@ -382,6 +616,19 @@ const propertyMap = {
 };
 
 const RATING_UNSUPPORTED_EXTENSIONS = new Set([".wav", ".aif", ".aiff"]);
+const STRUCTURED_ARTIST_TAG_EXTENSIONS = new Set([
+  ".mp3", ".flac", ".m4a", ".alac", ".aac", ".ogg", ".opus",
+]);
+const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const sameStringValues = (left, right) => (
+  left.length === right.length
+  && left.every((value, index) => value === right[index])
+);
+const completeMusicBrainzIds = (credits) => (
+  credits.length > 0 && credits.every((credit) => Boolean(credit.musicBrainzId))
+    ? credits.map((credit) => credit.musicBrainzId)
+    : []
+);
 
 export const writeMetadataToFile = async (sourcePath, updates) => {
   const expectedRating = updates.rating === undefined
@@ -401,6 +648,22 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
     ? String(vorbisRatingFromStars(updates.rating))
     : undefined;
   let replacedVorbisRating;
+  const writesArtistCredits = hasOwn(updates, "artistCredits");
+  const writesAlbumArtistCredits = hasOwn(updates, "albumArtistCredits");
+  const artistCredits = writesArtistCredits
+    ? normalizeArtistCredits(updates.artistCredits)
+    : [];
+  const albumArtistCredits = writesAlbumArtistCredits
+    ? normalizeArtistCredits(updates.albumArtistCredits)
+    : [];
+  const artistDisplay = updates.artist !== undefined
+    ? String(updates.artist)
+    : writesArtistCredits ? displayArtistCredits(artistCredits) : undefined;
+  const albumArtistDisplay = updates.albumArtist !== undefined
+    ? String(updates.albumArtist)
+    : updates.artists !== undefined
+      ? String(updates.artists)
+      : writesAlbumArtistCredits ? displayArtistCredits(albumArtistCredits) : undefined;
 
   // taglib-wasm exposes Vorbis RATING through both its complex rating API and
   // generic property API. When the field already exists, setting the generic
@@ -424,7 +687,6 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
     await taglib.edit(sourcePath, async (file) => {
       const tag = file.tag();
       if (updates.title !== undefined) tag.setTitle(String(updates.title));
-      if (updates.artist !== undefined) tag.setArtist(String(updates.artist));
       if (updates.album !== undefined) tag.setAlbum(String(updates.album));
       if (updates.comment !== undefined) tag.setComment(String(updates.comment));
       if (updates.genre !== undefined) tag.setGenre(String(updates.genre));
@@ -432,6 +694,47 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
       if (updates.trackNumber !== undefined) tag.setTrack(Number(updates.trackNumber) || 0);
       for (const [key, property] of Object.entries(propertyMap)) {
         if (updates[key] !== undefined) file.setProperty(property, String(updates[key] ?? ""));
+      }
+      if (
+        artistDisplay !== undefined
+        || albumArtistDisplay !== undefined
+        || writesArtistCredits
+        || writesAlbumArtistCredits
+      ) {
+        const preservedRatings = expectedRating === undefined ? file.getRatings() : null;
+        const properties = { ...file.properties() };
+        if (artistDisplay !== undefined) {
+          properties.artist = artistDisplay ? [artistDisplay] : [];
+        }
+        if (albumArtistDisplay !== undefined) {
+          properties.albumArtist = albumArtistDisplay ? [albumArtistDisplay] : [];
+        }
+        if (writesArtistCredits) {
+          properties.ARTISTS = artistCredits.map((credit) => credit.creditedName);
+          properties.musicbrainzArtistId = completeMusicBrainzIds(artistCredits);
+        }
+        if (writesAlbumArtistCredits) {
+          // ALBUMARTIST is the interoperable display credit. ALBUMARTISTS is a
+          // lossless multi-value companion understood by Muro and taggers that
+          // preserve arbitrary PropertyMap fields.
+          properties.ALBUMARTISTS = albumArtistCredits.map((credit) => credit.creditedName);
+          properties.musicbrainzReleaseArtistId = completeMusicBrainzIds(albumArtistCredits);
+        }
+        file.setProperties(properties);
+        // A full PropertyMap round-trip serializes MP3 POPM ratings through a
+        // generic string representation. Restore the richer rating objects so
+        // an artist-only edit cannot silently change an existing star rating.
+        if (preservedRatings) {
+          const safeRatings = extension === ".mp3"
+            ? preservedRatings.map((rating) => ({
+              ...rating,
+              // taglib-wasm 1.4.0 serializes an exact 1.0 as POPM byte 1;
+              // 0.999 is its documented/full-scale-safe representation.
+              rating: rating.rating === 1 ? 0.999 : rating.rating,
+            }))
+            : preservedRatings;
+          file.setRatings(safeRatings);
+        }
       }
       if (expectedRating !== undefined) {
         if (expectedRating === 0) {
@@ -464,7 +767,14 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
 
     // Reopen the file after TagLib's save. This distinguishes a real embedded
     // metadata write from formats that silently ignore an unsupported field.
-    if (coverBytes || expectedRating !== undefined) {
+    if (
+      coverBytes
+      || expectedRating !== undefined
+      || artistDisplay !== undefined
+      || albumArtistDisplay !== undefined
+      || writesArtistCredits
+      || writesAlbumArtistCredits
+    ) {
       const file = await taglib.open(sourcePath);
       try {
         if (coverBytes) {
@@ -488,6 +798,51 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
             throw new Error(
               `The audio format did not retain the embedded rating (${expectedStars} stars requested)`,
             );
+          }
+        }
+        const persistedProperties = file.properties();
+        if (
+          artistDisplay !== undefined
+          && propertyValues(persistedProperties, "artist")[0] !== artistDisplay
+        ) {
+          throw new Error("The audio format did not retain the artist display credit");
+        }
+        if (
+          albumArtistDisplay !== undefined
+          && STRUCTURED_ARTIST_TAG_EXTENSIONS.has(extension)
+          && propertyValues(persistedProperties, "albumArtist")[0] !== albumArtistDisplay
+        ) {
+          throw new Error("The audio format did not retain the album artist display credit");
+        }
+        if (writesArtistCredits && STRUCTURED_ARTIST_TAG_EXTENSIONS.has(extension)) {
+          const expectedNames = artistCredits.map((credit) => credit.creditedName);
+          const expectedIds = completeMusicBrainzIds(artistCredits);
+          if (!sameStringValues(propertyValues(persistedProperties, "ARTISTS"), expectedNames)) {
+            throw new Error("The audio format did not retain the structured track artists");
+          }
+          if (
+            !sameStringValues(
+              propertyValues(persistedProperties, "musicbrainzArtistId"),
+              expectedIds,
+            )
+          ) {
+            throw new Error("The audio format did not retain the track artist identifiers");
+          }
+        }
+        if (writesAlbumArtistCredits && STRUCTURED_ARTIST_TAG_EXTENSIONS.has(extension)) {
+          const expectedNames = albumArtistCredits.map((credit) => credit.creditedName);
+          const expectedIds = completeMusicBrainzIds(albumArtistCredits);
+          if (!sameStringValues(
+            propertyValues(persistedProperties, "ALBUMARTISTS"),
+            expectedNames,
+          )) {
+            throw new Error("The audio format did not retain the structured album artists");
+          }
+          if (!sameStringValues(
+            propertyValues(persistedProperties, "musicbrainzReleaseArtistId"),
+            expectedIds,
+          )) {
+            throw new Error("The audio format did not retain the album artist identifiers");
           }
         }
       } finally {

@@ -36,6 +36,9 @@ export const useLoudnessAnalysis = () => {
   const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
+  const artistSeparatorExceptions = useSettingsStore(
+    (settings) => settings.artistSeparatorExceptions,
+  );
 
   const cancel = useCallback(() => {
     cancelRef.current = true;
@@ -98,7 +101,11 @@ export const useLoudnessAnalysis = () => {
         // Track gain is still usable without it.
       }
       try {
-        const snapshot = await loadTracks(dbPath);
+        const snapshot = await loadTracks(
+          dbPath,
+          undefined,
+          artistSeparatorExceptions,
+        );
         setTracks(snapshot.library.map(importedTrackToTrack));
         setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
       } catch {
@@ -119,7 +126,7 @@ export const useLoudnessAnalysis = () => {
     } else {
       notify.success(t("loudness.scan.finished", { analyzed: String(analyzed) }));
     }
-  }, [resolveDbPath, setInboxTracks, setTracks]);
+  }, [artistSeparatorExceptions, resolveDbPath, setInboxTracks, setTracks]);
 
   return { ...state, run, cancel };
 };

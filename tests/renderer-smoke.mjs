@@ -46,12 +46,36 @@ const writeSilentWave = (filePath, durationSeconds = 5) => {
   fs.writeFileSync(filePath, buffer);
 };
 const smokeNow = Date.now();
+const smokeMuroArtistId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const smokeGuestArtistId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   id: `smoke-track-${index}`,
   title: `Smoke Track ${String(index).padStart(3, "0")}`,
   artist: artistSeparatorSmokeOnly && index === 249
     ? "Muro & Guest feat. DJ Test"
-    : "Muro",
+    : !artistSeparatorSmokeOnly && index === 5
+      ? "Muro feat. Guest Alias"
+      : "Muro",
+  artist_credits: !artistSeparatorSmokeOnly
+    ? index === 5
+      ? [{
+        artistId: smokeMuroArtistId,
+        name: "Muro",
+        creditedName: "Muro",
+        joinPhrase: " feat. ",
+      }, {
+        artistId: smokeGuestArtistId,
+        name: "Guest Artist",
+        creditedName: "Guest Alias",
+        joinPhrase: "",
+      }]
+      : [{
+        artistId: smokeMuroArtistId,
+        name: "Muro",
+        creditedName: "Muro",
+        joinPhrase: "",
+      }]
+    : undefined,
   artists: artistSeparatorSmokeOnly && index === 249
     ? "Various Artists & Muro"
     : "Muro",
@@ -129,6 +153,8 @@ let braveCoverFallbackEnabled = false;
 let braveCoverCacheCount = 0;
 let selectedBraveCoverId = null;
 let artistImageSaveCount = 0;
+let artistImageSearchArgs = null;
+let artistImageSaveArgs = null;
 let organizedLibraryExportArgs = null;
 let organizedLibraryReloaded = false;
 let itunesLibraryExportArgs = null;
@@ -223,6 +249,15 @@ app.whenReady().then(async () => {
     nativeDraggedFilePaths = Array.isArray(filePaths) ? [...filePaths] : [];
   });
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
+    if (command === "migrate_artist_credits") {
+      return {
+        skipped: false,
+        tracksChecked: smokeTracks.length,
+        setsCreated: 0,
+        setsReplaced: 0,
+        creditsCreated: 0,
+      };
+    }
     if (command === "load_tracks") {
       loadTracksInvocationCount += 1;
       const useExportedPaths = organizedLibraryExportArgs?.useAsCurrentLibrary === true;
@@ -322,7 +357,9 @@ app.whenReady().then(async () => {
     if (command === "test_get_itunes_library_export_args") return itunesLibraryExportArgs;
     if (command === "load_cached_artist_profiles") return [smokeArtistProfile];
     if (command === "get_artist_profile") return smokeArtistProfile;
-    if (command === "search_artist_images") return [
+    if (command === "search_artist_images") {
+      artistImageSearchArgs = { ...args };
+      return [
       {
         id: "commons-current",
         provider: "wikimedia-commons",
@@ -363,9 +400,11 @@ app.whenReady().then(async () => {
         width: 1000,
         height: 1000,
       },
-    ];
+      ];
+    }
     if (command === "set_artist_image") {
       artistImageSaveCount += 1;
+      artistImageSaveArgs = { ...args };
       return {
         ...smokeArtistProfile,
         imagePath: path.join(appRoot, "src", "assets", "app-logo.png"),
@@ -513,6 +552,8 @@ app.whenReady().then(async () => {
         braveCoverCacheCount,
         selectedBraveCoverId,
         artistImageSaveCount,
+        artistImageSearchArgs,
+        artistImageSaveArgs,
         copiedCoverPaths: [...copiedCoverPaths],
       };
     }
@@ -830,6 +871,57 @@ app.whenReady().then(async () => {
 
   if (rendererSmokeUrl) await window.loadURL(rendererSmokeUrl);
   else await window.loadFile(path.join(appRoot, "dist", "index.html"));
+
+  if (
+    !autoMixQueueSmokeOnly
+    && !artistSeparatorSmokeOnly
+    && !libraryExportSmokeOnly
+    && !settingsSmokeOnly
+  ) {
+    const multiArtistPreflight = await window.webContents.executeJavaScript(`(async () => {
+      let cell = null;
+      for (let attempt = 0; attempt < 40 && !cell; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        cell = document.querySelector(
+          '[data-track-index="5"] [data-column-key="artist"]'
+        );
+      }
+      const links = cell?.querySelectorAll('[data-track-artist-link="true"]') ?? [];
+      const exact = Boolean(
+        cell?.textContent?.trim() === "Muro feat. Guest Alias" &&
+        links.length === 2 &&
+        links[0]?.textContent === "Muro" &&
+        links[1]?.textContent === "Guest Alias"
+      );
+      links[1]?.click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const secondLink = Boolean(
+        window.location.hash.includes("/collection/artists") &&
+        window.location.hash.includes("value=Guest+Artist") &&
+        document.querySelector('[data-artist-detail="Guest Artist"]')
+      );
+      const debug = {
+        text: cell?.textContent ?? null,
+        links: [...links].map((link) => link.textContent),
+        hash: window.location.hash,
+      };
+      window.location.hash = "#/";
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      return { exact, secondLink, debug };
+    })()`);
+    if (!multiArtistPreflight.exact || !multiArtistPreflight.secondLink) {
+      fail(
+        `Multi-artist preflight failed: exact=${multiArtistPreflight.exact}, `
+        + `secondLink=${multiArtistPreflight.secondLink}, `
+        + `debug=${JSON.stringify(multiArtistPreflight.debug)}`,
+      );
+      return;
+    }
+    await new Promise((resolve) => {
+      window.webContents.once("did-finish-load", resolve);
+      window.webContents.reload();
+    });
+  }
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const result = await window.webContents.executeJavaScript(`(async () => {
@@ -1773,7 +1865,8 @@ app.whenReady().then(async () => {
         const batchLabelInput = batchEditModal?.querySelector('[data-autocomplete-field="label"]');
         const batchCommonValuesReady = Boolean(
           batchEditModal?.textContent?.includes("250") &&
-          batchArtistInput instanceof HTMLInputElement && batchArtistInput.value === "Muro" &&
+          batchArtistInput instanceof HTMLInputElement && batchArtistInput.value === "" &&
+          batchArtistInput.placeholder === "Mixed values" &&
           batchAlbumArtistInput instanceof HTMLInputElement && batchAlbumArtistInput.value === "Muro" &&
           batchAlbumInput instanceof HTMLInputElement && batchAlbumInput.value === "" &&
           batchAlbumInput.placeholder === "Mixed values" &&
@@ -2798,7 +2891,7 @@ app.whenReady().then(async () => {
         const artistCard = document.querySelector('[data-artist-card="Muro"]');
         const artistIndexReady =
           Boolean(document.querySelector("[data-artist-index]")) &&
-          artistCards.length === 1 &&
+          artistCards.length === 2 &&
           artistCard?.getAttribute("data-artist-profile-cached") === "true" &&
           artistCard?.textContent?.includes("250 tracks") &&
           artistCard?.textContent?.includes("25 albums");
@@ -2826,6 +2919,8 @@ app.whenReady().then(async () => {
         const artistImageApplied = Boolean(
           !document.querySelector("[data-artist-image-modal]") &&
           artistImageCounts.artistImageSaveCount === 1 &&
+          artistImageCounts.artistImageSearchArgs?.artistId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" &&
+          artistImageCounts.artistImageSaveArgs?.artistId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" &&
           document.querySelector(".artist-detail-photo img")?.getAttribute("src")?.includes("app-logo.png")
         );
 
@@ -2866,6 +2961,9 @@ app.whenReady().then(async () => {
           window.location.hash.includes("/collection/albums") &&
           window.location.hash.includes("album=") &&
           Boolean(document.querySelector("[data-album-detail]"));
+
+        window.location.hash = "#/";
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         const libraryViewButtons = [...document.querySelectorAll('[data-library-view]')];
         const recentlyPlayedNavigationIndex = libraryViewButtons.findIndex(

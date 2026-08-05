@@ -20,7 +20,7 @@ import {
   type PlaylistHistoryState,
   type PlaylistSnapshotEntry,
 } from "../../utils";
-import { notify, useLibraryStore } from "../../stores";
+import { notify, useLibraryStore, useSettingsStore } from "../../stores";
 
 const SENSITIVE_SETTING_KEYS = [
   "lastFmApiKey",
@@ -49,6 +49,9 @@ type LibraryDataToolsProps = {
 };
 
 export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
+  const artistSeparatorExceptions = useSettingsStore(
+    (state) => state.artistSeparatorExceptions,
+  );
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<PlaylistHistoryState>({
@@ -96,11 +99,11 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
   }, [dbPath]);
 
   const refreshTracks = useCallback(async () => {
-    const snapshot = await loadTracks(dbPath);
+    const snapshot = await loadTracks(dbPath, undefined, artistSeparatorExceptions);
     const store = useLibraryStore.getState();
     store.setTracks(snapshot.library.map(importedTrackToTrack));
     store.setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
-  }, [dbPath]);
+  }, [artistSeparatorExceptions, dbPath]);
 
   useEffect(() => {
     void Promise.all([refreshPlaylistData(), refreshMetadata()]).catch(() => undefined);

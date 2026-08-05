@@ -2,6 +2,25 @@ export { parseColumns, parseNumber, parseDetailWidth } from "./storage";
 export { getSortableValue, compareSortValues } from "./trackSorting";
 export { resolveDbPath } from "./dbPath";
 export {
+  albumArtistCredits,
+  albumArtistDisplay,
+  artistCreditSegments,
+  artistIdentityKey,
+  coerceArtistCredits,
+  explicitAlbumArtistDisplay,
+  formatArtistCredits,
+  isLegacyArtistId,
+  legacyArtistCredit,
+  legacyArtistCredits,
+  normalizeArtistName,
+  reviewedCommaSeparatedArtistCredits,
+  trackArtistCredits,
+  trackHasArtist,
+  type ArtistCreditSegment,
+  type ArtistCreditInput,
+  type ArtistTarget,
+} from "./artistCredits";
+export {
   playbackPlayFile,
   playbackToggle,
   playbackPlay,
@@ -98,6 +117,7 @@ export {
   loadListeningStatistics,
   backfillSearchText,
   backfillCoverArt,
+  migrateArtistCredits,
   loadRecentlyPlayed,
   recordTrackPlay,
   updatePlayHistory,

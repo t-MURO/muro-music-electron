@@ -5,7 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { strFromU8, unzipSync } from "fflate";
 import { createBackend } from "../electron/backend.mjs";
-import { loadTracks, openDatabase } from "../electron/database.mjs";
+import { loadArtistCredits, loadTracks, openDatabase } from "../electron/database.mjs";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "muro-data-features-"));
 const dbPath = path.join(root, "muro.db");
@@ -112,6 +112,54 @@ try {
     openDatabase(dbPath).prepare("SELECT title, rating FROM tracks WHERE id = ?").get("track-1").title,
     "Original title",
   );
+
+  const structuredArtistCredits = [{
+    name: "Artist One",
+    creditedName: "Artist One",
+    joinPhrase: " feat. ",
+    musicBrainzId: "11111111-1111-4111-8111-111111111111",
+  }, {
+    name: "Guest Artist",
+    creditedName: "Guest Alias",
+    joinPhrase: "",
+    musicBrainzId: "22222222-2222-4222-8222-222222222222",
+  }];
+  await backend.invoke("update_track_metadata", {
+    dbPath,
+    trackIds: ["track-1"],
+    updates: {
+      artist: "Artist One feat. Guest Alias",
+      artistCredits: structuredArtistCredits,
+    },
+  });
+  let persistedArtistCredits = loadArtistCredits(db, ["track-1"]).get("track-1").artist_credits;
+  assert.equal(
+    persistedArtistCredits.map((credit) => credit.creditedName + credit.joinPhrase).join(""),
+    "Artist One feat. Guest Alias",
+  );
+  assert.deepEqual(
+    persistedArtistCredits.map((credit) => credit.name),
+    ["Artist One", "Guest Artist"],
+  );
+  const artistHistory = (await backend.invoke("list_metadata_history", {
+    dbPath,
+    trackId: "track-1",
+  })).find((entry) => Object.hasOwn(entry.changes, "artist"));
+  assert.ok(artistHistory);
+  assert.equal(artistHistory.changes.artist.before, "Test artist");
+  assert.equal(artistHistory.changes.artist.beforeCredits.length, 1);
+  await backend.invoke("rollback_metadata_change", {
+    dbPath,
+    historyId: artistHistory.id,
+    field: "artist",
+  });
+  assert.equal(
+    db.prepare("SELECT artist FROM tracks WHERE id = ?").get("track-1").artist,
+    "Test artist",
+  );
+  persistedArtistCredits = loadArtistCredits(db, ["track-1"]).get("track-1").artist_credits;
+  assert.equal(persistedArtistCredits.length, 1);
+  assert.equal(persistedArtistCredits[0].creditedName, "Test artist");
 
   const play = await backend.invoke("record_track_play", { dbPath, trackId: "track-1" });
   await backend.invoke("update_play_history", {

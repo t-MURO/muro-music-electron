@@ -1,4 +1,9 @@
 import type { Track } from "../types";
+import {
+  albumArtistCredits,
+  explicitAlbumArtistDisplay,
+  trackArtistCredits,
+} from "./artistCredits";
 
 /**
  * Normalize a string for search comparison.
@@ -26,12 +31,18 @@ export function matchesSearchQuery(track: Track, query: string): boolean {
 
   const normalizedQuery = normalizeText(query);
   const queryTerms = normalizedQuery.split(" ").filter(Boolean);
+  const creditedArtistNames = trackArtistCredits(track)
+    .flatMap((credit) => [credit.name, credit.creditedName]);
+  const creditedAlbumArtistNames = albumArtistCredits(track, { fallbackToTrack: false })
+    .flatMap((credit) => [credit.name, credit.creditedName]);
 
   // Build searchable text from track fields
   const searchableFields = [
     track.title,
     track.artist,
-    track.artists,
+    ...creditedArtistNames,
+    explicitAlbumArtistDisplay(track),
+    ...creditedAlbumArtistNames,
     track.album,
     track.genre,
     track.comment,
