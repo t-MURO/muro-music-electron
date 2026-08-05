@@ -1025,14 +1025,20 @@ try {
     ["#EXTM3U", firstSourcePath].join("\r\n"),
     "utf8",
   );
-  await waitFor(
-    () => db.prepare(`
-      SELECT track_id
-      FROM playlist_tracks
-      WHERE playlist_id = 'playlist-empty-linked'
-    `).get()?.track_id === "track-1",
+  const emptyPlaylistSync = await backend.invoke("sync_playlist_source", {
+    dbPath,
+    playlistId: "playlist-empty-linked",
+  });
+  assert.deepEqual(
+    emptyPlaylistSync.trackIds,
+    ["track-1"],
     "an imported empty M3U should populate when its first song is added",
   );
+  assert.equal(db.prepare(`
+    SELECT track_id
+    FROM playlist_tracks
+    WHERE playlist_id = 'playlist-empty-linked'
+  `).get()?.track_id, "track-1");
   await backend.invoke("delete_playlist", {
     dbPath,
     playlistId: "playlist-empty-linked",
