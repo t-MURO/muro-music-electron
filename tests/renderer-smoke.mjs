@@ -1965,7 +1965,16 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        await waitForCondition(() => {
+          const row = scroller.querySelector('[data-track-playing="true"]');
+          return Boolean(
+            row?.getAttribute("data-track-index") === "1" &&
+            getComputedStyle(row).backgroundColor.startsWith("rgba(239, 51, 64,") &&
+            document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause" &&
+            navigator.mediaSession?.metadata?.title === "Smoke Track 001" &&
+            navigator.mediaSession.playbackState === "playing"
+          );
+        });
         const playingTrackRow = scroller.querySelector('[data-track-playing="true"]');
         const playingAfterSpace = playingTrackRow?.getAttribute("data-track-index");
         const playingRowColor = playingTrackRow
@@ -2064,11 +2073,21 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        const pausedRowSelector = '[data-track-index="' + playingAfterSpace + '"][data-track-playing="true"]';
+        await waitForCondition(() => {
+          const row = scroller.querySelector(pausedRowSelector);
+          return Boolean(
+            document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
+            navigator.mediaSession?.playbackState === "paused" &&
+            row &&
+            getComputedStyle(row).backgroundColor.startsWith("rgba(148, 163, 184,")
+          );
+        });
+        const pausedTrackRow = scroller.querySelector(pausedRowSelector);
         const pausedAfterSecondSpace = document.querySelector(".player-bar-play-button")
           ?.getAttribute("title") === "Play";
-        const pausedRowColor = playingTrackRow
-          ? getComputedStyle(playingTrackRow).backgroundColor
+        const pausedRowColor = pausedTrackRow
+          ? getComputedStyle(pausedTrackRow).backgroundColor
           : "";
         const pausedRowUsesGreyHighlight = pausedRowColor.startsWith("rgba(148, 163, 184,");
         const mediaSessionPausedReady = navigator.mediaSession?.playbackState === "paused";
