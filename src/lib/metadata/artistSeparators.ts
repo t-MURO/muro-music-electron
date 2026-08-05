@@ -2,6 +2,13 @@ import type { Track } from "../../types";
 
 const ARTIST_SEPARATOR_PATTERN = /\s+(?:&|feat\.?)\s+/gi;
 
+export const artistSeparatorExceptionKey = (artist: string): string =>
+  String(artist ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 export type ArtistSeparatorCandidate = {
   trackId: string;
   title: string;
@@ -24,11 +31,16 @@ export const proposeCommaSeparatedArtists = (artist: string): string | null => {
 
 export const findArtistSeparatorCandidates = (
   tracks: Track[],
-): ArtistSeparatorCandidate[] =>
-  tracks.flatMap((track) => {
+  exceptions: Iterable<string> = [],
+): ArtistSeparatorCandidate[] => {
+  const exceptionKeys = new Set(
+    Array.from(exceptions, artistSeparatorExceptionKey).filter(Boolean),
+  );
+
+  return tracks.flatMap((track) => {
     const candidates: ArtistSeparatorCandidate[] = [];
     const proposedArtist = proposeCommaSeparatedArtists(track.artist);
-    if (proposedArtist) {
+    if (proposedArtist && !exceptionKeys.has(artistSeparatorExceptionKey(track.artist))) {
       candidates.push({
         trackId: track.id,
         title: track.title,
@@ -43,7 +55,11 @@ export const findArtistSeparatorCandidates = (
     const proposedAlbumArtist = albumArtist
       ? proposeCommaSeparatedArtists(albumArtist)
       : null;
-    if (albumArtist && proposedAlbumArtist) {
+    if (
+      albumArtist
+      && proposedAlbumArtist
+      && !exceptionKeys.has(artistSeparatorExceptionKey(albumArtist))
+    ) {
       candidates.push({
         trackId: track.id,
         title: track.title,
@@ -56,3 +72,4 @@ export const findArtistSeparatorCandidates = (
 
     return candidates;
   });
+};

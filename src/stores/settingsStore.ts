@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { isLocale, setLocale as setI18nLocale, type Locale } from "../i18n";
 import type { MixBars } from "../lib/mix/config";
 import type { ReplayGainMode } from "../utils/replayGain";
+import { artistSeparatorExceptionKey } from "../lib/metadata/artistSeparators";
 import {
   DEFAULT_KEYBOARD_SHORTCUTS,
   normalizeShortcutMap,
@@ -92,6 +93,8 @@ type SettingsState = {
   /** Move accepted watched-folder imports into Album Artist / Album folders. */
   organizeAcceptedTracks: boolean;
   recentlyAddedPeriodDays: 1 | 7 | 30;
+  /** Exact artist/album-artist names ignored by separator cleanup. */
+  artistSeparatorExceptions: string[];
   keyboardShortcuts: KeyboardShortcutMap;
 };
 
@@ -129,6 +132,9 @@ type SettingsActions = {
   addWatchedFolder: (folder: string) => void;
   removeWatchedFolder: (folder: string) => void;
   setRecentlyAddedPeriodDays: (days: 1 | 7 | 30) => void;
+  addArtistSeparatorException: (artist: string) => void;
+  removeArtistSeparatorException: (artist: string) => void;
+  clearArtistSeparatorExceptions: () => void;
   setKeyboardShortcut: (action: ShortcutAction, shortcut: string) => void;
   resetKeyboardShortcuts: () => void;
 };
@@ -172,6 +178,7 @@ export const useSettingsStore = create<SettingsStore>()(
       watchedFolders: [],
       organizeAcceptedTracks: true,
       recentlyAddedPeriodDays: 30,
+      artistSeparatorExceptions: [],
       keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS },
 
       // Actions
@@ -235,6 +242,27 @@ export const useSettingsStore = create<SettingsStore>()(
       })),
       setRecentlyAddedPeriodDays: (recentlyAddedPeriodDays) =>
         set({ recentlyAddedPeriodDays }),
+      addArtistSeparatorException: (artist) => set((state) => {
+        const value = artist.normalize("NFKC").replace(/\s+/g, " ").trim();
+        const key = artistSeparatorExceptionKey(value);
+        if (!key || state.artistSeparatorExceptions.some(
+          (entry) => artistSeparatorExceptionKey(entry) === key
+        )) {
+          return {};
+        }
+        return {
+          artistSeparatorExceptions: [...state.artistSeparatorExceptions, value].slice(-1000),
+        };
+      }),
+      removeArtistSeparatorException: (artist) => set((state) => {
+        const key = artistSeparatorExceptionKey(artist);
+        return {
+          artistSeparatorExceptions: state.artistSeparatorExceptions.filter(
+            (entry) => artistSeparatorExceptionKey(entry) !== key
+          ),
+        };
+      }),
+      clearArtistSeparatorExceptions: () => set({ artistSeparatorExceptions: [] }),
       setKeyboardShortcut: (action, shortcut) => set((state) => ({
         keyboardShortcuts: { ...state.keyboardShortcuts, [action]: shortcut },
       })),
@@ -243,7 +271,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "muro-settings",
-      version: 5,
+      version: 6,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
@@ -278,6 +306,7 @@ export const useSettingsStore = create<SettingsStore>()(
         watchedFolders: state.watchedFolders,
         organizeAcceptedTracks: state.organizeAcceptedTracks,
         recentlyAddedPeriodDays: state.recentlyAddedPeriodDays,
+        artistSeparatorExceptions: state.artistSeparatorExceptions,
         keyboardShortcuts: state.keyboardShortcuts,
       }),
       migrate: (persistedState) => {
@@ -297,11 +326,21 @@ export const useSettingsStore = create<SettingsStore>()(
               (folder): folder is string => typeof folder === "string" && folder.length > 0,
             ).slice(0, 1)
           : [];
+        const artistSeparatorExceptions = Array.isArray(persisted.artistSeparatorExceptions)
+          ? [...new Map(
+              persisted.artistSeparatorExceptions
+                .filter((value): value is string => typeof value === "string")
+                .map((value) => value.normalize("NFKC").replace(/\s+/g, " ").trim())
+                .filter(Boolean)
+                .map((value) => [artistSeparatorExceptionKey(value), value]),
+            ).values()].slice(0, 1000)
+          : [];
 
         return {
           ...currentState,
           ...persisted,
           watchedFolders,
+          artistSeparatorExceptions,
           theme: normalizeThemeMode(persisted.theme),
           // Analysis settings are a nested group. Merge them with their defaults so
           // settings written by older versions cannot discard newer Key/BPM fields.

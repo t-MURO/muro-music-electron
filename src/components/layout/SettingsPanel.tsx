@@ -356,6 +356,13 @@ export const SettingsPanel = ({
   onClearSongs,
   onUseDefaultLocation,
 }: SettingsPanelProps) => {
+  const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
+  const removeArtistSeparatorException = useSettingsStore(
+    (s) => s.removeArtistSeparatorException,
+  );
+  const clearArtistSeparatorExceptions = useSettingsStore(
+    (s) => s.clearArtistSeparatorExceptions,
+  );
   const gaplessEnabled = useSettingsStore((s) => s.gaplessEnabled);
   const crossfadeSeconds = useSettingsStore((s) => s.crossfadeSeconds);
   const replayGainMode = useSettingsStore((s) => s.replayGainMode);
@@ -872,6 +879,45 @@ export const SettingsPanel = ({
                                   artistSeparatorCandidateCount === 1 ? "match" : "matches"
                                 }`}
                           </button>
+                          {artistSeparatorExceptions.length > 0 && (
+                            <div
+                              className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-bg-secondary)] p-3"
+                              data-artist-separator-exceptions
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                                  Saved exceptions ({artistSeparatorExceptions.length.toLocaleString()})
+                                </span>
+                                <button
+                                  className="text-[10px] font-medium text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
+                                  onClick={clearArtistSeparatorExceptions}
+                                  type="button"
+                                  data-clear-artist-separator-exceptions
+                                >
+                                  Clear all
+                                </button>
+                              </div>
+                              <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto">
+                                {artistSeparatorExceptions.map((artist) => (
+                                  <li
+                                    className="flex items-center justify-between gap-2 rounded px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+                                    key={artist}
+                                  >
+                                    <span className="min-w-0 truncate" title={artist}>{artist}</span>
+                                    <button
+                                      aria-label={`Remove ${artist} from artist separator exceptions`}
+                                      className="shrink-0 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
+                                      onClick={() => removeArtistSeparatorException(artist)}
+                                      type="button"
+                                      data-remove-artist-separator-exception={artist}
+                                    >
+                                      Remove
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

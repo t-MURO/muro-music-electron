@@ -9,6 +9,7 @@ type ArtistSeparatorReviewModalProps = {
   total: number;
   isApplying: boolean;
   onApply: (artist: string) => Promise<void>;
+  onSaveException: () => void;
   onSkip: () => void;
   onClose: () => void;
 };
@@ -19,6 +20,7 @@ export const ArtistSeparatorReviewModal = ({
   total,
   isApplying,
   onApply,
+  onSaveException,
   onSkip,
   onClose,
 }: ArtistSeparatorReviewModalProps) => {
@@ -113,7 +115,8 @@ export const ArtistSeparatorReviewModal = ({
 
           <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
             Applying updates Muro’s database and attempts to update the artist tag in the source
-            audio file.
+            audio file. Skip ignores only this occurrence; Save exception ignores this exact name
+            in future scans everywhere it appears.
           </p>
         </div>
 
@@ -129,6 +132,15 @@ export const ArtistSeparatorReviewModal = ({
           <button
             type="button"
             className="ml-auto rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 py-2 text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
+            disabled={isApplying}
+            onClick={onSaveException}
+            data-artist-separator-exception
+          >
+            Save exception
+          </button>
+          <button
+            type="button"
+            className="rounded-[var(--radius-md)] border border-[var(--color-border)] px-4 py-2 text-[12px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] disabled:opacity-50"
             disabled={isApplying}
             onClick={onSkip}
             data-artist-separator-skip

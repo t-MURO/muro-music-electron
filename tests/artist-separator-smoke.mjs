@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  artistSeparatorExceptionKey,
   findArtistSeparatorCandidates,
   proposeCommaSeparatedArtists,
 } from "../src/lib/metadata/artistSeparators.ts";
@@ -14,6 +15,7 @@ assert.equal(
 assert.equal(proposeCommaSeparatedArtists("R&B"), null);
 assert.equal(proposeCommaSeparatedArtists("Artist A featuring Artist B"), null);
 assert.equal(proposeCommaSeparatedArtists("Solo Artist"), null);
+assert.equal(artistSeparatorExceptionKey("  SHDW   & Obscure  "), "shdw & obscure");
 
 const track = (id, artist, albumArtist) => ({
   id,
@@ -62,6 +64,24 @@ assert.deepEqual(
       proposedValue: "Album Artist A, Album Artist B",
     },
   ],
+);
+
+const exceptionTracks = [
+  track("five", "SHDW & Obscure"),
+  track("six", "Solo Artist", "shdw & obscure"),
+  track("seven", "SHDW & Obscure feat. Guest"),
+];
+assert.equal(findArtistSeparatorCandidates(exceptionTracks).length, 3);
+assert.deepEqual(
+  findArtistSeparatorCandidates(exceptionTracks, [" SHDW & OBSCURE "]),
+  [{
+    trackId: "seven",
+    title: "Track seven",
+    album: "Test Album",
+    field: "artist",
+    originalValue: "SHDW & Obscure feat. Guest",
+    proposedValue: "SHDW, Obscure, Guest",
+  }],
 );
 
 console.log("Artist separator smoke test passed.");

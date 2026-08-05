@@ -1146,8 +1146,12 @@ app.whenReady().then(async () => {
         }
 
         window.location.hash = "#/settings";
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        document.querySelector('[data-settings-tab="library"]')?.click();
+        let libraryTab = null;
+        for (let attempt = 0; attempt < 40 && !libraryTab; attempt += 1) {
+          libraryTab = document.querySelector('[data-settings-tab="library"]');
+          if (!libraryTab) await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        libraryTab?.click();
         await new Promise((resolve) => setTimeout(resolve, 60));
         const useAsLibraryCheckbox = document.querySelector(
           "[data-use-export-as-current-library]"
@@ -1197,10 +1201,20 @@ app.whenReady().then(async () => {
         }
 
         window.location.hash = "#/settings";
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        document.querySelector('[data-settings-tab="library"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
-        const reviewButton = document.querySelector("[data-review-artist-separators]");
+        let artistLibraryTab = null;
+        for (let attempt = 0; attempt < 40 && !artistLibraryTab; attempt += 1) {
+          artistLibraryTab = document.querySelector('[data-settings-tab="library"]');
+          if (!artistLibraryTab) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+        }
+        artistLibraryTab?.click();
+        let reviewButton = null;
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          reviewButton = document.querySelector("[data-review-artist-separators]");
+          if (reviewButton?.textContent?.trim() === "Review 2 matches") break;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
         const reviewCountReady = reviewButton?.textContent?.trim() === "Review 2 matches";
         reviewButton?.click();
         await new Promise((resolve) => setTimeout(resolve, 80));
@@ -1216,7 +1230,7 @@ app.whenReady().then(async () => {
           proposedArtist.value === "Muro, Guest, DJ Test"
         );
 
-        document.querySelector("[data-artist-separator-apply]")?.click();
+        document.querySelector("[data-artist-separator-exception]")?.click();
         await new Promise((resolve) => setTimeout(resolve, 100));
         const secondField = document.querySelector("[data-artist-separator-field]");
         const currentAlbumArtist = document.querySelector("[data-artist-separator-current]");
@@ -1231,8 +1245,20 @@ app.whenReady().then(async () => {
         document.querySelector("[data-artist-separator-apply]")?.click();
         await new Promise((resolve) => setTimeout(resolve, 150));
         const updates = await window.muro.invoke("test_get_artist_separator_updates");
-        const savedArtistUpdate = updates[0];
-        const savedAlbumArtistUpdate = updates[1];
+        const savedAlbumArtistUpdate = updates[0];
+        const persistedArtistExceptions = JSON.parse(
+          localStorage.getItem("muro-settings") ?? "null"
+        )?.state?.artistSeparatorExceptions;
+        const savedExceptionReady = Boolean(
+          Array.isArray(persistedArtistExceptions) &&
+          persistedArtistExceptions.length === 1 &&
+          persistedArtistExceptions[0] === "Muro & Guest feat. DJ Test" &&
+          document.querySelector("[data-artist-separator-exceptions]")?.textContent
+            ?.includes("Muro & Guest feat. DJ Test") &&
+          document.querySelector(
+            '[data-remove-artist-separator-exception="Muro & Guest feat. DJ Test"]'
+          )
+        );
         const reviewCompleted = (
           !document.querySelector("[data-artist-separator-modal]") &&
           document.querySelector("[data-review-artist-separators]")?.hasAttribute("disabled")
@@ -1247,15 +1273,27 @@ app.whenReady().then(async () => {
             modal &&
             artistProposalReady &&
             albumArtistProposalReady &&
+            savedExceptionReady &&
             reviewCompleted &&
-            updates.length === 2 &&
-            savedArtistUpdate?.trackIds?.length === 1 &&
-            savedArtistUpdate.trackIds[0] === "smoke-track-249" &&
-            savedArtistUpdate.updates?.artist === "Muro, Guest, DJ Test" &&
+            updates.length === 1 &&
             savedAlbumArtistUpdate?.trackIds?.length === 1 &&
             savedAlbumArtistUpdate.trackIds[0] === "smoke-track-249" &&
             savedAlbumArtistUpdate.updates?.artists === "Various Artists, Muro"
           ),
+          artistSeparatorReviewDebug: {
+            reviewCountReady,
+            libraryTab: Boolean(artistLibraryTab),
+            reviewButtonText: reviewButton?.textContent?.trim() ?? null,
+            modal: Boolean(modal),
+            artistProposalReady,
+            albumArtistProposalReady,
+            savedExceptionReady,
+            reviewCompleted,
+            updates,
+            persistedArtistExceptions,
+            exceptionList: document.querySelector("[data-artist-separator-exceptions]")
+              ?.textContent?.trim() ?? null,
+          },
         };
       }
       if (${autoMixQueueSmokeOnly ? "true" : "false"}) {
@@ -3478,7 +3516,9 @@ app.whenReady().then(async () => {
       if (artistSeparatorSmokeOnly) {
         if (!result.artistSeparatorReviewReady) {
           fail(
-            `Artist separator review regression failed: ready=${result.artistSeparatorReviewReady}`
+            `Artist separator review regression failed: ${JSON.stringify(
+              result.artistSeparatorReviewDebug
+            )}`
           );
           return;
         }

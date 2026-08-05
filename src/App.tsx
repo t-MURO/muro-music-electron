@@ -103,6 +103,7 @@ import { confirm, open, save } from "@muro/desktop/dialogs";
 import { openExternal, showItemInFolder } from "./desktop/shell";
 import { isDjMixFeatureAvailable } from "./lib/mix/config";
 import {
+  artistSeparatorExceptionKey,
   findArtistSeparatorCandidates,
   type ArtistSeparatorCandidate,
 } from "./lib/metadata/artistSeparators";
@@ -163,13 +164,15 @@ function App() {
   const playlists = useLibraryStore((s) => s.playlists);
   const playlistFolders = useLibraryStore((s) => s.playlistFolders);
   const allTracks = useLibraryStore(selectAllTracks);
+  const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
+  const addArtistSeparatorException = useSettingsStore((s) => s.addArtistSeparatorException);
   const allTracksById = useMemo(
     () => new Map(allTracks.map((track) => [track.id, track])),
     [allTracks],
   );
   const artistSeparatorCandidates = useMemo(
-    () => findArtistSeparatorCandidates(allTracks),
-    [allTracks],
+    () => findArtistSeparatorCandidates(allTracks, artistSeparatorExceptions),
+    [allTracks, artistSeparatorExceptions],
   );
 
   const recentlyPlayedTracks = useRecentlyPlayedStore((s) => s.recentlyPlayedTracks);
@@ -1094,6 +1097,34 @@ function App() {
     handleSaveMetadata,
   ]);
 
+  const handleSaveArtistSeparatorException = useCallback(() => {
+    const review = artistSeparatorReview;
+    const candidate = review?.candidates[0];
+    if (!review || !candidate || artistSeparatorApplying) return;
+
+    const exceptionKey = artistSeparatorExceptionKey(candidate.originalValue);
+    const candidates = review.candidates.filter(
+      (entry) => artistSeparatorExceptionKey(entry.originalValue) !== exceptionKey,
+    );
+    const ignoredCount = review.candidates.length - candidates.length;
+    addArtistSeparatorException(candidate.originalValue);
+
+    if (candidates.length === 0) {
+      setArtistSeparatorReview(null);
+    } else {
+      setArtistSeparatorReview({
+        ...review,
+        candidates,
+        completed: review.completed + ignoredCount,
+      });
+    }
+    notify.success(`Saved “${candidate.originalValue}” as an artist separator exception`);
+  }, [
+    addArtistSeparatorException,
+    artistSeparatorApplying,
+    artistSeparatorReview,
+  ]);
+
   const {
     pendingTracks: pendingDeleteTracks,
     isDeleting: isDeletingTracks,
@@ -1836,6 +1867,7 @@ function App() {
         total={artistSeparatorReview?.total ?? 0}
         isApplying={artistSeparatorApplying}
         onApply={handleApplyArtistSeparator}
+        onSaveException={handleSaveArtistSeparatorException}
         onSkip={() => advanceArtistSeparatorReview(false)}
         onClose={() => setArtistSeparatorReview(null)}
       />
