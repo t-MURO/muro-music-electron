@@ -2792,9 +2792,10 @@ app.whenReady().then(async () => {
         document.querySelector('[data-panel-view="queue"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
         window.location.hash = "#/settings";
-        await new Promise((resolve) => setTimeout(resolve, 60));
-        document.querySelector('[data-settings-tab="analysis"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 60));
+        const analysisSettingsTab = await waitForSelector('[data-settings-tab="analysis"]');
+        analysisSettingsTab?.click();
+        await waitForSelector('[data-analysis-notation]');
+        await waitForSelector('[data-analysis-performance]');
         const notationSelect = document.querySelector('[data-analysis-notation]');
         const notationOptions = notationSelect instanceof HTMLSelectElement
           ? Array.from(notationSelect.options, (option) => option.value)
@@ -2806,8 +2807,11 @@ app.whenReady().then(async () => {
         if (performanceSelect instanceof HTMLSelectElement) {
           performanceSelect.value = "maximum";
           performanceSelect.dispatchEvent(new Event("change", { bubbles: true }));
-          await new Promise((resolve) => setTimeout(resolve, 40));
         }
+        const analysisPerformancePersisted = await waitForCondition(() =>
+          JSON.parse(localStorage.getItem("muro-settings") ?? "null")
+            ?.state?.analysisPerformance === "maximum"
+        );
         const persistedAnalysisPerformance = JSON.parse(
           localStorage.getItem("muro-settings") ?? "null"
         )?.state?.analysisPerformance;
@@ -2817,6 +2821,7 @@ app.whenReady().then(async () => {
           notationOptions.includes("combined") &&
           notationOptions.includes("djCombined") &&
           performanceOptions.join(",") === "stable,fast,maximum" &&
+          analysisPerformancePersisted &&
           persistedAnalysisPerformance === "maximum";
         window.location.hash = "#/collection/albums";
         await waitForSelector("[data-albums-view]");
