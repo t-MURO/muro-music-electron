@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   configureLibraryRoot,
+  getLibraryRoot,
   openDatabase,
   resolveTrackPath,
   storeTrackPath,
@@ -14,6 +15,24 @@ const normalizedPath = (value) => {
 };
 
 const pathsEqual = (left, right) => normalizedPath(left) === normalizedPath(right);
+
+const configuredLibraryRoot = async (dbPath, requestedRoot) => {
+  const candidate = String(requestedRoot ?? "").trim();
+  const libraryRoot = candidate ? path.resolve(candidate) : getLibraryRoot(dbPath);
+  if (!libraryRoot) throw new Error("Choose the music library folder first");
+
+  let stats;
+  try {
+    stats = await fs.promises.stat(libraryRoot);
+  } catch (error) {
+    throw new Error("The music library folder is unavailable", { cause: error });
+  }
+  if (!stats.isDirectory()) throw new Error("The music library folder is unavailable");
+
+  if (candidate) configureLibraryRoot(dbPath, libraryRoot);
+
+  return libraryRoot;
+};
 
 export const isPathInsideOrEqual = (candidatePath, folderPath) => {
   const relative = path.relative(path.resolve(folderPath), path.resolve(candidatePath));
@@ -129,6 +148,174 @@ const moveWithoutOverwrite = async (sourcePath, requestedDestination) => {
   }
 
   throw new Error("Could not find an available destination filename");
+};
+
+const structureIssue = (track, sourcePath, libraryRoot) => {
+  const currentFolder = path.dirname(sourcePath);
+  const expectedFolder = path.dirname(acceptedTrackDestination(track, libraryRoot));
+  if (pathsEqual(currentFolder, expectedFolder)) return null;
+
+  return {
+    trackId: String(track.id),
+    title: String(track.title ?? ""),
+    artist: String(track.artist ?? ""),
+    albumArtist: String(track.album_artist ?? ""),
+    album: String(track.album ?? ""),
+    filename: path.basename(sourcePath),
+    currentPath: sourcePath,
+    currentFolder,
+    expectedFolder,
+  };
+};
+
+const structureTrackSelect = `
+  SELECT id, title, artist, album_artist, album, filename, source_path,
+    import_status, is_missing
+  FROM tracks
+`;
+
+/**
+ * Find accepted tracks whose existing files are beneath the configured library
+ * root but no longer live in the Album Artist / Album directory implied by
+ * their current metadata. Inbox, missing, and external files are not offered
+ * for automatic moves.
+ */
+export const validateLibraryStructure = async ({ dbPath, libraryRoot }) => {
+  const root = await configuredLibraryRoot(dbPath, libraryRoot);
+  const tracks = openDatabase(dbPath).prepare(`
+    ${structureTrackSelect}
+    WHERE import_status != 'staged'
+    ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, title COLLATE NOCASE
+  `).all();
+
+  const misplaced = [];
+  let checked = 0;
+  let unavailable = 0;
+  let outsideRoot = 0;
+
+  for (const track of tracks) {
+    let sourcePath;
+    try {
+      sourcePath = resolveTrackPath(dbPath, track.source_path);
+    } catch {
+      unavailable += 1;
+      continue;
+    }
+    let stats;
+    try {
+      stats = await fs.promises.stat(sourcePath);
+    } catch {
+      unavailable += 1;
+      continue;
+    }
+    if (!stats.isFile()) {
+      unavailable += 1;
+      continue;
+    }
+    if (!isPathInsideOrEqual(sourcePath, root)) {
+      outsideRoot += 1;
+      continue;
+    }
+
+    checked += 1;
+    const issue = structureIssue(track, sourcePath, root);
+    if (issue) misplaced.push(issue);
+  }
+
+  return { checked, unavailable, outsideRoot, misplaced };
+};
+
+/**
+ * Re-query and re-check every requested track before moving it. This prevents
+ * stale validation results (for example, another metadata edit) from deciding
+ * filesystem destinations in the renderer.
+ */
+export const repairLibraryStructure = async ({ dbPath, libraryRoot, trackIds }) => {
+  const root = await configuredLibraryRoot(dbPath, libraryRoot);
+  const ids = [...new Set(
+    (Array.isArray(trackIds) ? trackIds : [])
+      .map((id) => String(id ?? "").trim())
+      .filter(Boolean),
+  )];
+  if (ids.length === 0) {
+    return { requested: 0, moved: [], skipped: 0, failures: [] };
+  }
+
+  const db = openDatabase(dbPath);
+  const placeholders = ids.map(() => "?").join(", ");
+  const tracks = db.prepare(`
+    ${structureTrackSelect}
+    WHERE id IN (${placeholders}) AND import_status != 'staged'
+  `).all(...ids);
+  const updatePath = db.prepare(`
+    UPDATE tracks
+    SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
+    WHERE id = ?
+  `);
+  const now = Math.floor(Date.now() / 1000);
+  const moved = [];
+  const failures = [];
+  let skipped = ids.length - tracks.length;
+
+  for (const track of tracks) {
+    let sourcePath;
+    try {
+      sourcePath = resolveTrackPath(dbPath, track.source_path);
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    let stats;
+    try {
+      stats = await fs.promises.stat(sourcePath);
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    if (!stats.isFile() || !isPathInsideOrEqual(sourcePath, root)) {
+      skipped += 1;
+      continue;
+    }
+
+    const issue = structureIssue(track, sourcePath, root);
+    if (!issue) {
+      skipped += 1;
+      continue;
+    }
+
+    let destinationPath = null;
+    try {
+      const requestedDestination = path.join(issue.expectedFolder, path.basename(sourcePath));
+      destinationPath = await moveWithoutOverwrite(sourcePath, requestedDestination);
+      updatePath.run(
+        storeTrackPath(dbPath, destinationPath),
+        path.basename(destinationPath),
+        now,
+        track.id,
+      );
+      moved.push({
+        trackId: String(track.id),
+        sourcePath: destinationPath,
+        filename: path.basename(destinationPath),
+      });
+    } catch (error) {
+      if (destinationPath) {
+        try {
+          await moveWithoutOverwrite(destinationPath, sourcePath);
+        } catch {
+          // Library verification can reconnect the rare case where both the
+          // database update and filesystem rollback fail.
+        }
+      }
+      failures.push({
+        trackId: String(track.id),
+        sourcePath,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { requested: ids.length, moved, skipped, failures };
 };
 
 export const acceptInboxTracks = async ({

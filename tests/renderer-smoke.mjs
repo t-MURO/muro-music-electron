@@ -137,6 +137,9 @@ const settingsWatchedFolders = [
   path.join(temporaryDirectory, "watched-two"),
 ];
 let settingsWatchedFolderSelection = 0;
+let loadTracksInvocationCount = 0;
+let libraryStructureValidationCount = 0;
+let libraryStructureRepairArgs = null;
 const shownItemPaths = [];
 let nativeDraggedFilePaths = [];
 const copiedCoverPaths = [];
@@ -221,6 +224,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
     if (command === "load_tracks") {
+      loadTracksInvocationCount += 1;
       const useExportedPaths = organizedLibraryExportArgs?.useAsCurrentLibrary === true;
       if (useExportedPaths) organizedLibraryReloaded = true;
       return {
@@ -728,6 +732,62 @@ app.whenReady().then(async () => {
       return { checked: 0, newlyMissing: 0, restored: 0, missing: 0 };
     }
     if (command === "list_missing_tracks") return [];
+    if (command === "validate_library_structure") {
+      libraryStructureValidationCount += 1;
+      const libraryRoot = args.libraryRoot || settingsWatchedFolders[1];
+      return {
+        checked: 1,
+        unavailable: 0,
+        outsideRoot: 0,
+        misplaced: libraryStructureValidationCount === 1
+          ? [{
+              trackId: "smoke-track-0",
+              title: "Smoke Track 000",
+              artist: "Renamed Muro",
+              albumArtist: "",
+              album: "Smoke Album 00",
+              filename: "track-0.wav",
+              currentPath: path.join(
+                libraryRoot,
+                "Muro",
+                "Smoke Album 00",
+                "track-0.wav"
+              ),
+              currentFolder: path.join(libraryRoot, "Muro", "Smoke Album 00"),
+              expectedFolder: path.join(
+                libraryRoot,
+                "Renamed Muro",
+                "Smoke Album 00"
+              ),
+            }]
+          : [],
+      };
+    }
+    if (command === "repair_library_structure") {
+      libraryStructureRepairArgs = { ...args, trackIds: [...(args.trackIds ?? [])] };
+      return {
+        requested: args.trackIds?.length ?? 0,
+        moved: (args.trackIds ?? []).map((trackId) => ({
+          trackId,
+          sourcePath: path.join(
+            args.libraryRoot,
+            "Renamed Muro",
+            "Smoke Album 00",
+            "track-0.wav"
+          ),
+          filename: "track-0.wav",
+        })),
+        skipped: 0,
+        failures: [],
+      };
+    }
+    if (command === "test_get_library_structure_state") {
+      return {
+        loadTracksInvocationCount,
+        validationCount: libraryStructureValidationCount,
+        repairArgs: libraryStructureRepairArgs,
+      };
+    }
     if (command === "list_tracks_needing_loudness") return [];
     if (command === "update_track_loudness") return { updated: true };
     if (command === "recompute_album_gain") return { albums: 0, updated: 0 };
@@ -947,6 +1007,58 @@ app.whenReady().then(async () => {
           persistedWatchedFolders[0] === ${JSON.stringify(settingsWatchedFolders[1])}
         );
 
+        const structureStateBefore = await window.muro.invoke(
+          "test_get_library_structure_state"
+        );
+        const validateStructureButton = document.querySelector(
+          "[data-validate-library-structure]"
+        );
+        const repairUnavailableBeforeValidation = Boolean(
+          !document.querySelector("[data-repair-library-structure]")
+        );
+        validateStructureButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const misplacedModal = document.querySelector("[data-library-structure-modal]");
+        const misplacedRow = document.querySelector(
+          '[data-library-structure-track="smoke-track-0"]'
+        );
+        const currentStructurePath = document.querySelector(
+          "[data-library-structure-current-path]"
+        );
+        const expectedStructurePath = document.querySelector(
+          "[data-library-structure-expected-path]"
+        );
+        const repairStructureButton = document.querySelector(
+          "[data-repair-library-structure]"
+        );
+        const structureValidationShowsTracks = Boolean(
+          validateStructureButton instanceof HTMLButtonElement &&
+          !validateStructureButton.disabled &&
+          repairUnavailableBeforeValidation &&
+          misplacedModal &&
+          misplacedRow?.textContent?.includes("Smoke Track 000") &&
+          misplacedRow?.textContent?.includes("Renamed Muro") &&
+          currentStructurePath?.textContent?.includes("Muro") &&
+          expectedStructurePath?.textContent?.includes("Renamed Muro") &&
+          repairStructureButton
+        );
+        repairStructureButton?.click();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        const structureStateAfter = await window.muro.invoke(
+          "test_get_library_structure_state"
+        );
+        const structureRepairReady = Boolean(
+          !document.querySelector("[data-library-structure-modal]") &&
+          !document.querySelector("[data-show-misplaced-tracks]") &&
+          document.querySelector("[data-library-structure-status]")
+            ?.textContent?.includes("correct folders") &&
+          structureStateAfter.validationCount === 2 &&
+          structureStateAfter.loadTracksInvocationCount >
+            structureStateBefore.loadTracksInvocationCount &&
+          structureStateAfter.repairArgs?.libraryRoot === persistedWatchedFolders[0] &&
+          structureStateAfter.repairArgs?.trackIds?.join(",") === "smoke-track-0"
+        );
+
         document.querySelector('[data-settings-tab="analysis"]')?.click();
         await new Promise((resolve) => setTimeout(resolve, 40));
         const analysisReady = Boolean(
@@ -988,6 +1100,8 @@ app.whenReady().then(async () => {
             itunesExportReady &&
             firstWatchedFolderReady &&
             singleWatchedFolderReady &&
+            structureValidationShowsTracks &&
+            structureRepairReady &&
             analysisReady &&
             djReady &&
             advancedReady &&
@@ -1005,6 +1119,10 @@ app.whenReady().then(async () => {
             firstWatchedFolderReady,
             singleWatchedFolderReady,
             persistedWatchedFolders,
+            structureValidationShowsTracks,
+            structureRepairReady,
+            structureStateBefore,
+            structureStateAfter,
             analysisReady,
             djReady,
             advancedReady,

@@ -52,6 +52,8 @@ import {
   acceptInboxTracks,
   findContainingWatchedFolder,
   isPathInsideOrEqual,
+  repairLibraryStructure,
+  validateLibraryStructure,
 } from "./inboxOrganizer.mjs";
 import {
   listPlaylistFilesForImport,
@@ -607,6 +609,10 @@ export const createBackend = ({
 
     accept_tracks: ({ dbPath, trackIds, organize, watchedFolders }) =>
       acceptInboxTracks({ dbPath, trackIds, organize, watchedFolders }),
+    validate_library_structure: ({ dbPath, libraryRoot }) =>
+      validateLibraryStructure({ dbPath, libraryRoot }),
+    repair_library_structure: ({ dbPath, libraryRoot, trackIds }) =>
+      repairLibraryStructure({ dbPath, libraryRoot, trackIds }),
     unaccept_tracks: ({ dbPath, trackIds }) =>
       bulkTrackOperation(dbPath, trackIds, "UPDATE tracks SET import_status = 'staged' WHERE id IN"),
     reject_tracks: ({ dbPath, trackIds }) =>

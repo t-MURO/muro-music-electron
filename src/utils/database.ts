@@ -33,6 +33,50 @@ export const acceptTracks = (
   });
 };
 
+export type LibraryStructureIssue = {
+  trackId: string;
+  title: string;
+  artist: string;
+  albumArtist: string;
+  album: string;
+  filename: string;
+  currentPath: string;
+  currentFolder: string;
+  expectedFolder: string;
+};
+
+export type LibraryStructureValidationResult = {
+  checked: number;
+  unavailable: number;
+  outsideRoot: number;
+  misplaced: LibraryStructureIssue[];
+};
+
+export type LibraryStructureRepairResult = {
+  requested: number;
+  moved: Array<{ trackId: string; sourcePath: string; filename: string }>;
+  skipped: number;
+  failures: Array<{ trackId: string; sourcePath: string; message: string }>;
+};
+
+export const validateLibraryStructure = (
+  dbPath: string,
+  libraryRoot: string,
+) => invoke<LibraryStructureValidationResult>("validate_library_structure", {
+  dbPath,
+  libraryRoot,
+});
+
+export const repairLibraryStructure = (
+  dbPath: string,
+  libraryRoot: string,
+  trackIds: string[],
+) => invoke<LibraryStructureRepairResult>("repair_library_structure", {
+  dbPath,
+  libraryRoot,
+  trackIds,
+});
+
 export const unacceptTracks = (dbPath: string, trackIds: string[]) => {
   return invoke<void>("unaccept_tracks", { dbPath, trackIds });
 };

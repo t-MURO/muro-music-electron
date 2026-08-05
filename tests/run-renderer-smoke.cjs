@@ -4,8 +4,13 @@ const os = require("node:os");
 const path = require("node:path");
 const electron = require("electron");
 
+const childEnvironment = { ...process.env, ELECTRON_RUN_AS_NODE: undefined };
+if (process.argv.includes("--settings")) {
+  childEnvironment.MURO_SETTINGS_SMOKE = "1";
+}
+
 const result = spawnSync(electron, [path.join(__dirname, "renderer-smoke.mjs")], {
-  env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined },
+  env: childEnvironment,
   stdio: "inherit",
 });
 

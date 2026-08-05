@@ -8,7 +8,11 @@ import {
   openDatabase,
 } from "../electron/database.mjs";
 import { createLibraryWatcher } from "../electron/libraryWatcher.mjs";
-import { acceptInboxTracks } from "../electron/inboxOrganizer.mjs";
+import {
+  acceptInboxTracks,
+  repairLibraryStructure,
+  validateLibraryStructure,
+} from "../electron/inboxOrganizer.mjs";
 import { importAudioFile } from "../electron/metadata.mjs";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "muro-watch-"));
@@ -225,6 +229,97 @@ const run = async () => {
     "Outside Artist/Outside Album/outside.mp3",
     "outside imports become portable after they are moved into the library root",
   );
+
+  // Editing metadata after import can make an organized path stale. Validation
+  // reports only accepted, existing files already within the library root.
+  db.prepare(`
+    UPDATE tracks
+    SET artist = 'Renamed Artist', album_artist = NULL
+    WHERE id = ?
+  `).run(offlineRow.id);
+
+  const stagedPath = path.join(watchDir, "staged-wrong.mp3");
+  fs.writeFileSync(stagedPath, buildMinimalMp3());
+  const stagedTrack = await importAudioFile(dbPath, stagedPath, cacheDir);
+  db.prepare(`
+    UPDATE tracks SET artist = 'Staged Artist', album = 'Staged Album'
+    WHERE id = ?
+  `).run(stagedTrack.id);
+
+  const acceptedOutsidePath = path.join(outsideFolder, "accepted-outside.mp3");
+  fs.writeFileSync(acceptedOutsidePath, buildMinimalMp3());
+  const acceptedOutsideTrack = await importAudioFile(dbPath, acceptedOutsidePath, cacheDir);
+  db.prepare(`
+    UPDATE tracks
+    SET artist = 'External Artist', album = 'External Album', import_status = 'accepted'
+    WHERE id = ?
+  `).run(acceptedOutsideTrack.id);
+
+  const unavailablePath = path.join(watchDir, "unavailable.mp3");
+  fs.writeFileSync(unavailablePath, buildMinimalMp3());
+  const unavailableTrack = await importAudioFile(dbPath, unavailablePath, cacheDir);
+  db.prepare("UPDATE tracks SET import_status = 'accepted' WHERE id = ?")
+    .run(unavailableTrack.id);
+  fs.unlinkSync(unavailablePath);
+
+  const validation = await validateLibraryStructure({ dbPath, libraryRoot: watchDir });
+  assert.equal(validation.checked, 3, "only existing accepted files inside the root are checked");
+  assert.equal(validation.unavailable, 1, "missing accepted files are counted separately");
+  assert.equal(validation.outsideRoot, 1, "accepted external files are counted separately");
+  assert.deepEqual(
+    validation.misplaced.map((track) => track.trackId),
+    [String(offlineRow.id)],
+    "only the track whose organizing metadata changed is misplaced",
+  );
+  assert.equal(
+    validation.misplaced[0].expectedFolder,
+    path.join(watchDir, "Renamed Artist", "Second Album"),
+    "validation compares the canonical directory without requiring a filename change",
+  );
+
+  const renamedAlbumFolder = path.join(watchDir, "Renamed Artist", "Second Album");
+  fs.mkdirSync(renamedAlbumFolder, { recursive: true });
+  const repairCollision = path.join(renamedAlbumFolder, "offline (2).mp3");
+  fs.writeFileSync(repairCollision, "repair must not overwrite this file");
+
+  const repaired = await repairLibraryStructure({
+    dbPath,
+    libraryRoot: watchDir,
+    trackIds: [
+      offlineRow.id,
+      droppedRow.id,
+      stagedTrack.id,
+      acceptedOutsideTrack.id,
+      unavailableTrack.id,
+      "unknown-track",
+    ],
+  });
+  const repairedPath = path.join(renamedAlbumFolder, "offline (2) (2).mp3");
+  assert.equal(repaired.requested, 6);
+  assert.equal(repaired.moved.length, 1, "the stale organized file is repaired");
+  assert.equal(repaired.skipped, 5, "staged, outside, unavailable, correct, and unknown rows are skipped");
+  assert.deepEqual(repaired.failures, []);
+  assert.equal(repaired.moved[0].sourcePath, repairedPath);
+  assert.equal(fs.existsSync(organizedOffline), false, "repair removes the file from the stale folder");
+  assert.equal(fs.existsSync(repairedPath), true, "repair uses a collision suffix in the correct folder");
+  assert.equal(
+    fs.readFileSync(repairCollision, "utf8"),
+    "repair must not overwrite this file",
+    "repair leaves an existing destination untouched",
+  );
+  const repairedRow = db.prepare("SELECT source_path, filename FROM tracks WHERE id = ?")
+    .get(offlineRow.id);
+  assert.equal(
+    repairedRow.source_path,
+    "Renamed Artist/Second Album/offline (2) (2).mp3",
+    "repair stores the new portable path",
+  );
+  assert.equal(repairedRow.filename, "offline (2) (2).mp3");
+
+  const cleanValidation = await validateLibraryStructure({ dbPath, libraryRoot: watchDir });
+  assert.equal(cleanValidation.misplaced.length, 0, "a repaired library validates cleanly");
+  assert.equal(cleanValidation.unavailable, 1);
+  assert.equal(cleanValidation.outsideRoot, 1);
 
   console.log("library-watcher-smoke: all assertions passed");
 };

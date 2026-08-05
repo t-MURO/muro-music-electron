@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AudioWaveform,
   ChevronDown,
@@ -22,9 +22,11 @@ import { t, type Locale } from "../../i18n";
 import { openExternal } from "../../desktop/shell";
 import { MIX_BAR_OPTIONS } from "../../lib/mix/config";
 import { useLoudnessAnalysis } from "../../hooks/useLoudnessAnalysis";
+import { useLibraryOrganization } from "../../hooks/useLibraryOrganization";
 import { useLibraryVerification } from "../../hooks/useLibraryVerification";
 import { useWatchedFolders } from "../../hooks/useWatchedFolders";
 import { MissingTracksModal } from "../ui/MissingTracksModal";
+import { MisplacedTracksModal } from "../ui/MisplacedTracksModal";
 import { LibraryDataTools } from "./LibraryDataTools";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutSettings";
 import type { ReplayGainMode } from "../../utils/replayGain";
@@ -94,7 +96,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "library",
     label: "Library & Files",
     description: "Database, export, and maintenance",
-    keywords: "database path files export organize separator cache index artwork backup restore history snapshots keyboard shortcuts itunes music xml playlists",
+    keywords: "database path files export organize structure validate move artist album separator cache index artwork backup restore history snapshots keyboard shortcuts itunes music xml playlists",
     icon: Database,
   },
   {
@@ -367,11 +369,29 @@ export const SettingsPanel = ({
   const setReplayGainPreventClipping = useSettingsStore((s) => s.setReplayGainPreventClipping);
   const setReplayGainReferenceLufs = useSettingsStore((s) => s.setReplayGainReferenceLufs);
   const loudnessScan = useLoudnessAnalysis();
+  const organization = useLibraryOrganization();
   const verification = useLibraryVerification();
   const watched = useWatchedFolders();
   const [missingTracksOpen, setMissingTracksOpen] = useState(false);
+  const [misplacedTracksOpen, setMisplacedTracksOpen] = useState(false);
 
   const onShowMissingTracks = () => setMissingTracksOpen(true);
+  const onValidateLibraryStructure = async () => {
+    const result = await organization.validate();
+    if (result && result.misplaced.length > 0) {
+      setMisplacedTracksOpen(true);
+    }
+  };
+  const onRepairLibraryStructure = async () => {
+    const result = await organization.repair();
+    if (result && result.validation.misplaced.length === 0) {
+      setMisplacedTracksOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    setMisplacedTracksOpen(false);
+  }, [watched.watchedFolders]);
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
   const [settingsSearch, setSettingsSearch] = useState("");
@@ -1060,6 +1080,77 @@ export const SettingsPanel = ({
                 </SettingsGroup>
 
                 <SettingsGroup
+                  title={t("structure.section")}
+                  description={t("structure.description")}
+                >
+                  <div className="space-y-3" data-library-structure-tool>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        className={primaryButtonClass}
+                        data-validate-library-structure
+                        disabled={
+                          !organization.hasLibraryRoot ||
+                          organization.validating ||
+                          organization.repairing
+                        }
+                        onClick={() => { void onValidateLibraryStructure(); }}
+                        type="button"
+                      >
+                        {organization.validating
+                          ? t("structure.running")
+                          : t("structure.run")}
+                      </button>
+                      {organization.lastResult &&
+                        organization.lastResult.misplaced.length > 0 && (
+                          <button
+                            className={secondaryButtonClass}
+                            data-show-misplaced-tracks
+                            onClick={() => setMisplacedTracksOpen(true)}
+                            type="button"
+                          >
+                            {t("structure.showMisplaced")} (
+                            {organization.lastResult.misplaced.length})
+                          </button>
+                        )}
+                      {organization.lastResult && (
+                        <span
+                          className="text-[var(--font-size-xs)] tabular-nums text-[var(--color-text-secondary)]"
+                          data-library-structure-status
+                        >
+                          {organization.lastResult.misplaced.length === 0
+                            ? t("structure.allCorrect", {
+                                checked: String(organization.lastResult.checked),
+                              })
+                            : t("structure.found", {
+                                misplaced: String(
+                                  organization.lastResult.misplaced.length
+                                ),
+                                checked: String(organization.lastResult.checked),
+                              })}
+                        </span>
+                      )}
+                    </div>
+                    {!organization.hasLibraryRoot && (
+                      <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-muted)]">
+                        {t("structure.noRoot")}
+                      </p>
+                    )}
+                    {organization.lastResult &&
+                      (
+                        organization.lastResult.outsideRoot > 0 ||
+                        organization.lastResult.unavailable > 0
+                      ) && (
+                        <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-muted)]">
+                          {t("structure.skipped", {
+                            outside: String(organization.lastResult.outsideRoot),
+                            unavailable: String(organization.lastResult.unavailable),
+                          })}
+                        </p>
+                      )}
+                  </div>
+                </SettingsGroup>
+
+                <SettingsGroup
                   title={t("verify.section")}
                   description={t("verify.description")}
                 >
@@ -1422,6 +1513,13 @@ export const SettingsPanel = ({
         onClose={() => setMissingTracksOpen(false)}
         onRelinkTrack={(trackId) => { void verification.relinkTrack(trackId); }}
         onAutoRelink={() => { void verification.autoRelink(); }}
+      />
+      <MisplacedTracksModal
+        isOpen={misplacedTracksOpen}
+        tracks={organization.lastResult?.misplaced ?? []}
+        repairing={organization.repairing}
+        onClose={() => setMisplacedTracksOpen(false)}
+        onRepair={() => { void onRepairLibraryStructure(); }}
       />
     </div>
   );
