@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { configureLibraryRoot } from "./database.mjs";
+import {
+  configureLibraryRoot,
+  openDatabase,
+  resolveTrackPath,
+} from "./database.mjs";
 import { AUDIO_EXTENSIONS, collectAudioPaths, importAudioFile } from "./metadata.mjs";
 
 /**
@@ -15,6 +19,11 @@ const SETTLE_POLL_MS = 500;
 
 const isAudioPath = (candidate) =>
   AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase());
+
+const comparablePath = (candidate) => {
+  const resolved = path.resolve(String(candidate));
+  return process.platform === "win32" ? resolved.toLocaleLowerCase() : resolved;
+};
 
 /**
  * Resolve once the file has stopped growing, or null if it never settles,
@@ -57,7 +66,12 @@ const waitForStableFile = async (filePath, { signal } = {}) => {
  * Imports land in the Inbox rather than the library proper: a watcher firing on
  * a half-organized download folder should not silently reshape the collection.
  */
-export const createLibraryWatcher = ({ cacheDir, emit, getSender }) => {
+export const createLibraryWatcher = ({
+  cacheDir,
+  emit,
+  getSender,
+  watch = fs.watch,
+}) => {
   /** directory -> fs.FSWatcher */
   const watchers = new Map();
   /** Paths seen but not yet imported, so a burst of events imports once. */
@@ -100,11 +114,40 @@ export const createLibraryWatcher = ({ cacheDir, emit, getSender }) => {
     void importSettledPath(filePath);
   };
 
+  const queueDirectory = async (directory) => {
+    const dbPath = currentDbPath;
+    if (!enabled || !dbPath || !watchers.has(directory)) return;
+    try {
+      const paths = await collectAudioPaths([directory]);
+      if (!enabled || currentDbPath !== dbPath || !watchers.has(directory)) return;
+      const knownPaths = new Set(
+        openDatabase(dbPath).prepare("SELECT source_path FROM tracks").all()
+          .flatMap((row) => {
+            try {
+              return [comparablePath(resolveTrackPath(dbPath, row.source_path))];
+            } catch {
+              return [];
+            }
+          }),
+      );
+      paths
+        .filter((filePath) => !knownPaths.has(comparablePath(filePath)))
+        .forEach(queuePath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Could not rescan watched folder ${directory}:`, message);
+      notify("muro://watched-folder-error", { sourcePath: directory, message });
+    }
+  };
+
   const watchDirectory = (directory) => {
     if (watchers.has(directory)) return;
     try {
-      const watcher = fs.watch(directory, { recursive: true }, (_eventType, filename) => {
-        if (!filename) return;
+      const watcher = watch(directory, { recursive: true }, (_eventType, filename) => {
+        if (!filename) {
+          void queueDirectory(directory);
+          return;
+        }
         queuePath(path.resolve(directory, filename.toString()));
       });
       watcher.on("error", (error) => {

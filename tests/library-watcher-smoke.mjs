@@ -48,12 +48,22 @@ const waitUntil = async (predicate, timeoutMs, label) => {
 };
 
 const imported = [];
+let emitWatchEvent = null;
 const watcher = createLibraryWatcher({
   cacheDir,
   emit: (_sender, name, payload) => {
     if (name === "muro://watched-folder-import") imported.push(payload);
   },
   getSender: () => ({ isDestroyed: () => false }),
+  watch: (_directory, _options, listener) => {
+    emitWatchEvent = listener;
+    return {
+      on() {
+        return this;
+      },
+      close() {},
+    };
+  },
 });
 
 const run = async () => {
@@ -80,12 +90,15 @@ const run = async () => {
 
   // Non-audio files must never be imported.
   fs.writeFileSync(path.join(watchDir, "notes.txt"), "not audio");
+  emitWatchEvent?.("change", "notes.txt");
   await wait(1_000);
   assert.equal(imported.length, 0, "a text file is ignored");
 
-  // Drop in an audio file and let the watcher settle and import it.
+  // A filename-less native event triggers a catch-up scan. Windows can omit
+  // the filename, so the watcher must still discover and import the new audio.
   const dropped = path.join(watchDir, "dropped.mp3");
   fs.writeFileSync(dropped, buildMinimalMp3());
+  emitWatchEvent?.("rename", null);
 
   await waitUntil(
     () => imported.some((entry) => entry.sourcePath === path.resolve(dropped)),
@@ -101,6 +114,7 @@ const run = async () => {
 
   // A second event for the same path must not create a duplicate row.
   fs.utimesSync(dropped, new Date(), new Date());
+  emitWatchEvent?.("change", "dropped.mp3");
   await wait(3_000);
   const count = db
     .prepare("SELECT COUNT(*) AS n FROM tracks WHERE source_path = ?")
