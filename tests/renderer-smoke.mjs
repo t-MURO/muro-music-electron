@@ -2030,7 +2030,10 @@ app.whenReady().then(async () => {
           cancelable: true,
           button: 0,
         }));
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await requireCondition("first track selection and table focus", () => Boolean(
+          document.activeElement === scroller &&
+          firstTrackRow?.getAttribute("data-track-selected") === "true"
+        ), 480);
         const tableFocusedAfterClick = document.activeElement === scroller;
         scroller.dispatchEvent(new KeyboardEvent("keydown", {
           key: "ArrowDown",
@@ -2038,7 +2041,11 @@ app.whenReady().then(async () => {
           bubbles: true,
           cancelable: true,
         }));
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await requireCondition("ArrowDown track selection", () => Boolean(
+          scroller.querySelector('[data-track-selected="true"]')
+            ?.getAttribute("data-track-index") === "1" &&
+          document.querySelector('[data-selection-edit]')
+        ), 480);
         const selectedAfterArrowDown = scroller.querySelector('[data-track-selected="true"]')
           ?.getAttribute("data-track-index");
         const selectionBarReady = Boolean(
@@ -2050,6 +2057,19 @@ app.whenReady().then(async () => {
         );
         document.querySelector('[data-selection-edit]')?.click();
         await waitForSelector('[data-edit-track-modal]');
+        await requireCondition("edit metadata form initialization", () => {
+          const artist = document.querySelector('[data-autocomplete-field="artist"]');
+          const albumArtist = document.querySelector('[data-autocomplete-field="albumArtist"]');
+          const button = document.querySelector('[data-testid="same-as-artist"]');
+          return Boolean(
+            artist instanceof HTMLInputElement &&
+            artist.value === "Muro" &&
+            albumArtist instanceof HTMLInputElement &&
+            albumArtist.value === "Muro" &&
+            button instanceof HTMLButtonElement &&
+            button.disabled
+          );
+        }, 480);
         const autocompleteFieldsReady = [
           ["artist", "Muro"],
           ["albumArtist", "Muro"],
@@ -2073,16 +2093,26 @@ app.whenReady().then(async () => {
           nativeValueSetter.call(artistEditInput, "Copied Artist");
           artistEditInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
-        const sameAsArtistEnabled = await waitForCondition(() => {
+        await requireCondition("edited artist value and Same as Artist action", () => {
+          const artist = document.querySelector('[data-autocomplete-field="artist"]');
           const button = document.querySelector('[data-testid="same-as-artist"]');
-          return button instanceof HTMLButtonElement && !button.disabled;
-        });
+          return artist instanceof HTMLInputElement &&
+            artist.value === "Copied Artist" &&
+            button instanceof HTMLButtonElement &&
+            !button.disabled;
+        }, 480);
+        const sameAsArtistEnabled = true;
         const enabledSameAsArtistButton = document.querySelector('[data-testid="same-as-artist"]');
         enabledSameAsArtistButton?.click();
-        const albumArtistCopied = await waitForCondition(() => {
+        await requireCondition("album artist copy from edited artist", () => {
           const input = document.querySelector('[data-autocomplete-field="albumArtist"]');
-          return input instanceof HTMLInputElement && input.value === "Copied Artist";
-        });
+          const button = document.querySelector('[data-testid="same-as-artist"]');
+          return input instanceof HTMLInputElement &&
+            input.value === "Copied Artist" &&
+            button instanceof HTMLButtonElement &&
+            button.disabled;
+        }, 480);
+        const albumArtistCopied = true;
         const sameAsArtistReady = Boolean(
           sameAsArtistInitiallyDisabled &&
           sameAsArtistEnabled &&
