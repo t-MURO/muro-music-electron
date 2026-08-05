@@ -35,6 +35,8 @@ export const useLibraryInit = () => {
 
   const resolveDbPath = useDbPath();
 
+  const [libraryLoading, setLibraryLoading] = useState(true);
+
   // Backfill state
   const [backfillPending, setBackfillPending] = useState(false);
   const [backfillStatus, setBackfillStatus] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export const useLibraryInit = () => {
   // Load library on mount
   useEffect(() => {
     let isMounted = true;
+    setLibraryLoading(true);
 
     const loadLibrary = async () => {
       try {
@@ -108,7 +111,9 @@ export const useLibraryInit = () => {
         })));
         setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
       } catch (error) {
-        notify.error(t("toast.library.loadFailed"));
+        if (isMounted) notify.error(t("toast.library.loadFailed"));
+      } finally {
+        if (isMounted) setLibraryLoading(false);
       }
     };
 
@@ -233,6 +238,7 @@ export const useLibraryInit = () => {
   }, [clearSongsPending, resolveDbPath, setTracks, setInboxTracks]);
 
   return {
+    libraryLoading,
     // Backfill state
     backfillPending,
     backfillStatus,

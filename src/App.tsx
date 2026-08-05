@@ -9,6 +9,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useLocation, useNavigate, useMatch } from "react-router";
+import { LoaderCircle } from "lucide-react";
 import {
   AppLayout,
   QueuePanel,
@@ -1203,6 +1204,7 @@ function App() {
 
   // Library initialization and backfill
   const {
+    libraryLoading,
     backfillPending,
     backfillStatus,
     coverArtBackfillPending,
@@ -2118,6 +2120,18 @@ function App() {
                     <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
                       <ListeningStatisticsView dbPath={dbPath} />
                     </Suspense>
+                  ) : libraryLoading && allTracks.length === 0 ? (
+                    <div
+                      className="flex min-h-[240px] flex-1 items-center justify-center"
+                      data-library-loading
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <div className="flex flex-col items-center gap-3 text-[var(--color-text-muted)]">
+                        <LoaderCircle className="h-7 w-7 animate-spin text-[var(--color-accent)]" aria-hidden="true" />
+                        <span className="text-[var(--font-size-sm)]">{t("common.loading")}</span>
+                      </div>
+                    </div>
                   ) : isArtistIndex ? (
                     <ArtistIndexView
                       items={artistIndexResults}

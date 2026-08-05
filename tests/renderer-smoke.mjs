@@ -23,6 +23,15 @@ const autoMixQueueSmokeOnly = process.env.MURO_AUTO_MIX_QUEUE_SMOKE === "1";
 const artistSeparatorSmokeOnly = process.env.MURO_ARTIST_SEPARATOR_SMOKE === "1";
 const libraryExportSmokeOnly = process.env.MURO_LIBRARY_EXPORT_SMOKE === "1";
 const settingsSmokeOnly = process.env.MURO_SETTINGS_SMOKE === "1";
+const startupLoadingSmoke = !autoMixQueueSmokeOnly
+  && !artistSeparatorSmokeOnly
+  && !libraryExportSmokeOnly
+  && !settingsSmokeOnly;
+let releaseStartupTrackLoad = () => undefined;
+const startupTrackLoadGate = new Promise((resolve) => {
+  releaseStartupTrackLoad = resolve;
+});
+let holdStartupTrackLoad = startupLoadingSmoke;
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-renderer-smoke-"));
 const writeSilentWave = (filePath, durationSeconds = 5) => {
   const sampleRate = 8_000;
@@ -262,7 +271,7 @@ app.whenReady().then(async () => {
       loadTracksInvocationCount += 1;
       const useExportedPaths = organizedLibraryExportArgs?.useAsCurrentLibrary === true;
       if (useExportedPaths) organizedLibraryReloaded = true;
-      return {
+      const snapshot = {
         library: useExportedPaths
           ? smokeTracks.map((track) => ({
               ...track,
@@ -271,6 +280,11 @@ app.whenReady().then(async () => {
           : smokeTracks,
         inbox: [],
       };
+      if (holdStartupTrackLoad) {
+        holdStartupTrackLoad = false;
+        return startupTrackLoadGate.then(() => snapshot);
+      }
+      return snapshot;
     }
     if (command === "load_playlists") return {
       playlists: [
@@ -872,12 +886,45 @@ app.whenReady().then(async () => {
   if (rendererSmokeUrl) await window.loadURL(rendererSmokeUrl);
   else await window.loadFile(path.join(appRoot, "dist", "index.html"));
 
-  if (
-    !autoMixQueueSmokeOnly
-    && !artistSeparatorSmokeOnly
-    && !libraryExportSmokeOnly
-    && !settingsSmokeOnly
-  ) {
+  if (startupLoadingSmoke) {
+    const startupLoadingState = await window.webContents.executeJavaScript(`(async () => {
+      let loading = null;
+      for (let attempt = 0; attempt < 40 && !loading; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        loading = document.querySelector('[data-library-loading]');
+      }
+      return {
+        visible: Boolean(loading),
+        role: loading?.getAttribute('role') ?? null,
+        live: loading?.getAttribute('aria-live') ?? null,
+        text: loading?.textContent?.trim() ?? null,
+        spinner: Boolean(loading?.querySelector('.animate-spin')),
+      };
+    })()`);
+    releaseStartupTrackLoad();
+    if (
+      !startupLoadingState.visible
+      || startupLoadingState.role !== "status"
+      || startupLoadingState.live !== "polite"
+      || !startupLoadingState.text?.includes("Loading")
+      || !startupLoadingState.spinner
+    ) {
+      fail(`Startup loading state failed: ${JSON.stringify(startupLoadingState)}`);
+      return;
+    }
+    const startupLoadCompleted = await window.webContents.executeJavaScript(`(async () => {
+      let row = null;
+      for (let attempt = 0; attempt < 80 && !row; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        row = document.querySelector('[data-track-index="0"]');
+      }
+      return Boolean(row) && !document.querySelector('[data-library-loading]');
+    })()`);
+    if (!startupLoadCompleted) {
+      fail("Startup loading state did not clear after songs became visible");
+      return;
+    }
+
     const multiArtistPreflight = await window.webContents.executeJavaScript(`(async () => {
       let cell = null;
       for (let attempt = 0; attempt < 40 && !cell; attempt += 1) {
