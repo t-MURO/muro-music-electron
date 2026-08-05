@@ -203,8 +203,8 @@ const timeout = setTimeout(
             : "Renderer smoke test timed out"
   ),
   autoMixQueueSmokeOnly || artistSeparatorSmokeOnly || libraryExportSmokeOnly || settingsSmokeOnly
-    ? 5_000
-    : 60_000,
+    ? 30_000
+    : 120_000,
 );
 
 app.whenReady().then(async () => {
@@ -981,7 +981,9 @@ app.whenReady().then(async () => {
   }
 
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    const result = await window.webContents.executeJavaScript(`(async () => {
+    let result;
+    try {
+      result = await window.webContents.executeJavaScript(`(async () => {
       const root = document.getElementById("root");
       const selectAll = document.querySelector('[aria-label="Select all tracks"]');
       const scroller = document.querySelector('[data-track-table-scroll]');
@@ -1001,6 +1003,10 @@ app.whenReady().then(async () => {
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
         return false;
+      };
+      const requireCondition = async (label, predicate, attempts = 120) => {
+        const ready = await waitForCondition(predicate, attempts);
+        if (!ready) throw new Error("Timed out waiting for " + label);
       };
       if (${settingsSmokeOnly ? "true" : "false"}) {
         if (!root?.childElementCount || !scroller) {
@@ -2413,29 +2419,47 @@ app.whenReady().then(async () => {
         document.querySelector("[data-output-button]")?.click();
         const castOutputDevice = await waitForSelector('[data-output-device="cast:cast-smoke"]');
         castOutputDevice?.click();
-        await waitForCondition(() =>
-          document.querySelector("[data-output-button]")?.getAttribute("data-output-state") === "idle" &&
-          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
-          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+        const remoteFallbackOutcomeReady = await waitForCondition(() => {
+          const notifications = [...document.querySelectorAll(".fixed.bottom-4.right-4 p")];
+          const restoreFailed = notifications.some((message) =>
+            message.textContent?.includes("Local playback could not be restored automatically.")
+          );
+          const restoreSucceeded = notifications.some((message) =>
             message.textContent?.includes("Local playback is ready and paused at the handoff position.")
-          )
-        );
+          );
+          return restoreFailed || Boolean(
+            restoreSucceeded &&
+            document.querySelector("[data-output-button]")?.getAttribute("data-output-state") === "idle" &&
+            document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play"
+          );
+        }, 480);
+        if (!remoteFallbackOutcomeReady) {
+          throw new Error("Timed out waiting for Cast fallback to finish");
+        }
+        const remoteFallbackMessages = [...document.querySelectorAll(".fixed.bottom-4.right-4 p")]
+          .map((message) => message.textContent?.trim() ?? "");
         const remoteFallbackReady = Boolean(
           document.querySelector("[data-output-button]")?.getAttribute("data-output-state") === "idle" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
-          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
-            message.textContent?.includes("Local playback is ready and paused at the handoff position.")
+          remoteFallbackMessages.some((message) =>
+            message.includes("Local playback is ready and paused at the handoff position.")
           )
         );
+        if (!remoteFallbackReady) {
+          throw new Error(
+            "Cast fallback finished without restoring paused local playback: " +
+            JSON.stringify(remoteFallbackMessages)
+          );
+        }
         await window.muro.invoke("test_emit_media_control", { action: "next" });
-        await waitForCondition(() =>
+        await requireCondition("media next transition after Cast fallback", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
         );
         const mediaNextTrackIndex = scroller.querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         await window.muro.invoke("test_emit_media_control", { action: "previous" });
-        await waitForCondition(() =>
+        await requireCondition("media previous transition after Cast fallback", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "1" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
         );
@@ -2444,7 +2468,7 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "next", source: "global-shortcut" },
         });
-        await waitForCondition(() =>
+        await requireCondition("global shortcut next transition", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
         );
@@ -2454,7 +2478,7 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "pause", source: "media-session" },
         });
-        await waitForCondition(() =>
+        await requireCondition("media pause after shortcut toggle", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
           navigator.mediaSession?.playbackState === "paused"
@@ -2466,7 +2490,7 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "next", source: "global-shortcut" },
         });
-        await waitForCondition(() =>
+        await requireCondition("global shortcut next while paused", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "3" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause"
         );
@@ -2478,7 +2502,7 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "pause", source: "media-session" },
         });
-        await waitForCondition(() =>
+        await requireCondition("media pause on advanced track", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "3" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
           navigator.mediaSession?.playbackState === "paused"
@@ -2489,7 +2513,7 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "play", source: "media-session" },
         });
-        await waitForCondition(() =>
+        await requireCondition("media resume after pause", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "3" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Pause" &&
           navigator.mediaSession?.playbackState === "playing"
@@ -2511,20 +2535,20 @@ app.whenReady().then(async () => {
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "previous", source: "global-shortcut" },
         });
-        await waitForCondition(() =>
+        await requireCondition("first previous transition after resume", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "2"
         );
         await window.muro.invoke("test_emit_media_control", {
           payload: { action: "previous", source: "global-shortcut" },
         });
-        await waitForCondition(() =>
+        await requireCondition("second previous transition after resume", () =>
           scroller.querySelector('[data-track-playing="true"]')?.getAttribute("data-track-index") === "1"
         );
         const mediaPreviousAfterResumeIndex = scroller
           .querySelector('[data-track-playing="true"]')
           ?.getAttribute("data-track-index");
         document.querySelector('[data-panel-view="mix"]')?.click();
-        await waitForCondition(() =>
+        await requireCondition("mix suggestions and filters", () =>
           document.querySelectorAll('[data-mix-suggestion]').length >= 3 &&
           Boolean(document.querySelector('[data-mix-filter-bpm]')) &&
           Boolean(document.querySelector('[data-mix-filter-rating]')) &&
@@ -4448,7 +4472,15 @@ app.whenReady().then(async () => {
         textLength: root?.textContent?.trim().length ?? 0,
         stickyHeaderReady: false,
       };
-    })()`);
+      })()`);
+    } catch (error) {
+      fail(
+        `Renderer smoke sequence failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return;
+    }
     if (result.childCount > 0 && result.textLength > 0 && result.stickyHeaderReady) {
       if (settingsSmokeOnly) {
         if (!result.settingsOrganizationReady) {
