@@ -985,6 +985,13 @@ app.whenReady().then(async () => {
         }
         return null;
       };
+      const waitForCondition = async (predicate, attempts = 40) => {
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          if (predicate()) return true;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        return false;
+      };
       if (${settingsSmokeOnly ? "true" : "false"}) {
         if (!root?.childElementCount || !scroller) {
           return {
@@ -1783,17 +1790,21 @@ app.whenReady().then(async () => {
           nativeValueSetter.call(artistEditInput, "Copied Artist");
           artistEditInput.dispatchEvent(new Event("input", { bubbles: true }));
         }
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const sameAsArtistEnabled = await waitForCondition(() => {
+          const button = document.querySelector('[data-testid="same-as-artist"]');
+          return button instanceof HTMLButtonElement && !button.disabled;
+        });
         const enabledSameAsArtistButton = document.querySelector('[data-testid="same-as-artist"]');
-        const sameAsArtistEnabled = enabledSameAsArtistButton instanceof HTMLButtonElement &&
-          !enabledSameAsArtistButton.disabled;
         enabledSameAsArtistButton?.click();
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const albumArtistCopied = await waitForCondition(() => {
+          const input = document.querySelector('[data-autocomplete-field="albumArtist"]');
+          return input instanceof HTMLInputElement && input.value === "Copied Artist";
+        });
         const sameAsArtistReady = Boolean(
           sameAsArtistInitiallyDisabled &&
           sameAsArtistEnabled &&
           albumArtistEditInput instanceof HTMLInputElement &&
-          albumArtistEditInput.value === "Copied Artist"
+          albumArtistCopied
         );
         const editCoverField = document.querySelector('[data-cover-art-field]');
         editCoverField?.dispatchEvent(new MouseEvent("contextmenu", {
