@@ -2092,9 +2092,15 @@ app.whenReady().then(async () => {
         const pausedRowUsesGreyHighlight = pausedRowColor.startsWith("rgba(148, 163, 184,");
         const mediaSessionPausedReady = navigator.mediaSession?.playbackState === "paused";
         document.querySelector("[data-output-button]")?.click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        document.querySelector('[data-output-device="cast:cast-smoke"]')?.click();
-        await new Promise((resolve) => setTimeout(resolve, 160));
+        const castOutputDevice = await waitForSelector('[data-output-device="cast:cast-smoke"]');
+        castOutputDevice?.click();
+        await waitForCondition(() =>
+          document.querySelector("[data-output-button]")?.getAttribute("data-output-state") === "idle" &&
+          document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
+          [...document.querySelectorAll(".fixed.bottom-4.right-4 p")].some((message) =>
+            message.textContent?.includes("Local playback is ready and paused at the handoff position.")
+          )
+        );
         const remoteFallbackReady = Boolean(
           document.querySelector("[data-output-button]")?.getAttribute("data-output-state") === "idle" &&
           document.querySelector(".player-bar-play-button")?.getAttribute("title") === "Play" &&
