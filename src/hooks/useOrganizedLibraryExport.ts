@@ -21,7 +21,7 @@ export const useOrganizedLibraryExport = () => {
   const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
-  const setLibraryRoot = useSettingsStore((state) => state.addWatchedFolder);
+  const setLibraryRoot = useSettingsStore((state) => state.setWatchedFolder);
   const artistSeparatorExceptions = useSettingsStore(
     (state) => state.artistSeparatorExceptions,
   );

@@ -17,7 +17,7 @@ export type LibraryStructureRepairOutcome = {
 };
 
 export const useLibraryOrganization = () => {
-  const libraryRoot = useSettingsStore((state) => state.watchedFolders[0] ?? "");
+  const libraryRoot = useSettingsStore((state) => state.watchedFolder);
   const artistSeparatorExceptions = useSettingsStore(
     (state) => state.artistSeparatorExceptions,
   );

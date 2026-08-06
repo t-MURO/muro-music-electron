@@ -41,16 +41,6 @@ export const isPathInsideOrEqual = (candidatePath, folderPath) => {
     && !path.isAbsolute(relative);
 };
 
-export const findContainingWatchedFolder = (sourcePath, watchedFolders) =>
-  [...new Set(
-    (Array.isArray(watchedFolders) ? watchedFolders : [])
-      .map((folder) => String(folder ?? "").trim())
-      .filter(Boolean)
-      .map((folder) => path.resolve(folder)),
-  )]
-    .filter((folder) => isPathInsideOrEqual(sourcePath, folder))
-    .sort((left, right) => right.length - left.length)[0] ?? null;
-
 const sourceFileName = (track) => {
   const parsed = path.parse(String(track.source_path ?? ""));
   const baseName = sanitizeExportSegment(parsed.name || track.title, "Unknown Track");
@@ -322,93 +312,81 @@ export const acceptInboxTracks = async ({
   dbPath,
   trackIds,
   organize = false,
-  watchedFolders = [],
+  libraryFolder,
 }) => {
   const ids = [...new Set(
     (Array.isArray(trackIds) ? trackIds : [])
       .map((id) => String(id ?? "").trim())
       .filter(Boolean),
   )];
-  if (ids.length === 0) return { accepted: 0, moved: [], failures: [] };
+  if (ids.length === 0) {
+    return { accepted: 0, acceptedTrackIds: [], moved: [], failures: [] };
+  }
+
+  // Acceptance is only possible when there is one real destination. Resolve
+  // it before changing any rows so an unavailable folder leaves the Inbox
+  // untouched.
+  const libraryRoot = await configuredLibraryRoot(dbPath, libraryFolder);
 
   const db = openDatabase(dbPath);
   const placeholders = ids.map(() => "?").join(", ");
   const tracks = db.prepare(`
-    SELECT id, title, artist, album_artist, album, filename, source_path,
-      move_to_watched_folder_on_accept
+    SELECT id, title, artist, album_artist, album, filename, source_path
     FROM tracks
-    WHERE id IN (${placeholders})
+    WHERE id IN (${placeholders}) AND import_status = 'staged'
   `).all(...ids);
   const now = Math.floor(Date.now() / 1000);
-
-  db.prepare(`
-    UPDATE tracks
-    SET import_status = 'accepted', updated_at = ?
-    WHERE id IN (${placeholders})
-  `).run(now, ...ids);
-
+  const acceptedTrackIds = [];
   const moved = [];
   const failures = [];
-  const hasOutsideFolderImports = tracks.some(
-    (track) => Number(track.move_to_watched_folder_on_accept) === 1,
-  );
-  if (!organize && !hasOutsideFolderImports) {
-    return { accepted: tracks.length, moved, failures };
-  }
-
-  const watchedFolder = (Array.isArray(watchedFolders) ? watchedFolders : [])
-    .map((folder) => String(folder ?? "").trim())
-    .filter(Boolean)
-    .map((folder) => path.resolve(folder))[0] ?? null;
-  if (watchedFolder) configureLibraryRoot(dbPath, watchedFolder);
-  let watchedFolderAvailable = false;
-  if (watchedFolder) {
-    try {
-      watchedFolderAvailable = (await fs.promises.stat(watchedFolder)).isDirectory();
-    } catch {
-      watchedFolderAvailable = false;
-    }
-  }
 
   const updatePath = db.prepare(`
     UPDATE tracks
     SET source_path = ?, filename = ?, is_missing = 0,
-      move_to_watched_folder_on_accept = 0, updated_at = ?
+      import_status = 'accepted', move_to_watched_folder_on_accept = 0,
+      updated_at = ?
     WHERE id = ?
   `);
-  const clearMoveOnAccept = db.prepare(`
+  const acceptInPlace = db.prepare(`
     UPDATE tracks
-    SET move_to_watched_folder_on_accept = 0, updated_at = ?
+    SET import_status = 'accepted', is_missing = 0,
+      move_to_watched_folder_on_accept = 0, updated_at = ?
     WHERE id = ?
   `);
 
   for (const track of tracks) {
-    const sourcePath = resolveTrackPath(dbPath, track.source_path);
-    const moveToWatchedFolder = Number(track.move_to_watched_folder_on_accept) === 1;
-    const containingWatchedFolder = findContainingWatchedFolder(sourcePath, watchedFolders);
+    let sourcePath = String(track.source_path ?? "");
+    try {
+      sourcePath = resolveTrackPath(dbPath, track.source_path);
+      const stats = await fs.promises.stat(sourcePath);
+      if (!stats.isFile()) throw new Error("Source path is not a file");
+    } catch (error) {
+      failures.push({
+        trackId: String(track.id),
+        sourcePath,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
 
-    let requestedDestination;
-    if (moveToWatchedFolder) {
-      if (!watchedFolder || !watchedFolderAvailable) {
+    const alreadyInLibrary = isPathInsideOrEqual(sourcePath, libraryRoot);
+    const requestedDestination = organize
+      ? acceptedTrackDestination(track, libraryRoot)
+      : alreadyInLibrary
+        ? sourcePath
+        : acceptedTrackRootDestination(track, libraryRoot);
+
+    if (pathsEqual(sourcePath, requestedDestination)) {
+      try {
+        acceptInPlace.run(now, track.id);
+        acceptedTrackIds.push(String(track.id));
+      } catch (error) {
         failures.push({
           trackId: String(track.id),
           sourcePath,
-          message: watchedFolder
-            ? "The watched folder is unavailable"
-            : "No watched folder is configured",
+          message: error instanceof Error ? error.message : String(error),
         });
-        continue;
       }
-      requestedDestination = organize
-        ? acceptedTrackDestination(track, watchedFolder)
-        : acceptedTrackRootDestination(track, watchedFolder);
-    } else {
-      if (!organize || !containingWatchedFolder) continue;
-      requestedDestination = acceptedTrackDestination(track, containingWatchedFolder);
-    }
-
-    if (pathsEqual(sourcePath, requestedDestination)) {
-      if (moveToWatchedFolder) clearMoveOnAccept.run(now, track.id);
       continue;
     }
 
@@ -421,6 +399,7 @@ export const acceptInboxTracks = async ({
         now,
         track.id,
       );
+      acceptedTrackIds.push(String(track.id));
       moved.push({
         trackId: String(track.id),
         sourcePath: destinationPath,
@@ -443,5 +422,10 @@ export const acceptInboxTracks = async ({
     }
   }
 
-  return { accepted: tracks.length, moved, failures };
+  return {
+    accepted: acceptedTrackIds.length,
+    acceptedTrackIds,
+    moved,
+    failures,
+  };
 };

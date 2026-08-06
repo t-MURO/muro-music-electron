@@ -29,6 +29,7 @@ export const clearTracks = (dbPath: string) => {
 
 export type AcceptTracksResult = {
   accepted: number;
+  acceptedTrackIds: string[];
   moved: Array<{ trackId: string; sourcePath: string; filename: string }>;
   failures: Array<{ trackId: string; sourcePath: string; message: string }>;
 };
@@ -36,13 +37,13 @@ export type AcceptTracksResult = {
 export const acceptTracks = (
   dbPath: string,
   trackIds: string[],
-  options?: { organize?: boolean; watchedFolders?: string[] },
+  options?: { organize?: boolean; libraryFolder?: string },
 ) => {
   return invoke<AcceptTracksResult>("accept_tracks", {
     dbPath,
     trackIds,
     organize: options?.organize ?? false,
-    watchedFolders: options?.watchedFolders ?? [],
+    libraryFolder: options?.libraryFolder ?? "",
   });
 };
 

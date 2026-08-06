@@ -73,6 +73,11 @@ try {
     "files outside the root retain their legacy absolute path",
   );
   assert.equal(
+    loadTracks(dbPath).inbox.find((track) => track.id === "outside")?.source_path,
+    outsideSource,
+    "legacy Library tracks outside the sole root return to the Inbox",
+  );
+  assert.equal(
     db.prepare("SELECT source_path FROM playlists WHERE id = 'portable-playlist'").get().source_path,
     "Playlists/Portable Mix.m3u8",
   );
@@ -88,12 +93,22 @@ try {
   configureLibraryRoot(dbPath, secondRoot);
   assert.equal(
     db.prepare("SELECT source_path FROM tracks WHERE id = 'inside'").get().source_path,
-    relativePath,
-    "changing computers only changes the root, not every track row",
+    firstSource,
+    "changing the root rebases old relative paths before storing the new root",
   );
   assert.equal(
-    loadTracks(dbPath).library.find((track) => track.id === "inside")?.source_path,
-    secondSource,
+    loadTracks(dbPath).inbox.find((track) => track.id === "inside")?.source_path,
+    firstSource,
+    "changing the root returns external tracks to the Inbox without moving their files",
+  );
+  assert.equal(
+    db.prepare("SELECT import_status FROM tracks WHERE id = 'inside'").get().import_status,
+    "staged",
+  );
+  assert.equal(
+    loadPlaylists(dbPath).playlists[0].source_path,
+    playlistSource,
+    "playlist sources are rebased with track sources",
   );
   assert.equal(
     toStoredTrackPath(secondSource, secondRoot),

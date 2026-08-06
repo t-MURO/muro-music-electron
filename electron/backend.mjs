@@ -53,8 +53,6 @@ import {
 import { createLibraryWatcher } from "./libraryWatcher.mjs";
 import {
   acceptInboxTracks,
-  findContainingWatchedFolder,
-  isPathInsideOrEqual,
   repairLibraryStructure,
   validateLibraryStructure,
 } from "./inboxOrganizer.mjs";
@@ -619,67 +617,21 @@ export const createBackend = ({
     async import_files({
       paths,
       dbPath,
-      nativeFolderDrop,
-      watchedFolders,
-      moveToWatchedFolderOnAcceptPaths,
+      libraryFolder,
     }, sender) {
       const inputPaths = Array.isArray(paths) ? paths : [];
       const audioPaths = await collectAudioPaths(inputPaths);
-      const normalizedWatchedFolders = Array.isArray(watchedFolders)
-        ? watchedFolders
-            .map((folder) => String(folder ?? "").trim())
-            .filter(Boolean)
-            .map((folder) => path.resolve(folder))
-        : [];
-      if (normalizedWatchedFolders[0]) {
-        configureLibraryRoot(dbPath, normalizedWatchedFolders[0]);
-      }
-      const explicitlyMarkedPaths = new Set(
-        (Array.isArray(moveToWatchedFolderOnAcceptPaths)
-          ? moveToWatchedFolderOnAcceptPaths
-          : [])
-          .map((filePath) => String(filePath ?? "").trim())
-          .filter(Boolean)
-          .map((filePath) => path.resolve(filePath)),
-      );
-      const droppedFolders = [];
-      if (nativeFolderDrop) {
-        for (const inputPath of inputPaths) {
-          const resolvedPath = path.resolve(String(inputPath ?? ""));
-          try {
-            if ((await fs.promises.stat(resolvedPath)).isDirectory()) {
-              droppedFolders.push(resolvedPath);
-            }
-          } catch {
-            // The importer will report or ignore unreadable inputs normally.
-          }
-        }
+      const normalizedLibraryFolder = String(libraryFolder ?? "").trim();
+      if (normalizedLibraryFolder) {
+        configureLibraryRoot(dbPath, normalizedLibraryFolder);
       }
       const imported = [];
       const failures = [];
       for (let index = 0; index < audioPaths.length; index += 1) {
         try {
           const audioPath = audioPaths[index];
-          const moveToWatchedFolderOnAccept =
-            explicitlyMarkedPaths.has(path.resolve(audioPath))
-            || (
-              normalizedWatchedFolders.length > 0
-              && droppedFolders.some((folder) => isPathInsideOrEqual(audioPath, folder))
-              && !findContainingWatchedFolder(audioPath, normalizedWatchedFolders)
-            );
-          const track = await importAudioFile(dbPath, audioPath, cacheDir, {
-            moveToWatchedFolderOnAccept,
-          });
+          const track = await importAudioFile(dbPath, audioPath, cacheDir);
           if (track) imported.push(track);
-          else if (moveToWatchedFolderOnAccept) {
-            // A previous import of the same staged file may have won a race.
-            // Preserve the folder-drop intent on that existing Inbox row.
-            openDatabase(dbPath).prepare(`
-              UPDATE tracks
-              SET move_to_watched_folder_on_accept = 1
-              WHERE source_path = ? AND import_status = 'staged'
-            `).run(storeTrackPath(dbPath, audioPath));
-          }
         } catch (error) {
           console.warn(`Failed to import ${audioPaths[index]}:`, error);
           failures.push({
@@ -803,8 +755,8 @@ export const createBackend = ({
       await fs.promises.rm(artistCacheDir, { recursive: true, force: true });
     },
 
-    accept_tracks: ({ dbPath, trackIds, organize, watchedFolders }) =>
-      acceptInboxTracks({ dbPath, trackIds, organize, watchedFolders }),
+    accept_tracks: ({ dbPath, trackIds, organize, libraryFolder }) =>
+      acceptInboxTracks({ dbPath, trackIds, organize, libraryFolder }),
     validate_library_structure: ({ dbPath, libraryRoot }) =>
       validateLibraryStructure({ dbPath, libraryRoot }),
     repair_library_structure: ({ dbPath, libraryRoot, trackIds }) =>
@@ -1635,14 +1587,14 @@ export const createBackend = ({
       return rows.length;
     },
 
-    set_watched_folders: ({ dbPath, folders, isEnabled }) =>
-      libraryWatcher.setFolders({ dbPath, folders, isEnabled }),
+    set_watched_folder: ({ dbPath, folder, isEnabled }) =>
+      libraryWatcher.setFolder({ dbPath, folder, isEnabled }),
 
     /** Catch up on files added while the watcher was not running. */
-    scan_watched_folders: ({ dbPath, folders }) =>
-      libraryWatcher.scanNow({ dbPath, folders }),
+    scan_watched_folder: ({ dbPath, folder }) =>
+      libraryWatcher.scanNow({ dbPath, folder }),
 
-    watched_folders_status: () => libraryWatcher.status(),
+    watched_folder_status: () => libraryWatcher.status(),
 
     /**
      * Track ids matching a query, ranked by the full-text index.

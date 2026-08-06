@@ -588,20 +588,19 @@ try {
   const outsideFolderImport = await backend.invoke("import_files", {
     dbPath,
     paths: [outsideDropPath],
-    nativeFolderDrop: true,
-    watchedFolders: [watchedImportPath],
+    libraryFolder: watchedImportPath,
   });
   assert.equal(outsideFolderImport.imported.length, 1);
   assert.equal(
-    outsideFolderImport.imported[0].move_to_watched_folder_on_accept,
-    1,
-    "a folder dropped from outside the watched folder is marked for relocation",
+    fs.existsSync(outsideDropTrackPath),
+    true,
+    "importing a folder leaves its files in place while they are in the Inbox",
   );
   const acceptedOutsideFolder = await backend.invoke("accept_tracks", {
     dbPath,
     trackIds: [outsideFolderImport.imported[0].id],
     organize: false,
-    watchedFolders: [watchedImportPath],
+    libraryFolder: watchedImportPath,
   });
   const relocatedDropTrackPath = path.join(watchedImportPath, "folder-drop.wav");
   assert.deepEqual(
@@ -611,14 +610,7 @@ try {
   );
   assert.equal(fs.existsSync(outsideDropTrackPath), false);
   assert.equal(fs.existsSync(relocatedDropTrackPath), true);
-  assert.equal(
-    db.prepare(`
-      SELECT move_to_watched_folder_on_accept
-      FROM tracks WHERE id = ?
-    `).get(outsideFolderImport.imported[0].id).move_to_watched_folder_on_accept,
-    0,
-    "the one-time move marker is cleared after a successful relocation",
-  );
+  assert.deepEqual(acceptedOutsideFolder.acceptedTrackIds, [outsideFolderImport.imported[0].id]);
   await backend.invoke("reject_tracks", {
     dbPath,
     trackIds: [outsideFolderImport.imported[0].id],
@@ -630,18 +622,25 @@ try {
   const individualDropImport = await backend.invoke("import_files", {
     dbPath,
     paths: [individualDropTrackPath],
-    nativeFolderDrop: true,
-    watchedFolders: [watchedImportPath],
+    libraryFolder: watchedImportPath,
   });
+  const acceptedIndividualDrop = await backend.invoke("accept_tracks", {
+    dbPath,
+    trackIds: [individualDropImport.imported[0].id],
+    libraryFolder: watchedImportPath,
+  });
+  assert.equal(acceptedIndividualDrop.accepted, 1);
+  assert.equal(fs.existsSync(individualDropTrackPath), false);
   assert.equal(
-    individualDropImport.imported[0].move_to_watched_folder_on_accept,
-    0,
-    "an individually dropped file is not marked for relocation",
+    fs.existsSync(path.join(watchedImportPath, "individual-drop.wav")),
+    true,
+    "an individually imported file also moves into the library folder when accepted",
   );
   await backend.invoke("reject_tracks", {
     dbPath,
     trackIds: [individualDropImport.imported[0].id],
   });
+  fs.unlinkSync(path.join(watchedImportPath, "individual-drop.wav"));
 
   const noDestinationFolder = path.join(directory, "no-destination-folder-drop");
   fs.mkdirSync(noDestinationFolder);
@@ -650,13 +649,11 @@ try {
   const noDestinationImport = await backend.invoke("import_files", {
     dbPath,
     paths: [noDestinationFolder],
-    nativeFolderDrop: true,
-    watchedFolders: [],
   });
   assert.equal(
-    noDestinationImport.imported[0].move_to_watched_folder_on_accept,
-    0,
-    "a folder drop imports normally when no watched destination is configured",
+    fs.existsSync(noDestinationTrackPath),
+    true,
+    "staging remains possible without supplying a library destination",
   );
   await backend.invoke("reject_tracks", {
     dbPath,
@@ -668,18 +665,19 @@ try {
   const watchedFolderImport = await backend.invoke("import_files", {
     dbPath,
     paths: [watchedImportPath],
-    nativeFolderDrop: true,
-    watchedFolders: [watchedImportPath],
+    libraryFolder: watchedImportPath,
   });
   const watchedDropTrack = watchedFolderImport.imported.find(
     (track) => track.source_path === watchedDropTrackPath,
   );
   assert.ok(watchedDropTrack);
-  assert.equal(
-    watchedDropTrack.move_to_watched_folder_on_accept,
-    0,
-    "a dropped folder that is already watched stays in place",
-  );
+  const acceptedWatchedTrack = await backend.invoke("accept_tracks", {
+    dbPath,
+    trackIds: [watchedDropTrack.id],
+    libraryFolder: watchedImportPath,
+  });
+  assert.equal(acceptedWatchedTrack.accepted, 1);
+  assert.equal(acceptedWatchedTrack.moved.length, 0, "a file already in the library root stays in place");
   await backend.invoke("reject_tracks", {
     dbPath,
     trackIds: [watchedDropTrack.id],
@@ -771,8 +769,8 @@ try {
   fs.unlinkSync(secondValidImportPath);
   fs.unlinkSync(concurrentImportPath);
 
-  const firstSourcePath = path.join(directory, "smoke.mp3");
-  const secondSourcePath = path.join(directory, "smoke-2.mp3");
+  let firstSourcePath = path.join(directory, "smoke.mp3");
+  let secondSourcePath = path.join(directory, "smoke-2.mp3");
   fs.writeFileSync(firstSourcePath, "first smoke file");
   fs.writeFileSync(secondSourcePath, "second smoke file");
   const insertTrack = db.prepare(`
@@ -787,7 +785,16 @@ try {
   assert.equal(snapshot.inbox.length, 2);
   assert.equal(snapshot.library.length, 0);
 
-  await backend.invoke("accept_tracks", { dbPath, trackIds: ["track-1", "track-2"] });
+  const acceptedTracks = await backend.invoke("accept_tracks", {
+    dbPath,
+    trackIds: ["track-1", "track-2"],
+    libraryFolder: watchedImportPath,
+  });
+  assert.equal(acceptedTracks.accepted, 2);
+  firstSourcePath = path.join(watchedImportPath, "smoke.mp3");
+  secondSourcePath = path.join(watchedImportPath, "smoke-2.mp3");
+  assert.equal(fs.existsSync(firstSourcePath), true);
+  assert.equal(fs.existsSync(secondSourcePath), true);
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 2);
   assert.equal(snapshot.inbox.length, 0);
@@ -910,7 +917,7 @@ try {
   const importedPlaylistPath = path.join(directory, "smoke-import.m3u8");
   fs.writeFileSync(
     importedPlaylistPath,
-    ["#EXTM3U", firstSourcePath, path.basename(secondSourcePath), "missing.mp3"].join("\r\n"),
+    ["#EXTM3U", firstSourcePath, secondSourcePath, "missing.mp3"].join("\r\n"),
     "utf8",
   );
   const importedPlaylist = await backend.invoke("import_playlist_file", {

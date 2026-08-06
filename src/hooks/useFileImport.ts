@@ -32,10 +32,6 @@ type UseFileImportArgs = {
   onPlaylistFolderDetected?: (directoryPath: string) => Promise<void>;
 };
 
-type ImportPathsOptions = {
-  source?: "picker" | "native-drop";
-};
-
 export const useFileImport = ({
   onImportComplete,
   onPlaylistFolderDetected,
@@ -50,7 +46,7 @@ export const useFileImport = ({
   const pendingPlaylistDrop = useUIStore((s) => s.pendingPlaylistDrop);
   const setPendingPlaylistDrop = useUIStore((s) => s.setPendingPlaylistDrop);
   const setImportProgress = useUIStore((s) => s.setImportProgress);
-  const watchedFolders = useSettingsStore((s) => s.watchedFolders);
+  const watchedFolder = useSettingsStore((s) => s.watchedFolder);
 
   // Ref to access current pending drop
   const pendingPlaylistDropRef = useRef<PlaylistDropOperation | null>(null);
@@ -163,7 +159,7 @@ export const useFileImport = ({
   }, [setPendingPlaylistDrop]);
 
   const handleImportPaths = useCallback(
-    async (paths: string[], options: ImportPathsOptions = {}) => {
+    async (paths: string[]) => {
       if (paths.length === 0) {
         return;
       }
@@ -192,8 +188,7 @@ export const useFileImport = ({
 
         const resolvedDbPath = await resolveDbPath();
         const result = await importFiles(resolvedDbPath, paths, {
-          nativeFolderDrop: options.source === "native-drop",
-          watchedFolders,
+          libraryFolder: watchedFolder,
         });
         const imported = result.imported;
         if (imported.length === 0) {
@@ -222,14 +217,11 @@ export const useFileImport = ({
         let currentImported = imported;
         let convertedTracks = currentImported.map(importedTrackToTrack);
         const importedSourcePaths = imported.map((track) => track.source_path);
-        let moveToWatchedFolderOnAcceptPaths = imported
-          .filter((track) => track.move_to_watched_folder_on_accept === 1)
-          .map((track) => track.source_path);
         const command: Command = {
           label: `Import ${imported.length} tracks`,
           do: async () => {
             const redoResult = await importFiles(resolvedDbPath, importedSourcePaths, {
-              moveToWatchedFolderOnAcceptPaths,
+              libraryFolder: watchedFolder,
             });
             if (
               redoResult.failures.length > 0
@@ -238,9 +230,6 @@ export const useFileImport = ({
               throw new Error(t("history.import.restoreFailed"));
             }
             currentImported = redoResult.imported;
-            moveToWatchedFolderOnAcceptPaths = currentImported
-              .filter((track) => track.move_to_watched_folder_on_accept === 1)
-              .map((track) => track.source_path);
             convertedTracks = currentImported.map(importedTrackToTrack);
             setInboxTracks((current) => [...convertedTracks, ...current]);
             return t(
@@ -295,7 +284,7 @@ export const useFileImport = ({
       setInboxTracks,
       onImportComplete,
       onPlaylistFolderDetected,
-      watchedFolders,
+      watchedFolder,
     ]
   );
 

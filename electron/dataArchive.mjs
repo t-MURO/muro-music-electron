@@ -20,6 +20,9 @@ const SENSITIVE_SETTING_KEYS = new Set([
   "acoustIdClientKey",
   // The selected library root belongs to this computer. Restoring it on a
   // different operating system would reintroduce the old absolute prefix.
+  "watchedFolder",
+  // Backups made while migrating from the former array setting must not leak
+  // the old machine-specific path either.
   "watchedFolders",
 ]);
 

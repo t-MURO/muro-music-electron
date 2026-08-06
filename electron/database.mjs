@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  isPathInsideLibraryRoot,
   normalizeLibraryRoot,
   portablePathKey,
   resolveStoredTrackPath,
@@ -1117,30 +1118,52 @@ export const configureLibraryRoot = (dbPath, requestedRoot) => {
   if (!root) return { libraryRoot: getLibraryRoot(dbPath), migrated: 0 };
 
   const db = openDatabase(dbPath);
-  db.prepare(`
+  const previousRoot = getLibraryRoot(dbPath);
+  const rootChanged = portablePathKey(previousRoot ?? "") !== portablePathKey(root);
+  const setRoot = db.prepare(`
     INSERT INTO app_metadata(key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(LIBRARY_ROOT_METADATA_KEY, root);
+  `);
 
-  const rows = db.prepare("SELECT id, source_path FROM tracks").all();
+  const rows = db.prepare("SELECT id, source_path, import_status FROM tracks").all();
   const used = new Map(
     rows.map((row) => [portablePathKey(row.source_path), String(row.id)]),
   );
   const update = db.prepare("UPDATE tracks SET source_path = ? WHERE id = ?");
+  const returnToInbox = db.prepare(`
+    UPDATE tracks SET import_status = 'staged' WHERE id = ?
+  `);
   let migrated = 0;
 
   db.transaction(() => {
+    setRoot.run(LIBRARY_ROOT_METADATA_KEY, root);
     for (const row of rows) {
       const stored = String(row.source_path ?? "");
-      const portable = toStoredTrackPath(stored, root);
-      if (!portable || portable === stored) continue;
+      const resolved = resolveStoredTrackPath(stored, previousRoot);
+      const portable = toStoredTrackPath(resolved, root);
+      if (portable && portable !== stored) {
+        const collision = used.get(portablePathKey(portable));
+        if (!collision || collision === String(row.id)) {
+          used.delete(portablePathKey(stored));
+          update.run(portable, row.id);
+          used.set(portablePathKey(portable), String(row.id));
+          migrated += 1;
+        }
+      }
 
-      const collision = used.get(portablePathKey(portable));
-      if (collision && collision !== String(row.id)) continue;
-      used.delete(portablePathKey(stored));
-      update.run(portable, row.id);
-      used.set(portablePathKey(portable), String(row.id));
-      migrated += 1;
+      // A root change must not leave a Library row pointing outside the sole
+      // library folder. Keep the file where it is and return the track to the
+      // Inbox; accepting it performs the actual move into the new root.
+      const resolvedForNewRoot = path.isAbsolute(resolved)
+        ? resolved
+        : resolveStoredTrackPath(portable || stored, root);
+      if (
+        rootChanged
+        && row.import_status !== "staged"
+        && !isPathInsideLibraryRoot(resolvedForNewRoot, root)
+      ) {
+        returnToInbox.run(row.id);
+      }
     }
     const updatePlaylist = db.prepare(
       "UPDATE playlists SET source_path = ? WHERE id = ?",
@@ -1151,7 +1174,8 @@ export const configureLibraryRoot = (dbPath, requestedRoot) => {
       WHERE source_path IS NOT NULL AND source_path <> ''
     `).all()) {
       const stored = String(playlist.source_path);
-      const portable = toStoredTrackPath(stored, root);
+      const resolved = resolveStoredTrackPath(stored, previousRoot);
+      const portable = toStoredTrackPath(resolved, root);
       if (!portable || portable === stored) continue;
       updatePlaylist.run(portable, playlist.id);
       migrated += 1;
@@ -1315,15 +1339,13 @@ export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   musicbrainz_albumid: row.musicbrainz_albumid || undefined,
   musicbrainz_releasegroupid: row.musicbrainz_releasegroupid || undefined,
   acoustid_id: row.acoustid_id || undefined,
-  move_to_watched_folder_on_accept:
-    Number(row.move_to_watched_folder_on_accept) === 1 ? 1 : 0,
 });
 
 const TRACK_SELECT = `
   SELECT id, title, artist, album_artist, album, track_number, track_total,
     key, bpm, year, date, added_at, updated_at, rating, duration_seconds,
     bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
-    import_status, move_to_watched_folder_on_accept, source_path, cover_art_path,
+    import_status, source_path, cover_art_path,
     cover_art_thumb_path, last_played_at, play_count, genre_json,
     comment_json, label, disc_number, disc_total, beat_grid_json,
     musicbrainz_trackid, musicbrainz_albumid, musicbrainz_artistid,

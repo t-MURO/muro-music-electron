@@ -18,13 +18,12 @@ type WatchedImportPayload = {
  */
 export const useWatchedFolders = () => {
   const [scanning, setScanning] = useState(false);
-  const watchFoldersEnabled = useSettingsStore((s) => s.watchFoldersEnabled);
-  const watchedFolders = useSettingsStore((s) => s.watchedFolders);
+  const watchFolderEnabled = useSettingsStore((s) => s.watchFolderEnabled);
+  const watchedFolder = useSettingsStore((s) => s.watchedFolder);
   const organizeAcceptedTracks = useSettingsStore((s) => s.organizeAcceptedTracks);
-  const setWatchFoldersEnabled = useSettingsStore((s) => s.setWatchFoldersEnabled);
+  const setWatchFolderEnabled = useSettingsStore((s) => s.setWatchFolderEnabled);
   const setOrganizeAcceptedTracks = useSettingsStore((s) => s.setOrganizeAcceptedTracks);
-  const addWatchedFolder = useSettingsStore((s) => s.addWatchedFolder);
-  const removeWatchedFolder = useSettingsStore((s) => s.removeWatchedFolder);
+  const setWatchedFolder = useSettingsStore((s) => s.setWatchedFolder);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
   const resolveDbPath = useDbPath();
 
@@ -35,10 +34,10 @@ export const useWatchedFolders = () => {
       try {
         const dbPath = await resolveDbPath();
         if (cancelled) return;
-        await invoke("set_watched_folders", {
+        await invoke("set_watched_folder", {
           dbPath,
-          folders: watchedFolders,
-          isEnabled: watchFoldersEnabled,
+          folder: watchedFolder,
+          isEnabled: watchFolderEnabled,
         });
       } catch {
         // Watching is best-effort; manual import still works.
@@ -47,7 +46,7 @@ export const useWatchedFolders = () => {
     return () => {
       cancelled = true;
     };
-  }, [resolveDbPath, watchFoldersEnabled, watchedFolders]);
+  }, [resolveDbPath, watchFolderEnabled, watchedFolder]);
 
   // Newly watched-in tracks arrive one at a time.
   useEffect(() => {
@@ -75,22 +74,22 @@ export const useWatchedFolders = () => {
   const addFolder = useCallback(async () => {
     const selected = await open({ directory: true, multiple: false });
     if (typeof selected !== "string") return;
-    addWatchedFolder(selected);
-    if (!watchFoldersEnabled) setWatchFoldersEnabled(true);
-  }, [addWatchedFolder, setWatchFoldersEnabled, watchFoldersEnabled]);
+    setWatchedFolder(selected);
+    if (!watchFolderEnabled) setWatchFolderEnabled(true);
+  }, [setWatchedFolder, setWatchFolderEnabled, watchFolderEnabled]);
 
   /**
    * fs.watch only reports changes made while it is running, so a manual sweep
    * covers anything that appeared while the app was closed.
    */
   const scanNow = useCallback(async () => {
-    if (scanning || watchedFolders.length === 0) return;
+    if (scanning || !watchedFolder) return;
     setScanning(true);
     try {
       const dbPath = await resolveDbPath();
       const result = await invoke<{ imported: number; scanned: number }>(
-        "scan_watched_folders",
-        { dbPath, folders: watchedFolders }
+        "scan_watched_folder",
+        { dbPath, folder: watchedFolder }
       );
       if (result.imported > 0) {
         notify.success(t("watch.scan.imported", { count: String(result.imported) }));
@@ -102,17 +101,16 @@ export const useWatchedFolders = () => {
     } finally {
       setScanning(false);
     }
-  }, [resolveDbPath, scanning, watchedFolders]);
+  }, [resolveDbPath, scanning, watchedFolder]);
 
   return {
     scanning,
-    watchFoldersEnabled,
-    watchedFolders,
+    watchFolderEnabled,
+    watchedFolder,
     organizeAcceptedTracks,
-    setWatchFoldersEnabled,
+    setWatchFolderEnabled,
     setOrganizeAcceptedTracks,
     addFolder,
-    removeFolder: removeWatchedFolder,
     scanNow,
   };
 };

@@ -402,7 +402,7 @@ export const SettingsPanel = ({
 
   useEffect(() => {
     setMisplacedTracksOpen(false);
-  }, [watched.watchedFolders]);
+  }, [watched.watchedFolder]);
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("general");
   const [settingsSearch, setSettingsSearch] = useState("");
@@ -1065,11 +1065,12 @@ export const SettingsPanel = ({
                   <div className="space-y-4">
                     <label className="flex items-start gap-3">
                       <input
-                        checked={watched.watchFoldersEnabled}
+                        checked={watched.watchFolderEnabled}
                         className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
-                        data-watch-folders-toggle
+                        data-watch-folder-toggle
+                        disabled={!watched.watchedFolder}
                         onChange={(event) =>
-                          watched.setWatchFoldersEnabled(event.target.checked)
+                          watched.setWatchFolderEnabled(event.target.checked)
                         }
                         type="checkbox"
                       />
@@ -1098,35 +1099,21 @@ export const SettingsPanel = ({
                       </span>
                     </label>
 
-                    {watched.watchedFolders.length === 0 ? (
+                    {!watched.watchedFolder ? (
                       <p className="text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
                         {t("watch.empty")}
                       </p>
                     ) : (
-                      <ul className="space-y-2">
-                        {watched.watchedFolders.map((folder) => (
-                          <li
-                            key={folder}
-                            className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2"
-                          >
-                            <span
-                              className="min-w-0 flex-1 truncate text-[var(--font-size-xs)] text-[var(--color-text-secondary)]"
-                              title={folder}
-                            >
-                              {folder}
-                            </span>
-                            <button
-                              className="shrink-0 rounded px-2 py-1 text-[var(--font-size-xs)] font-medium text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
-                              onClick={() => watched.removeFolder(folder)}
-                              type="button"
-                            >
-                              {t("watch.remove")}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-3 py-2">
+                        <span
+                          className="min-w-0 flex-1 truncate text-[var(--font-size-xs)] text-[var(--color-text-secondary)]"
+                          title={watched.watchedFolder}
+                        >
+                          {watched.watchedFolder}
+                        </span>
+                      </div>
                     )}
-                    {watched.watchedFolders.length > 0 && (
+                    {watched.watchedFolder && (
                       <p
                         className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]"
                         data-watch-folder-destination-hint
@@ -1142,12 +1129,12 @@ export const SettingsPanel = ({
                         onClick={() => { void watched.addFolder(); }}
                         type="button"
                       >
-                        {t(watched.watchedFolders.length > 0 ? "watch.change" : "watch.add")}
+                        {t(watched.watchedFolder ? "watch.change" : "watch.add")}
                       </button>
                       <button
                         className={secondaryButtonClass}
                         data-watch-scan-now
-                        disabled={watched.scanning || watched.watchedFolders.length === 0}
+                        disabled={watched.scanning || !watched.watchedFolder}
                         onClick={() => { void watched.scanNow(); }}
                         type="button"
                       >

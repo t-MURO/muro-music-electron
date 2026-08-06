@@ -70,23 +70,20 @@ const run = async () => {
   const db = openDatabase(dbPath);
 
   // Disabled watching must not register anything.
-  let status = watcher.setFolders({ dbPath, folders: [watchDir], isEnabled: false });
-  assert.deepEqual(status.watching, [], "nothing is watched while the feature is off");
+  let status = watcher.setFolder({ dbPath, folder: watchDir, isEnabled: false });
+  assert.equal(status.watching, null, "nothing is watched while the feature is off");
 
-  status = watcher.setFolders({ dbPath, folders: [watchDir], isEnabled: true });
-  assert.deepEqual(status.watching, [path.resolve(watchDir)], "the folder is watched once enabled");
+  status = watcher.setFolder({ dbPath, folder: watchDir, isEnabled: true });
+  assert.equal(status.watching, path.resolve(watchDir), "the folder is watched once enabled");
 
   // A non-existent folder is ignored rather than throwing.
-  status = watcher.setFolders({
+  status = watcher.setFolder({
     dbPath,
-    folders: [watchDir, path.join(tempDir, "does-not-exist")],
+    folder: path.join(tempDir, "does-not-exist"),
     isEnabled: true,
   });
-  assert.deepEqual(
-    status.watching,
-    [path.resolve(watchDir)],
-    "a missing folder is skipped without failing",
-  );
+  assert.equal(status.watching, null, "a missing folder is skipped without failing");
+  watcher.setFolder({ dbPath, folder: watchDir, isEnabled: true });
 
   // Non-audio files must never be imported.
   fs.writeFileSync(path.join(watchDir, "notes.txt"), "not audio");
@@ -122,15 +119,15 @@ const run = async () => {
   assert.equal(count, 1, "re-touching a watched file does not duplicate it");
 
   // A manual scan finds files that appeared while nothing was watching.
-  watcher.setFolders({ dbPath, folders: [], isEnabled: false });
+  watcher.setFolder({ dbPath, folder: "", isEnabled: false });
   const offline = path.join(watchDir, "offline.mp3");
   fs.writeFileSync(offline, buildMinimalMp3());
-  const scan = await watcher.scanNow({ dbPath, folders: [watchDir] });
+  const scan = await watcher.scanNow({ dbPath, folder: watchDir });
   assert.equal(scan.imported, 1, "the manual scan imports what the watcher missed");
   assert.equal(scan.scanned, 2, "the scan looked at both audio files");
 
   // Re-scanning imports nothing new.
-  const rescan = await watcher.scanNow({ dbPath, folders: [watchDir] });
+  const rescan = await watcher.scanNow({ dbPath, folder: watchDir });
   assert.equal(rescan.imported, 0, "a second scan is a no-op");
 
   const droppedRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
@@ -159,7 +156,7 @@ const run = async () => {
     dbPath,
     trackIds: [droppedRow.id, offlineRow.id],
     organize: true,
-    watchedFolders: [watchDir],
+    libraryFolder: watchDir,
   });
   const organizedDropped = path.join(
     watchDir,
@@ -209,10 +206,13 @@ const run = async () => {
   fs.mkdirSync(outsideFolder);
   const outsideFile = path.join(outsideFolder, "outside.mp3");
   fs.writeFileSync(outsideFile, buildMinimalMp3());
-  const outsideTrack = await importAudioFile(dbPath, outsideFile, cacheDir, {
-    moveToWatchedFolderOnAccept: true,
-  });
+  const outsideTrack = await importAudioFile(dbPath, outsideFile, cacheDir);
   assert.ok(outsideTrack, "the outside folder track imports into the Inbox");
+  assert.equal(
+    fs.existsSync(outsideFile),
+    true,
+    "staging an Inbox track does not move it into the library folder",
+  );
   db.prepare(`
     UPDATE tracks
     SET artist = 'Outside Artist', album_artist = NULL, album = 'Outside Album'
@@ -223,7 +223,7 @@ const run = async () => {
     dbPath,
     trackIds: [outsideTrack.id],
     organize: true,
-    watchedFolders: [watchDir],
+    libraryFolder: watchDir,
   });
   const organizedOutside = path.join(
     watchDir,
@@ -242,6 +242,24 @@ const run = async () => {
     db.prepare("SELECT source_path FROM tracks WHERE id = ?").get(outsideTrack.id).source_path,
     "Outside Artist/Outside Album/outside.mp3",
     "outside imports become portable after they are moved into the library root",
+  );
+
+  const failedSource = path.join(outsideFolder, "missing-before-accept.mp3");
+  fs.writeFileSync(failedSource, buildMinimalMp3());
+  const failedTrack = await importAudioFile(dbPath, failedSource, cacheDir);
+  fs.unlinkSync(failedSource);
+  const failedAcceptance = await acceptInboxTracks({
+    dbPath,
+    trackIds: [failedTrack.id],
+    libraryFolder: watchDir,
+  });
+  assert.equal(failedAcceptance.accepted, 0);
+  assert.deepEqual(failedAcceptance.acceptedTrackIds, []);
+  assert.equal(failedAcceptance.failures.length, 1);
+  assert.equal(
+    db.prepare("SELECT import_status FROM tracks WHERE id = ?").get(failedTrack.id).import_status,
+    "staged",
+    "a track stays in the Inbox when its file cannot be moved",
   );
 
   // Editing metadata after import can make an organized path stale. Validation

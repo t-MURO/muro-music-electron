@@ -774,14 +774,14 @@ app.whenReady().then(async () => {
     // uses its in-memory matcher — which is what the search assertions below
     // exercise. The index itself is covered by search-index-smoke.
     if (command === "search_tracks") return null;
-    if (command === "set_watched_folders") return { watching: [] };
-    if (command === "scan_watched_folders") return { imported: 0, scanned: 0 };
+    if (command === "set_watched_folder") return { watching: null };
+    if (command === "scan_watched_folder") return { imported: 0, scanned: 0 };
     if (command === "configure_playlist_sync") {
       return { linked: 0, synced: 0, changed: 0 };
     }
     if (command === "sync_playlist_source") return null;
-    if (command === "watched_folders_status") {
-      return { enabled: false, watching: [], pending: 0 };
+    if (command === "watched_folder_status") {
+      return { enabled: false, watching: null, pending: 0 };
     }
     if (command === "verify_library_files") {
       return { checked: 0, newlyMissing: 0, restored: 0, missing: 0 };
@@ -1221,29 +1221,25 @@ app.whenReady().then(async () => {
         );
         document.querySelector("[data-watch-add-folder]")?.click();
         await waitForCondition(() => {
-          let persistedFolders = null;
+          let persistedFolder = null;
           try {
-            persistedFolders = JSON.parse(
+            persistedFolder = JSON.parse(
               localStorage.getItem("muro-settings") ?? "null"
-            )?.state?.watchedFolders;
+            )?.state?.watchedFolder;
           } catch {}
           return Boolean(
             document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[1])}) &&
             !document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])}) &&
-            Array.isArray(persistedFolders) &&
-            persistedFolders.length === 1 &&
-            persistedFolders[0] === ${JSON.stringify(settingsWatchedFolders[1])}
+            persistedFolder === ${JSON.stringify(settingsWatchedFolders[1])}
           );
         });
-        const persistedWatchedFolders = JSON.parse(
+        const persistedWatchedFolder = JSON.parse(
           localStorage.getItem("muro-settings") ?? "null"
-        )?.state?.watchedFolders;
+        )?.state?.watchedFolder;
         const singleWatchedFolderReady = Boolean(
           document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[1])}) &&
           !document.body.textContent?.includes(${JSON.stringify(settingsWatchedFolders[0])}) &&
-          Array.isArray(persistedWatchedFolders) &&
-          persistedWatchedFolders.length === 1 &&
-          persistedWatchedFolders[0] === ${JSON.stringify(settingsWatchedFolders[1])}
+          persistedWatchedFolder === ${JSON.stringify(settingsWatchedFolders[1])}
         );
 
         const structureStateBefore = await window.muro.invoke(
@@ -1308,7 +1304,7 @@ app.whenReady().then(async () => {
           structureStateAfter.validationCount === 2 &&
           structureStateAfter.loadTracksInvocationCount >
             structureStateBefore.loadTracksInvocationCount &&
-          structureStateAfter.repairArgs?.libraryRoot === persistedWatchedFolders[0] &&
+          structureStateAfter.repairArgs?.libraryRoot === persistedWatchedFolder &&
           structureStateAfter.repairArgs?.trackIds?.join(",") === "smoke-track-0"
         );
 
@@ -1386,7 +1382,7 @@ app.whenReady().then(async () => {
             itunesExportStatus: itunesExportStatus?.textContent?.trim() ?? null,
             firstWatchedFolderReady,
             singleWatchedFolderReady,
-            persistedWatchedFolders,
+            persistedWatchedFolder,
             structureValidationShowsTracks,
             structureRepairReady,
             structureStateBefore,

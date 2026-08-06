@@ -30,7 +30,7 @@ export const useLibraryInit = () => {
   const dbPath = useSettingsStore((s) => s.dbPath);
   const dbFileName = useSettingsStore((s) => s.dbFileName);
   const useAutoDbPath = useSettingsStore((s) => s.useAutoDbPath);
-  const libraryRoot = useSettingsStore((s) => s.watchedFolders[0]);
+  const libraryRoot = useSettingsStore((s) => s.watchedFolder || undefined);
   const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
 
   const resolveDbPath = useDbPath();

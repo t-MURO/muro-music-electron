@@ -87,9 +87,9 @@ type SettingsState = {
   replayGainPreventClipping: boolean;
   /** ReplayGain 2.0 pins this at -18 LUFS; -14 matches streaming services. */
   replayGainReferenceLufs: number;
-  watchFoldersEnabled: boolean;
-  /** Sole absolute path watched for new audio; stored as an array for IPC compatibility. */
-  watchedFolders: string[];
+  watchFolderEnabled: boolean;
+  /** Sole absolute path used as the library root and optionally watched for new audio. */
+  watchedFolder: string;
   /** Move accepted watched-folder imports into Album Artist / Album folders. */
   organizeAcceptedTracks: boolean;
   recentlyAddedPeriodDays: 1 | 7 | 30;
@@ -127,10 +127,9 @@ type SettingsActions = {
   setReplayGainPreampDb: (preampDb: number) => void;
   setReplayGainPreventClipping: (preventClipping: boolean) => void;
   setReplayGainReferenceLufs: (referenceLufs: number) => void;
-  setWatchFoldersEnabled: (enabled: boolean) => void;
+  setWatchFolderEnabled: (enabled: boolean) => void;
   setOrganizeAcceptedTracks: (enabled: boolean) => void;
-  addWatchedFolder: (folder: string) => void;
-  removeWatchedFolder: (folder: string) => void;
+  setWatchedFolder: (folder: string) => void;
   setRecentlyAddedPeriodDays: (days: 1 | 7 | 30) => void;
   addArtistSeparatorException: (artist: string) => void;
   removeArtistSeparatorException: (artist: string) => void;
@@ -174,8 +173,8 @@ export const useSettingsStore = create<SettingsStore>()(
       replayGainPreampDb: 0,
       replayGainPreventClipping: true,
       replayGainReferenceLufs: -18,
-      watchFoldersEnabled: false,
-      watchedFolders: [],
+      watchFolderEnabled: false,
+      watchedFolder: "",
       organizeAcceptedTracks: true,
       recentlyAddedPeriodDays: 30,
       artistSeparatorExceptions: [],
@@ -230,16 +229,10 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ replayGainPreventClipping }),
       setReplayGainReferenceLufs: (referenceLufs) =>
         set({ replayGainReferenceLufs: Math.max(-30, Math.min(-5, referenceLufs)) }),
-      setWatchFoldersEnabled: (watchFoldersEnabled) => set({ watchFoldersEnabled }),
+      setWatchFolderEnabled: (watchFolderEnabled) => set({ watchFolderEnabled }),
       setOrganizeAcceptedTracks: (organizeAcceptedTracks) =>
         set({ organizeAcceptedTracks }),
-      // There is intentionally only one watched folder. Choosing another one
-      // replaces it and makes the destination for outside folder-drop imports
-      // unambiguous.
-      addWatchedFolder: (folder) => set({ watchedFolders: [folder] }),
-      removeWatchedFolder: (folder) => set((state) => ({
-        watchedFolders: state.watchedFolders.filter((entry) => entry !== folder),
-      })),
+      setWatchedFolder: (watchedFolder) => set({ watchedFolder }),
       setRecentlyAddedPeriodDays: (recentlyAddedPeriodDays) =>
         set({ recentlyAddedPeriodDays }),
       addArtistSeparatorException: (artist) => set((state) => {
@@ -271,7 +264,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: "muro-settings",
-      version: 6,
+      version: 7,
       partialize: (state) => ({
         theme: state.theme,
         locale: state.locale,
@@ -302,8 +295,8 @@ export const useSettingsStore = create<SettingsStore>()(
         replayGainPreampDb: state.replayGainPreampDb,
         replayGainPreventClipping: state.replayGainPreventClipping,
         replayGainReferenceLufs: state.replayGainReferenceLufs,
-        watchFoldersEnabled: state.watchFoldersEnabled,
-        watchedFolders: state.watchedFolders,
+        watchFolderEnabled: state.watchFolderEnabled,
+        watchedFolder: state.watchedFolder,
         organizeAcceptedTracks: state.organizeAcceptedTracks,
         recentlyAddedPeriodDays: state.recentlyAddedPeriodDays,
         artistSeparatorExceptions: state.artistSeparatorExceptions,
@@ -311,21 +304,37 @@ export const useSettingsStore = create<SettingsStore>()(
       }),
       migrate: (persistedState) => {
         if (!persistedState || typeof persistedState !== "object") return persistedState;
-        const persisted = persistedState as Partial<SettingsState>;
+        const persisted = persistedState as Partial<SettingsState> & {
+          watchFoldersEnabled?: unknown;
+          watchedFolders?: unknown;
+        };
         return { ...persisted, theme: normalizeThemeMode(persisted.theme) };
       },
       merge: (persistedState, currentState) => {
         const persisted = persistedState && typeof persistedState === "object"
-          ? persistedState as Partial<SettingsState>
+          ? persistedState as Partial<SettingsState> & {
+              watchFoldersEnabled?: unknown;
+              watchedFolders?: unknown;
+            }
           : {};
+        const {
+          watchFoldersEnabled: legacyWatchFoldersEnabled,
+          watchedFolders: legacyWatchedFolders,
+          ...persistedSettings
+        } = persisted;
         const savedCustomCodes = Array.isArray(persisted.analysisCustomCodes)
           ? persisted.analysisCustomCodes
           : [];
-        const watchedFolders = Array.isArray(persisted.watchedFolders)
-          ? persisted.watchedFolders.filter(
-              (folder): folder is string => typeof folder === "string" && folder.length > 0,
-            ).slice(0, 1)
-          : [];
+        const watchedFolder = typeof persisted.watchedFolder === "string"
+          ? persisted.watchedFolder.trim()
+          : Array.isArray(legacyWatchedFolders)
+            ? legacyWatchedFolders.find(
+                (folder): folder is string => typeof folder === "string" && folder.trim().length > 0,
+              )?.trim() ?? ""
+            : "";
+        const watchFolderEnabled = typeof persisted.watchFolderEnabled === "boolean"
+          ? persisted.watchFolderEnabled
+          : legacyWatchFoldersEnabled === true;
         const artistSeparatorExceptions = Array.isArray(persisted.artistSeparatorExceptions)
           ? [...new Map(
               persisted.artistSeparatorExceptions
@@ -338,8 +347,9 @@ export const useSettingsStore = create<SettingsStore>()(
 
         return {
           ...currentState,
-          ...persisted,
-          watchedFolders,
+          ...persistedSettings,
+          watchFolderEnabled,
+          watchedFolder,
           artistSeparatorExceptions,
           theme: normalizeThemeMode(persisted.theme),
           // Analysis settings are a nested group. Merge them with their defaults so

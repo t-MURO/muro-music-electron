@@ -1400,7 +1400,7 @@ function App() {
   // Native drag
   const handleNativeDropImport = useCallback(
     (paths: string[]) => {
-      void handleImportPaths(paths, { source: "native-drop" });
+      void handleImportPaths(paths);
     },
     [handleImportPaths],
   );

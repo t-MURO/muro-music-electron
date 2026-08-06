@@ -180,7 +180,7 @@ try {
       state: {
         theme: "dark",
         braveSearchApiKey: "must-not-leave-this-device",
-        watchedFolders: [root],
+        watchedFolder: root,
       },
       version: 4,
     }),
@@ -205,7 +205,7 @@ try {
   const archivedSettings = strFromU8(archiveEntries["settings/muro-settings.json"]);
   assert.doesNotMatch(archivedSettings, /must-not-leave-this-device/);
   assert.doesNotMatch(archivedSettings, /braveSearchApiKey/);
-  assert.doesNotMatch(archivedSettings, /watchedFolders/);
+  assert.doesNotMatch(archivedSettings, /watchedFolder/);
   const archivedDbPath = path.join(root, "archived.db");
   fs.writeFileSync(archivedDbPath, Buffer.from(archiveEntries["database/muro.db"]));
   const archivedDb = new Database(archivedDbPath, { readonly: true });

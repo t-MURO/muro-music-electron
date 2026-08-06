@@ -11,7 +11,7 @@ export const useInboxOperations = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
   const organizeAcceptedTracks = useSettingsStore((s) => s.organizeAcceptedTracks);
-  const watchedFolders = useSettingsStore((s) => s.watchedFolders);
+  const watchedFolder = useSettingsStore((s) => s.watchedFolder);
   const selectedIds = useUIStore((s) => s.selectedIds);
   const clearSelection = useUIStore((s) => s.clearSelection);
   const resolveDbPath = useDbPath();
@@ -21,8 +21,14 @@ export const useInboxOperations = () => {
     if (selectedTrackIds.length === 0) {
       return;
     }
+    if (!watchedFolder) {
+      notify.info(t("toast.inbox.chooseFolder"));
+      return;
+    }
 
     let tracksToAccept = inboxTracks.filter((t) => selectedIds.has(t.id));
+    let acceptedTrackIds = selectedTrackIds;
+    let trackIdsToAccept = selectedTrackIds;
     let organizedFileCount = 0;
     const resolvedDbPath = await resolveDbPath();
 
@@ -31,10 +37,17 @@ export const useInboxOperations = () => {
     const command = {
       label: `Accept ${selectedTrackIds.length} tracks`,
       do: async () => {
-        const result = await acceptTracks(resolvedDbPath, selectedTrackIds, {
+        const result = await acceptTracks(resolvedDbPath, trackIdsToAccept, {
           organize: organizeAcceptedTracks,
-          watchedFolders,
+          libraryFolder: watchedFolder,
         });
+        if (result.accepted === 0) {
+          throw new Error("No Inbox files could be moved into the library folder");
+        }
+        acceptedTrackIds = result.acceptedTrackIds;
+        trackIdsToAccept = result.acceptedTrackIds;
+        const acceptedIdSet = new Set(acceptedTrackIds);
+        tracksToAccept = tracksToAccept.filter((track) => acceptedIdSet.has(track.id));
         const movedPaths = new Map(
           result.moved.map((entry) => [entry.trackId, entry.sourcePath]),
         );
@@ -45,11 +58,11 @@ export const useInboxOperations = () => {
         };
         tracksToAccept = tracksToAccept.map(applyMovedPaths);
         setInboxTracks((current) =>
-          current.filter((t) => !selectedTrackIds.includes(t.id))
+          current.filter((t) => !acceptedIdSet.has(t.id))
         );
         setTracks((current) => [
           ...tracksToAccept,
-          ...current.filter((track) => !selectedTrackIds.includes(track.id)),
+          ...current.filter((track) => !acceptedIdSet.has(track.id)),
         ]);
         if (result.failures.length > 0) {
           notify.error(t("toast.inbox.organizeFailed", {
@@ -57,29 +70,30 @@ export const useInboxOperations = () => {
           }));
         }
         return t(
-          selectedTrackIds.length === 1
+          result.accepted === 1
             ? "history.inbox.accepted.one"
             : "history.inbox.accepted.many",
-          { count: String(selectedTrackIds.length) },
+          { count: String(result.accepted) },
         );
       },
       undo: async () => {
-        await unacceptTracks(resolvedDbPath, selectedTrackIds);
+        await unacceptTracks(resolvedDbPath, acceptedTrackIds);
+        const acceptedIdSet = new Set(acceptedTrackIds);
         setTracks((current) =>
-          current.filter((t) => !selectedTrackIds.includes(t.id))
+          current.filter((t) => !acceptedIdSet.has(t.id))
         );
         setInboxTracks((current) => [
           ...tracksToAccept,
-          ...current.filter((track) => !selectedTrackIds.includes(track.id)),
+          ...current.filter((track) => !acceptedIdSet.has(track.id)),
         ]);
         const organizedNote = organizedFileCount > 0
           ? ` ${t("history.inbox.organizedFilesKept")}`
           : "";
         return `${t(
-          selectedTrackIds.length === 1
+          acceptedTrackIds.length === 1
             ? "history.inbox.returned.one"
             : "history.inbox.returned.many",
-          { count: String(selectedTrackIds.length) },
+          { count: String(acceptedTrackIds.length) },
         )}${organizedNote}`;
       },
     };
@@ -95,7 +109,7 @@ export const useInboxOperations = () => {
     inboxTracks,
     selectedIds,
     organizeAcceptedTracks,
-    watchedFolders,
+    watchedFolder,
     setInboxTracks,
     setTracks,
   ]);

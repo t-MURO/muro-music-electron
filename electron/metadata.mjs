@@ -444,7 +444,6 @@ export const importAudioFile = async (
   dbPath,
   filePath,
   cacheDir,
-  { moveToWatchedFolderOnAccept = false } = {},
 ) => {
   const db = openDatabase(dbPath);
   const storedSourcePath = storeTrackPath(dbPath, filePath);
@@ -511,7 +510,6 @@ export const importAudioFile = async (
     source_path: storedSourcePath,
     search_text: searchText,
     import_status: "staged",
-    move_to_watched_folder_on_accept: moveToWatchedFolderOnAccept ? 1 : 0,
     duration_seconds: format.duration || 0,
     bitrate_kbps: format.bitrate ? Math.round(format.bitrate / 1000) : 0,
     sample_rate_hz: format.sampleRate ? Math.round(format.sampleRate) : 0,
@@ -531,7 +529,7 @@ export const importAudioFile = async (
       key, bpm, rating, raw_tags_json, musicbrainz_albumid, musicbrainz_artistid,
       musicbrainz_albumartistid, musicbrainz_releasegroupid, musicbrainz_trackid,
       musicbrainz_releasetrackid, musicbrainz_albumstatus, musicbrainz_albumtype, acoustid_id,
-      source_path, search_text, import_status, move_to_watched_folder_on_accept,
+      source_path, search_text, import_status,
       duration_seconds, bitrate_kbps, sample_rate_hz, bit_depth, file_size_bytes,
       added_at, updated_at, is_missing,
       cover_art_path, cover_art_thumb_path,
@@ -543,7 +541,7 @@ export const importAudioFile = async (
       @key, @bpm, @rating, @raw_tags_json, @musicbrainz_albumid, @musicbrainz_artistid,
       @musicbrainz_albumartistid, @musicbrainz_releasegroupid, @musicbrainz_trackid,
       @musicbrainz_releasetrackid, @musicbrainz_albumstatus, @musicbrainz_albumtype, @acoustid_id,
-      @source_path, @search_text, @import_status, @move_to_watched_folder_on_accept,
+      @source_path, @search_text, @import_status,
       @duration_seconds, @bitrate_kbps, @sample_rate_hz, @bit_depth, @file_size_bytes,
       @added_at, @updated_at, 0,
       @cover_art_path, @cover_art_thumb_path,

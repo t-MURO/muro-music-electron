@@ -72,7 +72,7 @@ export const createLibraryWatcher = ({
   getSender,
   watch = fs.watch,
 }) => {
-  /** directory -> fs.FSWatcher */
+  /** The map contains at most the one configured library folder. */
   const watchers = new Map();
   /** Paths seen but not yet imported, so a burst of events imports once. */
   const pendingPaths = new Set();
@@ -185,12 +185,12 @@ export const createLibraryWatcher = ({
 
   return {
     /**
-     * Replace the watched set. Folders that are already watched keep their
-     * existing watcher so an unrelated settings change does not restart them.
+     * Replace the watched folder. An unchanged folder keeps its existing
+     * watcher so an unrelated settings change does not restart it.
      */
-    setFolders({ dbPath, folders, isEnabled }) {
+    setFolder({ dbPath, folder, isEnabled }) {
       currentDbPath = dbPath ?? currentDbPath;
-      const requestedRoot = Array.isArray(folders) ? folders[0] : null;
+      const requestedRoot = String(folder ?? "").trim();
       if (currentDbPath && requestedRoot) {
         configureLibraryRoot(currentDbPath, requestedRoot);
       }
@@ -198,23 +198,21 @@ export const createLibraryWatcher = ({
 
       if (!enabled) {
         stopAll();
-        return { watching: [] };
+        return { watching: null };
       }
 
-      const wanted = new Set(
-        (Array.isArray(folders) ? folders : [])
-          .map((folder) => path.resolve(String(folder)))
-          .filter((folder) => {
-            try {
-              return fs.statSync(folder).isDirectory();
-            } catch {
-              return false;
-            }
-          }),
-      );
+      let wantedFolder = null;
+      if (requestedRoot) {
+        const resolvedFolder = path.resolve(requestedRoot);
+        try {
+          if (fs.statSync(resolvedFolder).isDirectory()) wantedFolder = resolvedFolder;
+        } catch {
+          // An unavailable folder leaves the watcher idle until settings retry.
+        }
+      }
 
       for (const [directory, watcher] of watchers) {
-        if (wanted.has(directory)) continue;
+        if (directory === wantedFolder) continue;
         try {
           watcher.close();
         } catch {
@@ -222,26 +220,28 @@ export const createLibraryWatcher = ({
         }
         watchers.delete(directory);
       }
-      for (const directory of wanted) watchDirectory(directory);
+      if (wantedFolder) watchDirectory(wantedFolder);
 
-      return { watching: [...watchers.keys()] };
+      return { watching: [...watchers.keys()][0] ?? null };
     },
 
     /**
-     * One-off sweep of the watched folders. fs.watch only reports changes made
+     * One-off sweep of the watched folder. fs.watch only reports changes made
      * while it is running, so anything added while the app was closed is picked
      * up here.
      */
-    async scanNow({ dbPath, folders }) {
+    async scanNow({ dbPath, folder }) {
       const target = dbPath ?? currentDbPath;
       if (!target) return { imported: 0, scanned: 0 };
 
-      const directories = (Array.isArray(folders) ? folders : [...watchers.keys()])
-        .map((folder) => path.resolve(String(folder)));
-      if (directories.length === 0) return { imported: 0, scanned: 0 };
-      configureLibraryRoot(target, directories[0]);
+      const requestedFolder = String(folder ?? "").trim();
+      const directory = requestedFolder
+        ? path.resolve(requestedFolder)
+        : [...watchers.keys()][0];
+      if (!directory) return { imported: 0, scanned: 0 };
+      configureLibraryRoot(target, directory);
 
-      const paths = await collectAudioPaths(directories);
+      const paths = await collectAudioPaths([directory]);
       let imported = 0;
       for (const filePath of paths) {
         try {
@@ -258,7 +258,11 @@ export const createLibraryWatcher = ({
     },
 
     status() {
-      return { enabled, watching: [...watchers.keys()], pending: pendingPaths.size };
+      return {
+        enabled,
+        watching: [...watchers.keys()][0] ?? null,
+        pending: pendingPaths.size,
+      };
     },
 
     close: stopAll,
