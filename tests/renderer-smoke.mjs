@@ -1768,6 +1768,7 @@ app.whenReady().then(async () => {
       });
       const requestedColumnLabels = [
         "Album Artist",
+        "Playlists",
         "Genre",
         "Play Count",
         "Last Played",
@@ -1780,6 +1781,7 @@ app.whenReady().then(async () => {
       ];
       const requestedColumnKeys = [
         "artists",
+        "playlists",
         "genre",
         "playCount",
         "lastPlayedAt",
@@ -1826,8 +1828,9 @@ app.whenReady().then(async () => {
       }, 80);
       const firstExtendedRow = scroller?.querySelector('[data-track-index="0"]');
       const requestedColumnValuesReady = Boolean(
-        requestedColumnLabels.length === 10 &&
+        requestedColumnLabels.length === 11 &&
         document.querySelector('[role="columnheader"][data-column-key="artists"]') &&
+        document.querySelector('[role="columnheader"][data-column-key="playlists"]') &&
         document.querySelector('[role="columnheader"][data-column-key="genre"]') &&
         document.querySelector('[role="columnheader"][data-column-key="playCount"]') &&
         document.querySelector('[role="columnheader"][data-column-key="lastPlayedAt"]') &&
@@ -1838,6 +1841,8 @@ app.whenReady().then(async () => {
         document.querySelector('[role="columnheader"][data-column-key="bitDepth"]') &&
         document.querySelector('[role="columnheader"][data-column-key="fileSize"]') &&
         firstExtendedRow?.querySelector('[data-column-key="artists"]')?.textContent?.trim() === "Muro" &&
+        firstExtendedRow?.querySelector('[data-column-key="playlists"]')?.textContent?.trim() === "Smoke Playlist, Next Context" &&
+        firstExtendedRow?.querySelectorAll('[data-column-key="playlists"] [data-track-playlist-link]').length === 2 &&
         firstExtendedRow?.querySelector('[data-column-key="genre"]')?.textContent?.trim() === "Electronic" &&
         firstExtendedRow?.querySelector('[data-column-key="playCount"]')?.textContent?.trim() === "0" &&
         firstExtendedRow?.querySelector('[data-column-key="lastPlayedAt"]')?.textContent?.includes("2026") &&

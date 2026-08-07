@@ -165,6 +165,7 @@
   "columns.artist": "Interpret",
   "columns.artists": "Album-Interpret",
   "columns.album": "Album",
+  "columns.playlists": "Wiedergabelisten",
   "columns.trackNumber": "Track-Nr.",
   "columns.trackTotal": "Tracks gesamt",
   "columns.discNumber": "Disc-Nr.",

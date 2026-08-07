@@ -96,6 +96,7 @@ import {
   getPathForView,
   compareSortValues,
   getSortableValue,
+  buildPlaylistMembershipMap,
   filterTracksBySearch,
   filterTracksAdvanced,
   countAdvancedTrackFilters,
@@ -185,6 +186,10 @@ function App() {
   const allTracksById = useMemo(
     () => new Map(allTracks.map((track) => [track.id, track])),
     [allTracks],
+  );
+  const playlistMembershipByTrackId = useMemo(
+    () => buildPlaylistMembershipMap(playlists),
+    [playlists],
   );
   const artistSeparatorCandidates = useMemo(
     () => findArtistSeparatorCandidates(allTracks, artistSeparatorExceptions),
@@ -314,6 +319,12 @@ function App() {
       navigate(getPathForView(newView));
     },
     [navigate]
+  );
+  const handleOpenPlaylist = useCallback(
+    (playlistId: string) => {
+      navigateToView(`playlist:${playlistId}` as LibraryView);
+    },
+    [navigateToView],
   );
 
   useEffect(() => {
@@ -563,8 +574,8 @@ function App() {
     }
     const next = [...filteredTracks];
     next.sort((left, right) => {
-      const leftValue = getSortableValue(left, sortState.key);
-      const rightValue = getSortableValue(right, sortState.key);
+      const leftValue = getSortableValue(left, sortState.key, playlistMembershipByTrackId);
+      const rightValue = getSortableValue(right, sortState.key, playlistMembershipByTrackId);
 
       if (leftValue === null && rightValue === null) {
         return 0;
@@ -580,7 +591,7 @@ function App() {
       return sortState.direction === "asc" ? result : -result;
     });
     return next;
-  }, [filteredTracks, sortState]);
+  }, [filteredTracks, playlistMembershipByTrackId, sortState]);
 
   const selectedVisibleTrackIds = useMemo(
     () => sortedTracks.filter((track) => selectedIds.has(track.id)).map((track) => track.id),
@@ -613,7 +624,7 @@ function App() {
     handleColumnResize,
     reorderColumns,
     toggleColumn,
-  } = useColumns({ tracks });
+  } = useColumns({ tracks, playlistMembershipByTrackId });
 
   // Context menus
   const { closeMenu, menuPosition, menuSelection, openForRow, openForSelection, openMenuId } =
@@ -2264,6 +2275,7 @@ function App() {
                         <TrackTable
                           tracks={sortedTracks}
                           columns={columns}
+                          playlistMembershipByTrackId={playlistMembershipByTrackId}
                           emptyTitle={
                             hasTrackSearchFilters && sortedTracks.length === 0
                               ? t("search.noResults")
@@ -2309,6 +2321,7 @@ function App() {
                           onTogglePlay={togglePlay}
                           onOpenArtist={handleOpenArtist}
                           onOpenAlbum={handleOpenTableAlbum}
+                          onOpenPlaylist={handleOpenPlaylist}
                           onAlbumContextMenu={handleTableAlbumContextMenu}
                           onColumnResize={handleColumnResize}
                           onColumnAutoFit={autoFitColumn}

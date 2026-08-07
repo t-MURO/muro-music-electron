@@ -1,5 +1,10 @@
 export { parseColumns, parseNumber, parseDetailWidth } from "./storage";
 export { getSortableValue, compareSortValues } from "./trackSorting";
+export {
+  buildPlaylistMembershipMap,
+  formatPlaylistMembership,
+  type TrackPlaylistMembership,
+} from "./playlistMembership";
 export { resolveDbPath } from "./dbPath";
 export {
   albumArtistCredits,

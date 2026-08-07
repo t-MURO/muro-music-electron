@@ -165,6 +165,7 @@
   "columns.artist": "Artist",
   "columns.artists": "Album Artist",
   "columns.album": "Album",
+  "columns.playlists": "Playlists",
   "columns.trackNumber": "Track #",
   "columns.trackTotal": "Track Total",
   "columns.discNumber": "Disc #",
