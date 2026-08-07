@@ -258,6 +258,15 @@ const ARTIST_CREDIT_SCHEMA = `
     ON artist_entities(musicbrainz_id COLLATE NOCASE)
     WHERE musicbrainz_id IS NOT NULL AND trim(musicbrainz_id) <> '';
 
+  CREATE TABLE IF NOT EXISTS artist_identity_bindings (
+    normalized_name TEXT PRIMARY KEY CHECK(length(trim(normalized_name)) > 0),
+    artist_id TEXT NOT NULL REFERENCES artist_entities(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS artist_identity_bindings_artist_idx
+    ON artist_identity_bindings(artist_id);
+
   CREATE TABLE IF NOT EXISTS track_artist_credit_sets (
     track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
     scope TEXT NOT NULL CHECK(scope IN ('track', 'album')),
@@ -670,6 +679,19 @@ const ensureArtistEntity = (db, credit, timestamp) => {
       row = undefined;
     }
   }
+  if (!row && !credit.musicBrainzId) {
+    row = db.prepare(`
+      SELECT
+        entities.id,
+        entities.canonical_name,
+        entities.normalized_name,
+        entities.musicbrainz_id
+      FROM artist_identity_bindings AS bindings
+      JOIN artist_entities AS entities ON entities.id = bindings.artist_id
+      WHERE bindings.normalized_name = ?
+      LIMIT 1
+    `).get(credit.normalizedName);
+  }
   if (!row) {
     row = credit.musicBrainzId
       ? db.prepare(`
@@ -744,6 +766,120 @@ const ensureArtistEntity = (db, credit, timestamp) => {
     normalized_name: credit.normalizedName,
     musicbrainz_id: credit.musicBrainzId,
   };
+};
+
+const resolveArtistEntity = (db, { artistId, musicBrainzId }, label) => {
+  const rawArtistId = String(artistId ?? "").trim();
+  const explicitMusicBrainzId = musicBrainzArtistId(musicBrainzId);
+  const prefixedMusicBrainzId = rawArtistId.toLocaleLowerCase().startsWith("mbid:")
+    ? musicBrainzArtistId(rawArtistId.slice(5))
+    : null;
+  const resolvedMusicBrainzId = explicitMusicBrainzId ?? prefixedMusicBrainzId;
+  let row = resolvedMusicBrainzId
+    ? db.prepare(`
+        SELECT id, canonical_name, normalized_name, musicbrainz_id
+        FROM artist_entities
+        WHERE musicbrainz_id = ? COLLATE NOCASE
+        LIMIT 1
+      `).get(resolvedMusicBrainzId)
+    : undefined;
+  if (!row && rawArtistId && !prefixedMusicBrainzId) {
+    row = db.prepare(`
+      SELECT id, canonical_name, normalized_name, musicbrainz_id
+      FROM artist_entities
+      WHERE id = ?
+    `).get(rawArtistId);
+  }
+  if (!row) throw new Error(`${label} artist was not found`);
+  return row;
+};
+
+/**
+ * Merge one durable artist identity into another without modifying the legacy
+ * display metadata on tracks. Confirmed names are bound to the destination so
+ * future credits without an external identifier do not recreate the duplicate.
+ */
+export const mergeArtistEntities = (
+  dbPath,
+  {
+    sourceArtistId,
+    sourceMusicBrainzId,
+    targetArtistId,
+    targetMusicBrainzId,
+  },
+) => {
+  const db = openDatabase(dbPath);
+  const merge = () => {
+    const source = resolveArtistEntity(db, {
+      artistId: sourceArtistId,
+      musicBrainzId: sourceMusicBrainzId,
+    }, "Source");
+    const target = resolveArtistEntity(db, {
+      artistId: targetArtistId,
+      musicBrainzId: targetMusicBrainzId,
+    }, "Destination");
+    if (source.id === target.id) {
+      throw new Error("Choose a different artist to merge");
+    }
+
+    const sourceMusicBrainz = musicBrainzArtistId(source.musicbrainz_id);
+    const targetMusicBrainz = musicBrainzArtistId(target.musicbrainz_id);
+    if (
+      sourceMusicBrainz
+      && targetMusicBrainz
+      && sourceMusicBrainz.toLocaleLowerCase() !== targetMusicBrainz.toLocaleLowerCase()
+    ) {
+      throw new Error("Artists with different MusicBrainz IDs cannot be merged");
+    }
+
+    const creditSummary = db.prepare(`
+      SELECT COUNT(*) AS credit_count, COUNT(DISTINCT track_id) AS track_count
+      FROM track_artist_credits
+      WHERE artist_id = ?
+    `).get(source.id);
+    const timestamp = Math.floor(Date.now() / 1000);
+    db.prepare(`
+      UPDATE track_artist_credits
+      SET artist_id = ?
+      WHERE artist_id = ?
+    `).run(target.id, source.id);
+    db.prepare("DELETE FROM artist_entities WHERE id = ?").run(source.id);
+
+    const mergedMusicBrainzId = targetMusicBrainz ?? sourceMusicBrainz;
+    db.prepare(`
+      UPDATE artist_entities
+      SET musicbrainz_id = ?, updated_at = ?
+      WHERE id = ?
+    `).run(mergedMusicBrainzId, timestamp, target.id);
+
+    const bindName = db.prepare(`
+      INSERT INTO artist_identity_bindings(
+        normalized_name, artist_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?)
+      ON CONFLICT(normalized_name) DO UPDATE SET
+        artist_id = excluded.artist_id,
+        updated_at = excluded.updated_at
+    `);
+    for (const normalizedName of new Set([
+      String(source.normalized_name),
+      String(target.normalized_name),
+    ])) {
+      if (normalizedName.trim()) {
+        bindName.run(normalizedName, target.id, timestamp, timestamp);
+      }
+    }
+    db.prepare("DELETE FROM artist_profiles WHERE artist_key = ?").run(source.id);
+
+    return {
+      sourceArtistId: String(source.id),
+      artistId: String(target.id),
+      name: String(target.canonical_name),
+      musicBrainzId: mergedMusicBrainzId,
+      creditsMerged: Number(creditSummary?.credit_count) || 0,
+      tracksAffected: Number(creditSummary?.track_count) || 0,
+    };
+  };
+  return db.inTransaction ? merge() : db.transaction(merge)();
 };
 
 /**

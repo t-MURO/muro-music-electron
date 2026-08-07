@@ -7,6 +7,7 @@ import {
   loadPlaylists,
   loadRecentlyPlayed,
   loadTracks,
+  mergeArtistEntities,
   migrateStructuredArtistCredits,
   openDatabase,
   rebuildSearchIndex,
@@ -659,6 +660,18 @@ export const createBackend = ({
       loadRecentlyPlayed(dbPath, limit, libraryRoot, artistSeparatorExceptions),
     migrate_artist_credits: ({ dbPath, artistSeparatorExceptions }) =>
       migrateStructuredArtistCredits(dbPath, artistSeparatorExceptions),
+    merge_artists: ({
+      dbPath,
+      sourceArtistId,
+      sourceMusicBrainzId,
+      targetArtistId,
+      targetMusicBrainzId,
+    }) => mergeArtistEntities(dbPath, {
+      sourceArtistId,
+      sourceMusicBrainzId,
+      targetArtistId,
+      targetMusicBrainzId,
+    }),
     create_library_backup: ({ dbPath, destinationPath, settingsJson, smartCratesJson }) =>
       createLibraryBackup({ dbPath, destinationPath, settingsJson, smartCratesJson }),
     restore_library_backup: ({ dbPath, archivePath }) =>
@@ -742,9 +755,13 @@ export const createBackend = ({
 
     clear_tracks: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
-      db.prepare("DELETE FROM tracks").run();
-      db.prepare("DELETE FROM artist_profiles").run();
-      db.prepare("DELETE FROM album_cover_cache").run();
+      db.transaction(() => {
+        db.prepare("DELETE FROM tracks").run();
+        db.prepare("DELETE FROM artist_identity_bindings").run();
+        db.prepare("DELETE FROM artist_entities").run();
+        db.prepare("DELETE FROM artist_profiles").run();
+        db.prepare("DELETE FROM album_cover_cache").run();
+      })();
       if (fs.existsSync(cacheDir)) {
         for (const entry of fs.readdirSync(cacheDir)) {
           const candidate = path.join(cacheDir, entry);

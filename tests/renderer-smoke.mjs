@@ -3636,6 +3636,41 @@ app.whenReady().then(async () => {
           document.querySelector('[data-artist-detail="Muro"][data-artist-status="ready"]') &&
           document.querySelector('[role="grid"]')?.getAttribute("aria-rowcount") === "250"
         );
+        document.querySelector("[data-artist-merge-button]")?.click();
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-artist-merge-modal]") &&
+          document.querySelector('[data-artist-merge-candidate="Guest Artist"]')
+        ));
+        const mergeConfirmBeforeSelection = document.querySelector("[data-merge-artists-confirm]");
+        const mergeConfirmInitiallyDisabled =
+          mergeConfirmBeforeSelection instanceof HTMLButtonElement && mergeConfirmBeforeSelection.disabled;
+        document.querySelector('[data-artist-merge-candidate="Guest Artist"]')?.click();
+        await waitForCondition(() => {
+          const button = document.querySelector("[data-merge-artists-confirm]");
+          return button instanceof HTMLButtonElement && !button.disabled;
+        });
+        const mergeConfirmAfterSelection = document.querySelector("[data-merge-artists-confirm]");
+        const artistMergeDebug = {
+          modal: Boolean(document.querySelector("[data-artist-merge-modal]")),
+          candidates: [...document.querySelectorAll("[data-artist-merge-candidate]")]
+            .map((candidate) => candidate.getAttribute("data-artist-merge-candidate")),
+          initiallyDisabled: mergeConfirmInitiallyDisabled,
+          afterDisabled: mergeConfirmAfterSelection instanceof HTMLButtonElement
+            ? mergeConfirmAfterSelection.disabled
+            : null,
+        };
+        const artistMergeModalReady = Boolean(
+          document.querySelector("[data-artist-merge-modal]") &&
+          mergeConfirmInitiallyDisabled &&
+          mergeConfirmAfterSelection instanceof HTMLButtonElement &&
+          !mergeConfirmAfterSelection.disabled
+        );
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }));
+        await waitForCondition(() => !document.querySelector("[data-artist-merge-modal]"));
         document.querySelector('[title="Search for another artist picture"]')?.click();
         await waitForCondition(() =>
           Boolean(
@@ -4453,6 +4488,8 @@ app.whenReady().then(async () => {
           albumArtistProfileReady,
           artistIndexReady,
           artistDetailReady,
+          artistMergeModalReady,
+          artistMergeDebug,
           artistImageChooserReady,
           artistImageApplied,
           tableArtistNavigationReady,
@@ -4843,6 +4880,10 @@ app.whenReady().then(async () => {
           `Artist picture chooser failed: chooser=${result.artistImageChooserReady}, ` +
           `applied=${result.artistImageApplied}, saves=${artistImageSaveCount}`
         );
+        return;
+      }
+      if (!result.artistMergeModalReady) {
+        fail(`Artist merge chooser failed: ${JSON.stringify(result.artistMergeDebug)}`);
         return;
       }
       if (!result.pausedAfterSecondSpace || !result.pausedRowUsesGreyHighlight) {

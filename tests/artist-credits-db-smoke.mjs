@@ -8,6 +8,7 @@ import {
   loadArtistCredits,
   loadRecentlyPlayed,
   loadTracks,
+  mergeArtistEntities,
   migrateStructuredArtistCredits,
   normalizeArtistName,
   openDatabase,
@@ -311,6 +312,170 @@ try {
     null,
   );
   db.prepare("DELETE FROM tracks WHERE id = 'homonymous-no-id'").run();
+
+  // A user-confirmed merge reconciles an identified and an ID-less entity,
+  // preserves display metadata, and binds later name-only credits to the
+  // chosen destination instead of recreating the duplicate.
+  const mergeMusicBrainzId = "33333333-3333-4333-8333-333333333333";
+  insert.run(
+    "merge-target",
+    "Merge Target",
+    "Duplicate Artist",
+    "Duplicate Artist",
+    "merge-target.flac",
+    "merge-target.flac",
+    5,
+    5,
+    null,
+    mergeMusicBrainzId,
+    mergeMusicBrainzId,
+  );
+  const mergeTargetSet = replaceTrackArtistCredits(db, {
+    trackId: "merge-target",
+    scope: "track",
+    displayText: "Duplicate Artist",
+    credits: [{
+      name: "Duplicate Artist",
+      creditedName: "Duplicate Artist",
+      joinPhrase: "",
+      musicBrainzId: mergeMusicBrainzId,
+    }],
+    provenance: "file-tags",
+  });
+  insert.run(
+    "merge-source",
+    "Merge Source",
+    "Duplicate Artist",
+    "Duplicate Artist",
+    "merge-source.flac",
+    "merge-source.flac",
+    6,
+    6,
+    null,
+    null,
+    null,
+  );
+  const mergeSourceSet = replaceTrackArtistCredits(db, {
+    trackId: "merge-source",
+    scope: "track",
+    displayText: "Duplicate Artist",
+    credits: [{
+      name: "Duplicate Artist",
+      creditedName: "Duplicate Artist",
+      joinPhrase: "",
+    }],
+    provenance: "file-tags",
+  });
+  replaceTrackArtistCredits(db, {
+    trackId: "merge-source",
+    scope: "album",
+    displayText: "Duplicate Artist",
+    credits: [{
+      name: "Duplicate Artist",
+      creditedName: "Duplicate Artist",
+      joinPhrase: "",
+    }],
+    provenance: "file-tags",
+  });
+  assert.notEqual(
+    mergeSourceSet.credits[0].artistId,
+    mergeTargetSet.credits[0].artistId,
+  );
+
+  const mergeResult = mergeArtistEntities(dbPath, {
+    sourceArtistId: mergeSourceSet.credits[0].artistId,
+    targetMusicBrainzId: mergeMusicBrainzId,
+  });
+  assert.equal(mergeResult.artistId, mergeTargetSet.credits[0].artistId);
+  assert.equal(mergeResult.musicBrainzId, mergeMusicBrainzId);
+  assert.equal(mergeResult.creditsMerged, 2);
+  assert.equal(mergeResult.tracksAffected, 1);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) count FROM artist_entities WHERE id = ?")
+      .get(mergeSourceSet.credits[0].artistId).count,
+    0,
+  );
+  assert.equal(
+    db.prepare(`
+      SELECT artist_id
+      FROM artist_identity_bindings
+      WHERE normalized_name = 'duplicate artist'
+    `).get().artist_id,
+    mergeTargetSet.credits[0].artistId,
+  );
+  assert.equal(
+    db.prepare("SELECT artist, album_artist FROM tracks WHERE id = 'merge-source'").get().artist,
+    "Duplicate Artist",
+  );
+
+  insert.run(
+    "merge-later",
+    "Merge Later",
+    "Duplicate Artist",
+    "Duplicate Artist",
+    "merge-later.flac",
+    "merge-later.flac",
+    7,
+    7,
+    null,
+    null,
+    null,
+  );
+  const laterSet = replaceTrackArtistCredits(db, {
+    trackId: "merge-later",
+    scope: "track",
+    displayText: "Duplicate Artist",
+    credits: [{
+      name: "Duplicate Artist",
+      creditedName: "Duplicate Artist",
+      joinPhrase: "",
+    }],
+    provenance: "file-tags",
+  });
+  assert.equal(laterSet.credits[0].artistId, mergeTargetSet.credits[0].artistId);
+  assert.equal(laterSet.credits[0].musicBrainzId, mergeMusicBrainzId);
+
+  const conflictingMusicBrainzId = "44444444-4444-4444-8444-444444444444";
+  insert.run(
+    "merge-conflict",
+    "Merge Conflict",
+    "Other Identity",
+    "Other Identity",
+    "merge-conflict.flac",
+    "merge-conflict.flac",
+    8,
+    8,
+    null,
+    conflictingMusicBrainzId,
+    conflictingMusicBrainzId,
+  );
+  const conflictingSet = replaceTrackArtistCredits(db, {
+    trackId: "merge-conflict",
+    scope: "track",
+    displayText: "Other Identity",
+    credits: [{
+      name: "Other Identity",
+      creditedName: "Other Identity",
+      joinPhrase: "",
+      musicBrainzId: conflictingMusicBrainzId,
+    }],
+    provenance: "file-tags",
+  });
+  assert.throws(
+    () => mergeArtistEntities(dbPath, {
+      sourceArtistId: conflictingSet.credits[0].artistId,
+      targetArtistId: mergeTargetSet.credits[0].artistId,
+    }),
+    /different MusicBrainz IDs/,
+  );
+  db.prepare(`
+    DELETE FROM tracks
+    WHERE id IN ('merge-target', 'merge-source', 'merge-later', 'merge-conflict')
+  `).run();
+  db.prepare(`
+    DELETE FROM artist_entities
+    WHERE normalized_name IN ('duplicate artist', 'other identity')
+  `).run();
 
   // A newly saved exception can safely revise legacy provenance only.
   const exceptionRefresh = ensureStructuredArtistCredits(
