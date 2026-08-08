@@ -56,4 +56,4 @@ export {
   CommandPalette,
   type CommandPaletteItem,
 } from "./ui";
-export { CamelotWheel, MixSuggestions, NowPlayingTrack, QueueItem } from "./queue";
+export { CamelotWheel, MixSuggestions, NowPlayingTrack, QueueItem, SetPlanner } from "./queue";

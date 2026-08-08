@@ -167,6 +167,8 @@ let artistImageSaveArgs = null;
 let organizedLibraryExportArgs = null;
 let organizedLibraryReloaded = false;
 let itunesLibraryExportArgs = null;
+let createdSetPlaylistArgs = null;
+let createdSetPlaylistTrackArgs = null;
 const settingsWatchedFolders = [
   path.join(temporaryDirectory, "watched-one"),
   path.join(temporaryDirectory, "watched-two"),
@@ -648,12 +650,31 @@ app.whenReady().then(async () => {
     if (command === "scan_technical_metadata") {
       return { checked: 0, updated: 0, failed: 0, remaining: 0 };
     }
+    if (command === "create_playlist") {
+      if (String(args.name ?? "").includes("DJ Set")) {
+        createdSetPlaylistArgs = { ...args };
+      }
+      return undefined;
+    }
+    if (command === "set_playlist_tracks") {
+      if (createdSetPlaylistArgs?.id === args.playlistId) {
+        createdSetPlaylistTrackArgs = {
+          ...args,
+          trackIds: [...(args.trackIds ?? [])],
+        };
+      }
+      return undefined;
+    }
+    if (command === "test_get_set_planner_save") {
+      return {
+        playlist: createdSetPlaylistArgs,
+        tracks: createdSetPlaylistTrackArgs,
+      };
+    }
     if (
       command === "reorder_playlists" ||
       command === "delete_playlist" ||
-      command === "create_playlist" ||
-      command === "update_playlist" ||
-      command === "set_playlist_tracks"
+      command === "update_playlist"
     ) return undefined;
     if (command === "delete_playlists") {
       return { deleted: args.playlistIds?.length ?? 0 };
@@ -2687,6 +2708,80 @@ app.whenReady().then(async () => {
           queueTexts: [...document.querySelectorAll('[data-queue-track]')]
             .map((track) => track.textContent?.trim() ?? null),
         };
+        document.querySelector('[data-panel-view="set"]')?.click();
+        await requireCondition("set planner controls", () => Boolean(
+          document.querySelector('[data-set-planner]') &&
+          document.querySelector('[data-set-planner-playlist]') &&
+          document.querySelector('[data-set-planner-flow]') &&
+          document.querySelector('[data-set-planner-count]') &&
+          document.querySelector('[data-set-planner-start-key]') &&
+          document.querySelector('[data-set-planner-end-key]')
+        ));
+        const setCountInput = document.querySelector('[data-set-planner-count]');
+        const setStartKey = document.querySelector('[data-set-planner-start-key]');
+        const setEndKey = document.querySelector('[data-set-planner-end-key]');
+        const inputValueSetter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        const selectValueSetter = Object.getOwnPropertyDescriptor(
+          HTMLSelectElement.prototype,
+          "value",
+        )?.set;
+        if (setCountInput instanceof HTMLInputElement && inputValueSetter) {
+          inputValueSetter.call(setCountInput, "8");
+          setCountInput.dispatchEvent(new Event("input", { bubbles: true }));
+          setCountInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (setStartKey instanceof HTMLSelectElement && selectValueSetter) {
+          selectValueSetter.call(setStartKey, "8A");
+          setStartKey.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (setEndKey instanceof HTMLSelectElement && selectValueSetter) {
+          selectValueSetter.call(setEndKey, "9A");
+          setEndKey.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        await requireCondition("set planner parameters", () =>
+          document.querySelector('[data-set-planner-count]')?.value === "8" &&
+          document.querySelector('[data-set-planner-start-key]')?.value === "8A" &&
+          document.querySelector('[data-set-planner-end-key]')?.value === "9A"
+        );
+        document.querySelector('[data-set-planner-generate]')?.click();
+        await requireCondition("generated DJ set", () =>
+          document.querySelectorAll('[data-set-planner-track]').length === 8 &&
+          Boolean(document.querySelector('[data-set-planner-save]'))
+        );
+        const setPlannerRows = Array.from(document.querySelectorAll('[data-set-planner-track]'));
+        const generatedSetBpms = setPlannerRows.map((row) =>
+          Number(row.getAttribute("data-set-planner-bpm"))
+        );
+        const generatedSetTrackIds = setPlannerRows.map((row) =>
+          row.getAttribute("data-set-planner-track-id")
+        );
+        const setPlannerOrderReady = generatedSetBpms.every(
+          (bpm) => Number.isFinite(bpm),
+        ) && generatedSetBpms.at(-1) >= generatedSetBpms[0];
+        document.querySelector('[data-set-planner-save]')?.click();
+        let setPlannerSaveDebug = null;
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          setPlannerSaveDebug = await window.muro.invoke("test_get_set_planner_save");
+          if (
+            setPlannerSaveDebug?.playlist?.name?.includes("DJ Set") &&
+            setPlannerSaveDebug?.tracks?.trackIds?.join(",") === generatedSetTrackIds.join(",")
+          ) break;
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        const setPlannerSaveReady = Boolean(
+          setPlannerSaveDebug?.playlist?.name?.includes("DJ Set") &&
+          setPlannerSaveDebug?.tracks?.trackIds?.join(",") === generatedSetTrackIds.join(",")
+        );
+        const setPlannerReady = Boolean(
+          setPlannerRows.length === 8 &&
+          setPlannerOrderReady &&
+          setPlannerSaveReady
+        );
+        document.querySelector('[data-panel-view="queue"]')?.click();
+        await waitForSelector('[data-queue-section="queue"]');
         const playlistDropTargetReady = Boolean(
           document.querySelector('[data-playlist-target="smoke-playlist"]') &&
           document.querySelector('[data-playlist-target="smoke-empty-playlist"]') &&
@@ -4375,6 +4470,8 @@ app.whenReady().then(async () => {
           playlistsUnderCollection,
           collapsedQueueControlsReady,
           collapsedQueueWidth,
+          setPlannerReady,
+          setPlannerSaveDebug,
           playlistExportMoveMenuReady,
           playlistReorderReady,
           bulkPlaylistMenuReady,
@@ -4708,6 +4805,13 @@ app.whenReady().then(async () => {
           `scores=${result.mixScoresReady}, compact=${result.compactMixSuggestionsReady}, ` +
           `expanded=${result.mixExpanded}, queued=${result.queuedFromMix}, ` +
           `queueDebug=${JSON.stringify(result.queuedFromMixDebug)}`
+        );
+        return;
+      }
+      if (!result.setPlannerReady) {
+        fail(
+          `DJ set planner failed to generate and save an ordered playlist: ` +
+          `${JSON.stringify(result.setPlannerSaveDebug)}`
         );
         return;
       }

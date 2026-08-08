@@ -2373,6 +2373,8 @@ function App() {
               queueTracks={queueTracks}
               playingNextTracks={playingNextTracks}
               allTracks={allTracks}
+              libraryTracks={tracks}
+              playlists={playlists}
               currentTrack={currentTrack}
               currentTrackDetails={currentTrack ? allTracks.find((track) => track.id === currentTrack.id) : null}
               currentPlaylist={viewConfig.playlist}
@@ -2381,6 +2383,9 @@ function App() {
               onReorderPlayingNext={reorderPlayingNext}
               onMovePlayingNextToQueue={movePlayingNextToQueue}
               onClearQueue={clearQueue}
+              onReplaceQueue={setQueue}
+              onAddToQueue={addToQueue}
+              onCreatePlaylist={handleCreatePlaylist}
               onPlayTrack={(trackId) => playTrackById(trackId)}
               onPlayNext={(trackId) => playNext([trackId])}
               onMixWithCurrent={djMixEnabled
