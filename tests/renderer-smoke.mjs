@@ -2714,10 +2714,12 @@ app.whenReady().then(async () => {
           document.querySelector('[data-set-planner-playlist]') &&
           document.querySelector('[data-set-planner-flow]') &&
           document.querySelector('[data-set-planner-count]') &&
+          document.querySelector('[data-set-planner-start-track]') &&
           document.querySelector('[data-set-planner-start-key]') &&
           document.querySelector('[data-set-planner-end-key]')
         ));
         const setCountInput = document.querySelector('[data-set-planner-count]');
+        const setStartTrack = document.querySelector('[data-set-planner-start-track]');
         const setStartKey = document.querySelector('[data-set-planner-start-key]');
         const setEndKey = document.querySelector('[data-set-planner-end-key]');
         const inputValueSetter = Object.getOwnPropertyDescriptor(
@@ -2733,9 +2735,9 @@ app.whenReady().then(async () => {
           setCountInput.dispatchEvent(new Event("input", { bubbles: true }));
           setCountInput.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        if (setStartKey instanceof HTMLSelectElement && selectValueSetter) {
-          selectValueSetter.call(setStartKey, "8A");
-          setStartKey.dispatchEvent(new Event("change", { bubbles: true }));
+        if (setStartTrack instanceof HTMLSelectElement && selectValueSetter) {
+          selectValueSetter.call(setStartTrack, "smoke-track-10");
+          setStartTrack.dispatchEvent(new Event("change", { bubbles: true }));
         }
         if (setEndKey instanceof HTMLSelectElement && selectValueSetter) {
           selectValueSetter.call(setEndKey, "9A");
@@ -2743,7 +2745,8 @@ app.whenReady().then(async () => {
         }
         await requireCondition("set planner parameters", () =>
           document.querySelector('[data-set-planner-count]')?.value === "8" &&
-          document.querySelector('[data-set-planner-start-key]')?.value === "8A" &&
+          document.querySelector('[data-set-planner-start-track]')?.value === "smoke-track-10" &&
+          document.querySelector('[data-set-planner-start-key]')?.disabled === true &&
           document.querySelector('[data-set-planner-end-key]')?.value === "9A"
         );
         document.querySelector('[data-set-planner-generate]')?.click();
@@ -2760,7 +2763,8 @@ app.whenReady().then(async () => {
         );
         const setPlannerOrderReady = generatedSetBpms.every(
           (bpm) => Number.isFinite(bpm),
-        ) && generatedSetBpms.at(-1) >= generatedSetBpms[0];
+        ) && generatedSetBpms.at(-1) >= generatedSetBpms[0]
+          && generatedSetTrackIds[0] === "smoke-track-10";
         document.querySelector('[data-set-planner-save]')?.click();
         let setPlannerSaveDebug = null;
         for (let attempt = 0; attempt < 120; attempt += 1) {

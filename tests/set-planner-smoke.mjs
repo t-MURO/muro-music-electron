@@ -49,6 +49,20 @@ assert.ok(
   "a rising preference produces a rising overall arc",
 );
 
+const fixedStart = planDjSet(risingSource, {
+  bpmFlow: "rising",
+  trackCount: 4,
+  startTrackId: "late-start-key",
+  startKey: "10A",
+  endKey: "10A",
+});
+assert.equal(
+  fixedStart.tracks[0].id,
+  "late-start-key",
+  "an explicitly selected starting song overrides automatic start-key scoring",
+);
+assert.equal(new Set(fixedStart.tracks.map((entry) => entry.id)).size, fixedStart.tracks.length);
+
 const falling = planDjSet(risingSource, {
   bpmFlow: "falling",
   trackCount: 6,

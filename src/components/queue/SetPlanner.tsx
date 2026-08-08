@@ -63,6 +63,7 @@ export const SetPlanner = ({
   );
   const [bpmFlow, setBpmFlow] = useState<SetBpmFlow>("rising");
   const [trackCount, setTrackCount] = useState(12);
+  const [startTrackId, setStartTrackId] = useState("");
   const [startKey, setStartKey] = useState("");
   const [endKey, setEndKey] = useState("");
   const [plan, setPlan] = useState<SetPlan | null>(null);
@@ -75,6 +76,12 @@ export const SetPlanner = ({
       .map((trackId) => trackById.get(trackId))
       .filter((track): track is Track => Boolean(track)) ?? [],
     [selectedPlaylist, trackById],
+  );
+  const eligibleStartingTracks = useMemo(
+    () => playlistTracks.filter((track) =>
+      typeof track.bpm === "number" && Number.isFinite(track.bpm) && track.bpm > 0
+    ),
+    [playlistTracks],
   );
 
   useEffect(() => {
@@ -89,13 +96,24 @@ export const SetPlanner = ({
   }, [selectedPlaylist?.id, selectedPlaylist?.name, playlistTracks.length]);
 
   useEffect(() => {
+    setStartTrackId("");
+  }, [selectedPlaylist?.id]);
+
+  useEffect(() => {
+    if (startTrackId && !eligibleStartingTracks.some((track) => track.id === startTrackId)) {
+      setStartTrackId("");
+    }
+  }, [eligibleStartingTracks, startTrackId]);
+
+  useEffect(() => {
     setPlan(null);
-  }, [bpmFlow, endKey, startKey, trackCount]);
+  }, [bpmFlow, endKey, startKey, startTrackId, trackCount]);
 
   const generate = () => {
     const result = planDjSet(playlistTracks, {
       bpmFlow,
       trackCount: Math.max(1, Math.min(trackCount, playlistTracks.length)),
+      startTrackId: startTrackId || null,
       startKey: startKey || null,
       endKey: endKey || null,
     });
@@ -155,6 +173,26 @@ export const SetPlanner = ({
           </select>
         </div>
 
+        <label className="block min-w-0">
+          <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.startTrack")}</span>
+          <select
+            className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] text-[var(--color-text-primary)]"
+            value={startTrackId}
+            onChange={(event) => {
+              setStartTrackId(event.target.value);
+              if (event.target.value) setStartKey("");
+            }}
+            data-set-planner-start-track
+          >
+            <option value="">{t("setPlanner.auto")}</option>
+            {eligibleStartingTracks.map((track) => (
+              <option key={track.id} value={track.id}>
+                {track.title} — {track.artist} · {track.bpm?.toFixed(1)} BPM · {toCamelotCode(track.key) || "—"}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div className="grid grid-cols-2 gap-2">
           <label className="min-w-0">
             <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.bpmFlow")}</span>
@@ -188,6 +226,7 @@ export const SetPlanner = ({
               className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] text-[var(--color-text-primary)]"
               value={startKey}
               onChange={(event) => setStartKey(event.target.value)}
+              disabled={Boolean(startTrackId)}
               data-set-planner-start-key
             >
               <option value="">{t("setPlanner.auto")}</option>

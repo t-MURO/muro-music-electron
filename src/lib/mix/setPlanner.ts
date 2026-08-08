@@ -11,6 +11,7 @@ export type SetBpmFlow = "rising" | "falling" | "steady" | "flexible";
 export type SetPlanOptions = {
   bpmFlow: SetBpmFlow;
   trackCount: number;
+  startTrackId?: string | null;
   startKey?: string | null;
   endKey?: string | null;
 };
@@ -178,12 +179,15 @@ export const planDjSet = (
     maximumBpm,
     medianBpm,
   );
-  const start = chooseLowestScore(candidates, (candidate) =>
-    (startCode ? keyDistanceForScore(candidate.code, startCode) * 500 : 0)
-    + (startTargetBpm === null
-      ? candidate.sourceIndex * 0.001
-      : Math.abs(candidate.bpm - startTargetBpm) * 2)
-  );
+  const requestedStart = options.startTrackId
+    ? candidates.find((candidate) => candidate.track.id === options.startTrackId) ?? null
+    : null;
+  const start = requestedStart ?? chooseLowestScore(candidates, (candidate) =>
+      (startCode ? keyDistanceForScore(candidate.code, startCode) * 500 : 0)
+      + (startTargetBpm === null
+        ? candidate.sourceIndex * 0.001
+        : Math.abs(candidate.bpm - startTargetBpm) * 2)
+    );
   if (!start) return { ...baseResult, tracks: [], transitions: [] };
 
   const selected: Candidate[] = [start];

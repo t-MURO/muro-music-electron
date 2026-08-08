@@ -106,6 +106,7 @@
   "setPlanner.source": "Quell-Playlist",
   "setPlanner.bpmFlow": "BPM-Verlauf",
   "setPlanner.trackCount": "Set-Länge",
+  "setPlanner.startTrack": "Starttitel",
   "setPlanner.startKey": "Start-Tonart",
   "setPlanner.endKey": "End-Tonart",
   "setPlanner.auto": "Automatisch",
