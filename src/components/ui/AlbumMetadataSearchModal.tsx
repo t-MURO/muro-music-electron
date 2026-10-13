@@ -5,7 +5,6 @@ import type { Track, TrackMetadataUpdates } from "../../types";
 import type {
   AlbumMetadataCandidate,
   AlbumMetadataRelease,
-  AlbumMetadataTrack,
 } from "../../utils/database";
 import {
   albumArtistDisplay,

@@ -1,0 +1,15 @@
+# Build output and dependencies
+node_modules/
+dist/
+build/
+release/
+out/
+coverage/
+
+# Generated / vendored
+package-lock.json
+scripts/keyfinder-checksums/
+
+# Hand-maintained prose and agent workspaces
+docs/
+.claude/

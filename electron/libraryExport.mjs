@@ -15,6 +15,7 @@ const WINDOWS_RESERVED_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 export const sanitizeExportSegment = (value, fallback = "Unknown") => {
   const cleaned = String(value ?? "")
     .normalize("NFC")
+    // eslint-disable-next-line no-control-regex -- stripping control chars is the point
     .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]+/g, "-")
     .replace(/\s+/g, " ")
     .replace(/[ .]+$/g, "")
@@ -132,6 +133,7 @@ const cleanPlaylistText = (value, fallback) =>
   String(value || fallback).replace(/[\r\n]+/g, " ").trim() || fallback;
 
 const cleanXmlText = (value) => String(value ?? "")
+  // eslint-disable-next-line no-control-regex -- XML 1.0 forbids these control chars
   .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
