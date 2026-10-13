@@ -807,6 +807,23 @@ try {
     trackIds: [watchedDropTrack.id],
   });
 
+  // A library refresh sends the current root to all three load commands; with
+  // the root unchanged none of them may rewrite the tracks table.
+  const totalChanges = () => db.prepare("SELECT total_changes() AS count").get().count;
+  const changesBeforeRefresh = totalChanges();
+  await backend.invoke("load_tracks", { libraryRoot: watchedImportPath });
+  await backend.invoke("load_playlists", { libraryRoot: watchedImportPath });
+  await backend.invoke("load_recently_played", { limit: 50, libraryRoot: watchedImportPath });
+  assert.equal(
+    totalChanges(),
+    changesBeforeRefresh,
+    "loading with an unchanged library root performs no writes",
+  );
+  assert.equal(
+    db.prepare("SELECT value FROM app_metadata WHERE key = 'library_root'").get().value,
+    watchedImportPath,
+  );
+
   const selectedCoverPath = path.join(directory, "selected-cover.png");
   const highResolutionCover = await sharp({
     create: { width: 2000, height: 1500, channels: 3, background: "#c92f49" },
@@ -872,6 +889,13 @@ try {
     updated: 1,
     failed: 0,
     remaining: 0,
+    // The renderer patches these by id rather than reloading the library.
+    tracks: [{
+      id: validImport.imported[0].id,
+      sample_rate_hz: 8_000,
+      bit_depth: 16,
+      file_size_bytes: fs.statSync(validImportPath).size,
+    }],
   });
   const rescannedTechnicalMetadata = db.prepare(`
     SELECT sample_rate_hz, bit_depth, file_size_bytes FROM tracks WHERE id = ?

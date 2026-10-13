@@ -4,6 +4,7 @@ import {
   configureLibraryRoot,
   getLibraryRoot,
   openDatabase,
+  refreshSearchText,
   resolveTrackPath,
   storeTrackPath,
 } from "./database.mjs";
@@ -283,6 +284,9 @@ export const repairLibraryStructure = async ({ dbPath, libraryRoot, trackIds }) 
         now,
         track.id,
       );
+      // The file name is part of the indexed search text and a collision
+      // suffix can change it, so reindex alongside the path.
+      refreshSearchText(db, track.id);
       moved.push({
         trackId: String(track.id),
         sourcePath: destinationPath,
@@ -399,6 +403,9 @@ export const acceptInboxTracks = async ({
         now,
         track.id,
       );
+      // The file name is part of the indexed search text and a collision
+      // suffix can change it, so reindex alongside the path.
+      refreshSearchText(db, track.id);
       acceptedTrackIds.push(String(track.id));
       moved.push({
         trackId: String(track.id),

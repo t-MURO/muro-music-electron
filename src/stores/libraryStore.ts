@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Playlist, PlaylistFolder, Track } from "../types";
+import { touchesSearchableFields } from "../utils/indexedSearch";
 
 type LibraryState = {
   tracks: Track[];
@@ -7,12 +8,16 @@ type LibraryState = {
   playlists: Playlist[];
   playlistFolders: PlaylistFolder[];
   allTracks: Track[];
+  /** Bumped when track data a search can match on may have changed. */
+  searchRevision: number;
 };
 
 type LibraryActions = {
   // Tracks
   setTracks: (tracks: Track[] | ((prev: Track[]) => Track[])) => void;
   updateTrack: (id: string, updates: Partial<Track>) => void;
+  /** Apply per-track field updates by id across Library and Inbox in one pass. */
+  patchTracks: (patches: ReadonlyArray<Partial<Track> & Pick<Track, "id">>) => void;
 
   // Inbox
   setInboxTracks: (tracks: Track[] | ((prev: Track[]) => Track[])) => void;
@@ -43,6 +48,7 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   playlists: [],
   playlistFolders: [],
   allTracks: [],
+  searchRevision: 0,
 
   // Track Actions
   setTracks: (tracks) =>
@@ -51,6 +57,9 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       return {
         tracks: newTracks,
         allTracks: [...newTracks, ...state.inboxTracks],
+        searchRevision: newTracks === state.tracks
+          ? state.searchRevision
+          : state.searchRevision + 1,
       };
     }),
 
@@ -64,6 +73,44 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
         tracks: newTracks,
         inboxTracks: newInboxTracks,
         allTracks: [...newTracks, ...newInboxTracks],
+        searchRevision: touchesSearchableFields(updates)
+          ? state.searchRevision + 1
+          : state.searchRevision,
+      };
+    }),
+
+  patchTracks: (patches) =>
+    set((state) => {
+      const byId = new Map(patches.map((patch) => [patch.id, patch]));
+      if (byId.size === 0) return state;
+      // Unchanged tracks and lists keep their identity so memoized views and
+      // the search index do not rebuild for a no-op batch.
+      const patchList = (list: Track[]) => {
+        let changed = false;
+        const next = list.map((track) => {
+          const patch = byId.get(track.id);
+          if (!patch) return track;
+          const differs = (Object.keys(patch) as Array<keyof Track>).some(
+            (key) => track[key] !== patch[key]
+          );
+          if (!differs) return track;
+          changed = true;
+          return { ...track, ...patch };
+        });
+        return changed ? next : list;
+      };
+      const newTracks = patchList(state.tracks);
+      const newInboxTracks = patchList(state.inboxTracks);
+      if (newTracks === state.tracks && newInboxTracks === state.inboxTracks) return state;
+      return {
+        tracks: newTracks,
+        inboxTracks: newInboxTracks,
+        allTracks: [...newTracks, ...newInboxTracks],
+        // Background scans patch technical fields only; those batches must
+        // not re-run the active search.
+        searchRevision: patches.some(touchesSearchableFields)
+          ? state.searchRevision + 1
+          : state.searchRevision,
       };
     }),
 
@@ -74,6 +121,9 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       return {
         inboxTracks: newInboxTracks,
         allTracks: [...state.tracks, ...newInboxTracks],
+        searchRevision: newInboxTracks === state.inboxTracks
+          ? state.searchRevision
+          : state.searchRevision + 1,
       };
     }),
 

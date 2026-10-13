@@ -661,7 +661,7 @@ app.whenReady().then(async () => {
         : null;
     }
     if (command === "scan_technical_metadata") {
-      return { checked: 0, updated: 0, failed: 0, remaining: 0 };
+      return { checked: 0, updated: 0, failed: 0, remaining: 0, tracks: [] };
     }
     if (command === "create_playlist") {
       if (String(args.name ?? "").includes("DJ Set")) {

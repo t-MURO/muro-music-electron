@@ -5,7 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { capturePlaylistState } from "./history.mjs";
-import { closeDatabase, openDatabase } from "./database.mjs";
+import { closeDatabase, configureLibraryRoot, openDatabase } from "./database.mjs";
 
 const ARCHIVE_FORMAT = "muro-library-backup";
 const ARCHIVE_VERSION = 3;
@@ -352,6 +352,11 @@ export const restoreLibraryBackup = async ({
         `).run(currentLibraryRoot);
       }
     })();
+    // Loads no longer rewrite paths under an unchanged root, so make any
+    // absolute paths in the backup that sit under this root portable now.
+    if (currentLibraryRoot) {
+      configureLibraryRoot(resolvedDbPath, currentLibraryRoot, { force: true });
+    }
     return {
       archivePath: resolvedArchivePath,
       recoveryPath: originalMoved ? recoveryPath : null,

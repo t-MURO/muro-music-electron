@@ -1,5 +1,5 @@
 import { invoke } from "@muro/desktop/runtime";
-import type { LibrarySnapshot, PlaylistSnapshot } from "./importApi";
+import type { ImportedTrack, LibrarySnapshot, PlaylistSnapshot } from "./importApi";
 import type {
   AlbumCoverCandidate,
   ArtistImageCandidate,
@@ -296,6 +296,10 @@ export type TechnicalMetadataScanResult = {
   updated: number;
   failed: number;
   remaining: number;
+  /** The stored technical fields for every track checked in this batch. */
+  tracks: Array<
+    Pick<ImportedTrack, "id" | "sample_rate_hz" | "bit_depth" | "file_size_bytes">
+  >;
 };
 
 export const scanTechnicalMetadata = (limit = 25) =>

@@ -21,6 +21,7 @@ const TECHNICAL_SCAN_BATCH_SIZE = 25;
 export const useLibraryInit = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
+  const patchTracks = useLibraryStore((s) => s.patchTracks);
   const setPlaylists = useLibraryStore((s) => s.setPlaylists);
   const setPlaylistFolders = useLibraryStore((s) => s.setPlaylistFolders);
   const setRecentlyPlayedTracks = useRecentlyPlayedStore((s) => s.setRecentlyPlayedTracks);
@@ -107,11 +108,15 @@ export const useLibraryInit = () => {
       try {
         const result = await scanTechnicalMetadata(TECHNICAL_SCAN_BATCH_SIZE);
         if (cancelled) return;
-        if (result.updated > 0) {
-          const snapshot = await loadTracks(libraryRoot, artistSeparatorExceptions);
-          if (cancelled) return;
-          setTracks(snapshot.library.map(importedTrackToTrack));
-          setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
+        // Patch only the scanned rows; reloading the whole library per batch
+        // made a large first scan cost one full load every 25 tracks.
+        if (result.tracks?.length) {
+          patchTracks(result.tracks.map((track) => ({
+            id: track.id,
+            sampleRate: track.sample_rate_hz ?? undefined,
+            bitDepth: track.bit_depth ?? undefined,
+            fileSize: track.file_size_bytes ?? undefined,
+          })));
         }
         if (result.remaining > 0) schedule(CONTINUE_TECHNICAL_SCAN_DELAY_MS);
       } catch (error) {
@@ -123,7 +128,7 @@ export const useLibraryInit = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [artistSeparatorExceptions, libraryRoot, setInboxTracks, setTracks]);
+  }, [libraryRoot, patchTracks]);
 
   // Backfill handlers
   const handleBackfillSearchText = useCallback(async () => {

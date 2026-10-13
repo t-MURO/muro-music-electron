@@ -548,9 +548,10 @@ function App() {
   );
 
   // Text search resolves through the SQLite full-text index. Until it answers
-  // (first keystroke, or if the index is unavailable) the in-memory matcher
-  // keeps the results correct.
-  const { matchedIds: searchMatchedIds } = useIndexedSearch(searchQuery);
+  // the current query (while typing, or if the index is unavailable) the
+  // in-memory matcher keeps the results correct.
+  const searchRevision = useLibraryStore((s) => s.searchRevision);
+  const { matchedIds: searchMatchedIds } = useIndexedSearch(searchQuery, searchRevision);
 
   // Apply text search first, then the structured track filters.
   const filteredTracks = useMemo(() => {

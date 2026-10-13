@@ -90,6 +90,32 @@ try {
     playlistSource,
   );
 
+  // Every load passes the current root; an unchanged root must not scan the
+  // tracks table or open a write transaction.
+  const totalChanges = () => db.prepare("SELECT total_changes() AS count").get().count;
+  const changesBeforeReload = totalChanges();
+  const preparedSql = [];
+  const originalPrepare = db.prepare;
+  db.prepare = function prepare(sql, ...rest) {
+    preparedSql.push(String(sql));
+    return originalPrepare.call(this, sql, ...rest);
+  };
+  let unchanged;
+  try {
+    unchanged = configureLibraryRoot(dbPath, firstRoot);
+    loadTracks(dbPath, firstRoot);
+    loadPlaylists(dbPath, firstRoot);
+  } finally {
+    db.prepare = originalPrepare;
+  }
+  assert.deepEqual(unchanged, { libraryRoot: firstRoot, migrated: 0 });
+  assert.equal(totalChanges(), changesBeforeReload, "loading under an unchanged root writes nothing");
+  assert.equal(
+    preparedSql.some((sql) => /UPDATE|INSERT|SELECT id, source_path, import_status/.test(sql)),
+    false,
+    "an unchanged root skips the path migration",
+  );
+
   configureLibraryRoot(dbPath, secondRoot);
   assert.equal(
     db.prepare("SELECT source_path FROM tracks WHERE id = 'inside'").get().source_path,

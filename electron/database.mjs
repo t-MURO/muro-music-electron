@@ -838,12 +838,18 @@ export const mergeArtistEntities = (
       WHERE artist_id = ?
     `).get(source.id);
     const timestamp = Math.floor(Date.now() / 1000);
+    const affectedTrackIds = db.prepare(`
+      SELECT DISTINCT track_id FROM track_artist_credits WHERE artist_id = ?
+    `).all(source.id).map((row) => String(row.track_id));
     db.prepare(`
       UPDATE track_artist_credits
       SET artist_id = ?
       WHERE artist_id = ?
     `).run(target.id, source.id);
     db.prepare("DELETE FROM artist_entities WHERE id = ?").run(source.id);
+    // Search text carries each credit's canonical artist name, which is now
+    // the destination's.
+    for (const trackId of affectedTrackIds) refreshSearchText(db, trackId);
 
     const mergedMusicBrainzId = targetMusicBrainz ?? sourceMusicBrainz;
     db.prepare(`
@@ -1248,13 +1254,23 @@ export const getLibraryRoot = (dbPath) => {
  * Store the machine-specific library root and convert paths already beneath it
  * to portable, forward-slash relative values. Absolute paths outside the root
  * remain supported for Inbox and legacy imports.
+ *
+ * Every library load passes the current root, so an unchanged root returns
+ * after a single metadata read. Paths written while a root is configured are
+ * already stored relative to it, so only a real root change (or `force`, used
+ * after a restore writes the root directly) needs the full-table rewrite.
  */
-export const configureLibraryRoot = (dbPath, requestedRoot) => {
+export const configureLibraryRoot = (dbPath, requestedRoot, { force = false } = {}) => {
   const root = normalizeLibraryRoot(requestedRoot);
   if (!root) return { libraryRoot: getLibraryRoot(dbPath), migrated: 0 };
 
   const db = openDatabase(dbPath);
-  const previousRoot = getLibraryRoot(dbPath);
+  const storedRoot = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(LIBRARY_ROOT_METADATA_KEY)?.value;
+  if (!force && storedRoot === root) return { libraryRoot: root, migrated: 0 };
+
+  const previousRoot = normalizeLibraryRoot(storedRoot);
   const rootChanged = portablePathKey(previousRoot ?? "") !== portablePathKey(root);
   const setRoot = db.prepare(`
     INSERT INTO app_metadata(key, value) VALUES (?, ?)
@@ -1420,6 +1436,15 @@ const formatDuration = (seconds) => {
   return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
 };
 
+/** The fields the background technical scan fills in, shaped as in rowToTrack. */
+export const technicalTrackFields = (row) => ({
+  sample_rate_hz: row.sample_rate_hz > 0 ? row.sample_rate_hz : undefined,
+  bit_depth: row.bit_depth > 0 ? row.bit_depth : undefined,
+  file_size_bytes: typeof row.file_size_bytes === "number" && row.file_size_bytes >= 0
+    ? row.file_size_bytes
+    : undefined,
+});
+
 export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   id: String(row.id),
   title: row.title || "Unknown Title",
@@ -1441,11 +1466,7 @@ export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   duration: formatDuration(row.duration_seconds),
   duration_seconds: row.duration_seconds || 0,
   bitrate: row.bitrate_kbps > 0 ? `${row.bitrate_kbps} kbps` : "--",
-  sample_rate_hz: row.sample_rate_hz > 0 ? row.sample_rate_hz : undefined,
-  bit_depth: row.bit_depth > 0 ? row.bit_depth : undefined,
-  file_size_bytes: typeof row.file_size_bytes === "number" && row.file_size_bytes >= 0
-    ? row.file_size_bytes
-    : undefined,
+  ...technicalTrackFields(row),
   rating: row.rating || 0,
   source_path: dbPath
     ? resolveLibraryPath(dbPath, row.source_path, libraryRoot)

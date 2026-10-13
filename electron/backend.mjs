@@ -19,6 +19,7 @@ import {
   resolveTrackPath,
   searchTrackIds,
   storeTrackPath,
+  technicalTrackFields,
 } from "./database.mjs";
 import { createLibraryBackup, restoreLibraryBackup } from "./dataArchive.mjs";
 import {
@@ -1416,9 +1417,11 @@ export const createBackend = ({
     delete_playlist_snapshot: ({ dbPath, snapshotId }) =>
       deletePlaylistSnapshot(openDatabase(dbPath), snapshotId),
     update_track_analysis: ({ dbPath, trackId, bpm, key }) => {
-      openDatabase(dbPath)
-        .prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?")
+      const db = openDatabase(dbPath);
+      db.prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?")
         .run(bpm ?? null, key ?? null, Math.floor(Date.now() / 1000), trackId);
+      // BPM and key are searchable, so the index must see the new values.
+      refreshSearchText(db, trackId);
     },
     update_track_beat_grid: ({ dbPath, trackId, beatGridJson }) => {
       const invalid = () => new Error("Invalid beat grid payload");
@@ -1935,20 +1938,26 @@ export const createBackend = ({
       `);
       let updated = 0;
       let failed = 0;
+      // The renderer patches these fields by id instead of reloading the
+      // whole library after every batch.
+      const tracks = [];
+      const record = (id, values) => {
+        update.run(values.sample_rate_hz, values.bit_depth, values.file_size_bytes, id);
+        tracks.push({ id: String(id), ...technicalTrackFields(values) });
+      };
       for (const row of rows) {
         const sourcePath = resolveTrackPath(dbPath, row.source_path);
         try {
           const technical = await extractTechnicalMetadata(sourcePath);
-          update.run(
-            technical.sampleRateHz,
-            technical.bitDepth,
-            technical.fileSizeBytes,
-            row.id,
-          );
+          record(row.id, {
+            sample_rate_hz: technical.sampleRateHz,
+            bit_depth: technical.bitDepth,
+            file_size_bytes: technical.fileSizeBytes,
+          });
           updated += 1;
         } catch (error) {
           // Mark an unreadable file as scanned so it does not block future batches.
-          update.run(0, 0, 0, row.id);
+          record(row.id, { sample_rate_hz: 0, bit_depth: 0, file_size_bytes: 0 });
           failed += 1;
           console.warn(`Failed to extract technical metadata from ${sourcePath}:`, error);
         }
@@ -1957,7 +1966,7 @@ export const createBackend = ({
         SELECT COUNT(*) AS count FROM tracks
         WHERE sample_rate_hz IS NULL OR file_size_bytes IS NULL
       `).get()?.count ?? 0;
-      return { checked: rows.length, updated, failed, remaining };
+      return { checked: rows.length, updated, failed, remaining, tracks };
     },
     cache_cover_art_from_file: ({ filePath }) =>
       cacheCoverFile(pathAccess.assertReadable(filePath, "image file"), cacheDir),

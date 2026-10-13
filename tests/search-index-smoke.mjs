@@ -6,14 +6,33 @@ import { randomUUID } from "node:crypto";
 import {
   buildSearchMatchQuery,
   closeDatabases,
+  mergeArtistEntities,
   openDatabase,
   rebuildSearchIndex,
   refreshSearchText,
+  replaceTrackArtistCredits,
   searchTrackIds,
 } from "../electron/database.mjs";
+import { createBackend } from "../electron/backend.mjs";
+import { acceptInboxTracks } from "../electron/inboxOrganizer.mjs";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "muro-search-"));
 const dbPath = path.join(tempDir, "search.db");
+
+const backend = createBackend({
+  dbPath,
+  cacheDir: path.join(tempDir, "covers"),
+  artistProfileCacheDir: path.join(tempDir, "artists"),
+  emit: () => {},
+  keyFinder: {
+    health: () => ({ ok: true }),
+    startAnalysis: () => ({}),
+    cancelAnalysis: () => ({}),
+    recycle: () => ({}),
+    close: () => {},
+  },
+  fpcalcBinaryDirectories: [],
+});
 
 // The filename deliberately does not echo the title: search_text covers both,
 // so a shared word would hide whether a title edit actually reindexed.
@@ -43,7 +62,7 @@ const insertTrack = (db, { title, artist, album, genre = [], key = null, bpm = n
   return id;
 };
 
-const run = () => {
+const run = async () => {
   const db = openDatabase(dbPath);
 
   const darkSide = insertTrack(db, {
@@ -126,6 +145,60 @@ const run = () => {
   db.prepare("DELETE FROM tracks WHERE id = ?").run(darkSide);
   assert.deepEqual(searchTrackIds(dbPath, "renamed"), [], "a delete removes the row from the index");
 
+  // Every write path that changes a searchable field has to reindex the row,
+  // or the renderer's refreshed query keeps returning the old answer.
+  const analyzed = insertTrack(db, { title: "Unanalyzed", artist: "Index Test", album: "Analysis" });
+  await backend.invoke("update_track_analysis", { dbPath, trackId: analyzed, bpm: 174, key: "11B" });
+  assert.deepEqual(searchTrackIds(dbPath, "174"), [analyzed], "an analyzed BPM is searchable");
+  assert.deepEqual(searchTrackIds(dbPath, "11B"), [analyzed], "an analyzed key is searchable");
+
+  const inboxDir = path.join(tempDir, "inbox");
+  const libraryDir = path.join(tempDir, "library");
+  fs.mkdirSync(inboxDir, { recursive: true });
+  fs.mkdirSync(libraryDir, { recursive: true });
+  fs.writeFileSync(path.join(inboxDir, "collide.mp3"), "incoming");
+  fs.writeFileSync(path.join(libraryDir, "collide.mp3"), "already in the library");
+  const staged = randomUUID();
+  db.prepare(`
+    INSERT INTO tracks (id, title, artist, album, filename, source_path, import_status, added_at)
+    VALUES (?, 'Staged', 'Index Test', 'Inbox', 'collide.mp3', ?, 'staged', ?)
+  `).run(staged, path.join(inboxDir, "collide.mp3"), Math.floor(Date.now() / 1000));
+  refreshSearchText(db, staged);
+  const accepted = await acceptInboxTracks({ dbPath, trackIds: [staged], libraryFolder: libraryDir });
+  assert.equal(accepted.moved[0]?.filename, "collide (2).mp3", "the collision renamed the file");
+  assert.deepEqual(
+    searchTrackIds(dbPath, "collide 2"),
+    [staged],
+    "accepting a track reindexes its new file name",
+  );
+
+  const typo = insertTrack(db, { title: "Typo Credit", artist: "Daft Pnk", album: "Merge" });
+  const canonical = insertTrack(db, { title: "Right Credit", artist: "Daft Punk", album: "Merge" });
+  const typoSet = replaceTrackArtistCredits(db, {
+    trackId: typo,
+    scope: "track",
+    displayText: "Daft Pnk",
+    credits: [{ name: "Daft Pnk", creditedName: "Daft Pnk", joinPhrase: "" }],
+    provenance: "file-tags",
+  });
+  const canonicalSet = replaceTrackArtistCredits(db, {
+    trackId: canonical,
+    scope: "track",
+    displayText: "Daft Punk",
+    credits: [{ name: "Daft Punk", creditedName: "Daft Punk", joinPhrase: "" }],
+    provenance: "file-tags",
+  });
+  assert.deepEqual(searchTrackIds(dbPath, "punk"), [canonical]);
+  mergeArtistEntities(dbPath, {
+    sourceArtistId: typoSet.credits[0].artistId,
+    targetArtistId: canonicalSet.credits[0].artistId,
+  });
+  assert.deepEqual(
+    [...searchTrackIds(dbPath, "punk")].sort(),
+    [typo, canonical].sort(),
+    "merging artists reindexes the tracks credited to the merged artist",
+  );
+
   // A rebuild must reproduce the same answers.
   rebuildSearchIndex(db);
   assert.deepEqual(searchTrackIds(dbPath, "bjork"), [bjork], "the index survives a rebuild");
@@ -147,8 +220,9 @@ const run = () => {
 };
 
 try {
-  run();
+  await run();
 } finally {
+  backend.close?.();
   closeDatabases();
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
