@@ -243,6 +243,7 @@
   "analysis.key": "Key",
   "analysis.close": "Close",
   "analysis.cancel": "Cancel",
+  "analysis.cancelled": "Analysis cancelled.",
   "analysis.save": "Save to Library",
   "analysis.saving": "Saving...",
   "columns.bpm": "BPM",
@@ -595,5 +596,16 @@
   "toast.playlistFolder.renamed": "Renamed folder to {name}",
   "toast.playlist.importing": "Importing {count} playlists from {folder}",
   "toast.playlist.importedNone": "Imported 0 of {count} playlists",
-  "toast.playlist.exported": "Exported {count} tracks"
+  "toast.playlist.exported": "Exported {count} tracks",
+  "toast.details.more": "and {count} more",
+  "toast.tagWrite.failedOne": "Saved in your library, but the tags in {file} could not be updated. Check that the file isn't read-only or open in another app.",
+  "toast.tagWrite.failedMany": "Saved in your library, but the tags in {count} files could not be updated. Check that they aren't read-only or open in another app.",
+  "toast.tagWrite.retry": "Retry writing tags",
+  "toast.tagWrite.retrying": "Writing tags to {count} file(s) again…",
+  "toast.tagWrite.retrySucceeded": "Tags written to {count} file(s)",
+  "toast.tagWrite.reason.readOnly": "the file is read-only",
+  "toast.tagWrite.reason.locked": "the file is open in another app",
+  "toast.tagWrite.reason.missing": "the file could not be found",
+  "toast.cover.embeddedOne": "Cover art embedded in the music file",
+  "toast.cover.embeddedMany": "Cover art embedded in all {count} music files"
 }

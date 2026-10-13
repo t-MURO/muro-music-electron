@@ -4,7 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { TagLib } from "taglib-wasm";
-import { closeDatabase } from "../electron/database.mjs";
+import { createBackend } from "../electron/backend.mjs";
+import { closeDatabase, openDatabase } from "../electron/database.mjs";
 import {
   artistMetadataFromCommon,
   importAudioFile,
@@ -319,6 +320,61 @@ try {
     wavHash,
     "a rejected rating must not rewrite an unsupported audio file",
   );
+
+  // A read-only or locked file must surface as a reported write error while
+  // the library keeps the edit, so the renderer can say so and retry.
+  const runsAsRoot = typeof process.getuid === "function" && process.getuid() === 0;
+  if (!runsAsRoot) {
+    const backend = createBackend({
+      dbPath,
+      cacheDir: path.join(directory, "covers"),
+      emit: () => {},
+      keyFinder: { close: () => {} },
+    });
+    try {
+      const db = openDatabase(dbPath);
+      const trackId = String(db.prepare("SELECT id FROM tracks LIMIT 1").get().id);
+      const lockedHash = hashFile(mp3Path);
+      fs.chmodSync(mp3Path, 0o444);
+      const lockedResult = await backend.invoke("update_track_metadata", {
+        trackIds: [trackId],
+        updates: { title: "Edited while read-only" },
+      });
+      assert.equal(lockedResult.updated, 1);
+      assert.equal(lockedResult.filesWritten, 0);
+      assert.equal(lockedResult.fileWriteErrors.length, 1);
+      assert.equal(lockedResult.fileWriteErrors[0].trackId, trackId);
+      assert.equal(lockedResult.fileWriteErrors[0].fileName, "rated.mp3");
+      assert.ok(lockedResult.fileWriteErrors[0].message, "the failure must explain itself");
+      assert.equal(lockedResult.fileWriteErrors[0].reason, "readOnly");
+      assert.equal(hashFile(mp3Path), lockedHash, "a read-only file must not be modified");
+      const lockedRow = db.prepare("SELECT title, last_write_error FROM tracks WHERE id = ?")
+        .get(trackId);
+      assert.equal(lockedRow.title, "Edited while read-only", "the library keeps the edit");
+      assert.ok(lockedRow.last_write_error, "the failed write is recorded on the track");
+
+      // Retrying the same updates once the file is writable catches the tags up.
+      fs.chmodSync(mp3Path, 0o644);
+      const retryResult = await backend.invoke("update_track_metadata", {
+        trackIds: [trackId],
+        updates: { title: "Edited while read-only" },
+      });
+      assert.deepEqual(retryResult, { updated: 1, filesWritten: 1, fileWriteErrors: [] });
+      assert.equal(
+        db.prepare("SELECT last_write_error FROM tracks WHERE id = ?").get(trackId).last_write_error,
+        null,
+      );
+      const retriedFile = await taglib.open(mp3Path);
+      try {
+        assert.equal(retriedFile.tag().title, "Edited while read-only");
+      } finally {
+        retriedFile.dispose();
+      }
+    } finally {
+      fs.chmodSync(mp3Path, 0o644);
+      backend.close();
+    }
+  }
 
   console.log("Metadata rating smoke checks passed.");
 } finally {

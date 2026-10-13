@@ -75,7 +75,7 @@ import {
   useGaplessPlayback,
   useIndexedSearch,
   useArtistProfiles,
-  useDbPath,
+  useDatabaseLocation,
   normalizeArtistProfileKey,
   type LibraryView,
 } from "./hooks";
@@ -236,19 +236,14 @@ function App() {
   const seekMode = useSettingsStore((s) => s.seekMode);
   const djMixFeatureEnabled = useSettingsStore((s) => s.djMixEnabled);
   const djMixEnabled = isDjMixFeatureAvailable(djMixFeatureEnabled);
-  const dbPath = useSettingsStore((s) => s.dbPath);
-  const dbFileName = useSettingsStore((s) => s.dbFileName);
   const libraryRoot = useSettingsStore((s) => s.watchedFolder || undefined);
   const setTheme = useSettingsStore((s) => s.setTheme);
   const setLocale = useSettingsStore((s) => s.setLocale);
   const setSeekMode = useSettingsStore((s) => s.setSeekMode);
-  const setDbPath = useSettingsStore((s) => s.setDbPath);
-  const setDbFileName = useSettingsStore((s) => s.setDbFileName);
-  const setUseAutoDbPath = useSettingsStore((s) => s.setUseAutoDbPath);
   const recentlyAddedPeriodDays = useSettingsStore((s) => s.recentlyAddedPeriodDays);
   const setRecentlyAddedPeriodDays = useSettingsStore((s) => s.setRecentlyAddedPeriodDays);
   const keyboardShortcuts = useSettingsStore((s) => s.keyboardShortcuts);
-  const resolveDbPath = useDbPath();
+  const databaseLocation = useDatabaseLocation();
 
   useEffect(() => {
     applyThemeMode(theme);
@@ -506,8 +501,7 @@ function App() {
     source: ArtistIndexItem,
     target: ArtistIndexItem,
   ) => {
-    const resolvedPath = await resolveDbPath();
-    const result = await mergeArtists(resolvedPath, {
+    const result = await mergeArtists({
       artistId: source.artistId,
       musicBrainzId: source.musicBrainzId,
     }, {
@@ -515,8 +509,8 @@ function App() {
       musicBrainzId: target.musicBrainzId,
     });
     const [snapshot, recentlyPlayedSnapshot] = await Promise.all([
-      loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions),
-      loadRecentlyPlayed(resolvedPath, 50, libraryRoot, artistSeparatorExceptions),
+      loadTracks(libraryRoot, artistSeparatorExceptions),
+      loadRecentlyPlayed(50, libraryRoot, artistSeparatorExceptions),
     ]);
     setTracks(snapshot.library.map(importedTrackToTrack));
     setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
@@ -539,7 +533,6 @@ function App() {
     artistSeparatorExceptions,
     libraryRoot,
     navigate,
-    resolveDbPath,
     setInboxTracks,
     setRecentlyPlayedTracks,
     setTracks,
@@ -1088,12 +1081,25 @@ function App() {
     handleAnalysisComplete,
   } = useTrackAnalysis();
 
-  const analysisTracks = useMemo(
-    () => analysisTrackIds
-      .map((id) => allTracks.find((track) => track.id === id))
-      .filter((track): track is Track => track !== undefined),
-    [allTracks, analysisTrackIds]
-  );
+  // Snapshot the tracks once per analysis request instead of deriving them from
+  // the live library: any library update (a background import, or a save of the
+  // analysis results) would otherwise hand the modal a new array and restart
+  // the running job. A new request (new analysisTrackIds) starts a new job.
+  const resolveAnalysisTracks = (trackIds: string[]) => trackIds
+    .map((id) => allTracksById.get(id))
+    .filter((track): track is Track => track !== undefined);
+  const [analysisJob, setAnalysisJob] = useState(() => ({
+    id: 0,
+    trackIds: analysisTrackIds,
+    tracks: resolveAnalysisTracks(analysisTrackIds),
+  }));
+  if (analysisJob.trackIds !== analysisTrackIds) {
+    setAnalysisJob({
+      id: analysisJob.id + 1,
+      trackIds: analysisTrackIds,
+      tracks: resolveAnalysisTracks(analysisTrackIds),
+    });
+  }
 
   // Track editing
   const {
@@ -1930,8 +1936,8 @@ function App() {
           <AnalysisModal
             isOpen
             isMinimized={isAnalysisModalMinimized}
-            tracks={analysisTracks}
-            dbPath={dbPath}
+            jobId={analysisJob.id}
+            tracks={analysisJob.tracks}
             onClose={closeAnalysisModal}
             onMinimize={minimizeAnalysisModal}
             onRestore={restoreAnalysisModal}
@@ -2165,8 +2171,8 @@ function App() {
                         locale={locale}
                         themes={themes}
                         localeOptions={localeOptions}
-                        dbPath={dbPath}
-                        dbFileName={dbFileName}
+                        databasePath={databaseLocation.location?.dbPath ?? ""}
+                        databaseIsDefault={databaseLocation.location?.isDefault ?? true}
                         backfillPending={backfillPending}
                         backfillStatus={backfillStatus}
                         coverArtBackfillPending={coverArtBackfillPending}
@@ -2179,19 +2185,19 @@ function App() {
                         onThemeChange={setTheme}
                         onLocaleChange={setLocale}
                         onSeekModeChange={setSeekMode}
-                        onDbPathChange={setDbPath}
-                        onDbFileNameChange={setDbFileName}
+                        onOpenDatabase={databaseLocation.openDatabase}
+                        onCreateDatabase={databaseLocation.createDatabase}
                         onBackfillSearchText={handleBackfillSearchText}
                         onBackfillCoverArt={handleBackfillCoverArt}
                         onReviewArtistSeparators={handleOpenArtistSeparatorReview}
                         onExportOrganizedLibrary={handleExportOrganizedLibrary}
                         onClearSongs={handleClearSongs}
-                        onUseDefaultLocation={() => setUseAutoDbPath(true)}
+                        onUseDefaultLocation={databaseLocation.switchToDefaultLocation}
                       />
                     </Suspense>
                   ) : viewConfig.type === "statistics" ? (
                     <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
-                      <ListeningStatisticsView dbPath={dbPath} />
+                      <ListeningStatisticsView />
                     </Suspense>
                   ) : libraryLoading && allTracks.length === 0 ? (
                     <div

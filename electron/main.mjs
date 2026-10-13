@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createBackend } from "./backend.mjs";
-import { createLocalFileResponse } from "./fileProtocol.mjs";
+import { createDatabaseLocationStore, isSqliteDatabaseFile } from "./databaseLocation.mjs";
+import { createMediaProtocolHandler } from "./fileProtocol.mjs";
 import { createKeyFinderService } from "./keyfinder.mjs";
 import { registerMediaShortcuts } from "./mediaShortcuts.mjs";
 import { createTrustedRendererUrlCheck } from "./rendererSecurity.mjs";
@@ -20,6 +21,8 @@ const developmentKeyFinderBinaries = [
   path.resolve(appRoot, "../neo-key-finder/neo-keyfinder/src-tauri/binaries"),
 ].filter(Boolean);
 const productionRendererPath = path.join(appRoot, "dist", "index.html");
+// Packaged builds must never load (and trust) an externally supplied renderer URL.
+const developmentRendererUrl = app.isPackaged ? undefined : process.env.MURO_DEV_URL;
 const fallbackDragIconDataUrl =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -38,10 +41,11 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow = null;
 let backend = null;
+let databaseLocation = null;
 let mediaShortcutRegistration = null;
 
 const isTrustedRendererUrl = createTrustedRendererUrlCheck({
-  developmentUrl: process.env.MURO_DEV_URL,
+  developmentUrl: developmentRendererUrl,
   productionRendererPath,
 });
 
@@ -153,8 +157,8 @@ const createWindow = async () => {
     callback(false);
   });
 
-  if (process.env.MURO_DEV_URL) {
-    await mainWindow.loadURL(process.env.MURO_DEV_URL);
+  if (developmentRendererUrl) {
+    await mainWindow.loadURL(developmentRendererUrl);
   } else {
     await mainWindow.loadFile(productionRendererPath);
   }
@@ -166,18 +170,10 @@ const startApplication = async () => {
     app.dock?.setIcon(developmentAppIcon);
   }
 
-  protocol.handle("muro-file", (request) => {
-    try {
-      const url = new URL(request.url);
-      if (url.hostname !== "local") {
-        return new Response("Invalid file URL", { status: 400 });
-      }
-      const filePath = decodeURIComponent(url.pathname.slice(1));
-      return createLocalFileResponse(request, filePath);
-    } catch {
-      return new Response("Invalid file URL", { status: 400 });
-    }
-  });
+  databaseLocation = createDatabaseLocationStore({ userDataDir: app.getPath("userData") });
+  protocol.handle("muro-file", createMediaProtocolHandler({
+    isPathAllowed: (filePath) => backend?.canReadPath(filePath) ?? false,
+  }));
 
   const keyFinder = createKeyFinderService({
     binaryDirectories: app.isPackaged
@@ -193,12 +189,87 @@ const startApplication = async () => {
     fpcalcBinaryDirectories: app.isPackaged
       ? [path.join(process.resourcesPath, "fpcalc")]
       : [path.join(appRoot, "build", "fpcalc")],
+    getDbPath: () => databaseLocation.getDbPath(),
   });
+  const pathAccess = backend.pathAccess;
 
+  // Sent by the preload script, before any page script runs, to carry the
+  // database location older versions kept in renderer settings over to the
+  // main-process config. Ignored once a location has been recorded.
+  ipcMain.on("muro:migrate-database-location", (event, legacy) => {
+    try {
+      assertTrustedRenderer(event);
+      if (databaseLocation.needsMigration()) {
+        const legacyDbPath = legacy?.useAutoDbPath === false && typeof legacy?.dbPath === "string"
+          && legacy.dbPath.trim()
+          ? legacy.dbPath.trim()
+          : path.join(
+            app.getPath("userData"),
+            typeof legacy?.dbFileName === "string" && legacy.dbFileName.trim()
+              ? legacy.dbFileName.trim()
+              : "muro.db",
+          );
+        const result = databaseLocation.migrateLegacyLocation(legacyDbPath);
+        if (result.rejectedLegacyPath) {
+          console.warn(
+            "Ignored a legacy database location that is not a SQLite database:",
+            result.rejectedLegacyPath,
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to migrate the database location:", error);
+    }
+  });
   registerTrustedHandler("muro:invoke", (event, command, args) =>
     backend.invoke(command, args ?? {}, event.sender)
   );
   registerTrustedHandler("muro:app-data-dir", () => app.getPath("userData"));
+  registerTrustedHandler("muro:database-location", () => databaseLocation.describe());
+  registerTrustedHandler("muro:choose-database-location", async (_event, options) => {
+    const createNew = options?.mode === "create";
+    const current = databaseLocation.getDbPath();
+    const filters = [{ name: "Muro library database", extensions: ["db", "sqlite", "sqlite3"] }];
+    const result = createNew
+      ? await dialog.showSaveDialog(mainWindow, {
+        title: "Create a new library database",
+        defaultPath: path.join(path.dirname(current), "muro.db"),
+        filters,
+      })
+      : await dialog.showOpenDialog(mainWindow, {
+        title: "Open a library database",
+        defaultPath: path.dirname(current),
+        properties: ["openFile"],
+        filters,
+      });
+    const selected = createNew ? result.filePath : result.filePaths?.[0];
+    if (result.canceled || !selected) return null;
+    const exists = fs.existsSync(selected);
+    if (exists && !(fs.statSync(selected).size === 0 || isSqliteDatabaseFile(selected))) {
+      throw new Error("The selected file is not a Muro library database");
+    }
+    const next = databaseLocation.setDbPath(selected);
+    backend.databaseLocationChanged(current);
+    return next;
+  });
+  registerTrustedHandler("muro:reset-database-location", async () => {
+    const current = databaseLocation.describe();
+    if (current.isDefault) return current;
+    const confirmation = await dialog.showMessageBox(mainWindow, {
+      type: "question",
+      title: "Muro Music",
+      message: "Switch to the database in the default location?",
+      detail: `The current database stays at ${current.dbPath}.`,
+      buttons: ["Cancel", "Switch"],
+      defaultId: 1,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (confirmation.response !== 1) return null;
+    const next = databaseLocation.resetToDefault();
+    backend.databaseLocationChanged(current.dbPath);
+    return next;
+  });
   registerTrustedHandler("muro:clipboard-has-image", () => !clipboard.readImage().isEmpty());
   registerTrustedHandler("muro:cache-clipboard-cover-art", () => {
     const image = clipboard.readImage();
@@ -206,6 +277,9 @@ const startApplication = async () => {
     return backend.invoke("cache_cover_art_from_bytes", { bytes: image.toPNG() });
   });
   registerTrustedHandler("muro:copy-image-to-clipboard", (_event, filePath) => {
+    if (!backend.canReadPath(String(filePath ?? ""))) {
+      throw new Error("The cover art could not be read");
+    }
     const image = nativeImage.createFromPath(String(filePath ?? ""));
     if (image.isEmpty()) throw new Error("The cover art could not be read");
     clipboard.writeImage(image);
@@ -244,6 +318,11 @@ const startApplication = async () => {
       filters: Array.isArray(options.filters) ? options.filters : undefined,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
+    // What the user picks becomes usable by later commands in this session.
+    pathAccess.grantDialogSelection({
+      paths: result.filePaths,
+      directory: Boolean(options.directory),
+    });
     return options.multiple ? result.filePaths : result.filePaths[0];
   });
   registerTrustedHandler("muro:save-dialog", async (_event, options) => {
@@ -252,7 +331,9 @@ const startApplication = async () => {
       defaultPath: typeof options.defaultPath === "string" ? options.defaultPath : undefined,
       filters: Array.isArray(options.filters) ? options.filters : undefined,
     });
-    return result.canceled || !result.filePath ? null : result.filePath;
+    if (result.canceled || !result.filePath) return null;
+    pathAccess.grantDialogSelection({ paths: [result.filePath], save: true });
+    return result.filePath;
   });
   registerTrustedHandler("muro:open-external", async (_event, value) => {
     const url = new URL(String(value));
@@ -274,7 +355,11 @@ const startApplication = async () => {
   });
   registerTrustedHandler("muro:show-item-in-folder", (_event, value) => {
     const filePath = String(value || "");
-    if (!path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
+    if (
+      !path.isAbsolute(filePath)
+      || !backend.canReadPath(filePath)
+      || !fs.existsSync(filePath)
+    ) {
       throw new Error("Track source file does not exist");
     }
     shell.showItemInFolder(path.normalize(filePath));
@@ -286,6 +371,7 @@ const startApplication = async () => {
         (Array.isArray(values) ? values : [])
           .slice(0, 1000)
           .filter((value) => typeof value === "string" && path.isAbsolute(value))
+          .filter((value) => backend.canReadPath(value))
           .map((value) => path.normalize(value))
           .filter((value) => {
             try {
@@ -323,6 +409,22 @@ const startApplication = async () => {
       assertTrustedRenderer(event);
     } catch {
       return;
+    }
+    // Only the preload script sends this channel, with paths Electron resolved
+    // from a real OS drop, so dropped files and folders may be imported.
+    if (payload?.kind === "drop" && Array.isArray(payload.paths)) {
+      for (const droppedPath of payload.paths.slice(0, 10_000)) {
+        if (typeof droppedPath !== "string") continue;
+        try {
+          if (fs.statSync(droppedPath).isDirectory()) {
+            pathAccess.grantDirectory(droppedPath, { read: true, write: false });
+          } else {
+            pathAccess.grantFile(droppedPath, { read: true, write: false });
+          }
+        } catch {
+          // A vanished drop target cannot be imported anyway.
+        }
+      }
     }
     event.sender.send("muro:event", "muro://native-drag", payload);
   });

@@ -5,7 +5,6 @@ export {
   formatPlaylistMembership,
   type TrackPlaylistMembership,
 } from "./playlistMembership";
-export { resolveDbPath } from "./dbPath";
 export {
   albumArtistCredits,
   albumArtistDisplay,

@@ -65,6 +65,7 @@ let audioContext: AudioContext | null = null;
 const elementChains = new Map<HTMLAudioElement, ElementChain>();
 let transition: ActiveTransition | null = null;
 let rateEaseTimerId: number | null = null;
+let rateEaseElement: HTMLAudioElement | null = null;
 let cancelCleanupTimerId: number | null = null;
 let pendingCancelPark: (() => void) | null = null;
 
@@ -278,14 +279,19 @@ const stopRateEase = (): void => {
     window.clearInterval(rateEaseTimerId);
     rateEaseTimerId = null;
   }
+  rateEaseElement = null;
 };
 
+// After a hand-off the incoming track glides from its matched tempo back to
+// 1.0x. The ease belongs to that element, not to the transition, so arming or
+// cancelling a later transition must not freeze it part-way.
 const startRateEase = (el: HTMLAudioElement): void => {
   stopRateEase();
   if (Math.abs(el.playbackRate - 1) < RATE_EASE_EPSILON) {
     el.playbackRate = 1;
     return;
   }
+  rateEaseElement = el;
   rateEaseTimerId = window.setInterval(() => {
     try {
       const diff = 1 - el.playbackRate;
@@ -312,6 +318,20 @@ const flushPendingCancelPark = (): void => {
     park();
   }
 };
+
+// Returns an element to plain playback: 1.0x with pitch preserved and neutral
+// transition automation. The runtime calls this whenever a track starts or
+// stops outside a transition, so no mix setting can leak into it.
+export function resetElement(el: HTMLAudioElement): void {
+  if (rateEaseElement === el) stopRateEase();
+  el.defaultPlaybackRate = 1;
+  el.playbackRate = 1;
+  const pitchEl = el as PitchCapableElement;
+  if ("preservesPitch" in pitchEl) pitchEl.preservesPitch = true;
+  if ("webkitPreservesPitch" in pitchEl) pitchEl.webkitPreservesPitch = true;
+  const chain = getChain(el);
+  if (chain) setChainNeutral(chain);
+}
 
 const parkElement = (el: HTMLAudioElement): void => {
   el.pause();
@@ -439,6 +459,7 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
   routeElement(req.incoming.el);
 
   const incomingEl = req.incoming.el;
+  if (rateEaseElement === incomingEl) stopRateEase();
   const pitchEl = incomingEl as PitchCapableElement;
   if ("preservesPitch" in pitchEl) pitchEl.preservesPitch = req.preservePitch;
   if ("webkitPreservesPitch" in pitchEl) pitchEl.webkitPreservesPitch = req.preservePitch;
@@ -490,7 +511,6 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
 }
 
 export function cancelTransition(): void {
-  stopRateEase();
   const t = transition;
   if (!t) return;
   stopWatcher(t);

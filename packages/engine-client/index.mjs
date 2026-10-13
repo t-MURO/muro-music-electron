@@ -36,23 +36,39 @@ export class KeyFinderClient extends EventEmitter {
   #child;
   #nextRequest = 1;
   #pending = new Map();
+  // Set once the engine can no longer answer; later requests fail with it.
+  #closedError = null;
+  #exitEmitted = false;
 
-  constructor({ executablePath }) {
+  constructor({ executablePath, args = [] }) {
     super();
-    this.#child = spawn(executablePath, [], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    this.#child = spawn(executablePath, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     const lines = readline.createInterface({ input: this.#child.stdout });
     lines.on("line", (line) => this.#route(line));
     this.#child.stderr.setEncoding("utf8");
     this.#child.stderr.on("data", (message) => this.emit("stderr", message));
-    this.#child.once("error", (error) => this.#failAll(error));
+    // A dying engine surfaces as EPIPE/ECONNRESET on its pipes. Unhandled
+    // stream errors would crash the main process, so they shut the client
+    // down instead and the owner recreates it on "exit".
+    for (const stream of [this.#child.stdin, this.#child.stdout, this.#child.stderr]) {
+      stream.on("error", (error) => this.#shutDown(
+        new Error(`KeyFinder engine pipe failed: ${error.message}`, { cause: error }),
+      ));
+    }
+    this.#child.on("error", (error) => {
+      this.#shutDown(error);
+      // A spawn failure may never be followed by "exit".
+      if (this.#child.pid === undefined) this.#emitExit(null, null, error);
+    });
     this.#child.once("exit", (code, signal) => {
       const error = new Error(`KeyFinder engine exited (${signal ?? code ?? "unknown"})`);
-      this.#failAll(error);
-      this.emit("exit", { code, signal, error });
+      this.#shutDown(error);
+      this.#emitExit(code, signal, error);
     });
   }
 
   request(method, params = {}, { timeoutMs = 5_000 } = {}) {
+    if (this.#closedError) return Promise.reject(this.#closedError);
     const requestId = `electron-${this.#nextRequest++}`;
     const envelope = { version: protocolVersion, requestId, method, params };
     return new Promise((resolve, reject) => {
@@ -119,20 +135,33 @@ export class KeyFinderClient extends EventEmitter {
     }
   }
 
-  #failAll(error) {
+  #shutDown(error) {
     for (const pending of this.#pending.values()) {
       clearTimeout(pending.timer());
       pending.reject(error);
     }
     this.#pending.clear();
+    if (this.#closedError) return;
+    this.#closedError = error;
+    // A broken pipe leaves the engine unusable even if it is still running;
+    // end it so "exit" fires and the owner can start a fresh one.
+    // On Windows a graceful default kill can leave the native analyzer alive
+    // after its Electron owner recycles it. SIGKILL maps to TerminateProcess and
+    // guarantees that decoded-audio memory is released between batches.
+    if (this.#child.exitCode === null && this.#child.signalCode === null && this.#child.pid !== undefined) {
+      this.#child.kill("SIGKILL");
+    }
+  }
+
+  #emitExit(code, signal, error) {
+    if (this.#exitEmitted) return;
+    this.#exitEmitted = true;
+    this.emit("exit", { code, signal, error });
   }
 
   close() {
     if (this.#child.exitCode !== null || this.#child.signalCode !== null) return;
     this.#child.stdin.destroy();
-    // On Windows a graceful default kill can leave the native analyzer alive
-    // after its Electron owner recycles it. SIGKILL maps to TerminateProcess and
-    // guarantees that decoded-audio memory is released between batches.
-    this.#child.kill("SIGKILL");
+    this.#shutDown(new Error("KeyFinder engine was closed"));
   }
 }

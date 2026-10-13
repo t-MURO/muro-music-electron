@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  closeDatabase,
   closeDatabases,
   configureLibraryRoot,
+  getLibraryRoot,
   loadArtistCredits,
   loadPlaylists,
   loadRecentlyPlayed,
@@ -62,6 +64,12 @@ import {
   readPlaylistForImport,
 } from "./playlistFiles.mjs";
 import { createPlaylistSyncService } from "./playlistSync.mjs";
+import {
+  createPathAccess,
+  createPathAccessError,
+  normalizeAccessPath,
+} from "./pathAccess.mjs";
+import { portablePathKey } from "./libraryPaths.mjs";
 
 const allowedUpdates = {
   title: "title",
@@ -441,6 +449,31 @@ const comparableArtistCredits = (credits) => normalizedArtistCredits(credits).ma
   role: credit.role ?? null,
 }));
 
+// TagLib reports file-system failures as opaque WASM error codes. Probe the
+// file directly so the renderer can explain the usual causes.
+const tagWriteFailureReason = async (sourcePath) => {
+  let handle;
+  try {
+    handle = await fs.promises.open(sourcePath, "r+");
+    return "unknown";
+  } catch (error) {
+    switch (error?.code) {
+      case "ENOENT":
+        return "missing";
+      case "EACCES":
+      case "EPERM":
+      case "EROFS":
+        return "readOnly";
+      case "EBUSY":
+        return "locked";
+      default:
+        return "unknown";
+    }
+  } finally {
+    await handle?.close();
+  }
+};
+
 const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") => {
   const normalizedUpdates = canonicalMetadataUpdates(updates);
   if (!trackIds.length || Object.keys(normalizedUpdates).length === 0) {
@@ -564,7 +597,12 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errorUpdate.run(message, id);
-      fileWriteErrors.push({ trackId: id, fileName: path.basename(sourcePath), message });
+      fileWriteErrors.push({
+        trackId: id,
+        fileName: path.basename(sourcePath),
+        message,
+        reason: await tagWriteFailureReason(sourcePath),
+      });
       console.warn(`Failed to write metadata to ${sourcePath}:`, error);
     }
   }
@@ -583,8 +621,139 @@ export const createBackend = ({
   dlnaService: dlnaServiceOverride,
   acoustIdService: acoustIdServiceOverride,
   fpcalcBinaryDirectories = [],
+  dbPath: configuredDbPath,
+  getDbPath = () => configuredDbPath,
+  pathAccess: pathAccessOverride,
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
+  const restoredArtworkDir = path.join(path.dirname(cacheDir), "restored-artwork");
+  // The database location belongs to the main process; a dbPath sent by the
+  // renderer is discarded in invoke() and replaced with this one.
+  const currentDbPath = () => {
+    const value = getDbPath();
+    if (typeof value !== "string" || !path.isAbsolute(value)) {
+      throw new Error("The library database location is not configured");
+    }
+    return path.resolve(value);
+  };
+  const currentLibraryRoot = () => {
+    try {
+      return getLibraryRoot(currentDbPath());
+    } catch {
+      return null;
+    }
+  };
+  const artworkRoots = () => [cacheDir, artistCacheDir, restoredArtworkDir]
+    .map((root) => path.resolve(root));
+  const isInsideArtworkRoot = (filePath) => {
+    const candidate = normalizeAccessPath(filePath);
+    return Boolean(candidate) && artworkRoots().some((root) => {
+      const relative = path.relative(root, candidate);
+      return relative !== ""
+        && relative !== ".."
+        && !relative.startsWith(`..${path.sep}`)
+        && !path.isAbsolute(relative);
+    });
+  };
+  const IMAGE_EXTENSIONS = new Set([".gif", ".jpeg", ".jpg", ".png", ".webp"]);
+  const referencedPathCache = new Set();
+  // Inbox tracks and artwork written by older versions can live outside the
+  // library root and caches. They are still usable because the database (which
+  // only main-process code populates with validated paths) points at them.
+  const isDatabaseReferencedPath = (filePath) => {
+    const key = portablePathKey(filePath);
+    if (referencedPathCache.has(key)) return true;
+    const dbPath = currentDbPath();
+    const db = openDatabase(dbPath);
+    const stored = storeTrackPath(dbPath, filePath);
+    const caseInsensitive = process.platform === "win32" ? " COLLATE NOCASE" : "";
+    let referenced = Boolean(
+      db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(stored)
+      || (caseInsensitive
+        && db.prepare(`SELECT 1 FROM tracks WHERE source_path = ?${caseInsensitive}`).get(stored)),
+    );
+    if (!referenced && IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
+      referenced = Boolean(db.prepare(`
+        SELECT 1 FROM tracks
+        WHERE cover_art_path = ?${caseInsensitive} OR cover_art_thumb_path = ?${caseInsensitive}
+        LIMIT 1
+      `).get(filePath, filePath));
+    }
+    if (referenced) {
+      referencedPathCache.add(key);
+      if (referencedPathCache.size > 4_096) {
+        referencedPathCache.delete(referencedPathCache.values().next().value);
+      }
+    }
+    return referenced;
+  };
+  const pathAccess = pathAccessOverride ?? createPathAccess({
+    trustedRoots: () => [...artworkRoots(), currentLibraryRoot()].filter(Boolean),
+    isTrustedFile: isDatabaseReferencedPath,
+  });
+  /**
+   * A library root sent by the renderer is honoured only when it is the root
+   * the database already uses or a folder the user picked in a dialog.
+   * Otherwise a script could widen the protocol's reach to the whole disk.
+   */
+  const authorizedLibraryRoot = (dbPath, requested, { strict = true } = {}) => {
+    const candidate = String(requested ?? "").trim();
+    if (!candidate) return undefined;
+    const normalized = normalizeAccessPath(candidate);
+    const current = getLibraryRoot(dbPath);
+    if (normalized && current && portablePathKey(normalized) === portablePathKey(current)) {
+      return current;
+    }
+    if (normalized && pathAccess.isGranted(normalized, "write")) return normalized;
+    if (strict) throw createPathAccessError("library folder");
+    console.warn("Ignoring a library folder that was not chosen in this session:", candidate);
+    return undefined;
+  };
+  /** Cover paths stored on tracks must be app-owned artwork or already known. */
+  const assertArtworkPath = (dbPath, value) => {
+    if (value == null || value === "") return value;
+    const candidate = normalizeAccessPath(String(value));
+    if (candidate && isInsideArtworkRoot(candidate)) return candidate;
+    if (candidate && openDatabase(dbPath).prepare(`
+      SELECT 1 FROM tracks WHERE cover_art_path = ? OR cover_art_thumb_path = ? LIMIT 1
+    `).get(candidate, candidate)) {
+      return candidate;
+    }
+    throw createPathAccessError("cover art file");
+  };
+  const trackSourcePathForId = (dbPath, trackId) => {
+    const stored = openDatabase(dbPath)
+      .prepare("SELECT source_path FROM tracks WHERE id = ?")
+      .get(String(trackId ?? ""))?.source_path;
+    try {
+      return stored ? resolveTrackPath(dbPath, stored) : null;
+    } catch {
+      return null;
+    }
+  };
+  // Undoing a playlist deletion re-sends the linked file path; remember the
+  // paths the database held so restore_playlists accepts them afterwards.
+  const grantLinkedPlaylistSources = (dbPath, playlistIds) => {
+    const select = openDatabase(dbPath).prepare("SELECT source_path FROM playlists WHERE id = ?");
+    for (const playlistId of playlistIds) {
+      const stored = select.get(String(playlistId ?? ""))?.source_path;
+      if (!stored) continue;
+      try {
+        pathAccess.grantFile(resolveTrackPath(dbPath, stored), { read: true, write: false });
+      } catch {
+        // An unresolved relative path cannot be linked again anyway.
+      }
+    }
+  };
+  /** Cast/DLNA serve files to the LAN, so they get the same checks. */
+  const authorizedRemotePlayback = (dbPath, args) => {
+    const fromTrack = args?.trackId ? trackSourcePathForId(dbPath, args.trackId) : null;
+    const sourcePath = fromTrack ?? pathAccess.assertReadable(args?.sourcePath, "track file");
+    const coverArtPath = args?.coverArtPath && pathAccess.canRead(args.coverArtPath)
+      ? normalizeAccessPath(args.coverArtPath)
+      : null;
+    return { ...args, sourcePath, coverArtPath };
+  };
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
   const acoustId = acoustIdServiceOverride ?? createAcoustIdService({
     binaryDirectories: fpcalcBinaryDirectories,
@@ -615,19 +784,38 @@ export const createBackend = ({
   const commands = {
     ...castService.commands,
     ...dlnaService.commands,
+    ...(castService.commands.cast_load_track
+      ? {
+        cast_load_track: (args) =>
+          castService.commands.cast_load_track(authorizedRemotePlayback(currentDbPath(), args)),
+      }
+      : {}),
+    ...(dlnaService.commands.dlna_load_track
+      ? {
+        dlna_load_track: (args) =>
+          dlnaService.commands.dlna_load_track(authorizedRemotePlayback(currentDbPath(), args)),
+      }
+      : {}),
     async import_files({
       paths,
       dbPath,
       libraryFolder,
     }, sender) {
-      const inputPaths = Array.isArray(paths) ? paths : [];
+      const failures = [];
+      const inputPaths = (Array.isArray(paths) ? paths : []).filter((inputPath) => {
+        if (pathAccess.canRead(inputPath)) return true;
+        failures.push({
+          path: String(inputPath ?? ""),
+          message: createPathAccessError("file or folder").message,
+        });
+        return false;
+      });
+      const normalizedLibraryFolder = authorizedLibraryRoot(dbPath, libraryFolder);
       const audioPaths = await collectAudioPaths(inputPaths);
-      const normalizedLibraryFolder = String(libraryFolder ?? "").trim();
       if (normalizedLibraryFolder) {
         configureLibraryRoot(dbPath, normalizedLibraryFolder);
       }
       const imported = [];
-      const failures = [];
       for (let index = 0; index < audioPaths.length; index += 1) {
         try {
           const audioPath = audioPaths[index];
@@ -654,10 +842,20 @@ export const createBackend = ({
     },
 
     load_tracks: ({ dbPath, libraryRoot, artistSeparatorExceptions }) =>
-      loadTracks(dbPath, libraryRoot, artistSeparatorExceptions),
-    load_playlists: ({ dbPath, libraryRoot }) => loadPlaylists(dbPath, libraryRoot),
+      loadTracks(
+        dbPath,
+        authorizedLibraryRoot(dbPath, libraryRoot, { strict: false }),
+        artistSeparatorExceptions,
+      ),
+    load_playlists: ({ dbPath, libraryRoot }) =>
+      loadPlaylists(dbPath, authorizedLibraryRoot(dbPath, libraryRoot, { strict: false })),
     load_recently_played: ({ dbPath, limit, libraryRoot, artistSeparatorExceptions }) =>
-      loadRecentlyPlayed(dbPath, limit, libraryRoot, artistSeparatorExceptions),
+      loadRecentlyPlayed(
+        dbPath,
+        limit,
+        authorizedLibraryRoot(dbPath, libraryRoot, { strict: false }),
+        artistSeparatorExceptions,
+      ),
     migrate_artist_credits: ({ dbPath, artistSeparatorExceptions }) =>
       migrateStructuredArtistCredits(dbPath, artistSeparatorExceptions),
     merge_artists: ({
@@ -673,13 +871,21 @@ export const createBackend = ({
       targetMusicBrainzId,
     }),
     create_library_backup: ({ dbPath, destinationPath, settingsJson, smartCratesJson }) =>
-      createLibraryBackup({ dbPath, destinationPath, settingsJson, smartCratesJson }),
-    restore_library_backup: ({ dbPath, archivePath }) =>
-      restoreLibraryBackup({
+      createLibraryBackup({
         dbPath,
-        archivePath,
-        artworkRoot: path.dirname(cacheDir),
+        destinationPath: pathAccess.assertWritable(destinationPath, "backup destination"),
+        settingsJson,
+        smartCratesJson,
       }),
+    restore_library_backup: async ({ dbPath, archivePath }) => {
+      const result = await restoreLibraryBackup({
+        dbPath,
+        archivePath: pathAccess.assertReadable(archivePath, "backup archive"),
+        artworkRoot: path.dirname(cacheDir),
+      });
+      referencedPathCache.clear();
+      return result;
+    },
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
     get_artist_profile: ({
@@ -754,6 +960,7 @@ export const createBackend = ({
       acoustId.identifyTrack(openDatabase(dbPath), { trackId, clientKey, force }),
 
     clear_tracks: async ({ dbPath }) => {
+      referencedPathCache.clear();
       const db = openDatabase(dbPath);
       db.transaction(() => {
         db.prepare("DELETE FROM tracks").run();
@@ -773,15 +980,26 @@ export const createBackend = ({
     },
 
     accept_tracks: ({ dbPath, trackIds, organize, libraryFolder }) =>
-      acceptInboxTracks({ dbPath, trackIds, organize, libraryFolder }),
+      acceptInboxTracks({
+        dbPath,
+        trackIds,
+        organize,
+        libraryFolder: authorizedLibraryRoot(dbPath, libraryFolder),
+      }),
     validate_library_structure: ({ dbPath, libraryRoot }) =>
-      validateLibraryStructure({ dbPath, libraryRoot }),
+      validateLibraryStructure({ dbPath, libraryRoot: authorizedLibraryRoot(dbPath, libraryRoot) }),
     repair_library_structure: ({ dbPath, libraryRoot, trackIds }) =>
-      repairLibraryStructure({ dbPath, libraryRoot, trackIds }),
+      repairLibraryStructure({
+        dbPath,
+        libraryRoot: authorizedLibraryRoot(dbPath, libraryRoot),
+        trackIds,
+      }),
     unaccept_tracks: ({ dbPath, trackIds }) =>
       bulkTrackOperation(dbPath, trackIds, "UPDATE tracks SET import_status = 'staged' WHERE id IN"),
-    reject_tracks: ({ dbPath, trackIds }) =>
-      bulkTrackOperation(dbPath, trackIds, "DELETE FROM tracks WHERE id IN"),
+    reject_tracks: ({ dbPath, trackIds }) => {
+      referencedPathCache.clear();
+      return bulkTrackOperation(dbPath, trackIds, "DELETE FROM tracks WHERE id IN");
+    },
     delete_tracks: async ({ dbPath, trackIds, deleteFromDisk }) => {
       const ids = [...new Set(
         (Array.isArray(trackIds) ? trackIds : [])
@@ -789,6 +1007,7 @@ export const createBackend = ({
           .filter(Boolean),
       )];
       if (ids.length === 0) return { deletedTrackIds: [], failures: [] };
+      referencedPathCache.clear();
 
       let deletedTrackIds = ids;
       const failures = [];
@@ -833,7 +1052,7 @@ export const createBackend = ({
     }) => {
       const db = openDatabase(dbPath);
       const linkedSourcePath = sourcePath
-        ? storeTrackPath(dbPath, path.resolve(String(sourcePath)))
+        ? storeTrackPath(dbPath, pathAccess.assertReadable(String(sourcePath), "playlist file"))
         : null;
       const result = withPlaylistHistory(db, `Create playlist: ${String(name).trim()}`, () => {
         const targetFolderId = folderId || null;
@@ -898,6 +1117,7 @@ export const createBackend = ({
     },
     delete_playlist: async ({ dbPath, playlistId }) => {
       const db = openDatabase(dbPath);
+      grantLinkedPlaylistSources(dbPath, [playlistId]);
       const result = withPlaylistHistory(db, "Delete playlist", () =>
         db.prepare("DELETE FROM playlists WHERE id = ?").run(playlistId));
       await playlistSync.refreshSources({ dbPath, syncChanged: false });
@@ -911,6 +1131,7 @@ export const createBackend = ({
       )];
       if (ids.length === 0) return { deleted: 0 };
       const db = openDatabase(dbPath);
+      grantLinkedPlaylistSources(dbPath, ids);
       const placeholders = ids.map(() => "?").join(", ");
       const result = withPlaylistHistory(db, `Delete ${ids.length} playlists`, () => {
         const result = db.prepare(`DELETE FROM playlists WHERE id IN (${placeholders})`).run(...ids);
@@ -949,7 +1170,10 @@ export const createBackend = ({
             playlist.folderId ? String(playlist.folderId) : null,
             Number(playlist.sortOrder) || 0,
             playlist.sourcePath
-              ? storeTrackPath(dbPath, path.resolve(String(playlist.sourcePath)))
+              ? storeTrackPath(
+                dbPath,
+                pathAccess.assertReadable(String(playlist.sourcePath), "playlist file"),
+              )
               : null,
             playlist.sourceMtimeMs == null ? null : Number(playlist.sourceMtimeMs),
             playlist.sourceSize == null ? null : Number(playlist.sourceSize),
@@ -1039,22 +1263,34 @@ export const createBackend = ({
         db.prepare("DELETE FROM playlist_folders WHERE id = ?").run(folderId);
       });
     },
-    list_playlist_files: ({ directoryPath }) => listPlaylistFilesForImport(directoryPath),
-    import_playlist_file: ({ dbPath, filePath }) => readPlaylistForImport(dbPath, filePath),
+    list_playlist_files: ({ directoryPath }) =>
+      listPlaylistFilesForImport(pathAccess.assertReadable(directoryPath, "playlist folder")),
+    import_playlist_file: ({ dbPath, filePath }) =>
+      readPlaylistForImport(dbPath, pathAccess.assertReadable(filePath, "playlist file")),
     configure_playlist_sync: ({ dbPath }) =>
       playlistSync.refreshSources({ dbPath, syncChanged: true }),
     sync_playlist_source: ({ dbPath, playlistId }) =>
       playlistSync.syncPlaylist({ dbPath, playlistId, force: true, reason: "manual" }),
     export_playlist_file: ({ dbPath, playlistId, filePath }) =>
-      exportPlaylistFile(dbPath, playlistId, filePath),
+      exportPlaylistFile(
+        dbPath,
+        playlistId,
+        pathAccess.assertWritable(filePath, "playlist export destination"),
+      ),
     export_all_playlists: ({ dbPath, destinationPath }) =>
-      exportAllPlaylists({ dbPath, destinationPath }),
+      exportAllPlaylists({
+        dbPath,
+        destinationPath: pathAccess.assertWritable(destinationPath, "export folder"),
+      }),
     export_itunes_library: ({ dbPath, destinationPath }) =>
-      exportItunesLibrary({ dbPath, destinationPath }),
+      exportItunesLibrary({
+        dbPath,
+        destinationPath: pathAccess.assertWritable(destinationPath, "export destination"),
+      }),
     export_organized_library: ({ dbPath, destinationPath, useAsCurrentLibrary }, sender) =>
       exportOrganizedLibrary({
         dbPath,
-        destinationPath,
+        destinationPath: pathAccess.assertWritable(destinationPath, "export folder"),
         useAsCurrentLibrary: Boolean(useAsCurrentLibrary),
         onProgress: (progress) => emit(sender, "muro://library-export-progress", progress),
       }),
@@ -1103,8 +1339,15 @@ export const createBackend = ({
         `).run(playlistId, Math.max(0, Number(count) || 0)));
     },
 
-    update_track_metadata: ({ dbPath, trackIds, updates }) =>
-      updateTrackMetadata(dbPath, trackIds, updates),
+    update_track_metadata: ({ dbPath, trackIds, updates }) => {
+      const checkedUpdates = { ...(updates ?? {}) };
+      for (const key of ["coverArtPath", "coverArtThumbPath"]) {
+        if (hasOwn(checkedUpdates, key)) {
+          checkedUpdates[key] = assertArtworkPath(dbPath, checkedUpdates[key]);
+        }
+      }
+      return updateTrackMetadata(dbPath, trackIds, checkedUpdates);
+    },
     list_metadata_history: ({ dbPath, trackId, limit }) => {
       const db = openDatabase(dbPath);
       const bounded = Math.max(1, Math.min(Number(limit) || 100, 500));
@@ -1144,12 +1387,10 @@ export const createBackend = ({
       if ((field === "artists" || field === "albumArtist") && Array.isArray(change.beforeCredits)) {
         rollbackUpdates.albumArtistCredits = change.beforeCredits;
       }
-      return updateTrackMetadata(
-        dbPath,
-        [String(row.track_id)],
-        rollbackUpdates,
-        "rollback",
-      );
+      const trackId = String(row.track_id);
+      const result = await updateTrackMetadata(dbPath, [trackId], rollbackUpdates, "rollback");
+      // The caller needs the applied updates to retry a failed tag write.
+      return { ...result, trackId, updates: rollbackUpdates };
     },
     list_playlist_history: ({ dbPath, limit }) =>
       listPlaylistHistory(openDatabase(dbPath), limit),
@@ -1249,7 +1490,8 @@ export const createBackend = ({
     /** Point a track at a new file. The replacement must actually exist. */
     relink_track: ({ dbPath, trackId, newPath }) => {
       if (typeof trackId !== "string" || !trackId) throw new Error("A track is required");
-      const resolved = path.resolve(String(newPath ?? ""));
+      const resolved = pathAccess.assertReadable(String(newPath ?? ""), "replacement file");
+      referencedPathCache.clear();
       if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
         throw new Error("The selected file does not exist");
       }
@@ -1281,10 +1523,13 @@ export const createBackend = ({
      * absorb decoder rounding without pairing two different songs.
      */
     auto_relink_missing: async ({ dbPath, searchDir, dryRun }) => {
-      const root = path.resolve(String(searchDir ?? ""));
+      const root = normalizeAccessPath(String(searchDir ?? ""));
+      if (!root) throw new Error("Choose a folder to search");
+      pathAccess.assertReadable(root, "folder");
       if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
         throw new Error("Choose a folder to search");
       }
+      referencedPathCache.clear();
 
       const db = openDatabase(dbPath);
       const missing = db.prepare(`
@@ -1461,19 +1706,30 @@ export const createBackend = ({
     },
 
     keyfinder_health: () => keyFinder.health(),
-    start_track_analysis: ({ tracks, settings, writeAuthorization }, sender) =>
-      keyFinder.startAnalysis(
-        Array.isArray(tracks) ? tracks : [],
+    start_track_analysis: ({ dbPath, tracks, settings, writeAuthorization }, sender) => {
+      // The analysis engine can write key/BPM tags, so library tracks are
+      // located by ID and only database tracks may be written to.
+      const authorizedTracks = (Array.isArray(tracks) ? tracks : []).map((track) => {
+        const sourcePath = trackSourcePathForId(dbPath, track?.id);
+        if (sourcePath) return { ...track, sourcePath };
+        if (writeAuthorization) throw createPathAccessError("track file");
+        return { ...track, sourcePath: pathAccess.assertReadable(track?.sourcePath, "track file") };
+      });
+      return keyFinder.startAnalysis(
+        authorizedTracks,
         sender,
         settings,
         Boolean(writeAuthorization),
-      ),
+      );
+    },
     cancel_track_analysis: ({ jobId }) => keyFinder.cancelAnalysis(jobId),
     recycle_keyfinder: () => keyFinder.recycle(),
-    generate_track_waveform: ({ sourcePath, points }) =>
-      waveformCache.getOrCreate(sourcePath, points, (normalizedPoints) =>
-        keyFinder.generateWaveform(sourcePath, normalizedPoints)
-      ),
+    generate_track_waveform: ({ sourcePath, points }) => {
+      const authorizedPath = pathAccess.assertReadable(sourcePath, "track file");
+      return waveformCache.getOrCreate(authorizedPath, points, (normalizedPoints) =>
+        keyFinder.generateWaveform(authorizedPath, normalizedPoints)
+      );
+    },
     get_track_source_path: ({ dbPath, trackId }) =>
       (() => {
         const stored = openDatabase(dbPath)
@@ -1605,11 +1861,15 @@ export const createBackend = ({
     },
 
     set_watched_folder: ({ dbPath, folder, isEnabled }) =>
-      libraryWatcher.setFolder({ dbPath, folder, isEnabled }),
+      libraryWatcher.setFolder({
+        dbPath,
+        folder: authorizedLibraryRoot(dbPath, folder),
+        isEnabled,
+      }),
 
     /** Catch up on files added while the watcher was not running. */
     scan_watched_folder: ({ dbPath, folder }) =>
-      libraryWatcher.scanNow({ dbPath, folder }),
+      libraryWatcher.scanNow({ dbPath, folder: authorizedLibraryRoot(dbPath, folder) }),
 
     watched_folder_status: () => libraryWatcher.status(),
 
@@ -1699,7 +1959,8 @@ export const createBackend = ({
       `).get()?.count ?? 0;
       return { checked: rows.length, updated, failed, remaining };
     },
-    cache_cover_art_from_file: ({ filePath }) => cacheCoverFile(filePath, cacheDir),
+    cache_cover_art_from_file: ({ filePath }) =>
+      cacheCoverFile(pathAccess.assertReadable(filePath, "image file"), cacheDir),
     cache_cover_art_from_bytes: ({ bytes }) => {
       const data = Buffer.from(bytes ?? []);
       if (data.length === 0 || data.length > 50 * 1024 * 1024) {
@@ -1711,10 +1972,36 @@ export const createBackend = ({
 
   return {
     async invoke(command, args, sender) {
+      if (typeof command !== "string" || !Object.hasOwn(commands, command)) {
+        throw new Error(`Unsupported command: ${command}`);
+      }
       const handler = commands[command];
-      if (!handler) throw new Error(`Unsupported command: ${command}`);
       if (sender) lastSender = sender;
-      return handler(args, sender);
+      // Never trust a renderer-supplied database location. The main-process
+      // location is resolved lazily so commands that do not touch the
+      // database keep working before one is configured.
+      const { dbPath: _ignoredDbPath, ...commandArgs } = args && typeof args === "object" ? args : {};
+      Object.defineProperty(commandArgs, "dbPath", { get: currentDbPath, enumerable: false });
+      return handler(commandArgs, sender);
+    },
+    pathAccess,
+    /** Whether muro-file:// (and other read paths) may expose this file. */
+    canReadPath: (filePath) => pathAccess.canRead(filePath),
+    getDatabaseLocation: () => currentDbPath(),
+    /** Close the old connection after the main process moved the database. */
+    databaseLocationChanged(previousDbPath) {
+      referencedPathCache.clear();
+      if (previousDbPath && path.resolve(previousDbPath) !== currentDbPath()) {
+        // The user already chose the previous library folder, so the new
+        // database may adopt it when the renderer reloads with that setting.
+        try {
+          const previousRoot = getLibraryRoot(previousDbPath);
+          if (previousRoot) pathAccess.grantDirectory(previousRoot);
+        } catch {
+          // An unreadable previous database simply grants nothing.
+        }
+        closeDatabase(previousDbPath);
+      }
     },
     close() {
       libraryWatcher.close();

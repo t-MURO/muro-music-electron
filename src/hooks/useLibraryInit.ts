@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { appDataDir, join } from "@muro/desktop/paths";
 import { useLibraryStore, useSettingsStore, useRecentlyPlayedStore, notify } from "../stores";
 import {
   backfillCoverArt,
@@ -12,7 +11,6 @@ import {
   importedTrackToTrack,
   scanTechnicalMetadata,
 } from "../utils";
-import { useDbPath } from "./useDbPath";
 import { confirm } from "@muro/desktop/dialogs";
 import { t } from "../i18n";
 
@@ -27,13 +25,8 @@ export const useLibraryInit = () => {
   const setPlaylistFolders = useLibraryStore((s) => s.setPlaylistFolders);
   const setRecentlyPlayedTracks = useRecentlyPlayedStore((s) => s.setRecentlyPlayedTracks);
 
-  const dbPath = useSettingsStore((s) => s.dbPath);
-  const dbFileName = useSettingsStore((s) => s.dbFileName);
-  const useAutoDbPath = useSettingsStore((s) => s.useAutoDbPath);
   const libraryRoot = useSettingsStore((s) => s.watchedFolder || undefined);
   const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
-
-  const resolveDbPath = useDbPath();
 
   const [libraryLoading, setLibraryLoading] = useState(true);
 
@@ -44,32 +37,6 @@ export const useLibraryInit = () => {
   const [coverArtBackfillStatus, setCoverArtBackfillStatus] = useState<string | null>(null);
   const [clearSongsPending, setClearSongsPending] = useState(false);
 
-  // Auto-resolve DB path
-  useEffect(() => {
-    let isMounted = true;
-
-    const resolveDefaultDbPath = async () => {
-      if (!useAutoDbPath) {
-        return;
-      }
-
-      try {
-        const baseDir = await appDataDir();
-        const defaultPath = await join(baseDir, dbFileName || "muro.db");
-        if (isMounted) {
-          useSettingsStore.setState({ dbPath: defaultPath });
-        }
-      } catch (error) {
-        console.warn("Failed to resolve default db path", error);
-      }
-    };
-
-    resolveDefaultDbPath();
-    return () => {
-      isMounted = false;
-    };
-  }, [dbFileName, useAutoDbPath]);
-
   // Load library on mount
   useEffect(() => {
     let isMounted = true;
@@ -77,12 +44,11 @@ export const useLibraryInit = () => {
 
     const loadLibrary = async () => {
       try {
-        const resolvedPath = await resolveDbPath();
-        await migrateArtistCredits(resolvedPath, artistSeparatorExceptions);
+        await migrateArtistCredits(artistSeparatorExceptions);
         const [snapshot, playlistSnapshot, recentlyPlayedSnapshot] = await Promise.all([
-          loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions),
-          loadPlaylists(resolvedPath, libraryRoot),
-          loadRecentlyPlayed(resolvedPath, 50, libraryRoot, artistSeparatorExceptions),
+          loadTracks(libraryRoot, artistSeparatorExceptions),
+          loadPlaylists(libraryRoot),
+          loadRecentlyPlayed(50, libraryRoot, artistSeparatorExceptions),
         ]);
         if (!isMounted) {
           return;
@@ -124,7 +90,6 @@ export const useLibraryInit = () => {
   }, [
     artistSeparatorExceptions,
     libraryRoot,
-    resolveDbPath,
     setTracks,
     setInboxTracks,
     setPlaylists,
@@ -140,11 +105,10 @@ export const useLibraryInit = () => {
     };
     const run = async () => {
       try {
-        const resolvedPath = await resolveDbPath();
-        const result = await scanTechnicalMetadata(resolvedPath, TECHNICAL_SCAN_BATCH_SIZE);
+        const result = await scanTechnicalMetadata(TECHNICAL_SCAN_BATCH_SIZE);
         if (cancelled) return;
         if (result.updated > 0) {
-          const snapshot = await loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions);
+          const snapshot = await loadTracks(libraryRoot, artistSeparatorExceptions);
           if (cancelled) return;
           setTracks(snapshot.library.map(importedTrackToTrack));
           setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
@@ -159,19 +123,14 @@ export const useLibraryInit = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [artistSeparatorExceptions, libraryRoot, resolveDbPath, setInboxTracks, setTracks]);
+  }, [artistSeparatorExceptions, libraryRoot, setInboxTracks, setTracks]);
 
   // Backfill handlers
   const handleBackfillSearchText = useCallback(async () => {
-    if (!dbPath.trim()) {
-      setBackfillStatus("Enter a database path to run the backfill.");
-      return;
-    }
-
     try {
       setBackfillPending(true);
       setBackfillStatus("Running backfill...");
-      const updated = await backfillSearchText(dbPath.trim());
+      const updated = await backfillSearchText();
       setBackfillStatus(`Updated ${updated} tracks.`);
     } catch (error) {
       const message =
@@ -180,22 +139,16 @@ export const useLibraryInit = () => {
     } finally {
       setBackfillPending(false);
     }
-  }, [dbPath]);
+  }, []);
 
   const handleBackfillCoverArt = useCallback(async () => {
-    if (!dbPath.trim()) {
-      setCoverArtBackfillStatus("Enter a database path to run the backfill.");
-      return;
-    }
-
     try {
       setCoverArtBackfillPending(true);
       setCoverArtBackfillStatus("Rebuilding high-resolution cover cache...");
-      const updated = await backfillCoverArt(dbPath.trim());
+      const updated = await backfillCoverArt();
       setCoverArtBackfillStatus(`Rebuilt high-resolution cover art for ${updated} tracks.`);
       // Reload tracks to get the new cover art paths
-      const resolvedPath = await resolveDbPath();
-      const snapshot = await loadTracks(resolvedPath, libraryRoot, artistSeparatorExceptions);
+      const snapshot = await loadTracks(libraryRoot, artistSeparatorExceptions);
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch (error) {
@@ -205,7 +158,7 @@ export const useLibraryInit = () => {
     } finally {
       setCoverArtBackfillPending(false);
     }
-  }, [artistSeparatorExceptions, dbPath, libraryRoot, resolveDbPath, setTracks, setInboxTracks]);
+  }, [artistSeparatorExceptions, libraryRoot, setTracks, setInboxTracks]);
 
   // Clear songs handler
   const handleClearSongs = useCallback(async () => {
@@ -226,8 +179,7 @@ export const useLibraryInit = () => {
 
     setClearSongsPending(true);
     try {
-      const resolvedPath = await resolveDbPath();
-      await clearTracks(resolvedPath);
+      await clearTracks();
       setTracks([]);
       setInboxTracks([]);
     } catch (error) {
@@ -235,7 +187,7 @@ export const useLibraryInit = () => {
     } finally {
       setClearSongsPending(false);
     }
-  }, [clearSongsPending, resolveDbPath, setTracks, setInboxTracks]);
+  }, [clearSongsPending, setTracks, setInboxTracks]);
 
   return {
     libraryLoading,

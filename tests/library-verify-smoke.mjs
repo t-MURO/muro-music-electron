@@ -14,6 +14,7 @@ fs.mkdirSync(musicDir, { recursive: true });
 fs.mkdirSync(movedDir, { recursive: true });
 
 const backend = createBackend({
+  dbPath,
   cacheDir: path.join(tempDir, "covers"),
   artistProfileCacheDir: path.join(tempDir, "artists"),
   emit: () => {},
@@ -26,6 +27,9 @@ const backend = createBackend({
   },
   fpcalcBinaryDirectories: [],
 });
+// The library folder (and the relink search folders under it) are picked in
+// native dialogs by the user.
+backend.pathAccess.grantDialogSelection({ paths: [tempDir], directory: true });
 
 const writeAudioFile = (dir, name) => {
   const filePath = path.join(dir, name);

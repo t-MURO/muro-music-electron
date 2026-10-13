@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@muro/desktop/runtime";
-import { useDbPath } from "./useDbPath";
 
 const DEBOUNCE_MS = 120;
 
@@ -15,7 +14,6 @@ const DEBOUNCE_MS = 120;
 export const useIndexedSearch = (query: string) => {
   const [matchedIds, setMatchedIds] = useState<Set<string> | null>(null);
   const [pending, setPending] = useState(false);
-  const resolveDbPath = useDbPath();
   // Late responses from a stale query must not overwrite a newer result.
   const requestIdRef = useRef(0);
 
@@ -34,9 +32,7 @@ export const useIndexedSearch = (query: string) => {
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const dbPath = await resolveDbPath();
           const ids = await invoke<string[] | null>("search_tracks", {
-            dbPath,
             query: trimmed,
           });
           if (requestIdRef.current !== requestId) return;
@@ -55,7 +51,7 @@ export const useIndexedSearch = (query: string) => {
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [query, resolveDbPath]);
+  }, [query]);
 
   return { matchedIds, pending };
 };

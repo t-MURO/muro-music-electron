@@ -5,7 +5,6 @@ import { open } from "@muro/desktop/dialogs";
 import { notify, useLibraryStore, useSettingsStore } from "../stores";
 import { importedTrackToTrack, type ImportedTrack } from "../utils";
 import { t } from "../i18n";
-import { useDbPath } from "./useDbPath";
 
 type WatchedImportPayload = {
   track: ImportedTrack;
@@ -25,28 +24,16 @@ export const useWatchedFolders = () => {
   const setOrganizeAcceptedTracks = useSettingsStore((s) => s.setOrganizeAcceptedTracks);
   const setWatchedFolder = useSettingsStore((s) => s.setWatchedFolder);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
-  const resolveDbPath = useDbPath();
 
   // Push the watch set to the main process whenever it changes.
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const dbPath = await resolveDbPath();
-        if (cancelled) return;
-        await invoke("set_watched_folder", {
-          dbPath,
-          folder: watchedFolder,
-          isEnabled: watchFolderEnabled,
-        });
-      } catch {
-        // Watching is best-effort; manual import still works.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [resolveDbPath, watchFolderEnabled, watchedFolder]);
+    invoke("set_watched_folder", {
+      folder: watchedFolder,
+      isEnabled: watchFolderEnabled,
+    }).catch(() => {
+      // Watching is best-effort; manual import still works.
+    });
+  }, [watchFolderEnabled, watchedFolder]);
 
   // Newly watched-in tracks arrive one at a time.
   useEffect(() => {
@@ -86,10 +73,9 @@ export const useWatchedFolders = () => {
     if (scanning || !watchedFolder) return;
     setScanning(true);
     try {
-      const dbPath = await resolveDbPath();
       const result = await invoke<{ imported: number; scanned: number }>(
         "scan_watched_folder",
-        { dbPath, folder: watchedFolder }
+        { folder: watchedFolder }
       );
       if (result.imported > 0) {
         notify.success(t("watch.scan.imported", { count: String(result.imported) }));
@@ -101,7 +87,7 @@ export const useWatchedFolders = () => {
     } finally {
       setScanning(false);
     }
-  }, [resolveDbPath, scanning, watchedFolder]);
+  }, [scanning, watchedFolder]);
 
   return {
     scanning,

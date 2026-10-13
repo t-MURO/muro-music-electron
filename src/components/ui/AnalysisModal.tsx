@@ -27,8 +27,10 @@ type TrackAnalysis = {
 type AnalysisModalProps = {
   isOpen: boolean;
   isMinimized: boolean;
+  /** Identifies one analysis request; a new ID cancels the current job and starts over. */
+  jobId: number;
+  /** Snapshot of the tracks for `jobId`. Changes to it alone do not restart the job. */
   tracks: Track[];
-  dbPath: string;
   onClose: () => void;
   onMinimize: () => void;
   onRestore: () => void;
@@ -63,8 +65,8 @@ const formatEta = (seconds: number) => {
 export const AnalysisModal = ({
   isOpen,
   isMinimized,
+  jobId,
   tracks,
-  dbPath,
   onClose,
   onMinimize,
   onRestore,
@@ -77,6 +79,7 @@ export const AnalysisModal = ({
   const analysisPerformance = useSettingsStore((state) => state.analysisPerformance);
   const [analyses, setAnalyses] = useState<TrackAnalysis[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
   const [selectedRange, setSelectedRange] = useState<BpmRange>(BPM_RANGES[0]);
@@ -84,6 +87,9 @@ export const AnalysisModal = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const activeJobIdsRef = useRef(new Set<string>());
   const cancelRequestedRef = useRef(false);
+  // Releases workers still waiting on a native job, so a user cancel ends the
+  // run even if a cancelled job never reports back.
+  const stopWaitingRef = useRef<(() => void) | null>(null);
   const resultsScrollRef = useRef<HTMLDivElement | null>(null);
   const analysisIndexRef = useRef(new Map<string, number>());
   const analysisStartedAtRef = useRef<number | null>(null);
@@ -94,37 +100,40 @@ export const AnalysisModal = ({
     overscan: 8,
   });
 
-  // Initialize analyses when tracks change
+  // Run one native KeyFinder job per jobId. Keyed on the job rather than the
+  // tracks array so library updates while it runs (including the ones the
+  // analysis causes) neither cancel it nor clear its results.
   useEffect(() => {
-    if (isOpen && tracks.length > 0) {
-      analysisIndexRef.current = new Map(
-        tracks.map((track, index) => [track.id, index])
-      );
-      setAnalyses(
-        tracks.map((track) => ({
-          track,
-          result: null,
-          error: null,
-          writeError: null,
-          rawBpm: 0,
-        }))
-      );
-      setProgress({ current: 0, total: tracks.length });
-      setEtaSeconds(null);
-      analysisStartedAtRef.current = null;
-    }
-  }, [isOpen, tracks]);
-
-  // Start the native KeyFinder job when the modal opens.
-  useEffect(() => {
-    if (!isOpen || tracks.length === 0 || isAnalyzing) {
+    if (!isOpen || tracks.length === 0) {
       return;
     }
+
+    analysisIndexRef.current = new Map(
+      tracks.map((track, index) => [track.id, index])
+    );
+    setAnalyses(
+      tracks.map((track) => ({
+        track,
+        result: null,
+        error: null,
+        writeError: null,
+        rawBpm: 0,
+      }))
+    );
+    setProgress({ current: 0, total: tracks.length });
+    setEtaSeconds(null);
+    setIsCancelled(false);
+    analysisStartedAtRef.current = null;
 
     let disposed = false;
     let removeListener: (() => void) | undefined;
     const finishedJobs = new Set<string>();
     const finishResolvers = new Map<string, () => void>();
+    const stopWaiting = () => {
+      for (const resolve of finishResolvers.values()) resolve();
+      finishResolvers.clear();
+    };
+    stopWaitingRef.current = stopWaiting;
     const trackProgress = new Map<string, number>();
     const completedTrackIds = new Set<string>();
     let nextTrackIndex = 0;
@@ -219,6 +228,10 @@ export const AnalysisModal = ({
             finishResolvers.delete(event.jobId);
           }
         });
+        if (disposed) {
+          removeListener();
+          return;
+        }
 
         const runWorker = async () => {
           while (!disposed && !cancelRequestedRef.current) {
@@ -305,16 +318,20 @@ export const AnalysisModal = ({
 
     return () => {
       disposed = true;
+      if (stopWaitingRef.current === stopWaiting) stopWaitingRef.current = null;
       removeListener?.();
-      for (const resolve of finishResolvers.values()) resolve();
-      finishResolvers.clear();
+      stopWaiting();
       const activeJobIds = [...activeJobIdsRef.current];
       activeJobIdsRef.current.clear();
-      for (const jobId of activeJobIds) {
-        void cancelTrackAnalysis(jobId).catch(() => undefined);
+      for (const nativeJobId of activeJobIds) {
+        void cancelTrackAnalysis(nativeJobId).catch(() => undefined);
       }
+      // The disposed run skips its own cleanup, so never leave it spinning.
+      setIsAnalyzing(false);
     };
-  }, [isOpen, tracks]);
+    // Settings and the tracks snapshot are read when the job starts; only a
+    // new job (or closing the modal) should restart or cancel it.
+  }, [isOpen, jobId]);
 
   // Re-normalize BPM when range changes
   useEffect(() => {
@@ -349,7 +366,6 @@ export const AnalysisModal = ({
 
           // Save to database
           await invoke("update_track_analysis", {
-            dbPath,
             trackId: analysis.track.id,
             bpm: analysis.result.bpm > 0 ? analysis.result.bpm : null,
             key: analysis.result.camelot !== "?" ? analysis.result.camelot : null,
@@ -365,15 +381,17 @@ export const AnalysisModal = ({
     } finally {
       setIsSaving(false);
     }
-  }, [analyses, dbPath, onAnalysisComplete, onClose]);
+  }, [analyses, onAnalysisComplete, onClose]);
 
   const handleCancel = useCallback(() => {
     cancelRequestedRef.current = true;
+    setIsCancelled(true);
     const activeJobIds = [...activeJobIdsRef.current];
     activeJobIdsRef.current.clear();
-    for (const jobId of activeJobIds) {
-      void cancelTrackAnalysis(jobId).catch(() => undefined);
+    for (const nativeJobId of activeJobIds) {
+      void cancelTrackAnalysis(nativeJobId).catch(() => undefined);
     }
+    stopWaitingRef.current?.();
   }, []);
 
   const handleClose = useCallback(() => {
@@ -415,7 +433,9 @@ export const AnalysisModal = ({
     ? etaSeconds === null
       ? t("analysis.etaCalculating")
       : t("analysis.etaRemaining", { time: formatEta(etaSeconds) })
-    : t("analysis.complete");
+    : isCancelled
+      ? t("analysis.cancelled")
+      : t("analysis.complete");
 
   if (isMinimized) {
     return createPortal(
@@ -481,7 +501,9 @@ export const AnalysisModal = ({
           <p className="mt-[var(--spacing-xs)] text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
             {isAnalyzing
               ? t("analysis.analyzing")
-              : allComplete
+              : isCancelled
+                ? t("analysis.cancelled")
+                : allComplete
                 ? t("analysis.complete")
                 : t("analysis.subtitle")}
           </p>
@@ -599,9 +621,13 @@ export const AnalysisModal = ({
                     </div>
                   )}
                 </>
-              ) : (
+              ) : isAnalyzing ? (
                 <div className="flex items-center justify-center py-[var(--spacing-lg)]">
                   <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                </div>
+              ) : (
+                <div className="py-[var(--spacing-lg)] text-center text-[var(--font-size-sm)] text-[var(--color-text-muted)]">
+                  {isCancelled ? t("analysis.cancelled") : "-"}
                 </div>
               )}
             </div>
@@ -644,8 +670,10 @@ export const AnalysisModal = ({
                               ? analysis.result.bpm.toFixed(1)
                               : "N/A"}
                           </span>
-                        ) : (
+                        ) : isAnalyzing ? (
                           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                        ) : (
+                          <span className="text-[var(--color-text-muted)]">-</span>
                         )}
                       </div>
                       <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right text-[var(--font-size-sm)]">
@@ -655,8 +683,10 @@ export const AnalysisModal = ({
                           <span className="font-medium text-[var(--color-text-primary)]">
                             {analysis.result.camelot}
                           </span>
-                        ) : (
+                        ) : isAnalyzing ? (
                           <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                        ) : (
+                          <span className="text-[var(--color-text-muted)]">-</span>
                         )}
                       </div>
                     </div>

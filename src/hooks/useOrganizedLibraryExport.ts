@@ -7,7 +7,6 @@ import {
   loadTracks,
   type OrganizedLibraryExportResult,
 } from "../utils";
-import { useDbPath } from "./useDbPath";
 import { t } from "../i18n";
 
 type OrganizedLibraryExportProgress = {
@@ -18,7 +17,6 @@ type OrganizedLibraryExportProgress = {
 };
 
 export const useOrganizedLibraryExport = () => {
-  const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const setLibraryRoot = useSettingsStore((state) => state.setWatchedFolder);
@@ -61,9 +59,7 @@ export const useOrganizedLibraryExport = () => {
     setPending(true);
     setStatus("Preparing organized library export…");
     try {
-      const dbPath = await resolveDbPath();
       const result = await exportOrganizedLibrary(
-        dbPath,
         destinationPath,
         useAsCurrentLibrary,
       );
@@ -72,7 +68,6 @@ export const useOrganizedLibraryExport = () => {
         try {
           setLibraryRoot(result.exportRoot);
           const snapshot = await loadTracks(
-            dbPath,
             result.exportRoot,
             artistSeparatorExceptions,
           );
@@ -122,7 +117,6 @@ export const useOrganizedLibraryExport = () => {
     }
   }, [
     artistSeparatorExceptions,
-    resolveDbPath,
     setInboxTracks,
     setLibraryRoot,
     setTracks,

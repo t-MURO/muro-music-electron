@@ -4,7 +4,6 @@ import { open } from "@muro/desktop/dialogs";
 import { notify, useLibraryStore, useSettingsStore } from "../stores";
 import { importedTrackToTrack, loadTracks } from "../utils";
 import { t } from "../i18n";
-import { useDbPath } from "./useDbPath";
 
 export type MissingTrack = {
   id: string;
@@ -42,16 +41,15 @@ export const useLibraryVerification = () => {
   const [relinking, setRelinking] = useState(false);
   const [lastResult, setLastResult] = useState<VerifyResult | null>(null);
   const [missingTracks, setMissingTracks] = useState<MissingTrack[]>([]);
-  const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
   const artistSeparatorExceptions = useSettingsStore(
     (state) => state.artistSeparatorExceptions,
   );
 
-  const reloadLibrary = useCallback(async (dbPath: string) => {
+  const reloadLibrary = useCallback(async () => {
     try {
-      const snapshot = await loadTracks(dbPath, undefined, artistSeparatorExceptions);
+      const snapshot = await loadTracks(undefined, artistSeparatorExceptions);
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch {
@@ -60,21 +58,19 @@ export const useLibraryVerification = () => {
   }, [artistSeparatorExceptions, setInboxTracks, setTracks]);
 
   const refreshMissing = useCallback(async () => {
-    const dbPath = await resolveDbPath();
-    const tracks = await invoke<MissingTrack[]>("list_missing_tracks", { dbPath });
+    const tracks = await invoke<MissingTrack[]>("list_missing_tracks");
     setMissingTracks(tracks);
     return tracks;
-  }, [resolveDbPath]);
+  }, []);
 
   const verify = useCallback(async () => {
     if (verifying) return;
     setVerifying(true);
     try {
-      const dbPath = await resolveDbPath();
-      const result = await invoke<VerifyResult>("verify_library_files", { dbPath });
+      const result = await invoke<VerifyResult>("verify_library_files");
       setLastResult(result);
       await refreshMissing();
-      await reloadLibrary(dbPath);
+      await reloadLibrary();
 
       if (result.missing === 0) {
         notify.success(t("verify.allPresent", { checked: String(result.checked) }));
@@ -91,7 +87,7 @@ export const useLibraryVerification = () => {
     } finally {
       setVerifying(false);
     }
-  }, [refreshMissing, reloadLibrary, resolveDbPath, verifying]);
+  }, [refreshMissing, reloadLibrary, verifying]);
 
   /** Point one track at a replacement file the user picks. */
   const relinkTrack = useCallback(async (trackId: string) => {
@@ -107,15 +103,14 @@ export const useLibraryVerification = () => {
     if (typeof selected !== "string") return;
 
     try {
-      const dbPath = await resolveDbPath();
-      await invoke("relink_track", { dbPath, trackId, newPath: selected });
+      await invoke("relink_track", { trackId, newPath: selected });
       await refreshMissing();
-      await reloadLibrary(dbPath);
+      await reloadLibrary();
       notify.success(t("verify.relinked"));
     } catch (error) {
       notify.error(error instanceof Error ? error.message : t("verify.relinkFailed"));
     }
-  }, [refreshMissing, reloadLibrary, resolveDbPath]);
+  }, [refreshMissing, reloadLibrary]);
 
   /** Search a folder and reconnect everything that matches by name and length. */
   const autoRelink = useCallback(async () => {
@@ -125,14 +120,12 @@ export const useLibraryVerification = () => {
 
     setRelinking(true);
     try {
-      const dbPath = await resolveDbPath();
       const result = await invoke<AutoRelinkResult>("auto_relink_missing", {
-        dbPath,
         searchDir: directory,
         dryRun: false,
       });
       await refreshMissing();
-      await reloadLibrary(dbPath);
+      await reloadLibrary();
 
       if (result.relinked === 0) {
         notify.info(t("verify.autoRelink.none"));
@@ -144,7 +137,7 @@ export const useLibraryVerification = () => {
     } finally {
       setRelinking(false);
     }
-  }, [refreshMissing, reloadLibrary, relinking, resolveDbPath]);
+  }, [refreshMissing, reloadLibrary, relinking]);
 
   return {
     verifying,

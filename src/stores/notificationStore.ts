@@ -1,17 +1,38 @@
 import { create } from "zustand";
 
+export type NotificationAction = {
+  label: string;
+  onClick: () => void;
+};
+
+export type NotificationOptions = {
+  /** Replaces the notification with the same key instead of stacking a new one. */
+  key?: string;
+  /** Short per-item lines shown under the message, e.g. which files failed. */
+  details?: string[];
+  action?: NotificationAction;
+  /** Keeps the toast until the user dismisses it or it is replaced. */
+  sticky?: boolean;
+  /** Runs when the user closes the toast, not when it times out or is replaced. */
+  onDismiss?: () => void;
+};
+
 export type Notification = {
   id: string;
   type: "success" | "error" | "info";
   message: string;
-};
+} & Omit<NotificationOptions, "key">;
 
 type NotificationState = {
   notifications: Notification[];
 };
 
 type NotificationActions = {
-  addNotification: (type: Notification["type"], message: string) => void;
+  addNotification: (
+    type: Notification["type"],
+    message: string,
+    options?: NotificationOptions,
+  ) => string;
   removeNotification: (id: string) => void;
 };
 
@@ -22,11 +43,20 @@ let notificationId = 0;
 export const useNotificationStore = create<NotificationStore>((set) => ({
   notifications: [],
 
-  addNotification: (type, message) => {
-    const id = `notification-${++notificationId}`;
-    set((state) => ({
-      notifications: [...state.notifications, { id, type, message }],
-    }));
+  addNotification: (type, message, options = {}) => {
+    const { key, ...rest } = options;
+    const id = key ?? `notification-${++notificationId}`;
+    const notification: Notification = { id, type, message, ...rest };
+    set((state) => {
+      const index = state.notifications.findIndex((n) => n.id === id);
+      if (index === -1) {
+        return { notifications: [...state.notifications, notification] };
+      }
+      const notifications = [...state.notifications];
+      notifications[index] = notification;
+      return { notifications };
+    });
+    return id;
   },
 
   removeNotification: (id) => {
@@ -37,10 +67,10 @@ export const useNotificationStore = create<NotificationStore>((set) => ({
 }));
 
 export const notify = {
-  success: (message: string) =>
-    useNotificationStore.getState().addNotification("success", message),
-  error: (message: string) =>
-    useNotificationStore.getState().addNotification("error", message),
-  info: (message: string) =>
-    useNotificationStore.getState().addNotification("info", message),
+  success: (message: string, options?: NotificationOptions) =>
+    useNotificationStore.getState().addNotification("success", message, options),
+  error: (message: string, options?: NotificationOptions) =>
+    useNotificationStore.getState().addNotification("error", message, options),
+  info: (message: string, options?: NotificationOptions) =>
+    useNotificationStore.getState().addNotification("info", message, options),
 };

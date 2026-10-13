@@ -124,6 +124,7 @@ const keyFinder = {
   close: () => { keyFinderClosed = true; },
 };
 const backend = createBackend({
+  dbPath,
   cacheDir: path.join(directory, "covers"),
   emit: () => {},
   keyFinder,
@@ -184,6 +185,129 @@ const backend = createBackend({
 
 try {
   const db = openDatabase(dbPath);
+
+  // Path access: nothing outside the library, the app caches, database
+  // references, or dialog grants may be read or written through commands.
+  const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-node-smoke-outside-"));
+  try {
+    const outsideAudioPath = path.join(outsideDirectory, "outside.wav");
+    const outsideImagePath = path.join(outsideDirectory, "outside.png");
+    writeSilentWav(outsideAudioPath);
+    fs.writeFileSync(outsideImagePath, Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    ));
+    const isAccessDenied = (error) => error?.code === "PATH_ACCESS_DENIED";
+
+    for (const command of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      await assert.rejects(
+        backend.invoke(command, {}),
+        /Unsupported command/,
+        `${command} must not resolve to an Object.prototype member`,
+      );
+    }
+
+    const strayDbPath = path.join(outsideDirectory, "renderer-chosen.db");
+    await backend.invoke("load_tracks", { dbPath: strayDbPath });
+    assert.equal(fs.existsSync(strayDbPath), false, "a renderer-supplied dbPath must be ignored");
+    assert.equal(backend.getDatabaseLocation(), path.resolve(dbPath));
+
+    assert.equal(backend.canReadPath(outsideAudioPath), false);
+    assert.equal(backend.canReadPath(path.join(directory, "covers", "cover.png")), true);
+    assert.equal(backend.canReadPath("relative/track.wav"), false);
+    assert.equal(backend.canReadPath(`\\\\?\\${outsideAudioPath}`), false);
+
+    const deniedImport = await backend.invoke("import_files", { paths: [outsideAudioPath] });
+    assert.equal(deniedImport.imported.length, 0);
+    assert.equal(deniedImport.failures.length, 1);
+    assert.match(deniedImport.failures[0].message, /not granted/);
+
+    const deniedPlaylistExport = path.join(outsideDirectory, "exported.m3u8");
+    await assert.rejects(
+      backend.invoke("export_playlist_file", { playlistId: "none", filePath: deniedPlaylistExport }),
+      isAccessDenied,
+    );
+    assert.equal(fs.existsSync(deniedPlaylistExport), false);
+    await assert.rejects(
+      backend.invoke("cache_cover_art_from_file", { filePath: outsideImagePath }),
+      isAccessDenied,
+    );
+    await assert.rejects(
+      backend.invoke("create_library_backup", {
+        destinationPath: path.join(outsideDirectory, "backup.murobackup"),
+        settingsJson: "",
+        smartCratesJson: "",
+      }),
+      isAccessDenied,
+    );
+    await assert.rejects(
+      backend.invoke("restore_library_backup", {
+        archivePath: path.join(outsideDirectory, "backup.murobackup"),
+      }),
+      isAccessDenied,
+    );
+    for (const [command, args] of [
+      ["export_all_playlists", { destinationPath: outsideDirectory }],
+      ["export_itunes_library", { destinationPath: path.join(outsideDirectory, "library.xml") }],
+      ["export_organized_library", { destinationPath: outsideDirectory }],
+      ["list_playlist_files", { directoryPath: outsideDirectory }],
+      ["import_playlist_file", { filePath: path.join(outsideDirectory, "list.m3u") }],
+      ["generate_track_waveform", { sourcePath: outsideAudioPath, points: 64 }],
+      ["relink_track", { trackId: "missing", newPath: outsideAudioPath }],
+      ["auto_relink_missing", { searchDir: outsideDirectory }],
+      ["set_watched_folder", { folder: outsideDirectory, isEnabled: false }],
+      ["scan_watched_folder", { folder: outsideDirectory }],
+      ["accept_tracks", { trackIds: [], libraryFolder: outsideDirectory }],
+      ["validate_library_structure", { libraryRoot: outsideDirectory }],
+      ["create_playlist", {
+        id: "denied-linked",
+        name: "Denied",
+        sourcePath: path.join(outsideDirectory, "list.m3u"),
+      }],
+      ["update_track_metadata", { trackIds: ["missing"], updates: { coverArtPath: outsideImagePath } }],
+      ["start_track_analysis", {
+        tracks: [{ id: "missing", sourcePath: outsideAudioPath }],
+        writeAuthorization: true,
+      }],
+      ["cast_load_track", { sourcePath: outsideAudioPath }],
+      ["dlna_load_track", { sourcePath: outsideAudioPath }],
+    ]) {
+      await assert.rejects(backend.invoke(command, args), isAccessDenied, `${command} must be denied`);
+    }
+    assert.deepEqual(fs.readdirSync(outsideDirectory).sort(), ["outside.png", "outside.wav"]);
+
+    await backend.invoke("load_tracks", { libraryRoot: outsideDirectory });
+    assert.equal(
+      db.prepare("SELECT value FROM app_metadata WHERE key = 'library_root'").get(),
+      undefined,
+      "an unchosen library root must not be configured",
+    );
+
+    // A dialog grant makes exactly the chosen path usable.
+    backend.pathAccess.grantFile(outsideImagePath);
+    assert.equal(backend.canReadPath(outsideImagePath), true);
+    assert.equal(backend.canReadPath(outsideAudioPath), false);
+    assert.equal(backend.pathAccess.canWrite(outsideImagePath), false);
+    const grantedCover = await backend.invoke("cache_cover_art_from_file", {
+      filePath: outsideImagePath,
+    });
+    assert.ok(backend.canReadPath(grantedCover.fullPath));
+
+    // An Inbox track may live outside the library root; the database
+    // reference is what makes it playable, and only while it exists.
+    db.prepare(`
+      INSERT INTO tracks(id, title, filename, source_path, import_status, added_at, updated_at)
+      VALUES ('outside-inbox', 'Outside', 'outside.wav', ?, 'staged', 0, 0)
+    `).run(outsideAudioPath);
+    assert.equal(backend.canReadPath(outsideAudioPath), true);
+    await backend.invoke("reject_tracks", { trackIds: ["outside-inbox"] });
+    assert.equal(backend.canReadPath(outsideAudioPath), false);
+  } finally {
+    fs.rmSync(outsideDirectory, { recursive: true, force: true });
+  }
+  // The remaining scenarios work on files the test picked "in a dialog".
+  backend.pathAccess.grantDirectory(directory);
+
   const metadataResults = await backend.invoke("search_track_metadata", {
     title: "Retry Track",
     artist: "Retry Artist",
@@ -1811,14 +1935,16 @@ try {
   };
   assert.deepEqual(
     await backend.invoke("start_track_analysis", {
-      tracks: [{ id: "track-1" }],
+      tracks: [{ id: "track-1", sourcePath: path.join(os.tmpdir(), "not-the-track.mp3") }],
       settings: analysisSettings,
       writeAuthorization: true,
     }),
     { jobId: "job-1" },
   );
+  // The engine may write tags, so the file comes from the track ID, never from
+  // the renderer-supplied path.
   assert.deepEqual(keyFinderStartArguments, {
-    tracks: [{ id: "track-1" }],
+    tracks: [{ id: "track-1", sourcePath: firstSourcePath }],
     settings: analysisSettings,
     writeAuthorization: true,
   });

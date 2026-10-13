@@ -3,7 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createLocalFileResponse } from "../electron/fileProtocol.mjs";
+import { createMediaProtocolHandler } from "../electron/fileProtocol.mjs";
+import { createPathAccess } from "../electron/pathAccess.mjs";
 
 protocol.registerSchemesAsPrivileged([{
   scheme: "muro-file",
@@ -180,6 +181,8 @@ let libraryStructureRepairArgs = null;
 const shownItemPaths = [];
 let nativeDraggedFilePaths = [];
 const copiedCoverPaths = [];
+// The main process owns the database location; no command may carry one.
+const commandsSentWithDbPath = new Set();
 const ratingUpdates = [];
 for (let index = 0; index < 5; index += 1) {
   writeSilentWave(smokeTracks[index].source_path);
@@ -210,11 +213,20 @@ const timeout = setTimeout(
 );
 
 app.whenReady().then(async () => {
-  protocol.handle("muro-file", (request) => {
-    const url = new URL(request.url);
-    return createLocalFileResponse(request, decodeURIComponent(url.pathname.slice(1)));
-  });
+  // Same handler as the app: only the test library folder and the bundled
+  // assets (standing in for the cover/artist caches) are servable.
+  protocol.handle("muro-file", createMediaProtocolHandler({
+    isPathAllowed: createPathAccess({
+      trustedRoots: () => [temporaryDirectory, path.join(appRoot, "src", "assets")],
+    }).canRead,
+  }));
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
+  ipcMain.on("muro:migrate-database-location", () => undefined);
+  ipcMain.handle("muro:database-location", () => ({
+    dbPath: path.join(temporaryDirectory, "muro.db"),
+    defaultPath: path.join(temporaryDirectory, "muro.db"),
+    isDefault: true,
+  }));
   ipcMain.handle("muro:open-dialog", () => {
     if (libraryExportSmokeOnly) return temporaryDirectory;
     if (settingsSmokeOnly) {
@@ -260,6 +272,7 @@ app.whenReady().then(async () => {
     nativeDraggedFilePaths = Array.isArray(filePaths) ? [...filePaths] : [];
   });
   ipcMain.handle("muro:invoke", (event, command, args = {}) => {
+    if (args && Object.hasOwn(args, "dbPath")) commandsSentWithDbPath.add(command);
     if (command === "migrate_artist_credits") {
       return {
         skipped: false,
@@ -1225,7 +1238,7 @@ app.whenReady().then(async () => {
           itunesExportArgs?.destinationPath === ${JSON.stringify(
             path.join(temporaryDirectory, "Muro Music Library.xml")
           )} &&
-          typeof itunesExportArgs?.dbPath === "string" &&
+          itunesExportArgs && !Object.hasOwn(itunesExportArgs, "dbPath") &&
           itunesExportStatus?.textContent?.includes("Exported 250 tracks and 5 playlists")
         );
         document.querySelector("[data-watch-add-folder]")?.click();
@@ -1472,7 +1485,7 @@ app.whenReady().then(async () => {
             useAsLibraryCheckbox.checked &&
             !exportButton.hasAttribute("disabled") &&
             exportArgs?.destinationPath === ${JSON.stringify(temporaryDirectory)} &&
-            typeof exportArgs?.dbPath === "string" &&
+            exportArgs && !Object.hasOwn(exportArgs, "dbPath") &&
             exportArgs?.useAsCurrentLibrary === true &&
             exportArgs?.rendererReloaded === true &&
             exportStatus?.textContent?.includes("Copied 250 music files") &&
@@ -4651,6 +4664,10 @@ app.whenReady().then(async () => {
       return;
     }
     if (result.childCount > 0 && result.textLength > 0 && result.stickyHeaderReady) {
+      if (commandsSentWithDbPath.size > 0) {
+        fail(`The renderer still sends dbPath over IPC: ${[...commandsSentWithDbPath].join(", ")}`);
+        return;
+      }
       if (settingsSmokeOnly) {
         if (!result.settingsOrganizationReady) {
           fail(

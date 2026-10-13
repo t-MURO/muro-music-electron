@@ -114,12 +114,10 @@ export function analyzeSourceLoudness(
  */
 export async function analyzeAndStoreLoudness(
   track: { id: string; sourcePath: string },
-  dbPath: string,
   referenceLufs: number = REFERENCE_LUFS
 ): Promise<TrackLoudness> {
   const loudness = await analyzeSourceLoudness(track.sourcePath, referenceLufs);
   await invoke("update_track_loudness", {
-    dbPath,
     trackId: track.id,
     integratedLufs: loudness.integratedLufs,
     gainDb: loudness.gainDb,

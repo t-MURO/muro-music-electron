@@ -24,12 +24,15 @@ fs.writeFileSync(sourcePath, Buffer.concat(mp3Frames));
 fs.writeFileSync(artworkPath, "artwork");
 
 const backend = createBackend({
+  dbPath,
   cacheDir: covers,
   emit: () => {},
   keyFinder: {
     close: () => {},
   },
 });
+// The library folder and the backup location are picked in native dialogs.
+backend.pathAccess.grantDialogSelection({ paths: [root], directory: true });
 
 try {
   const db = openDatabase(dbPath);

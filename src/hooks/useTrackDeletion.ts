@@ -10,7 +10,6 @@ import {
   useUIStore,
 } from "../stores";
 import { deleteTracks, playbackStop } from "../utils";
-import { useDbPath } from "./useDbPath";
 
 export const useTrackDeletion = () => {
   const allTracks = useLibraryStore(selectAllTracks);
@@ -25,7 +24,6 @@ export const useTrackDeletion = () => {
   const clearSelection = useUIStore((state) => state.clearSelection);
   const lastDeleteMode = useSettingsStore((state) => state.lastDeleteMode);
   const setLastDeleteMode = useSettingsStore((state) => state.setLastDeleteMode);
-  const resolveDbPath = useDbPath();
   const [pendingTrackIds, setPendingTrackIds] = useState<string[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -52,8 +50,7 @@ export const useTrackDeletion = () => {
         await playbackStop().catch(() => undefined);
       }
 
-      const resolvedDbPath = await resolveDbPath();
-      const result = await deleteTracks(resolvedDbPath, pendingTrackIds, deleteFromDisk);
+      const result = await deleteTracks(pendingTrackIds, deleteFromDisk);
       const deleted = new Set(result.deletedTrackIds);
 
       if (deleted.size > 0) {
@@ -88,7 +85,6 @@ export const useTrackDeletion = () => {
     isDeleting,
     pendingTrackIds,
     recentlyPlayedTracks,
-    resolveDbPath,
     setInboxTracks,
     setPlaylists,
     setPlayingNext,

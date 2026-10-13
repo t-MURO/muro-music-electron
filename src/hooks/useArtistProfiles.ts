@@ -12,7 +12,6 @@ import {
   setArtistImage,
 } from "../utils";
 import { useSettingsStore } from "../stores";
-import { useDbPath } from "./useDbPath";
 
 const INITIAL_SCAN_DELAY_MS = 5_000;
 const CONTINUE_SCAN_DELAY_MS = 60_000;
@@ -26,7 +25,6 @@ export const normalizeArtistProfileKey = (artistName: string) => artistName
   .toLocaleLowerCase();
 
 export const useArtistProfiles = () => {
-  const resolveDbPath = useDbPath();
   const lastFmApiKey = useSettingsStore((state) => state.lastFmApiKey);
   const theAudioDbApiKey = useSettingsStore((state) => state.theAudioDbApiKey);
   const fanartApiKey = useSettingsStore((state) => state.fanartApiKey);
@@ -39,8 +37,7 @@ export const useArtistProfiles = () => {
     let cancelled = false;
     const load = async () => {
       try {
-        const dbPath = await resolveDbPath();
-        const cached = await loadCachedArtistProfiles(dbPath);
+        const cached = await loadCachedArtistProfiles();
         if (cancelled) return;
         setProfiles(Object.fromEntries(cached.map((profile) => [profile.artistKey, profile])));
       } catch {
@@ -49,7 +46,7 @@ export const useArtistProfiles = () => {
     };
     void load();
     return () => { cancelled = true; };
-  }, [resolveDbPath]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,14 +56,12 @@ export const useArtistProfiles = () => {
     };
     const run = async () => {
       try {
-        const dbPath = await resolveDbPath();
         const result = await scanArtistProfiles(
-          dbPath,
           { fanartApiKey, lastFmApiKey, theAudioDbApiKey },
           SCAN_BATCH_SIZE,
         );
         if (cancelled) return;
-        const cached = await loadCachedArtistProfiles(dbPath);
+        const cached = await loadCachedArtistProfiles();
         if (cancelled) return;
         setProfiles(Object.fromEntries(cached.map((profile) => [profile.artistKey, profile])));
         schedule(result.queued > 0
@@ -81,7 +76,7 @@ export const useArtistProfiles = () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
+  }, [fanartApiKey, lastFmApiKey, theAudioDbApiKey]);
 
   const loadProfile = useCallback(async (
     artistName: string,
@@ -99,8 +94,7 @@ export const useArtistProfiles = () => {
       return next;
     });
     try {
-      const dbPath = await resolveDbPath();
-      const profile = await getArtistProfile(dbPath, artistName, force, {
+      const profile = await getArtistProfile(artistName, force, {
         fanartApiKey,
         lastFmApiKey,
         theAudioDbApiKey,
@@ -123,11 +117,10 @@ export const useArtistProfiles = () => {
         return next;
       });
     }
-  }, [fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
+  }, [fanartApiKey, lastFmApiKey, theAudioDbApiKey]);
 
   const searchImages = useCallback(async (artistName: string, identity?: ArtistTarget) => {
-    const dbPath = await resolveDbPath();
-    return searchArtistImages(dbPath, artistName, {
+    return searchArtistImages(artistName, {
       braveSearchApiKey,
       fanartApiKey,
       lastFmApiKey,
@@ -136,7 +129,7 @@ export const useArtistProfiles = () => {
       artistId: identity?.artistId,
       musicBrainzId: identity?.musicBrainzId,
     });
-  }, [braveSearchApiKey, fanartApiKey, lastFmApiKey, resolveDbPath, theAudioDbApiKey]);
+  }, [braveSearchApiKey, fanartApiKey, lastFmApiKey, theAudioDbApiKey]);
 
   const selectImage = useCallback(async (
     artistName: string,
@@ -146,14 +139,13 @@ export const useArtistProfiles = () => {
     const artistKey = identity
       ? artistIdentityKey(identity)
       : normalizeArtistProfileKey(artistName);
-    const dbPath = await resolveDbPath();
-    const profile = await setArtistImage(dbPath, artistName, candidate, {
+    const profile = await setArtistImage(artistName, candidate, {
       artistId: identity?.artistId,
       musicBrainzId: identity?.musicBrainzId,
     });
     setProfiles((current) => ({ ...current, [artistKey]: profile }));
     return profile;
-  }, [resolveDbPath]);
+  }, []);
 
   return { profiles, loadingKeys, errors, loadProfile, searchImages, selectImage };
 };

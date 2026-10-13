@@ -21,6 +21,7 @@ import {
   type PlaylistSnapshotEntry,
 } from "../../utils";
 import { notify, useLibraryStore, useSettingsStore } from "../../stores";
+import { recordMetadataWrite, showTagWriteFailures } from "../../utils/tagWriteFailures";
 
 const SENSITIVE_SETTING_KEYS = [
   "lastFmApiKey",
@@ -44,11 +45,7 @@ const displayValue = (value: unknown) => {
   return String(value);
 };
 
-type LibraryDataToolsProps = {
-  dbPath: string;
-};
-
-export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
+export const LibraryDataTools = () => {
   const artistSeparatorExceptions = useSettingsStore(
     (state) => state.artistSeparatorExceptions,
   );
@@ -65,11 +62,10 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
   const [itunesExportStatus, setItunesExportStatus] = useState<string | null>(null);
 
   const refreshPlaylistData = useCallback(async () => {
-    if (!dbPath) return;
     const [historyResult, snapshotResult, playlistData] = await Promise.all([
-      listPlaylistHistory(dbPath),
-      listPlaylistSnapshots(dbPath),
-      loadPlaylists(dbPath),
+      listPlaylistHistory(),
+      listPlaylistSnapshots(),
+      loadPlaylists(),
     ]);
     setHistory(historyResult);
     setSnapshots(snapshotResult);
@@ -92,18 +88,18 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
       parentId: folder.parent_id ?? undefined,
       sortOrder: folder.sort_order,
     })));
-  }, [dbPath]);
+  }, []);
 
   const refreshMetadata = useCallback(async () => {
-    if (dbPath) setMetadata(await listMetadataHistory(dbPath, undefined, 30));
-  }, [dbPath]);
+    setMetadata(await listMetadataHistory(undefined, 30));
+  }, []);
 
   const refreshTracks = useCallback(async () => {
-    const snapshot = await loadTracks(dbPath, undefined, artistSeparatorExceptions);
+    const snapshot = await loadTracks(undefined, artistSeparatorExceptions);
     const store = useLibraryStore.getState();
     store.setTracks(snapshot.library.map(importedTrackToTrack));
     store.setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
-  }, [artistSeparatorExceptions, dbPath]);
+  }, [artistSeparatorExceptions]);
 
   useEffect(() => {
     void Promise.all([refreshPlaylistData(), refreshMetadata()]).catch(() => undefined);
@@ -131,7 +127,6 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
     });
     if (!destinationPath) return;
     const result = await createLibraryBackup(
-      dbPath,
       destinationPath,
       window.localStorage.getItem("muro-settings") ?? "",
       window.localStorage.getItem("muro-smart-crates") ?? "",
@@ -155,7 +150,7 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
       { title: "Restore Muro library", confirmLabel: "Restore backup" },
     );
     if (!approved) return;
-    const result = await restoreLibraryBackup(dbPath, archivePath);
+    const result = await restoreLibraryBackup(archivePath);
     if (result.settingsJson) {
       const restored = JSON.parse(result.settingsJson);
       if (restored?.state && typeof restored.state === "object") {
@@ -167,8 +162,6 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
         for (const key of SENSITIVE_SETTING_KEYS) {
           restored.state[key] = currentState[key] ?? "";
         }
-        restored.state.dbPath = dbPath;
-        restored.state.useAutoDbPath = false;
         window.localStorage.setItem("muro-settings", JSON.stringify(restored));
       }
     }
@@ -185,7 +178,7 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
       filters: [{ name: "iTunes Library XML", extensions: ["xml"] }],
     });
     if (!destinationPath) return;
-    const result = await exportItunesLibrary(dbPath, destinationPath);
+    const result = await exportItunesLibrary(destinationPath);
     const skipped = result.playlistEntriesSkipped > 0
       ? ` ${result.playlistEntriesSkipped.toLocaleString()} playlist entries that point to Inbox tracks were skipped.`
       : "";
@@ -209,12 +202,14 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
   const handleCreateSnapshot = () => {
     const name = snapshotName.trim();
     if (!name) return;
-    void handlePlaylistChange(() => createPlaylistSnapshot(dbPath, name));
+    void handlePlaylistChange(() => createPlaylistSnapshot(name));
     setSnapshotName("");
   };
 
   const handleRollback = (entry: MetadataHistoryEntry, field: string) => run(async () => {
-    await rollbackMetadataChange(dbPath, entry.id, field);
+    const result = await rollbackMetadataChange(entry.id, field);
+    recordMetadataWrite([result.trackId], result.updates, result);
+    showTagWriteFailures();
     await Promise.all([refreshMetadata(), refreshTracks()]);
     setStatus(`Rolled back ${field} for ${entry.title}.`);
   });
@@ -232,10 +227,10 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
           folder, remain configured on this computer.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button className={primaryButtonClass} disabled={busy || !dbPath} onClick={handleBackup} type="button">
+          <button className={primaryButtonClass} disabled={busy} onClick={handleBackup} type="button">
             Create backup
           </button>
-          <button className={buttonClass} disabled={busy || !dbPath} onClick={handleRestore} type="button">
+          <button className={buttonClass} disabled={busy} onClick={handleRestore} type="button">
             Restore backup
           </button>
         </div>
@@ -253,7 +248,7 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
         </p>
         <button
           className={`mt-3 ${primaryButtonClass}`}
-          disabled={busy || !dbPath}
+          disabled={busy}
           onClick={handleItunesExport}
           type="button"
           data-export-itunes-library
@@ -282,9 +277,9 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
           </div>
           <div className="flex gap-2">
             <button className={buttonClass} disabled={busy || !history.canUndo} onClick={() =>
-              handlePlaylistChange(() => undoPlaylistHistory(dbPath))} type="button">Undo</button>
+              handlePlaylistChange(() => undoPlaylistHistory())} type="button">Undo</button>
             <button className={buttonClass} disabled={busy || !history.canRedo} onClick={() =>
-              handlePlaylistChange(() => redoPlaylistHistory(dbPath))} type="button">Redo</button>
+              handlePlaylistChange(() => redoPlaylistHistory())} type="button">Redo</button>
           </div>
         </div>
         <div className="mt-3 flex gap-2">
@@ -311,9 +306,9 @@ export const LibraryDataTools = ({ dbPath }: LibraryDataToolsProps) => {
                 </span>
                 <span className="flex gap-2">
                   <button className={buttonClass} disabled={busy} onClick={() =>
-                    handlePlaylistChange(() => restorePlaylistSnapshot(dbPath, snapshot.id))} type="button">Restore</button>
+                    handlePlaylistChange(() => restorePlaylistSnapshot(snapshot.id))} type="button">Restore</button>
                   <button className={buttonClass} disabled={busy} onClick={() =>
-                    handlePlaylistChange(() => deletePlaylistSnapshot(dbPath, snapshot.id))} type="button">Delete</button>
+                    handlePlaylistChange(() => deletePlaylistSnapshot(snapshot.id))} type="button">Delete</button>
                 </span>
               </div>
             ))}

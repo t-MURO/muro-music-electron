@@ -44,8 +44,8 @@ type SettingsPanelProps = {
   locale: Locale;
   themes: ReadonlyArray<{ id: ThemeMode; label: string }>;
   localeOptions: ReadonlyArray<{ id: string; label: string }>;
-  dbPath: string;
-  dbFileName: string;
+  databasePath: string;
+  databaseIsDefault: boolean;
   backfillPending: boolean;
   backfillStatus: string | null;
   coverArtBackfillPending: boolean;
@@ -58,8 +58,8 @@ type SettingsPanelProps = {
   onThemeChange: (theme: ThemeMode) => void;
   onLocaleChange: (locale: Locale) => void;
   onSeekModeChange: (mode: "fast" | "accurate") => void;
-  onDbPathChange: (value: string) => void;
-  onDbFileNameChange: (value: string) => void;
+  onOpenDatabase: () => void;
+  onCreateDatabase: () => void;
   onBackfillSearchText: () => void;
   onBackfillCoverArt: () => void;
   onReviewArtistSeparators: () => void;
@@ -333,8 +333,8 @@ export const SettingsPanel = ({
   locale,
   themes,
   localeOptions,
-  dbPath,
-  dbFileName,
+  databasePath,
+  databaseIsDefault,
   backfillPending,
   backfillStatus,
   coverArtBackfillPending,
@@ -347,8 +347,8 @@ export const SettingsPanel = ({
   onThemeChange,
   onLocaleChange,
   onSeekModeChange,
-  onDbPathChange,
-  onDbFileNameChange,
+  onOpenDatabase,
+  onCreateDatabase,
   onBackfillSearchText,
   onBackfillCoverArt,
   onReviewArtistSeparators,
@@ -825,28 +825,30 @@ export const SettingsPanel = ({
                   <div className="space-y-5">
                     <div>
                       <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-                        Database file name
-                      </label>
-                      <input
-                        className={`${inputClass} max-w-md`}
-                        placeholder="muro.db"
-                        value={dbFileName}
-                        onChange={(event) => onDbFileNameChange(event.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
-                        Custom database path
+                        Current database
                       </label>
                       <input
                         className={`${inputClass} max-w-xl`}
-                        placeholder="/path/to/muro.db"
-                        value={dbPath}
-                        onChange={(event) => onDbPathChange(event.target.value)}
+                        readOnly
+                        value={databasePath}
+                        data-database-location
                       />
-                      <button className={`mt-3 ${secondaryButtonClass}`} type="button" onClick={onUseDefaultLocation}>
-                        Use default location
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button className={secondaryButtonClass} type="button" onClick={onOpenDatabase}>
+                          Open existing database…
+                        </button>
+                        <button className={secondaryButtonClass} type="button" onClick={onCreateDatabase}>
+                          Create new database…
+                        </button>
+                        <button
+                          className={secondaryButtonClass}
+                          type="button"
+                          disabled={databaseIsDefault}
+                          onClick={onUseDefaultLocation}
+                        >
+                          Use default location
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </SettingsGroup>
@@ -1005,7 +1007,7 @@ export const SettingsPanel = ({
                   </div>
                 </SettingsGroup>
 
-                <LibraryDataTools dbPath={dbPath} />
+                <LibraryDataTools />
 
                 <KeyboardShortcutSettings />
 

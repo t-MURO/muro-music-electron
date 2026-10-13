@@ -11,7 +11,6 @@ import { getOrComputeBeatGrid, type BeatGrid } from "../lib/beatgrid";
 import { planTransition } from "../lib/mix/plan";
 import { playbackCancelTransition, playbackTransitionTo } from "../utils/playbackApi";
 import { resolveGainFactor } from "../utils/replayGain";
-import { useDbPath } from "./useDbPath";
 import { t } from "../i18n";
 
 type UseMixTransitionArgs = {
@@ -47,7 +46,6 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
   const autoMix = useSettingsStore((s) => s.autoMix);
   const mixBars = useSettingsStore((s) => s.mixBars);
   const mixPreservePitch = useSettingsStore((s) => s.mixPreservePitch);
-  const getDbPath = useDbPath();
 
   // Guards shared between the manual and auto-mix paths.
   const manualMixInFlightRef = useRef(false);
@@ -61,8 +59,7 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
   const resolveGrid = useCallback(
     async (track: Track): Promise<BeatGrid | null> => {
       try {
-        const dbPath = await getDbPath();
-        const grid = await getOrComputeBeatGrid(track, dbPath);
+        const grid = await getOrComputeBeatGrid(track);
         useLibraryStore.getState().updateTrack(track.id, { beatGrid: grid });
         return grid;
       } catch (error) {
@@ -70,7 +67,7 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
         return null;
       }
     },
-    [getDbPath]
+    []
   );
 
   const cancelAutomaticMix = useCallback(async () => {

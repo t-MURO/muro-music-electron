@@ -9,7 +9,6 @@ import {
   type LibraryStructureValidationResult,
 } from "../utils/database";
 import { importedTrackToTrack } from "../utils/importApi";
-import { useDbPath } from "./useDbPath";
 
 export type LibraryStructureRepairOutcome = {
   repair: LibraryStructureRepairResult;
@@ -23,7 +22,6 @@ export const useLibraryOrganization = () => {
   );
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
-  const resolveDbPath = useDbPath();
   const busyRef = useRef(false);
   const [validating, setValidating] = useState(false);
   const [repairing, setRepairing] = useState(false);
@@ -34,10 +32,9 @@ export const useLibraryOrganization = () => {
     setLastResult(null);
   }, [libraryRoot]);
 
-  const reloadLibrary = useCallback(async (dbPath: string) => {
+  const reloadLibrary = useCallback(async () => {
     try {
       const snapshot = await loadTracks(
-        dbPath,
         libraryRoot,
         artistSeparatorExceptions,
       );
@@ -58,8 +55,7 @@ export const useLibraryOrganization = () => {
     busyRef.current = true;
     setValidating(true);
     try {
-      const dbPath = await resolveDbPath();
-      const result = await validateLibraryStructure(dbPath, libraryRoot);
+      const result = await validateLibraryStructure(libraryRoot);
       setLastResult(result);
       if (result.misplaced.length === 0) {
         notify.success(t("structure.allCorrect", { checked: String(result.checked) }));
@@ -77,7 +73,7 @@ export const useLibraryOrganization = () => {
       busyRef.current = false;
       setValidating(false);
     }
-  }, [libraryRoot, resolveDbPath]);
+  }, [libraryRoot]);
 
   const repair = useCallback(async () => {
     const trackIds = lastResult?.misplaced.map((track) => track.trackId) ?? [];
@@ -86,10 +82,9 @@ export const useLibraryOrganization = () => {
     busyRef.current = true;
     setRepairing(true);
     try {
-      const dbPath = await resolveDbPath();
-      const repairResult = await repairLibraryStructure(dbPath, libraryRoot, trackIds);
-      await reloadLibrary(dbPath);
-      const validation = await validateLibraryStructure(dbPath, libraryRoot);
+      const repairResult = await repairLibraryStructure(libraryRoot, trackIds);
+      await reloadLibrary();
+      const validation = await validateLibraryStructure(libraryRoot);
       setLastResult(validation);
 
       if (repairResult.failures.length > 0) {
@@ -110,7 +105,7 @@ export const useLibraryOrganization = () => {
       busyRef.current = false;
       setRepairing(false);
     }
-  }, [lastResult, libraryRoot, reloadLibrary, resolveDbPath]);
+  }, [lastResult, libraryRoot, reloadLibrary]);
 
   return {
     hasLibraryRoot: Boolean(libraryRoot),

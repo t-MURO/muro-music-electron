@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { invoke } from "@muro/desktop/runtime";
 import { notify, useLibraryStore, useSettingsStore, useUIStore } from "../stores";
 import type { Track, TrackMetadataUpdates } from "../types";
+import { t } from "../i18n";
 import {
   cacheAlbumCoverCandidate,
   fetchTrackCoverArt,
@@ -16,15 +17,13 @@ import {
   type AlbumMetadataRelease,
   type AcoustIdIdentificationResult,
 } from "../utils/database";
-import { useDbPath } from "./useDbPath";
 import type { AlbumCoverCandidate } from "../types";
 import { albumArtistDisplay } from "../utils/artistCredits";
-
-type MetadataWriteResult = {
-  updated: number;
-  filesWritten: number;
-  fileWriteErrors: Array<{ trackId: string; fileName: string; message: string }>;
-};
+import {
+  recordMetadataWrite,
+  showTagWriteFailures,
+  type MetadataWriteResult,
+} from "../utils/tagWriteFailures";
 
 export const useTrackEdit = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
@@ -32,7 +31,6 @@ export const useTrackEdit = () => {
   const editTrackIds = useUIStore((s) => s.editTrackIds);
   const openEditModal = useUIStore((s) => s.openEditModal);
   const closeEditModal = useUIStore((s) => s.closeEditModal);
-  const resolveDbPath = useDbPath();
   const acoustIdClientKey = useSettingsStore((state) => state.acoustIdClientKey);
   const braveSearchApiKey = useSettingsStore((state) => state.braveSearchApiKey);
 
@@ -50,9 +48,7 @@ export const useTrackEdit = () => {
         return;
       }
 
-      const dbPath = await resolveDbPath();
       const result = await invoke<MetadataWriteResult | undefined>("update_track_metadata", {
-        dbPath,
         trackIds,
         updates: updateMap,
       });
@@ -69,27 +65,19 @@ export const useTrackEdit = () => {
       setTracks(updateTrackList);
       setInboxTracks(updateTrackList);
 
-      if (updates.coverArtPath && result) {
-        if (result.fileWriteErrors.length > 0) {
-          const failedNames = result.fileWriteErrors
-            .slice(0, 3)
-            .map((failure) => failure.fileName)
-            .join(", ");
-          const remaining = result.fileWriteErrors.length - 3;
-          throw new Error(
-            `Cover art was embedded in ${result.filesWritten} of ${trackIds.length} files. `
-            + `Could not write ${failedNames}${remaining > 0 ? ` and ${remaining} more` : ""}. `
-            + "Check that the files are writable.",
-          );
-        }
+      // The library is updated before any file is touched, so a failed tag
+      // write leaves the edit saved in Muro. Say so, and offer a retry.
+      const failedWrites = recordMetadataWrite(trackIds, updateMap, result);
+      showTagWriteFailures();
+      if (updates.coverArtPath && result && failedWrites === 0) {
         notify.success(
           trackIds.length === 1
-            ? "Cover art embedded in the music file"
-            : `Cover art embedded in all ${result.filesWritten} music files`,
+            ? t("toast.cover.embeddedOne")
+            : t("toast.cover.embeddedMany", { count: String(result.filesWritten) }),
         );
       }
     },
-    [resolveDbPath, setTracks, setInboxTracks]
+    [setTracks, setInboxTracks]
   );
 
   const handleFetchCoverArt = useCallback(
@@ -97,10 +85,9 @@ export const useTrackEdit = () => {
       trackId: string,
       metadata: { album?: string; artist?: string },
     ): Promise<FetchedCoverArt | { candidates: AlbumCoverCandidate[] } | null> => {
-      const dbPath = await resolveDbPath();
       let providerError: unknown = null;
       try {
-        const cover = await fetchTrackCoverArt(dbPath, trackId, metadata);
+        const cover = await fetchTrackCoverArt(trackId, metadata);
         if (cover) return cover;
       } catch (error) {
         providerError = error;
@@ -115,7 +102,7 @@ export const useTrackEdit = () => {
       if (providerError) throw providerError;
       return null;
     },
-    [braveSearchApiKey, resolveDbPath],
+    [braveSearchApiKey],
   );
 
   const handleCacheCoverCandidate = useCallback(
@@ -152,10 +139,9 @@ export const useTrackEdit = () => {
 
   const handleIdentifyWithAcoustId = useCallback(
     async (track: Track, force = false): Promise<AcoustIdIdentificationResult> => {
-      const dbPath = await resolveDbPath();
-      return identifyTrackWithAcoustId(dbPath, track.id, acoustIdClientKey, force);
+      return identifyTrackWithAcoustId(track.id, acoustIdClientKey, force);
     },
-    [acoustIdClientKey, resolveDbPath],
+    [acoustIdClientKey],
   );
 
   return {

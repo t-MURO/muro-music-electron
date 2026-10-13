@@ -6,25 +6,24 @@ import type {
   ArtistProfile,
 } from "../types";
 import type { ArtistCreditInput } from "./artistCredits";
+import type { MetadataWriteResult } from "./tagWriteFailures";
 
 // ============================================================================
 // Library Operations
 // ============================================================================
 
 export const loadTracks = (
-  dbPath: string,
   libraryRoot?: string,
   artistSeparatorExceptions?: string[],
 ) => {
   return invoke<LibrarySnapshot>("load_tracks", {
-    dbPath,
     libraryRoot,
     artistSeparatorExceptions,
   });
 };
 
-export const clearTracks = (dbPath: string) => {
-  return invoke<void>("clear_tracks", { dbPath });
+export const clearTracks = () => {
+  return invoke<void>("clear_tracks");
 };
 
 export type AcceptTracksResult = {
@@ -35,12 +34,10 @@ export type AcceptTracksResult = {
 };
 
 export const acceptTracks = (
-  dbPath: string,
   trackIds: string[],
   options?: { organize?: boolean; libraryFolder?: string },
 ) => {
   return invoke<AcceptTracksResult>("accept_tracks", {
-    dbPath,
     trackIds,
     organize: options?.organize ?? false,
     libraryFolder: options?.libraryFolder ?? "",
@@ -74,29 +71,25 @@ export type LibraryStructureRepairResult = {
 };
 
 export const validateLibraryStructure = (
-  dbPath: string,
   libraryRoot: string,
 ) => invoke<LibraryStructureValidationResult>("validate_library_structure", {
-  dbPath,
   libraryRoot,
 });
 
 export const repairLibraryStructure = (
-  dbPath: string,
   libraryRoot: string,
   trackIds: string[],
 ) => invoke<LibraryStructureRepairResult>("repair_library_structure", {
-  dbPath,
   libraryRoot,
   trackIds,
 });
 
-export const unacceptTracks = (dbPath: string, trackIds: string[]) => {
-  return invoke<void>("unaccept_tracks", { dbPath, trackIds });
+export const unacceptTracks = (trackIds: string[]) => {
+  return invoke<void>("unaccept_tracks", { trackIds });
 };
 
-export const rejectTracks = (dbPath: string, trackIds: string[]) => {
-  return invoke<void>("reject_tracks", { dbPath, trackIds });
+export const rejectTracks = (trackIds: string[]) => {
+  return invoke<void>("reject_tracks", { trackIds });
 };
 
 export type DeleteTracksResult = {
@@ -105,22 +98,20 @@ export type DeleteTracksResult = {
 };
 
 export const deleteTracks = (
-  dbPath: string,
   trackIds: string[],
   deleteFromDisk: boolean
 ) => {
   return invoke<DeleteTracksResult>("delete_tracks", {
-    dbPath,
     trackIds,
     deleteFromDisk,
   });
 };
 
-export const updateTrackBeatGrid = (dbPath: string, trackId: string, beatGridJson: string) =>
-  invoke<{ updated: boolean }>("update_track_beat_grid", { dbPath, trackId, beatGridJson });
+export const updateTrackBeatGrid = (trackId: string, beatGridJson: string) =>
+  invoke<{ updated: boolean }>("update_track_beat_grid", { trackId, beatGridJson });
 
-export const loadCachedArtistProfiles = (dbPath: string) =>
-  invoke<ArtistProfile[]>("load_cached_artist_profiles", { dbPath });
+export const loadCachedArtistProfiles = () =>
+  invoke<ArtistProfile[]>("load_cached_artist_profiles");
 
 export type ArtistProfileIdentity = {
   artistId?: string;
@@ -128,13 +119,11 @@ export type ArtistProfileIdentity = {
 };
 
 export const getArtistProfile = (
-  dbPath: string,
   artistName: string,
   force = false,
   providerKeys: ArtistProfileProviderKeys = {},
   identity: ArtistProfileIdentity = {},
 ) => invoke<ArtistProfile>("get_artist_profile", {
-  dbPath,
   artistName,
   ...identity,
   force,
@@ -142,24 +131,20 @@ export const getArtistProfile = (
 });
 
 export const searchArtistImages = (
-  dbPath: string,
   artistName: string,
   providerKeys: ArtistProfileProviderKeys = {},
   identity: ArtistProfileIdentity = {},
 ) => invoke<ArtistImageCandidate[]>("search_artist_images", {
-  dbPath,
   artistName,
   ...identity,
   ...providerKeys,
 });
 
 export const setArtistImage = (
-  dbPath: string,
   artistName: string,
   candidate: ArtistImageCandidate,
   identity: ArtistProfileIdentity = {},
 ) => invoke<ArtistProfile>("set_artist_image", {
-  dbPath,
   artistName,
   candidate,
   ...identity,
@@ -182,10 +167,9 @@ export type ArtistProfileScanResult = {
 };
 
 export const scanArtistProfiles = (
-  dbPath: string,
   providerKeys: ArtistProfileProviderKeys = {},
   limit = 25,
-) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { dbPath, ...providerKeys, limit });
+) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { ...providerKeys, limit });
 
 export type FetchedCoverArt = {
   fullPath: string;
@@ -195,11 +179,9 @@ export type FetchedCoverArt = {
 };
 
 export const fetchTrackCoverArt = (
-  dbPath: string,
   trackId: string,
   metadata: { album?: string; artist?: string } = {},
 ) => invoke<FetchedCoverArt | null>("fetch_track_cover_art", {
-  dbPath,
   trackId,
   ...metadata,
 });
@@ -251,12 +233,10 @@ export type AcoustIdIdentificationResult = {
 };
 
 export const identifyTrackWithAcoustId = (
-  dbPath: string,
   trackId: string,
   clientKey: string,
   force = false,
 ) => invoke<AcoustIdIdentificationResult>("identify_track_acoustid", {
-  dbPath,
   trackId,
   clientKey,
   force,
@@ -318,19 +298,18 @@ export type TechnicalMetadataScanResult = {
   remaining: number;
 };
 
-export const scanTechnicalMetadata = (dbPath: string, limit = 25) =>
-  invoke<TechnicalMetadataScanResult>("scan_technical_metadata", { dbPath, limit });
+export const scanTechnicalMetadata = (limit = 25) =>
+  invoke<TechnicalMetadataScanResult>("scan_technical_metadata", { limit });
 
 // ============================================================================
 // Playlist Operations
 // ============================================================================
 
-export const loadPlaylists = (dbPath: string, libraryRoot?: string) => {
-  return invoke<PlaylistSnapshot>("load_playlists", { dbPath, libraryRoot });
+export const loadPlaylists = (libraryRoot?: string) => {
+  return invoke<PlaylistSnapshot>("load_playlists", { libraryRoot });
 };
 
 export const createPlaylist = (
-  dbPath: string,
   id: string,
   name: string,
   folderId?: string,
@@ -338,7 +317,6 @@ export const createPlaylist = (
   sourcePath?: string,
 ) => {
   return invoke<void>("create_playlist", {
-    dbPath,
     id,
     name,
     folderId,
@@ -348,28 +326,24 @@ export const createPlaylist = (
 };
 
 export const updatePlaylist = (
-  dbPath: string,
   playlistId: string,
   updates: { name?: string; folderId?: string | null; sortOrder?: number },
-) => invoke<void>("update_playlist", { dbPath, playlistId, ...updates });
+) => invoke<void>("update_playlist", { playlistId, ...updates });
 
 export const reorderPlaylists = (
-  dbPath: string,
   items: Array<{ id: string; folderId?: string; sortOrder: number }>,
-) => invoke<void>("reorder_playlists", { dbPath, items });
+) => invoke<void>("reorder_playlists", { items });
 
-export const deletePlaylist = (dbPath: string, playlistId: string) => {
+export const deletePlaylist = (playlistId: string) => {
   return invoke<void>("delete_playlist", {
-    dbPath,
     playlistId,
   });
 };
 
-export const deletePlaylists = (dbPath: string, playlistIds: string[]) =>
-  invoke<{ deleted: number }>("delete_playlists", { dbPath, playlistIds });
+export const deletePlaylists = (playlistIds: string[]) =>
+  invoke<{ deleted: number }>("delete_playlists", { playlistIds });
 
 export const restorePlaylists = (
-  dbPath: string,
   playlists: Array<{
     id: string;
     name: string;
@@ -382,57 +356,50 @@ export const restorePlaylists = (
     sourceSyncError?: string;
     lastSyncedAt?: number;
   }>,
-) => invoke<{ restored: number }>("restore_playlists", { dbPath, playlists });
+) => invoke<{ restored: number }>("restore_playlists", { playlists });
 
 export const addTracksToPlaylist = (
-  dbPath: string,
   playlistId: string,
   trackIds: string[]
 ) => {
   return invoke<void>("add_tracks_to_playlist", {
-    dbPath,
     playlistId,
     trackIds,
   });
 };
 
 export const setPlaylistTracks = (
-  dbPath: string,
   playlistId: string,
   trackIds: string[]
 ) => {
   return invoke<void>("set_playlist_tracks", {
-    dbPath,
     playlistId,
     trackIds,
   });
 };
 
 export const removeLastTracksFromPlaylist = (
-  dbPath: string,
   playlistId: string,
   count: number
 ) => {
   return invoke<void>("remove_last_tracks_from_playlist", {
-    dbPath,
     playlistId,
     count,
   });
 };
 
 export const createPlaylistFolder = (
-  dbPath: string,
   id: string,
   name: string,
   parentId?: string,
   sortOrder?: number,
-) => invoke<void>("create_playlist_folder", { dbPath, id, name, parentId, sortOrder });
+) => invoke<void>("create_playlist_folder", { id, name, parentId, sortOrder });
 
-export const updatePlaylistFolder = (dbPath: string, folderId: string, name: string) =>
-  invoke<void>("update_playlist_folder", { dbPath, folderId, name });
+export const updatePlaylistFolder = (folderId: string, name: string) =>
+  invoke<void>("update_playlist_folder", { folderId, name });
 
-export const deletePlaylistFolder = (dbPath: string, folderId: string) =>
-  invoke<void>("delete_playlist_folder", { dbPath, folderId });
+export const deletePlaylistFolder = (folderId: string) =>
+  invoke<void>("delete_playlist_folder", { folderId });
 
 export type PlaylistFolderImportScan = {
   name: string;
@@ -453,9 +420,8 @@ export type PlaylistFolderImportScan = {
 export const listPlaylistFiles = (directoryPath: string) =>
   invoke<PlaylistFolderImportScan>("list_playlist_files", { directoryPath });
 
-export const importPlaylistFile = (dbPath: string, filePath: string) =>
+export const importPlaylistFile = (filePath: string) =>
   invoke<import("./importApi").ImportedPlaylistFile>("import_playlist_file", {
-    dbPath,
     filePath,
   });
 
@@ -474,24 +440,20 @@ export type PlaylistSourceSyncResult = {
   reason: "startup" | "watch" | "manual";
 };
 
-export const configurePlaylistSync = (dbPath: string) =>
+export const configurePlaylistSync = () =>
   invoke<{ linked: number; synced: number; changed: number }>(
     "configure_playlist_sync",
-    { dbPath },
   );
 
-export const syncPlaylistSource = (dbPath: string, playlistId: string) =>
+export const syncPlaylistSource = (playlistId: string) =>
   invoke<PlaylistSourceSyncResult | null>("sync_playlist_source", {
-    dbPath,
     playlistId,
   });
 
 export const exportPlaylistFile = (
-  dbPath: string,
   playlistId: string,
   filePath: string,
 ) => invoke<{ exported: number; filePath: string }>("export_playlist_file", {
-  dbPath,
   playlistId,
   filePath,
 });
@@ -503,10 +465,8 @@ export type PlaylistCollectionExportResult = {
 };
 
 export const exportAllPlaylists = (
-  dbPath: string,
   destinationPath: string,
 ) => invoke<PlaylistCollectionExportResult>("export_all_playlists", {
-  dbPath,
   destinationPath,
 });
 
@@ -521,10 +481,8 @@ export type ItunesLibraryExportResult = {
 };
 
 export const exportItunesLibrary = (
-  dbPath: string,
   destinationPath: string,
 ) => invoke<ItunesLibraryExportResult>("export_itunes_library", {
-  dbPath,
   destinationPath,
 });
 
@@ -547,12 +505,10 @@ export type LibraryBackupResult = {
 };
 
 export const createLibraryBackup = (
-  dbPath: string,
   destinationPath: string,
   settingsJson: string,
   smartCratesJson: string,
 ) => invoke<LibraryBackupResult>("create_library_backup", {
-  dbPath,
   destinationPath,
   settingsJson,
   smartCratesJson,
@@ -567,8 +523,8 @@ export type LibraryRestoreResult = {
   manifest: LibraryBackupResult["manifest"];
 };
 
-export const restoreLibraryBackup = (dbPath: string, archivePath: string) =>
-  invoke<LibraryRestoreResult>("restore_library_backup", { dbPath, archivePath });
+export const restoreLibraryBackup = (archivePath: string) =>
+  invoke<LibraryRestoreResult>("restore_library_backup", { archivePath });
 
 export type MetadataHistoryEntry = {
   id: number;
@@ -581,16 +537,17 @@ export type MetadataHistoryEntry = {
 };
 
 export const listMetadataHistory = (
-  dbPath: string,
   trackId?: string,
   limit = 100,
-) => invoke<MetadataHistoryEntry[]>("list_metadata_history", { dbPath, trackId, limit });
+) => invoke<MetadataHistoryEntry[]>("list_metadata_history", { trackId, limit });
 
 export const rollbackMetadataChange = (
-  dbPath: string,
   historyId: number,
   field: string,
-) => invoke("rollback_metadata_change", { dbPath, historyId, field });
+) => invoke<MetadataWriteResult & { trackId: string; updates: Record<string, unknown> }>(
+  "rollback_metadata_change",
+  { historyId, field },
+);
 
 export type PlaylistHistoryState = {
   entries: Array<{ id: number; action: string; createdAt: string; undone: boolean }>;
@@ -604,20 +561,20 @@ export type PlaylistSnapshotEntry = {
   createdAt: string;
 };
 
-export const listPlaylistHistory = (dbPath: string, limit = 50) =>
-  invoke<PlaylistHistoryState>("list_playlist_history", { dbPath, limit });
-export const undoPlaylistHistory = (dbPath: string) =>
-  invoke("undo_playlist_history", { dbPath });
-export const redoPlaylistHistory = (dbPath: string) =>
-  invoke("redo_playlist_history", { dbPath });
-export const createPlaylistSnapshot = (dbPath: string, name: string) =>
-  invoke<PlaylistSnapshotEntry>("create_playlist_snapshot", { dbPath, name });
-export const listPlaylistSnapshots = (dbPath: string) =>
-  invoke<PlaylistSnapshotEntry[]>("list_playlist_snapshots", { dbPath });
-export const restorePlaylistSnapshot = (dbPath: string, snapshotId: string) =>
-  invoke("restore_playlist_snapshot", { dbPath, snapshotId });
-export const deletePlaylistSnapshot = (dbPath: string, snapshotId: string) =>
-  invoke<{ deleted: boolean }>("delete_playlist_snapshot", { dbPath, snapshotId });
+export const listPlaylistHistory = (limit = 50) =>
+  invoke<PlaylistHistoryState>("list_playlist_history", { limit });
+export const undoPlaylistHistory = () =>
+  invoke("undo_playlist_history");
+export const redoPlaylistHistory = () =>
+  invoke("redo_playlist_history");
+export const createPlaylistSnapshot = (name: string) =>
+  invoke<PlaylistSnapshotEntry>("create_playlist_snapshot", { name });
+export const listPlaylistSnapshots = () =>
+  invoke<PlaylistSnapshotEntry[]>("list_playlist_snapshots");
+export const restorePlaylistSnapshot = (snapshotId: string) =>
+  invoke("restore_playlist_snapshot", { snapshotId });
+export const deletePlaylistSnapshot = (snapshotId: string) =>
+  invoke<{ deleted: boolean }>("delete_playlist_snapshot", { snapshotId });
 
 export type ListeningStatistics = {
   listeningSeconds: number;
@@ -637,8 +594,8 @@ export type ListeningStatistics = {
   }>;
 };
 
-export const loadListeningStatistics = (dbPath: string) =>
-  invoke<ListeningStatistics>("load_listening_statistics", { dbPath });
+export const loadListeningStatistics = () =>
+  invoke<ListeningStatistics>("load_listening_statistics");
 
 export type OrganizedLibraryExportResult = {
   exportRoot: string;
@@ -655,11 +612,9 @@ export type OrganizedLibraryExportResult = {
 };
 
 export const exportOrganizedLibrary = (
-  dbPath: string,
   destinationPath: string,
   useAsCurrentLibrary: boolean,
 ) => invoke<OrganizedLibraryExportResult>("export_organized_library", {
-  dbPath,
   destinationPath,
   useAsCurrentLibrary,
 });
@@ -668,12 +623,12 @@ export const exportOrganizedLibrary = (
 // Backfill Operations
 // ============================================================================
 
-export const backfillSearchText = (dbPath: string) => {
-  return invoke<number>("backfill_search_text", { dbPath });
+export const backfillSearchText = () => {
+  return invoke<number>("backfill_search_text");
 };
 
-export const backfillCoverArt = (dbPath: string) => {
-  return invoke<number>("backfill_cover_art", { dbPath });
+export const backfillCoverArt = () => {
+  return invoke<number>("backfill_cover_art");
 };
 
 export type ArtistCreditMigrationResult = {
@@ -685,10 +640,8 @@ export type ArtistCreditMigrationResult = {
 };
 
 export const migrateArtistCredits = (
-  dbPath: string,
   artistSeparatorExceptions: string[] = [],
 ) => invoke<ArtistCreditMigrationResult>("migrate_artist_credits", {
-  dbPath,
   artistSeparatorExceptions,
 });
 
@@ -707,11 +660,9 @@ export type ArtistMergeResult = {
 };
 
 export const mergeArtists = (
-  dbPath: string,
   source: ArtistMergeIdentity,
   target: ArtistMergeIdentity,
 ) => invoke<ArtistMergeResult>("merge_artists", {
-  dbPath,
   sourceArtistId: source.artistId,
   sourceMusicBrainzId: source.musicBrainzId,
   targetArtistId: target.artistId,
@@ -723,32 +674,27 @@ export const mergeArtists = (
 // ============================================================================
 
 export const loadRecentlyPlayed = (
-  dbPath: string,
   limit: number = 50,
   libraryRoot?: string,
   artistSeparatorExceptions?: string[],
 ) => {
   return invoke<import("./importApi").ImportedTrack[]>("load_recently_played", {
-    dbPath,
     limit,
     libraryRoot,
     artistSeparatorExceptions,
   });
 };
 
-export const recordTrackPlay = (dbPath: string, trackId: string) => {
+export const recordTrackPlay = (trackId: string) => {
   return invoke<{ historyId: number; playedAt: string }>("record_track_play", {
-    dbPath,
     trackId,
   });
 };
 
 export const updatePlayHistory = (
-  dbPath: string,
   historyId: number,
   listenedSeconds: number,
 ) => invoke<{ updated: boolean }>("update_play_history", {
-  dbPath,
   historyId,
   listenedSeconds,
 });

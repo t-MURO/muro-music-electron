@@ -2,6 +2,22 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 const listeners = new Map();
 
+// Older versions kept the database location in renderer settings. Hand it to
+// the main process before any page script can run; IPC from this frame is
+// processed in order, so it lands before the page's first command. The main
+// process ignores it once a location has been recorded.
+try {
+  const persisted = JSON.parse(window.localStorage.getItem("muro-settings") ?? "null");
+  const state = persisted && typeof persisted.state === "object" ? persisted.state : {};
+  ipcRenderer.send("muro:migrate-database-location", {
+    dbPath: typeof state.dbPath === "string" ? state.dbPath : "",
+    dbFileName: typeof state.dbFileName === "string" ? state.dbFileName : "",
+    useAutoDbPath: state.useAutoDbPath !== false,
+  });
+} catch {
+  // Unreadable legacy settings fall back to the default database location.
+}
+
 // Keep exactly one Electron listener regardless of how many app-level events
 // React subscribes to. Besides avoiding EventEmitter warnings, this makes the
 // bridge's cleanup correct when the same callback is used for multiple names.
@@ -26,6 +42,10 @@ contextBridge.exposeInMainWorld("muro", {
   invoke: (command, args = {}) => ipcRenderer.invoke("muro:invoke", command, args),
   on,
   appDataDir: () => ipcRenderer.invoke("muro:app-data-dir"),
+  databaseLocation: () => ipcRenderer.invoke("muro:database-location"),
+  chooseDatabaseLocation: (options = {}) =>
+    ipcRenderer.invoke("muro:choose-database-location", options),
+  resetDatabaseLocation: () => ipcRenderer.invoke("muro:reset-database-location"),
   clipboardHasImage: () => ipcRenderer.invoke("muro:clipboard-has-image"),
   cacheClipboardCoverArt: () => ipcRenderer.invoke("muro:cache-clipboard-cover-art"),
   copyImageToClipboard: (filePath) => ipcRenderer.invoke("muro:copy-image-to-clipboard", filePath),

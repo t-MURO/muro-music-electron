@@ -17,7 +17,6 @@ import {
   syncPlaylistSource,
   type PlaylistSourceSyncResult,
 } from "../utils";
-import { useDbPath } from "./useDbPath";
 import { t } from "../i18n";
 import type { Playlist } from "../types";
 
@@ -29,7 +28,6 @@ export const usePlaylistTransfer = () => {
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const setPlaylists = useLibraryStore((state) => state.setPlaylists);
   const setPlaylistFolders = useLibraryStore((state) => state.setPlaylistFolders);
-  const resolveDbPath = useDbPath();
 
   useEffect(() => {
     let cancelled = false;
@@ -87,8 +85,7 @@ export const usePlaylistTransfer = () => {
         unlisten = null;
         return;
       }
-      const dbPath = await resolveDbPath();
-      if (!cancelled) await configurePlaylistSync(dbPath);
+      if (!cancelled) await configurePlaylistSync();
     })().catch((error) => {
       console.warn("Failed to start imported playlist synchronization", error);
     });
@@ -97,14 +94,13 @@ export const usePlaylistTransfer = () => {
       cancelled = true;
       unlisten?.();
     };
-  }, [resolveDbPath, setInboxTracks, setPlaylists]);
+  }, [setInboxTracks, setPlaylists]);
 
   const importPlaylistIntoStore = useCallback(async (
-    dbPath: string,
     filePath: string,
     folderId?: string,
   ) => {
-    const parsed = await importPlaylistFile(dbPath, filePath);
+    const parsed = await importPlaylistFile(filePath);
     const libraryTrackIdByPath = new Map(
       useLibraryStore.getState().tracks.map((track) => [normalizePath(track.sourcePath), track.id])
     );
@@ -118,7 +114,7 @@ export const usePlaylistTransfer = () => {
         .map((entry) => entry.path)
     )];
     const importResult = missingPaths.length > 0
-      ? await importFiles(dbPath, missingPaths)
+      ? await importFiles(missingPaths)
       : { imported: [], scanned: 0, failures: [] };
     const imported = importResult.imported;
     const converted = imported.map(importedTrackToTrack);
@@ -156,7 +152,6 @@ export const usePlaylistTransfer = () => {
       sourcePath: parsed.source_path,
     };
     await createPlaylist(
-      dbPath,
       playlist.id,
       playlist.name,
       folderId,
@@ -165,14 +160,14 @@ export const usePlaylistTransfer = () => {
     );
     try {
       if (playlist.trackIds.length > 0) {
-        await addTracksToPlaylist(dbPath, playlist.id, playlist.trackIds);
+        await addTracksToPlaylist(playlist.id, playlist.trackIds);
       }
     } catch (error) {
-      await deletePlaylist(dbPath, playlist.id).catch(() => undefined);
+      await deletePlaylist(playlist.id).catch(() => undefined);
       throw error;
     }
     setPlaylists((current) => [...current, playlist]);
-    const initialSync = await syncPlaylistSource(dbPath, playlist.id).catch((error) => {
+    const initialSync = await syncPlaylistSource(playlist.id).catch((error) => {
       console.warn(`Initial playlist sync failed for ${playlist.name}`, error);
       return null;
     });
@@ -208,8 +203,7 @@ export const usePlaylistTransfer = () => {
 
   const importPlaylist = useCallback(async (filePath: string) => {
     try {
-      const dbPath = await resolveDbPath();
-      const result = await importPlaylistIntoStore(dbPath, filePath);
+      const result = await importPlaylistIntoStore(filePath);
       if (!result) {
         notify.error(t("toast.playlist.noAvailableFiles"));
         return null;
@@ -231,15 +225,14 @@ export const usePlaylistTransfer = () => {
       notify.error(t("toast.playlist.importFailed"));
       return null;
     }
-  }, [importPlaylistIntoStore, resolveDbPath]);
+  }, [importPlaylistIntoStore]);
 
   const importPlaylistFolder = useCallback(async (directoryPath: string) => {
-    let dbPath: string | null = null;
     const createdFolderIds: string[] = [];
     const cleanupFolders = async () => {
-      if (!dbPath || createdFolderIds.length === 0) return;
+      if (createdFolderIds.length === 0) return;
       for (const folderId of [...createdFolderIds].reverse()) {
-        await deletePlaylistFolder(dbPath, folderId).catch(() => undefined);
+        await deletePlaylistFolder(folderId).catch(() => undefined);
       }
       const created = new Set(createdFolderIds);
       setPlaylistFolders((current) => current.filter((folder) => !created.has(folder.id)));
@@ -251,7 +244,6 @@ export const usePlaylistTransfer = () => {
         return null;
       }
 
-      dbPath = await resolveDbPath();
       sequenceRef.current += 1;
       const rootFolder = {
         id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
@@ -261,7 +253,6 @@ export const usePlaylistTransfer = () => {
           .reduce((highest, folder) => Math.max(highest, folder.sortOrder), -1) + 1,
       };
       await createPlaylistFolder(
-        dbPath,
         rootFolder.id,
         rootFolder.name,
         undefined,
@@ -283,7 +274,7 @@ export const usePlaylistTransfer = () => {
           parentId,
           sortOrder,
         };
-        await createPlaylistFolder(dbPath, folder.id, folder.name, parentId, sortOrder);
+        await createPlaylistFolder(folder.id, folder.name, parentId, sortOrder);
         createdFolderIds.push(folder.id);
         folderIdByPath.set(scannedFolder.path, folder.id);
         importedFolders.push(folder);
@@ -295,7 +286,7 @@ export const usePlaylistTransfer = () => {
       for (const entry of scan.entries) {
         try {
           const folderId = folderIdByPath.get(entry.folderPath ?? "") ?? rootFolder.id;
-          const result = await importPlaylistIntoStore(dbPath, entry.path, folderId);
+          const result = await importPlaylistIntoStore(entry.path, folderId);
           if (result) playlistIds.push(result.playlist.id);
         } catch {
           // Keep importing the remaining files and summarize partial failures.
@@ -321,24 +312,22 @@ export const usePlaylistTransfer = () => {
       notify.error(t("toast.playlistFolder.importFailed"));
       return null;
     }
-  }, [importPlaylistIntoStore, resolveDbPath, setPlaylistFolders]);
+  }, [importPlaylistIntoStore, setPlaylistFolders]);
 
   const exportPlaylist = useCallback(async (playlistId: string, filePath: string) => {
     try {
-      const dbPath = await resolveDbPath();
-      const result = await exportPlaylistFile(dbPath, playlistId, filePath);
+      const result = await exportPlaylistFile(playlistId, filePath);
       notify.success(t("toast.playlist.exported", { count: String(result.exported) }));
       return true;
     } catch {
       notify.error(t("toast.playlist.exportFailed"));
       return false;
     }
-  }, [resolveDbPath]);
+  }, []);
 
   const exportAllPlaylists = useCallback(async (destinationPath: string) => {
     try {
-      const dbPath = await resolveDbPath();
-      const result = await exportAllPlaylistFiles(dbPath, destinationPath);
+      const result = await exportAllPlaylistFiles(destinationPath);
       notify.success(
         `Exported ${result.playlistsExported} playlists with `
         + `${result.playlistEntriesExported} track entries`
@@ -348,7 +337,7 @@ export const usePlaylistTransfer = () => {
       notify.error(t("toast.playlist.exportAllFailed"));
       return null;
     }
-  }, [resolveDbPath]);
+  }, []);
 
   return { importPlaylist, importPlaylistFolder, exportPlaylist, exportAllPlaylists };
 };

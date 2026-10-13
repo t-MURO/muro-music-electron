@@ -240,22 +240,24 @@ export const parseByteRange = (value, size) => {
   return { start, end: Math.min(end, size - 1) };
 };
 
+// No CORS headers: Electron serves this privileged scheme to the app's own
+// renderer (fetch, <img>, and crossOrigin audio feeding Web Audio) without
+// them, and a wildcard would only help other origins read library files.
 const responseHeaders = (filePath, contentLength, recovered) => {
   const headers = new Headers({
-    "Access-Control-Allow-Origin": "*",
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-store",
     "Content-Length": String(contentLength),
     "Content-Type": MIME_TYPES.get(path.extname(filePath).toLowerCase()) ?? "application/octet-stream",
-    "Cross-Origin-Resource-Policy": "cross-origin",
+    "X-Content-Type-Options": "nosniff",
   });
   if (recovered) headers.set("X-Muro-Recovered-Media", "flac-frame-resync");
   return headers;
 };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Cross-Origin-Resource-Policy": "cross-origin",
+const errorHeaders = {
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
 };
 
 const originalSegmentsForVirtualRange = (start, end, recovery) => {
@@ -292,7 +294,7 @@ export const createLocalFileResponse = async (request, filePath) => {
   if (!isSupportedLocalMediaPath(filePath)) {
     return new Response("Unsupported local media type", {
       status: 415,
-      headers: corsHeaders,
+      headers: errorHeaders,
     });
   }
 
@@ -300,11 +302,11 @@ export const createLocalFileResponse = async (request, filePath) => {
   try {
     fileStats = await fs.promises.stat(filePath);
   } catch {
-    return new Response("File not found", { status: 404, headers: corsHeaders });
+    return new Response("File not found", { status: 404, headers: errorHeaders });
   }
 
   if (!fileStats.isFile()) {
-    return new Response("File not found", { status: 404, headers: corsHeaders });
+    return new Response("File not found", { status: 404, headers: errorHeaders });
   }
 
   const recovery = await getFlacPrefixRecovery(filePath, fileStats);
@@ -317,7 +319,7 @@ export const createLocalFileResponse = async (request, filePath) => {
     return new Response(null, {
       status: 416,
       headers: {
-        ...corsHeaders,
+        ...errorHeaders,
         "Accept-Ranges": "bytes",
         "Content-Range": `bytes */${size}`,
       },
@@ -343,4 +345,36 @@ export const createLocalFileResponse = async (request, filePath) => {
     originalSegmentsForVirtualRange(start, end, recovery),
   );
   return new Response(Readable.toWeb(stream), { status, headers });
+};
+
+/**
+ * protocol.handle() callback for muro-file://local/<encoded absolute path>.
+ * Only files the main process can account for (library root, app caches,
+ * database references, dialog grants) are served; everything else is refused
+ * before the file is even stat'ed, so the scheme is no existence oracle.
+ */
+export const createMediaProtocolHandler = ({ isPathAllowed }) => async (request) => {
+  let filePath;
+  try {
+    const url = new URL(request.url);
+    if (url.hostname !== "local") throw new Error("Unexpected host");
+    filePath = decodeURIComponent(url.pathname.slice(1));
+  } catch {
+    return new Response("Invalid file URL", { status: 400, headers: errorHeaders });
+  }
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Method not allowed", { status: 405, headers: errorHeaders });
+  }
+  if (!isSupportedLocalMediaPath(filePath)) {
+    return new Response("Unsupported local media type", { status: 415, headers: errorHeaders });
+  }
+
+  let allowed = false;
+  try {
+    allowed = Boolean(await isPathAllowed(filePath));
+  } catch {
+    allowed = false;
+  }
+  if (!allowed) return new Response("Forbidden", { status: 403, headers: errorHeaders });
+  return createLocalFileResponse(request, path.resolve(filePath));
 };

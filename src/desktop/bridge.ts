@@ -1,11 +1,19 @@
 export type BridgeEvent = { payload: unknown };
 export type WindowControlAction = "minimize" | "toggleMaximize" | "close";
+export type DatabaseLocation = {
+  dbPath: string;
+  defaultPath: string;
+  isDefault: boolean;
+};
 
 export type MuroBridge = {
   platform: string;
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
   on(event: string, listener: (payload: unknown) => void): () => void;
   appDataDir(): Promise<string>;
+  databaseLocation(): Promise<DatabaseLocation>;
+  chooseDatabaseLocation(options: { mode: "open" | "create" }): Promise<DatabaseLocation | null>;
+  resetDatabaseLocation(): Promise<DatabaseLocation | null>;
   clipboardHasImage(): Promise<boolean>;
   cacheClipboardCoverArt(): Promise<{ fullPath: string; thumbPath: string } | null>;
   copyImageToClipboard(filePath: string): Promise<boolean>;

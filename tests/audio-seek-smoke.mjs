@@ -3,7 +3,8 @@ import { app, BrowserWindow, protocol } from "electron";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createLocalFileResponse } from "../electron/fileProtocol.mjs";
+import { createMediaProtocolHandler } from "../electron/fileProtocol.mjs";
+import { createPathAccess } from "../electron/pathAccess.mjs";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -21,6 +22,8 @@ protocol.registerSchemesAsPrivileged([
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-audio-seek-"));
 const audioPath = path.join(temporaryDirectory, "seek-test.wav");
 const htmlPath = path.join(temporaryDirectory, "index.html");
+const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "muro-audio-seek-outside-"));
+const outsideAudioPath = path.join(outsideDirectory, "outside.wav");
 
 const writeToneWave = (filePath, durationSeconds = 60) => {
   const sampleRate = 44_100;
@@ -50,6 +53,7 @@ const writeToneWave = (filePath, durationSeconds = 60) => {
 };
 
 writeToneWave(audioPath);
+writeToneWave(outsideAudioPath, 1);
 fs.writeFileSync(htmlPath, "<!doctype html><html><body>Audio seek smoke test</body></html>");
 app.setPath("userData", temporaryDirectory);
 
@@ -59,15 +63,21 @@ const timeout = setTimeout(() => {
 }, 15_000);
 
 app.whenReady().then(async () => {
-  protocol.handle("muro-file", (request) => {
-    const url = new URL(request.url);
-    return createLocalFileResponse(request, decodeURIComponent(url.pathname.slice(1)));
-  });
+  // Same handler as the app: only the test library folder is servable.
+  protocol.handle("muro-file", createMediaProtocolHandler({
+    isPathAllowed: createPathAccess({ trustedRoots: () => [temporaryDirectory] }).canRead,
+  }));
 
   const window = new BrowserWindow({ show: false });
   await window.loadFile(htmlPath);
 
   const audioUrl = `muro-file://local/${encodeURIComponent(audioPath)}`;
+  const outsideUrl = `muro-file://local/${encodeURIComponent(outsideAudioPath)}`;
+  const outsideStatus = await window.webContents.executeJavaScript(
+    `fetch(${JSON.stringify(outsideUrl)}).then((response) => response.status)`,
+  );
+  assert.equal(outsideStatus, 403, "files outside the allowed folders must not be served");
+
   const result = await window.webContents.executeJavaScript(`(async () => {
     const response = await fetch(${JSON.stringify(audioUrl)});
     if (!response.ok) throw new Error(\`audio fetch failed (HTTP \${response.status})\`);

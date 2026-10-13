@@ -6,7 +6,6 @@ import {
   reorderPlaylists as reorderPlaylistsInDatabase,
   updatePlaylistFolder as updatePlaylistFolderInDatabase,
 } from "../utils";
-import { useDbPath } from "./useDbPath";
 import { t } from "../i18n";
 
 export const usePlaylistFolders = () => {
@@ -15,7 +14,6 @@ export const usePlaylistFolders = () => {
   const playlists = useLibraryStore((state) => state.playlists);
   const setPlaylistFolders = useLibraryStore((state) => state.setPlaylistFolders);
   const playlistFolders = useLibraryStore((state) => state.playlistFolders);
-  const resolveDbPath = useDbPath();
 
   const createFolder = useCallback(async (name: string) => {
     const trimmed = name.trim();
@@ -29,9 +27,7 @@ export const usePlaylistFolders = () => {
         .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1,
     };
     try {
-      const dbPath = await resolveDbPath();
       await createPlaylistFolderInDatabase(
-        dbPath,
         folder.id,
         folder.name,
         undefined,
@@ -44,14 +40,13 @@ export const usePlaylistFolders = () => {
       notify.error(t("toast.playlistFolder.createFailed"));
       return null;
     }
-  }, [playlistFolders, resolveDbPath, setPlaylistFolders]);
+  }, [playlistFolders, setPlaylistFolders]);
 
   const renameFolder = useCallback(async (folderId: string, name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return false;
     try {
-      const dbPath = await resolveDbPath();
-      await updatePlaylistFolderInDatabase(dbPath, folderId, trimmed);
+      await updatePlaylistFolderInDatabase(folderId, trimmed);
       setPlaylistFolders((current) => current.map((folder) =>
         folder.id === folderId ? { ...folder, name: trimmed } : folder
       ));
@@ -61,13 +56,12 @@ export const usePlaylistFolders = () => {
       notify.error(t("toast.playlistFolder.renameFailed"));
       return false;
     }
-  }, [resolveDbPath, setPlaylistFolders]);
+  }, [setPlaylistFolders]);
 
   const removeFolder = useCallback(async (folderId: string) => {
     try {
-      const dbPath = await resolveDbPath();
       const parentId = playlistFolders.find((folder) => folder.id === folderId)?.parentId;
-      await deletePlaylistFolderInDatabase(dbPath, folderId);
+      await deletePlaylistFolderInDatabase(folderId);
       setPlaylistFolders((current) => {
         let nextSortOrder = current
           .filter((folder) => folder.id !== folderId && folder.parentId === parentId)
@@ -108,7 +102,7 @@ export const usePlaylistFolders = () => {
       notify.error(t("toast.playlistFolder.deleteFailed"));
       return false;
     }
-  }, [playlistFolders, resolveDbPath, setPlaylistFolders, setPlaylists]);
+  }, [playlistFolders, setPlaylistFolders, setPlaylists]);
 
   const movePlaylists = useCallback(async (
     playlistIds: string[],
@@ -136,9 +130,7 @@ export const usePlaylistFolders = () => {
         folderId: playlist.folderId,
         sortOrder: playlist.sortOrder,
       }]));
-      const dbPath = await resolveDbPath();
       await reorderPlaylistsInDatabase(
-        dbPath,
         moved.map((playlist) => ({
           id: playlist.id,
           folderId: playlist.folderId,
@@ -156,7 +148,7 @@ export const usePlaylistFolders = () => {
       notify.error(selected.length === 1 ? "Failed to move playlist" : "Failed to move playlists");
       return false;
     }
-  }, [playlists, resolveDbPath, setPlaylists]);
+  }, [playlists, setPlaylists]);
 
   const reorderPlaylist = useCallback(async (
     sourceId: string,
@@ -200,9 +192,7 @@ export const usePlaylistFolders = () => {
     const next = playlists.map((playlist) => updates.get(playlist.id) ?? playlist);
     setPlaylists(next);
     try {
-      const dbPath = await resolveDbPath();
       await reorderPlaylistsInDatabase(
-        dbPath,
         [...updates.values()].map((playlist) => ({
           id: playlist.id,
           folderId: playlist.folderId,
@@ -215,7 +205,7 @@ export const usePlaylistFolders = () => {
       notify.error(t("toast.playlist.reorderFailed"));
       return false;
     }
-  }, [playlists, resolveDbPath, setPlaylists]);
+  }, [playlists, setPlaylists]);
 
   return {
     createFolder,

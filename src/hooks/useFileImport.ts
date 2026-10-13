@@ -2,7 +2,6 @@ import { listen } from "@muro/desktop/events";
 import { useCallback, useEffect, useRef } from "react";
 import { commandManager, type Command } from "../command-manager/commandManager";
 import { useLibraryStore, useSettingsStore, useUIStore, notify } from "../stores";
-import { useDbPath } from "./useDbPath";
 import {
   createPlaylist,
   deletePlaylist,
@@ -52,11 +51,9 @@ export const useFileImport = ({
   const pendingPlaylistDropRef = useRef<PlaylistDropOperation | null>(null);
   pendingPlaylistDropRef.current = pendingPlaylistDrop;
 
-  const resolveDbPath = useDbPath();
 
   const executePlaylistDrop = useCallback(
     async (playlistId: string, payload: string[]) => {
-      const resolvedDbPath = await resolveDbPath();
 
       // Capture the current state before executing
       const playlist = playlists.find((p: Playlist) => p.id === playlistId);
@@ -79,7 +76,7 @@ export const useFileImport = ({
       const command: Command = {
         label: `Add ${novelIds.length} tracks to playlist`,
         do: async () => {
-          await setPlaylistTracks(resolvedDbPath, playlistId, nextIds);
+          await setPlaylistTracks(playlistId, nextIds);
           setPlaylists((current) =>
             current.map((p) =>
               p.id === playlistId ? { ...p, trackIds: nextIds } : p
@@ -93,7 +90,7 @@ export const useFileImport = ({
           );
         },
         undo: async () => {
-          await setPlaylistTracks(resolvedDbPath, playlistId, previousIds);
+          await setPlaylistTracks(playlistId, previousIds);
           setPlaylists((current) =>
             current.map((p) =>
               p.id === playlistId ? { ...p, trackIds: previousIds } : p
@@ -114,7 +111,7 @@ export const useFileImport = ({
         notify.error(t("toast.playlist.addFailed"));
       }
     },
-    [setPlaylists, resolveDbPath, playlists]
+    [setPlaylists, playlists]
   );
 
   const handlePlaylistDrop = useCallback(
@@ -186,8 +183,7 @@ export const useFileImport = ({
           }
         }
 
-        const resolvedDbPath = await resolveDbPath();
-        const result = await importFiles(resolvedDbPath, paths, {
+        const result = await importFiles(paths, {
           libraryFolder: watchedFolder,
         });
         const imported = result.imported;
@@ -220,7 +216,7 @@ export const useFileImport = ({
         const command: Command = {
           label: `Import ${imported.length} tracks`,
           do: async () => {
-            const redoResult = await importFiles(resolvedDbPath, importedSourcePaths, {
+            const redoResult = await importFiles(importedSourcePaths, {
               libraryFolder: watchedFolder,
             });
             if (
@@ -241,7 +237,7 @@ export const useFileImport = ({
           },
           undo: async () => {
             const ids = currentImported.map((track) => track.id);
-            const result = await deleteTracks(resolvedDbPath, ids, false);
+            const result = await deleteTracks(ids, false);
             if (result.failures.length > 0 || result.deletedTrackIds.length !== ids.length) {
               throw new Error(t("history.import.removeFailed"));
             }
@@ -279,7 +275,6 @@ export const useFileImport = ({
       }
     },
     [
-      resolveDbPath,
       setImportProgress,
       setInboxTracks,
       onImportComplete,
@@ -304,13 +299,11 @@ export const useFileImport = ({
           .filter((item) => !item.folderId)
           .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1,
       };
-      const resolvedDbPath = await resolveDbPath();
 
       const command: Command = {
         label: `Create playlist ${trimmed}`,
         do: async () => {
           await createPlaylist(
-            resolvedDbPath,
             playlist.id,
             playlist.name,
             playlist.folderId,
@@ -318,17 +311,17 @@ export const useFileImport = ({
           );
           try {
             if (playlist.trackIds.length > 0) {
-              await setPlaylistTracks(resolvedDbPath, playlist.id, playlist.trackIds);
+              await setPlaylistTracks(playlist.id, playlist.trackIds);
             }
           } catch (error) {
-            await deletePlaylist(resolvedDbPath, playlist.id).catch(() => undefined);
+            await deletePlaylist(playlist.id).catch(() => undefined);
             throw error;
           }
           setPlaylists((current) => [...current, playlist]);
           return t("history.playlist.created", { name: playlist.name });
         },
         undo: async () => {
-          await deletePlaylist(resolvedDbPath, playlist.id);
+          await deletePlaylist(playlist.id);
           setPlaylists((current) =>
             current.filter((item) => item.id !== playlist.id)
           );
@@ -344,7 +337,7 @@ export const useFileImport = ({
         return null;
       }
     },
-    [playlists, resolveDbPath, setPlaylists]
+    [playlists, setPlaylists]
   );
 
   // Undo/redo is bound globally in useKeyboardShortcuts, which also guards

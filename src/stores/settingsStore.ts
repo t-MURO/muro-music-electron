@@ -59,9 +59,6 @@ type SettingsState = {
   theme: ThemeMode;
   locale: Locale;
   seekMode: "fast" | "accurate";
-  dbPath: string;
-  dbFileName: string;
-  useAutoDbPath: boolean;
   analysisNotation: AnalysisNotationMode;
   analysisCustomCodes: string[];
   analysisDelimiter: string;
@@ -102,9 +99,6 @@ type SettingsActions = {
   setTheme: (theme: ThemeMode) => void;
   setLocale: (locale: Locale) => void;
   setSeekMode: (mode: "fast" | "accurate") => void;
-  setDbPath: (path: string) => void;
-  setDbFileName: (name: string) => void;
-  setUseAutoDbPath: (auto: boolean) => void;
   setAnalysisNotation: (notation: AnalysisNotationMode) => void;
   setAnalysisCustomCode: (index: number, value: string) => void;
   setAnalysisDelimiter: (delimiter: string) => void;
@@ -147,9 +141,6 @@ export const useSettingsStore = create<SettingsStore>()(
       theme: "dark",
       locale: "en",
       seekMode: "fast",
-      dbPath: "",
-      dbFileName: "muro.db",
-      useAutoDbPath: true,
       analysisNotation: "custom",
       analysisCustomCodes: [...DEFAULT_CUSTOM_CODES],
       analysisDelimiter: " - ",
@@ -190,9 +181,6 @@ export const useSettingsStore = create<SettingsStore>()(
         setI18nLocale(locale);
       },
       setSeekMode: (seekMode) => set({ seekMode }),
-      setDbPath: (dbPath) => set({ dbPath, useAutoDbPath: false }),
-      setDbFileName: (dbFileName) => set({ dbFileName, useAutoDbPath: true }),
-      setUseAutoDbPath: (useAutoDbPath) => set({ useAutoDbPath }),
       setAnalysisNotation: (analysisNotation) => set({ analysisNotation }),
       setAnalysisCustomCode: (index, value) => set((state) => {
         const analysisCustomCodes = [...state.analysisCustomCodes];
@@ -269,9 +257,6 @@ export const useSettingsStore = create<SettingsStore>()(
         theme: state.theme,
         locale: state.locale,
         seekMode: state.seekMode,
-        dbPath: state.dbPath,
-        dbFileName: state.dbFileName,
-        useAutoDbPath: state.useAutoDbPath,
         analysisNotation: state.analysisNotation,
         analysisCustomCodes: state.analysisCustomCodes,
         analysisDelimiter: state.analysisDelimiter,
@@ -315,11 +300,20 @@ export const useSettingsStore = create<SettingsStore>()(
           ? persistedState as Partial<SettingsState> & {
               watchFoldersEnabled?: unknown;
               watchedFolders?: unknown;
+              dbPath?: unknown;
+              dbFileName?: unknown;
+              useAutoDbPath?: unknown;
             }
           : {};
+        // The database location moved to the main process (see
+        // electron/databaseLocation.mjs); the preload hands these legacy keys
+        // over once and the renderer no longer keeps them.
         const {
           watchFoldersEnabled: legacyWatchFoldersEnabled,
           watchedFolders: legacyWatchedFolders,
+          dbPath: _legacyDbPath,
+          dbFileName: _legacyDbFileName,
+          useAutoDbPath: _legacyUseAutoDbPath,
           ...persistedSettings
         } = persisted;
         const savedCustomCodes = Array.isArray(persisted.analysisCustomCodes)

@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadListeningStatistics, type ListeningStatistics } from "../../utils";
 
-type ListeningStatisticsViewProps = {
-  dbPath: string;
-};
-
 const formatDuration = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -42,14 +38,14 @@ const Ranking = ({
   );
 };
 
-export const ListeningStatisticsView = ({ dbPath }: ListeningStatisticsViewProps) => {
+export const ListeningStatisticsView = () => {
   const [statistics, setStatistics] = useState<ListeningStatistics | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    loadListeningStatistics(dbPath).then((result) => {
+    loadListeningStatistics().then((result) => {
       if (!cancelled) setStatistics(result);
     }).catch((reason) => {
       if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
@@ -57,7 +53,7 @@ export const ListeningStatisticsView = ({ dbPath }: ListeningStatisticsViewProps
     return () => {
       cancelled = true;
     };
-  }, [dbPath]);
+  }, []);
 
   const monthlyMax = useMemo(
     () => Math.max(1, ...(statistics?.monthly.map((item) => item.listeningSeconds) ?? [])),

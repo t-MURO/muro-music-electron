@@ -243,6 +243,7 @@
   "analysis.key": "Tonart",
   "analysis.close": "Schließen",
   "analysis.cancel": "Abbrechen",
+  "analysis.cancelled": "Analyse abgebrochen.",
   "analysis.save": "In Bibliothek speichern",
   "analysis.saving": "Speichern...",
   "columns.bpm": "BPM",
@@ -595,5 +596,16 @@
   "toast.playlistFolder.renamed": "Ordner in {name} umbenannt",
   "toast.playlist.importing": "{count} Playlists werden aus {folder} importiert",
   "toast.playlist.importedNone": "0 von {count} Playlists importiert",
-  "toast.playlist.exported": "{count} Titel exportiert"
+  "toast.playlist.exported": "{count} Titel exportiert",
+  "toast.details.more": "und {count} weitere",
+  "toast.tagWrite.failedOne": "In der Bibliothek gespeichert, aber die Tags in {file} konnten nicht aktualisiert werden. Prüfe, ob die Datei schreibgeschützt oder in einer anderen App geöffnet ist.",
+  "toast.tagWrite.failedMany": "In der Bibliothek gespeichert, aber die Tags in {count} Dateien konnten nicht aktualisiert werden. Prüfe, ob sie schreibgeschützt oder in einer anderen App geöffnet sind.",
+  "toast.tagWrite.retry": "Tags erneut schreiben",
+  "toast.tagWrite.retrying": "Tags werden erneut in {count} Datei(en) geschrieben…",
+  "toast.tagWrite.retrySucceeded": "Tags in {count} Datei(en) geschrieben",
+  "toast.tagWrite.reason.readOnly": "die Datei ist schreibgeschützt",
+  "toast.tagWrite.reason.locked": "die Datei ist in einer anderen App geöffnet",
+  "toast.tagWrite.reason.missing": "die Datei wurde nicht gefunden",
+  "toast.cover.embeddedOne": "Cover-Art in die Musikdatei eingebettet",
+  "toast.cover.embeddedMany": "Cover-Art in alle {count} Musikdateien eingebettet"
 }

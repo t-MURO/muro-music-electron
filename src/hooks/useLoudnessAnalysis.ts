@@ -4,7 +4,6 @@ import { analyzeAndStoreLoudness } from "../lib/loudness/service";
 import { notify, useLibraryStore, useSettingsStore } from "../stores";
 import { loadTracks, importedTrackToTrack } from "../utils";
 import { t } from "../i18n";
-import { useDbPath } from "./useDbPath";
 
 type PendingTrack = { id: string; source_path: string };
 
@@ -33,7 +32,6 @@ const IDLE_STATE: LoudnessScanState = {
 export const useLoudnessAnalysis = () => {
   const [state, setState] = useState<LoudnessScanState>(IDLE_STATE);
   const cancelRef = useRef(false);
-  const resolveDbPath = useDbPath();
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
   const artistSeparatorExceptions = useSettingsStore(
@@ -48,18 +46,10 @@ export const useLoudnessAnalysis = () => {
     if (cancelRef.current) cancelRef.current = false;
 
     const referenceLufs = useSettingsStore.getState().replayGainReferenceLufs;
-    let dbPath: string;
-    try {
-      dbPath = await resolveDbPath();
-    } catch {
-      notify.error(t("loudness.scan.failed"));
-      return;
-    }
 
     let pending: PendingTrack[];
     try {
       pending = await invoke<PendingTrack[]>("list_tracks_needing_loudness", {
-        dbPath,
         limit: 2000,
       });
     } catch {
@@ -81,7 +71,6 @@ export const useLoudnessAnalysis = () => {
       try {
         await analyzeAndStoreLoudness(
           { id: track.id, sourcePath: track.source_path },
-          dbPath,
           referenceLufs
         );
         analyzed += 1;
@@ -96,13 +85,12 @@ export const useLoudnessAnalysis = () => {
     // end rather than after each file.
     if (analyzed > 0) {
       try {
-        await invoke("recompute_album_gain", { dbPath, referenceLufs });
+        await invoke("recompute_album_gain", { referenceLufs });
       } catch {
         // Track gain is still usable without it.
       }
       try {
         const snapshot = await loadTracks(
-          dbPath,
           undefined,
           artistSeparatorExceptions,
         );
@@ -126,7 +114,7 @@ export const useLoudnessAnalysis = () => {
     } else {
       notify.success(t("loudness.scan.finished", { analyzed: String(analyzed) }));
     }
-  }, [artistSeparatorExceptions, resolveDbPath, setInboxTracks, setTracks]);
+  }, [artistSeparatorExceptions, setInboxTracks, setTracks]);
 
   return { ...state, run, cancel };
 };

@@ -16,7 +16,7 @@ export { useTrackAnalysis } from "./useTrackAnalysis";
 export { useTrackEdit } from "./useTrackEdit";
 export { useTrackDeletion } from "./useTrackDeletion";
 export { useSidebarData } from "./useSidebarData";
-export { useDbPath } from "./useDbPath";
+export { useDatabaseLocation } from "./useDatabaseLocation";
 export {
   useAudioPlayback,
   type AudioPlaybackState,

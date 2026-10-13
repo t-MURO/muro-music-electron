@@ -580,6 +580,9 @@ const playbackInvoke = async <T>(
       // Stop the previous source before changing tracks. This also makes
       // repeated/rapid play requests deterministic on Windows.
       player.pause();
+      // A normal play always runs at 1.0x, even on the element that just came
+      // out of a DJ transition at the matched tempo.
+      mix.resetElement(player);
       currentTrack = {
         id: String(args.id),
         title: String(args.title),
@@ -623,6 +626,9 @@ const playbackInvoke = async <T>(
 
       discardPreload();
       const element = ensureIdleElement();
+      // The idle element may be a former transition deck; a gapless or
+      // crossfade hand-off must not inherit its tempo.
+      mix.resetElement(element);
       const nextGainFactor = Number(track.gainFactor) > 0 ? Number(track.gainFactor) : 1;
       await prepareElementVolume(element, nextGainFactor);
       element.src = convertFileSrc(String(track.sourcePath));
@@ -700,6 +706,7 @@ const playbackInvoke = async <T>(
       cancelCrossfade();
       discardPreload();
       player.pause();
+      mix.resetElement(player);
       player.currentTime = 0;
       currentTrack = null;
       setMediaSessionMetadata(null);

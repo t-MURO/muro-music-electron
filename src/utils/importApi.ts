@@ -101,7 +101,6 @@ export type ImportFilesResult = {
 // ============================================================================
 
 export const importFiles = (
-  dbPath: string,
   paths: string[],
   options: {
     libraryFolder?: string;
@@ -109,7 +108,6 @@ export const importFiles = (
 ) => {
   return invoke<ImportFilesResult>("import_files", {
     paths,
-    dbPath,
     libraryFolder: options.libraryFolder ?? "",
   });
 };

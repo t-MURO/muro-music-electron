@@ -97,13 +97,11 @@ export function analyzeSourceBeatGrid(
 
 export async function getOrComputeBeatGrid(
   track: Track,
-  dbPath: string,
 ): Promise<BeatGrid> {
   if (track.beatGrid?.version === BEAT_GRID_VERSION) return track.beatGrid;
   const grid = await analyzeSourceBeatGrid(track.sourcePath, track.bpm ?? null);
   // Persist fire-and-forget: a failed write must not block the transition.
   invoke("update_track_beat_grid", {
-    dbPath,
     trackId: track.id,
     beatGridJson: JSON.stringify(grid),
   }).catch(() => undefined);

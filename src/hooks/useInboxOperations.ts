@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { commandManager } from "../command-manager/commandManager";
 import { useLibraryStore, useSettingsStore, useUIStore, notify } from "../stores";
-import { useDbPath } from "./useDbPath";
 import { acceptTracks, rejectTracks, unacceptTracks } from "../utils";
 import { t } from "../i18n";
 
@@ -14,7 +13,6 @@ export const useInboxOperations = () => {
   const watchedFolder = useSettingsStore((s) => s.watchedFolder);
   const selectedIds = useUIStore((s) => s.selectedIds);
   const clearSelection = useUIStore((s) => s.clearSelection);
-  const resolveDbPath = useDbPath();
 
   const handleAcceptTracks = useCallback(async () => {
     const selectedTrackIds = Array.from(selectedIds);
@@ -30,14 +28,13 @@ export const useInboxOperations = () => {
     let acceptedTrackIds = selectedTrackIds;
     let trackIdsToAccept = selectedTrackIds;
     let organizedFileCount = 0;
-    const resolvedDbPath = await resolveDbPath();
 
     clearSelection();
 
     const command = {
       label: `Accept ${selectedTrackIds.length} tracks`,
       do: async () => {
-        const result = await acceptTracks(resolvedDbPath, trackIdsToAccept, {
+        const result = await acceptTracks(trackIdsToAccept, {
           organize: organizeAcceptedTracks,
           libraryFolder: watchedFolder,
         });
@@ -77,7 +74,7 @@ export const useInboxOperations = () => {
         );
       },
       undo: async () => {
-        await unacceptTracks(resolvedDbPath, acceptedTrackIds);
+        await unacceptTracks(acceptedTrackIds);
         const acceptedIdSet = new Set(acceptedTrackIds);
         setTracks((current) =>
           current.filter((t) => !acceptedIdSet.has(t.id))
@@ -105,7 +102,6 @@ export const useInboxOperations = () => {
     }
   }, [
     clearSelection,
-    resolveDbPath,
     inboxTracks,
     selectedIds,
     organizeAcceptedTracks,
@@ -120,11 +116,10 @@ export const useInboxOperations = () => {
       return;
     }
 
-    const resolvedDbPath = await resolveDbPath();
 
     clearSelection();
     try {
-      await rejectTracks(resolvedDbPath, selectedTrackIds);
+      await rejectTracks(selectedTrackIds);
       setInboxTracks((current) =>
         current.filter((track) => !selectedTrackIds.includes(track.id))
       );
@@ -139,7 +134,7 @@ export const useInboxOperations = () => {
     } catch {
       notify.error(t("toast.inbox.rejectFailed"));
     }
-  }, [clearSelection, resolveDbPath, selectedIds, setInboxTracks]);
+  }, [clearSelection, selectedIds, setInboxTracks]);
 
   return {
     handleAcceptTracks,

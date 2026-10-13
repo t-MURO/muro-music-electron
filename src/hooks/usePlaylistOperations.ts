@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 import { commandManager } from "../command-manager/commandManager";
 import { useLibraryStore, useUIStore, notify } from "../stores";
-import { useDbPath } from "./useDbPath";
 import {
   deletePlaylists,
   restorePlaylists,
@@ -28,7 +27,6 @@ export const usePlaylistOperations = ({
   const closePlaylistEdit = useUIStore((s) => s.closePlaylistEdit);
   const setPlaylistEditName = useUIStore((s) => s.setPlaylistEditName);
   const clearSelection = useUIStore((s) => s.clearSelection);
-  const resolveDbPath = useDbPath();
 
   const handleOpenPlaylistEdit = useCallback(
     (playlist: { id: string; name: string }) => {
@@ -43,13 +41,12 @@ export const usePlaylistOperations = ({
 
   const handleRenamePlaylist = useCallback(
     async (playlistId: string, nextName: string) => {
-      const resolvedDbPath = await resolveDbPath();
       const previousName = playlists.find((playlist) => playlist.id === playlistId)?.name;
       if (!previousName || previousName === nextName) return;
       const command = {
         label: `Rename playlist to ${nextName}`,
         do: async () => {
-          await updatePlaylist(resolvedDbPath, playlistId, { name: nextName });
+          await updatePlaylist(playlistId, { name: nextName });
           setPlaylists((current) =>
             current.map((playlist) =>
               playlist.id === playlistId ? { ...playlist, name: nextName } : playlist
@@ -58,7 +55,7 @@ export const usePlaylistOperations = ({
           return t("history.playlist.renamed", { previousName, nextName });
         },
         undo: async () => {
-          await updatePlaylist(resolvedDbPath, playlistId, { name: previousName });
+          await updatePlaylist(playlistId, { name: previousName });
           setPlaylists((current) =>
             current.map((playlist) =>
               playlist.id === playlistId
@@ -76,7 +73,7 @@ export const usePlaylistOperations = ({
         notify.error(t("toast.playlist.renameFailed"));
       }
     },
-    [playlists, resolveDbPath, setPlaylists]
+    [playlists, setPlaylists]
   );
 
   const handleDeletePlaylists = useCallback(
@@ -86,7 +83,6 @@ export const usePlaylistOperations = ({
         .map((playlist, index) => ({ playlist, index }))
         .filter(({ playlist }) => ids.has(playlist.id));
       if (removed.length === 0) return;
-      const resolvedDbPath = await resolveDbPath();
       const activePlaylistId = currentView.startsWith("playlist:")
         ? currentView.slice("playlist:".length)
         : null;
@@ -95,7 +91,7 @@ export const usePlaylistOperations = ({
       const command = {
         label: removed.length === 1 ? "Delete playlist" : `Delete ${removed.length} playlists`,
         do: async () => {
-          const result = await deletePlaylists(resolvedDbPath, [...ids]);
+          const result = await deletePlaylists([...ids]);
           if (result.deleted !== removed.length) {
             throw new Error(t("history.playlist.deletePartial", {
               actual: String(result.deleted),
@@ -117,7 +113,6 @@ export const usePlaylistOperations = ({
         },
         undo: async () => {
           const result = await restorePlaylists(
-            resolvedDbPath,
             removed.map(({ playlist }) => playlist),
           );
           if (result.restored !== removed.length) {
@@ -155,7 +150,7 @@ export const usePlaylistOperations = ({
         notify.error(t("toast.playlist.deleteFailed"));
       }
     },
-    [resolveDbPath, navigateToView, playlists, setPlaylists, currentView]
+    [navigateToView, playlists, setPlaylists, currentView]
   );
 
   const handlePlaylistEditSubmit = useCallback(() => {
@@ -183,7 +178,6 @@ export const usePlaylistOperations = ({
       const previousIds = [...playlist.trackIds];
       const nextIds = previousIds.filter((trackId) => !removed.has(trackId));
       if (nextIds.length === previousIds.length) return;
-      const resolvedDbPath = await resolveDbPath();
 
       clearSelection();
       const removedCount = previousIds.length - nextIds.length;
@@ -191,7 +185,7 @@ export const usePlaylistOperations = ({
         await commandManager.execute({
           label: `Remove ${removedCount} tracks from playlist`,
           do: async () => {
-            await setPlaylistTracks(resolvedDbPath, playlistId, nextIds);
+            await setPlaylistTracks(playlistId, nextIds);
             setPlaylists((current) => current.map((item) =>
               item.id === playlistId ? { ...item, trackIds: nextIds } : item
             ));
@@ -203,7 +197,7 @@ export const usePlaylistOperations = ({
             );
           },
           undo: async () => {
-            await setPlaylistTracks(resolvedDbPath, playlistId, previousIds);
+            await setPlaylistTracks(playlistId, previousIds);
             setPlaylists((current) => current.map((item) =>
               item.id === playlistId ? { ...item, trackIds: previousIds } : item
             ));
@@ -219,7 +213,7 @@ export const usePlaylistOperations = ({
         notify.error(t("toast.playlist.removeFailed"));
       }
     },
-    [clearSelection, playlists, resolveDbPath, setPlaylists]
+    [clearSelection, playlists, setPlaylists]
   );
 
   return {
