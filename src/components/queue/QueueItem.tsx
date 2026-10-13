@@ -52,7 +52,7 @@ export const QueueItem = forwardRef<HTMLDivElement, QueueItemProps>(
         </button>
       </div>
     );
-  }
+  },
 );
 
 QueueItem.displayName = "QueueItem";

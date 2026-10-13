@@ -3,13 +3,13 @@ import type { MixBars } from "./config";
 
 export type TransitionPlan = {
   mode: "beatmatch" | "fade";
-  rate: number;             // initial playbackRate for incoming deck; 1 in fade mode
-  startAtSec: number;       // position in A when the incoming deck starts playing
-  cueInSec: number;         // position in B (B-time) where B starts
-  durationSec: number;      // total transition length measured on A's clock
-  bassSwapAtSec: number;    // offset from transition start when bass swap begins
-  bassSwapDurSec: number;   // bass swap ramp length
-  beatSecA: number | null;  // A beat interval in seconds; null in fade mode
+  rate: number; // initial playbackRate for incoming deck; 1 in fade mode
+  startAtSec: number; // position in A when the incoming deck starts playing
+  cueInSec: number; // position in B (B-time) where B starts
+  durationSec: number; // total transition length measured on A's clock
+  bassSwapAtSec: number; // offset from transition start when bass swap begins
+  bassSwapDurSec: number; // bass swap ramp length
+  beatSecA: number | null; // A beat interval in seconds; null in fade mode
 };
 
 export type PlanTransitionArgs = {
@@ -22,7 +22,7 @@ export type PlanTransitionArgs = {
    * it to use — a track with an eight-bar outro cannot give a thirty-two-bar
    * blend no matter what the setting says.
    */
-  bars?: MixBars;           // default 8
+  bars?: MixBars; // default 8
 };
 
 const MIN_CONFIDENCE = 0.25;
@@ -84,10 +84,7 @@ const MAX_ALIGNMENT_BARS = 16;
  * tempo gap, where beatmatching is most audible, were the ones cut to two
  * bars. Neither rule was ever tested against listening, and both made it worse.
  */
-const deriveBars = (args: {
-  cap: number;
-  introBarsB: number | null;
-}): number => {
+const deriveBars = (args: { cap: number; introBarsB: number | null }): number => {
   const { cap, introBarsB } = args;
   // Only constrain by a runway that was actually detected.
   return introBarsB !== null ? Math.min(cap, introBarsB) : cap;
@@ -112,7 +109,7 @@ const gridAnchor = (grid: BeatGrid, barSec: number) => {
 const buildFadePlan = (
   gridB: BeatGrid | null,
   durationASec: number,
-  durationBSec: number
+  durationBSec: number,
 ): TransitionPlan => {
   const durationSec = Math.min(8, Math.max(3, durationASec * 0.1));
   const startAtSec = Math.max(0, durationASec - durationSec - 1);
@@ -169,12 +166,13 @@ export function planTransition(args: PlanTransitionArgs): TransitionPlan {
 
   // A runway under a bar is no runway at all, and must not be read as "zero
   // bars of blend allowed".
-  const introBarsB = gridB.introEndSec > 0
-    ? (() => {
-        const bars = (gridB.introEndSec - gridB.firstDownbeatSec) / (4 * (60 / gridB.bpm));
-        return bars >= 1 ? bars : null;
-      })()
-    : null;
+  const introBarsB =
+    gridB.introEndSec > 0
+      ? (() => {
+          const bars = (gridB.introEndSec - gridB.firstDownbeatSec) / (4 * (60 / gridB.bpm));
+          return bars >= 1 ? bars : null;
+        })()
+      : null;
   const targetBars = deriveBars({ cap: requestedBars, introBarsB });
 
   // A blend that both begins and ends on a phrase boundary is what makes the

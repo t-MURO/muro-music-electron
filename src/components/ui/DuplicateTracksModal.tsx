@@ -64,9 +64,7 @@ export const DuplicateTracksModal = ({
                 <span className="truncate font-medium text-[var(--color-text-primary)]">
                   {track.title}
                 </span>
-                <span className="truncate text-[var(--color-text-muted)]">
-                  {track.artist}
-                </span>
+                <span className="truncate text-[var(--color-text-muted)]">{track.artist}</span>
               </li>
             ))}
           </ul>
@@ -90,6 +88,6 @@ export const DuplicateTracksModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

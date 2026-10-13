@@ -109,6 +109,6 @@ export const PlaylistEditModal = ({
         </form>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

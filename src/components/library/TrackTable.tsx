@@ -23,7 +23,7 @@ type TrackTableProps = {
   onRowSelect: (
     index: number,
     id: string,
-    options?: { isMetaKey?: boolean; isShiftKey?: boolean }
+    options?: { isMetaKey?: boolean; isShiftKey?: boolean },
   ) => void;
   onRowDragStart: (event: React.DragEvent<HTMLDivElement>, id: string) => void;
   onRowDrag: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -32,7 +32,7 @@ type TrackTableProps = {
     event: React.MouseEvent,
     id: string,
     index: number,
-    isSelected: boolean
+    isSelected: boolean,
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
   onTogglePlay?: () => void;
@@ -112,31 +112,27 @@ export const TrackTable = memo(
       const observer = new MutationObserver(updateRowHeight);
       observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-theme", "data-table-density"]
+        attributeFilter: ["data-theme", "data-table-density"],
       });
       return () => observer.disconnect();
     }, []);
 
-    const visibleColumns = useMemo(
-      () => columns.filter((column) => column.visible),
-      [columns]
-    );
+    const visibleColumns = useMemo(() => columns.filter((column) => column.visible), [columns]);
     const selectedVisibleCount = useMemo(
       () => tracks.reduce((count, track) => count + (selectedIds.has(track.id) ? 1 : 0), 0),
       [selectedIds, tracks],
     );
     const tableWidth = useMemo(() => {
       return (
-        visibleColumns.reduce((total, column) => total + column.width, 0) +
-        LEADING_COLUMN_WIDTH
+        visibleColumns.reduce((total, column) => total + column.width, 0) + LEADING_COLUMN_WIDTH
       );
     }, [visibleColumns]);
     const gridTemplateColumns = useMemo(
       () =>
         [`${LEADING_COLUMN_WIDTH}px`, ...visibleColumns.map((column) => `${column.width}px`)].join(
-          " "
+          " ",
         ),
-      [visibleColumns]
+      [visibleColumns],
     );
 
     const rowVirtualizer = useVirtualizer({
@@ -175,8 +171,7 @@ export const TrackTable = memo(
 
     const virtualRows = rowVirtualizer.getVirtualItems();
 
-    const clampIndex = (index: number) =>
-      Math.max(0, Math.min(tracks.length - 1, index));
+    const clampIndex = (index: number) => Math.max(0, Math.min(tracks.length - 1, index));
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.currentTarget !== event.target) {
@@ -252,35 +247,35 @@ export const TrackTable = memo(
       (index: number, id: string, options?: { isMetaKey?: boolean; isShiftKey?: boolean }) => {
         onRowSelect(index, id, options);
       },
-      [onRowSelect]
+      [onRowSelect],
     );
 
     const handleRowDragStartStable = useCallback(
       (event: React.DragEvent<HTMLDivElement>, id: string) => {
         onRowDragStart(event, id);
       },
-      [onRowDragStart]
+      [onRowDragStart],
     );
 
     const handleRowContextMenuStable = useCallback(
       (event: React.MouseEvent, id: string, index: number, isSelected: boolean) => {
         onRowContextMenu(event, id, index, isSelected);
       },
-      [onRowContextMenu]
+      [onRowContextMenu],
     );
 
     const handleRowDoubleClickStable = useCallback(
       (trackId: string) => {
         onRowDoubleClick?.(trackId);
       },
-      [onRowDoubleClick]
+      [onRowDoubleClick],
     );
 
     const handleRatingChangeStable = useCallback(
       (id: string, rating: number) => {
         onRatingChange(id, rating);
       },
-      [onRatingChange]
+      [onRatingChange],
     );
 
     return (
@@ -335,64 +330,68 @@ export const TrackTable = memo(
               }
             }}
           >
-          {tracks.length === 0 ? (
-            <TableEmptyState
-              title={emptyTitle}
-              description={emptyDescription}
-              primaryActionLabel={emptyActionLabel}
-              onPrimaryAction={onEmptyAction}
-              secondaryActionLabel={emptySecondaryActionLabel}
-              onSecondaryAction={onEmptySecondaryAction}
-            />
-          ) : (
-          <div
-            className="relative"
-            style={{ height: rowVirtualizer.getTotalSize(), minWidth: tableWidth }}
-          >
-            {virtualRows.map((virtualRow: VirtualItem) => {
-              const track = tracks[virtualRow.index];
-              if (!track) {
-                return null;
-              }
-              return (
-                <TableRow
-                  key={virtualRow.key}
-                  track={track}
-                  playlistMembership={playlistMembershipByTrackId.get(track.id) ?? []}
-                  index={virtualRow.index}
-                  isSelected={selectedIds.has(track.id)}
-                  isPlayingTrack={track.id === playingTrackId}
-                  isCurrentlyPlaying={isCurrentlyPlaying}
-                  visibleColumns={visibleColumns}
-                  gridTemplateColumns={gridTemplateColumns}
-                  tableWidth={tableWidth}
-                  virtualStart={virtualRow.start}
-                  onRowSelect={handleRowSelectStable}
-                  onRowDragStart={handleRowDragStartStable}
-                  onRowDrag={onRowDrag}
-                  onRowDragEnd={onRowDragEnd}
-                  onRowContextMenu={handleRowContextMenuStable}
-                  onRowDoubleClick={handleRowDoubleClickStable}
-                  onOpenArtist={onOpenArtist}
-                  onOpenAlbum={onOpenAlbum}
-                  onOpenPlaylist={onOpenPlaylist}
-                  onAlbumContextMenu={onAlbumContextMenu}
-                  onRatingChange={handleRatingChangeStable}
-                />
-              );
-            })}
-          </div>
-          )}
+            {tracks.length === 0 ? (
+              <TableEmptyState
+                title={emptyTitle}
+                description={emptyDescription}
+                primaryActionLabel={emptyActionLabel}
+                onPrimaryAction={onEmptyAction}
+                secondaryActionLabel={emptySecondaryActionLabel}
+                onSecondaryAction={onEmptySecondaryAction}
+              />
+            ) : (
+              <div
+                className="relative"
+                style={{ height: rowVirtualizer.getTotalSize(), minWidth: tableWidth }}
+              >
+                {virtualRows.map((virtualRow: VirtualItem) => {
+                  const track = tracks[virtualRow.index];
+                  if (!track) {
+                    return null;
+                  }
+                  return (
+                    <TableRow
+                      key={virtualRow.key}
+                      track={track}
+                      playlistMembership={playlistMembershipByTrackId.get(track.id) ?? []}
+                      index={virtualRow.index}
+                      isSelected={selectedIds.has(track.id)}
+                      isPlayingTrack={track.id === playingTrackId}
+                      isCurrentlyPlaying={isCurrentlyPlaying}
+                      visibleColumns={visibleColumns}
+                      gridTemplateColumns={gridTemplateColumns}
+                      tableWidth={tableWidth}
+                      virtualStart={virtualRow.start}
+                      onRowSelect={handleRowSelectStable}
+                      onRowDragStart={handleRowDragStartStable}
+                      onRowDrag={onRowDrag}
+                      onRowDragEnd={onRowDragEnd}
+                      onRowContextMenu={handleRowContextMenuStable}
+                      onRowDoubleClick={handleRowDoubleClickStable}
+                      onOpenArtist={onOpenArtist}
+                      onOpenAlbum={onOpenAlbum}
+                      onOpenPlaylist={onOpenPlaylist}
+                      onAlbumContextMenu={onAlbumContextMenu}
+                      onRatingChange={handleRatingChangeStable}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
         {tracks.length > 0 && (
           <div className="flex h-6 shrink-0 items-center border-t border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-[10px] tabular-nums text-[var(--color-text-muted)]">
-            <span>{selectedVisibleCount} of {tracks.length.toLocaleString()} selected</span>
-            <span className="ml-auto" data-table-keyboard-hint>Up/Down select · Space plays</span>
+            <span>
+              {selectedVisibleCount} of {tracks.length.toLocaleString()} selected
+            </span>
+            <span className="ml-auto" data-table-keyboard-hint>
+              Up/Down select · Space plays
+            </span>
             <span className="ml-4">{tracks.length.toLocaleString()} tracks in view</span>
           </div>
         )}
       </div>
     );
-  }
+  },
 );

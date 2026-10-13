@@ -1,9 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  dbToLinear,
-  measureLoudness,
-  replayGainFromLoudness,
-} from "../src/lib/loudness/r128.ts";
+import { dbToLinear, measureLoudness, replayGainFromLoudness } from "../src/lib/loudness/r128.ts";
 import { resolveGainFactor } from "../src/utils/replayGain.ts";
 
 const SAMPLE_RATE = 48_000;
@@ -109,17 +105,10 @@ const closeTo = (actual, expected, tolerance, message) => {
     "track mode applies the track gain",
   );
 
-  assert.equal(
-    resolveGainFactor({}, base),
-    1,
-    "a track without a gain value plays untouched",
-  );
+  assert.equal(resolveGainFactor({}, base), 1, "a track without a gain value plays untouched");
 
   closeTo(
-    resolveGainFactor(
-      { replayGainTrackDb: -6, replayGainAlbumDb: -9 },
-      { ...base, mode: "album" },
-    ),
+    resolveGainFactor({ replayGainTrackDb: -6, replayGainAlbumDb: -9 }, { ...base, mode: "album" }),
     dbToLinear(-9),
     0.001,
     "album mode prefers the album gain",

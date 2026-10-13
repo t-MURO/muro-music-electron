@@ -62,23 +62,28 @@ const timeout = setTimeout(() => {
   app.exit(1);
 }, 15_000);
 
-app.whenReady().then(async () => {
-  // Same handler as the app: only the test library folder is servable.
-  protocol.handle("muro-file", createMediaProtocolHandler({
-    isPathAllowed: createPathAccess({ trustedRoots: () => [temporaryDirectory] }).canRead,
-  }));
+app
+  .whenReady()
+  .then(async () => {
+    // Same handler as the app: only the test library folder is servable.
+    protocol.handle(
+      "muro-file",
+      createMediaProtocolHandler({
+        isPathAllowed: createPathAccess({ trustedRoots: () => [temporaryDirectory] }).canRead,
+      }),
+    );
 
-  const window = new BrowserWindow({ show: false });
-  await window.loadFile(htmlPath);
+    const window = new BrowserWindow({ show: false });
+    await window.loadFile(htmlPath);
 
-  const audioUrl = `muro-file://local/${encodeURIComponent(audioPath)}`;
-  const outsideUrl = `muro-file://local/${encodeURIComponent(outsideAudioPath)}`;
-  const outsideStatus = await window.webContents.executeJavaScript(
-    `fetch(${JSON.stringify(outsideUrl)}).then((response) => response.status)`,
-  );
-  assert.equal(outsideStatus, 403, "files outside the allowed folders must not be served");
+    const audioUrl = `muro-file://local/${encodeURIComponent(audioPath)}`;
+    const outsideUrl = `muro-file://local/${encodeURIComponent(outsideAudioPath)}`;
+    const outsideStatus = await window.webContents.executeJavaScript(
+      `fetch(${JSON.stringify(outsideUrl)}).then((response) => response.status)`,
+    );
+    assert.equal(outsideStatus, 403, "files outside the allowed folders must not be served");
 
-  const result = await window.webContents.executeJavaScript(`(async () => {
+    const result = await window.webContents.executeJavaScript(`(async () => {
     const response = await fetch(${JSON.stringify(audioUrl)});
     if (!response.ok) throw new Error(\`audio fetch failed (HTTP \${response.status})\`);
     const encoded = await response.arrayBuffer();
@@ -128,19 +133,23 @@ app.whenReady().then(async () => {
     };
   })()`);
 
-  assert.ok(result.fetchedBytes > 44, `Unexpected fetched byte count: ${result.fetchedBytes}`);
-  assert.equal(result.decodedSampleRate, 11025);
-  assert.ok(result.decodedDuration >= 59.9, `Unexpected decoded duration: ${result.decodedDuration}`);
-  assert.ok(result.duration >= 59.9, `Unexpected duration: ${result.duration}`);
-  assert.ok(result.currentTime >= 44.9, `Unexpected seek position: ${result.currentTime}`);
-  assert.ok(result.graphPeak > 0.1, `Web Audio graph was silent (peak: ${result.graphPeak})`);
+    assert.ok(result.fetchedBytes > 44, `Unexpected fetched byte count: ${result.fetchedBytes}`);
+    assert.equal(result.decodedSampleRate, 11025);
+    assert.ok(
+      result.decodedDuration >= 59.9,
+      `Unexpected decoded duration: ${result.decodedDuration}`,
+    );
+    assert.ok(result.duration >= 59.9, `Unexpected duration: ${result.duration}`);
+    assert.ok(result.currentTime >= 44.9, `Unexpected seek position: ${result.currentTime}`);
+    assert.ok(result.graphPeak > 0.1, `Web Audio graph was silent (peak: ${result.graphPeak})`);
 
-  clearTimeout(timeout);
-  window.destroy();
-  console.log("Audio seek smoke test passed.");
-  app.quit();
-}).catch((error) => {
-  clearTimeout(timeout);
-  console.error(error);
-  app.exit(1);
-});
+    clearTimeout(timeout);
+    window.destroy();
+    console.log("Audio seek smoke test passed.");
+    app.quit();
+  })
+  .catch((error) => {
+    clearTimeout(timeout);
+    console.error(error);
+    app.exit(1);
+  });

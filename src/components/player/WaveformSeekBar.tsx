@@ -59,11 +59,19 @@ export const WaveformSeekBar = ({
         peak = Math.max(peak, Math.abs(Number(peaks[peakIndex]) || 0));
       }
       const x = index * step;
-      const barHeight = Math.max(2 * ratio, Math.min(height - 2 * ratio, peak * (height - 3 * ratio)));
+      const barHeight = Math.max(
+        2 * ratio,
+        Math.min(height - 2 * ratio, peak * (height - 3 * ratio)),
+      );
       const y = (height - barHeight) / 2;
       context.fillStyle = x + barWidth <= playedX ? playedColor : pendingColor;
       context.globalAlpha = x + barWidth <= playedX ? 1 : 0.58;
-      context.fillRect(Math.round(x), Math.round(y), Math.ceil(barWidth), Math.max(1, Math.round(barHeight)));
+      context.fillRect(
+        Math.round(x),
+        Math.round(y),
+        Math.ceil(barWidth),
+        Math.max(1, Math.round(barHeight)),
+      );
     }
     context.globalAlpha = 1;
   }, [peaks, progress]);
@@ -75,7 +83,10 @@ export const WaveformSeekBar = ({
     const resizeObserver = new ResizeObserver(draw);
     resizeObserver.observe(canvas);
     const themeObserver = new MutationObserver(draw);
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
     return () => {
       resizeObserver.disconnect();
       themeObserver.disconnect();
@@ -98,7 +109,10 @@ export const WaveformSeekBar = ({
       tabIndex={0}
     >
       <canvas ref={canvasRef} className="pointer-events-none h-full w-full" aria-hidden="true" />
-      <span className="pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--color-accent)]" style={{ left: `${progress}%` }} />
+      <span
+        className="pointer-events-none absolute bottom-0 top-0 w-px bg-[var(--color-accent)]"
+        style={{ left: `${progress}%` }}
+      />
     </div>
   );
 };

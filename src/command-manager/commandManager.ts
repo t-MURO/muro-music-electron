@@ -51,7 +51,10 @@ export class CommandManager {
     this.queuedOperations += 1;
     this.notify();
     const next = this.operationQueue.then(operation, operation);
-    this.operationQueue = next.then(() => undefined, () => undefined);
+    this.operationQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
     return next.finally(() => {
       this.queuedOperations -= 1;
       this.notify();

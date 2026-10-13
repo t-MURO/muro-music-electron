@@ -6,16 +6,18 @@ import { fileURLToPath } from "node:url";
 import { createMediaProtocolHandler } from "../electron/fileProtocol.mjs";
 import { createPathAccess } from "../electron/pathAccess.mjs";
 
-protocol.registerSchemesAsPrivileged([{
-  scheme: "muro-file",
-  privileges: {
-    standard: true,
-    secure: true,
-    supportFetchAPI: true,
-    stream: true,
-    corsEnabled: true,
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "muro-file",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+    },
   },
-}]);
+]);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
@@ -24,10 +26,11 @@ const autoMixQueueSmokeOnly = process.env.MURO_AUTO_MIX_QUEUE_SMOKE === "1";
 const artistSeparatorSmokeOnly = process.env.MURO_ARTIST_SEPARATOR_SMOKE === "1";
 const libraryExportSmokeOnly = process.env.MURO_LIBRARY_EXPORT_SMOKE === "1";
 const settingsSmokeOnly = process.env.MURO_SETTINGS_SMOKE === "1";
-const startupLoadingSmoke = !autoMixQueueSmokeOnly
-  && !artistSeparatorSmokeOnly
-  && !libraryExportSmokeOnly
-  && !settingsSmokeOnly;
+const startupLoadingSmoke =
+  !autoMixQueueSmokeOnly &&
+  !artistSeparatorSmokeOnly &&
+  !libraryExportSmokeOnly &&
+  !settingsSmokeOnly;
 let releaseStartupTrackLoad = () => undefined;
 const startupTrackLoadGate = new Promise((resolve) => {
   releaseStartupTrackLoad = resolve;
@@ -61,34 +64,38 @@ const smokeGuestArtistId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const smokeTracks = Array.from({ length: 250 }, (_, index) => ({
   id: `smoke-track-${index}`,
   title: `Smoke Track ${String(index).padStart(3, "0")}`,
-  artist: artistSeparatorSmokeOnly && index === 249
-    ? "Muro & Guest feat. DJ Test"
-    : !artistSeparatorSmokeOnly && index === 5
-      ? "Muro feat. Guest Alias"
-      : "Muro",
+  artist:
+    artistSeparatorSmokeOnly && index === 249
+      ? "Muro & Guest feat. DJ Test"
+      : !artistSeparatorSmokeOnly && index === 5
+        ? "Muro feat. Guest Alias"
+        : "Muro",
   artist_credits: !artistSeparatorSmokeOnly
     ? index === 5
-      ? [{
-        artistId: smokeMuroArtistId,
-        name: "Muro",
-        creditedName: "Muro",
-        joinPhrase: " feat. ",
-      }, {
-        artistId: smokeGuestArtistId,
-        name: "Guest Artist",
-        creditedName: "Guest Alias",
-        joinPhrase: "",
-      }]
-      : [{
-        artistId: smokeMuroArtistId,
-        name: "Muro",
-        creditedName: "Muro",
-        joinPhrase: "",
-      }]
+      ? [
+          {
+            artistId: smokeMuroArtistId,
+            name: "Muro",
+            creditedName: "Muro",
+            joinPhrase: " feat. ",
+          },
+          {
+            artistId: smokeGuestArtistId,
+            name: "Guest Artist",
+            creditedName: "Guest Alias",
+            joinPhrase: "",
+          },
+        ]
+      : [
+          {
+            artistId: smokeMuroArtistId,
+            name: "Muro",
+            creditedName: "Muro",
+            joinPhrase: "",
+          },
+        ]
     : undefined,
-  artists: artistSeparatorSmokeOnly && index === 249
-    ? "Various Artists & Muro"
-    : "Muro",
+  artists: artistSeparatorSmokeOnly && index === 249 ? "Various Artists & Muro" : "Muro",
   album: `Smoke Album ${String(Math.floor(index / 10)).padStart(2, "0")}`,
   track_number: (index % 10) + 1,
   track_total: 10,
@@ -146,11 +153,13 @@ const smokeArtistProfile = {
   wikipediaUrl: "https://en.wikipedia.org/wiki/Muro_(musician)",
   lastFmAttempted: true,
   lastFmUrl: "https://www.last.fm/music/Muro",
-  similarArtists: [{
-    name: "Similar Muro",
-    musicBrainzId: "55555555-5555-4555-8555-555555555555",
-    url: "https://www.last.fm/music/Similar+Muro",
-  }],
+  similarArtists: [
+    {
+      name: "Similar Muro",
+      musicBrainzId: "55555555-5555-4555-8555-555555555555",
+      url: "https://www.last.fm/music/Similar+Muro",
+    },
+  ],
   theAudioDbId: "654321",
   theAudioDbUrl: "https://www.theaudiodb.com/artist/654321",
   fanartUrl: "https://fanart.tv/artist/11111111-1111-4111-8111-111111111111/",
@@ -196,17 +205,18 @@ const fail = (message) => {
 };
 
 const timeout = setTimeout(
-  () => fail(
-    autoMixQueueSmokeOnly
-      ? "Auto-mix queue smoke test timed out because the renderer became unresponsive"
-      : artistSeparatorSmokeOnly
-        ? "Artist separator renderer smoke test timed out"
-        : libraryExportSmokeOnly
-          ? "Organized library export renderer smoke test timed out"
-          : settingsSmokeOnly
-            ? "Settings organization renderer smoke test timed out"
-            : "Renderer smoke test timed out"
-  ),
+  () =>
+    fail(
+      autoMixQueueSmokeOnly
+        ? "Auto-mix queue smoke test timed out because the renderer became unresponsive"
+        : artistSeparatorSmokeOnly
+          ? "Artist separator renderer smoke test timed out"
+          : libraryExportSmokeOnly
+            ? "Organized library export renderer smoke test timed out"
+            : settingsSmokeOnly
+              ? "Settings organization renderer smoke test timed out"
+              : "Renderer smoke test timed out",
+    ),
   autoMixQueueSmokeOnly || artistSeparatorSmokeOnly || libraryExportSmokeOnly || settingsSmokeOnly
     ? 30_000
     : 120_000,
@@ -215,11 +225,14 @@ const timeout = setTimeout(
 app.whenReady().then(async () => {
   // Same handler as the app: only the test library folder and the bundled
   // assets (standing in for the cover/artist caches) are servable.
-  protocol.handle("muro-file", createMediaProtocolHandler({
-    isPathAllowed: createPathAccess({
-      trustedRoots: () => [temporaryDirectory, path.join(appRoot, "src", "assets")],
-    }).canRead,
-  }));
+  protocol.handle(
+    "muro-file",
+    createMediaProtocolHandler({
+      isPathAllowed: createPathAccess({
+        trustedRoots: () => [temporaryDirectory, path.join(appRoot, "src", "assets")],
+      }).canRead,
+    }),
+  );
   ipcMain.handle("muro:app-data-dir", () => temporaryDirectory);
   ipcMain.on("muro:migrate-database-location", () => undefined);
   ipcMain.handle("muro:database-location", () => ({
@@ -230,9 +243,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("muro:open-dialog", () => {
     if (libraryExportSmokeOnly) return temporaryDirectory;
     if (settingsSmokeOnly) {
-      const selected = settingsWatchedFolders[
-        Math.min(settingsWatchedFolderSelection, settingsWatchedFolders.length - 1)
-      ];
+      const selected =
+        settingsWatchedFolders[
+          Math.min(settingsWatchedFolderSelection, settingsWatchedFolders.length - 1)
+        ];
       settingsWatchedFolderSelection += 1;
       return selected;
     }
@@ -250,8 +264,9 @@ app.whenReady().then(async () => {
     copiedCoverPaths.push(filePath);
     return true;
   });
-  ipcMain.handle("muro:window-is-maximized", (event) =>
-    BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
+  ipcMain.handle(
+    "muro:window-is-maximized",
+    (event) => BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false,
   );
   ipcMain.handle("muro:window-control", (event, action) => {
     const testWindow = BrowserWindow.fromWebContents(event.sender);
@@ -290,7 +305,11 @@ app.whenReady().then(async () => {
         library: useExportedPaths
           ? smokeTracks.map((track) => ({
               ...track,
-              source_path: path.join(temporaryDirectory, "Muro Library", path.basename(track.source_path)),
+              source_path: path.join(
+                temporaryDirectory,
+                "Muro Library",
+                path.basename(track.source_path),
+              ),
             }))
           : smokeTracks,
         inbox: [],
@@ -301,71 +320,72 @@ app.whenReady().then(async () => {
       }
       return snapshot;
     }
-    if (command === "load_playlists") return {
-      playlists: [
-        {
-          id: "smoke-playlist",
-          name: "Smoke Playlist",
-          folder_id: "smoke-folder",
-          sort_order: 0,
-          track_ids: smokeTracks.map((track) => track.id),
-        },
-        {
-          id: "smoke-empty-playlist",
-          name: "Empty Mix",
-          folder_id: null,
-          sort_order: 0,
-          track_ids: [],
-        },
-        {
-          id: "smoke-drag-playlist",
-          name: "Drag Target",
-          folder_id: null,
-          sort_order: 1,
-          track_ids: [],
-        },
-        {
-          id: "smoke-next-playlist",
-          name: "Next Context",
-          folder_id: null,
-          sort_order: 2,
-          track_ids: ["smoke-track-0", "smoke-track-10", "smoke-track-20"],
-        },
-        {
-          id: "smoke-nested-playlist",
-          name: "Nested Playlist",
-          folder_id: "smoke-nested-folder",
-          sort_order: 0,
-          track_ids: [],
-        },
-        {
-          id: "smoke-linked-playlist",
-          name: "Linked M3U",
-          folder_id: null,
-          sort_order: 3,
-          source_path: path.join(temporaryDirectory, "linked.m3u"),
-          source_mtime_ms: null,
-          source_size: null,
-          source_sync_error: null,
-          last_synced_at: null,
-          track_ids: [],
-        },
-      ],
-      folders: [
-        {
-          id: "smoke-folder",
-          name: "Smoke Sets",
-          parent_id: null,
-          sort_order: 0,
-        },
-        {
-          id: "smoke-nested-folder",
-          name: "Nested Sets",
-          parent_id: "smoke-folder",
-          sort_order: 0,
-        },
-      ],
-    };
+    if (command === "load_playlists")
+      return {
+        playlists: [
+          {
+            id: "smoke-playlist",
+            name: "Smoke Playlist",
+            folder_id: "smoke-folder",
+            sort_order: 0,
+            track_ids: smokeTracks.map((track) => track.id),
+          },
+          {
+            id: "smoke-empty-playlist",
+            name: "Empty Mix",
+            folder_id: null,
+            sort_order: 0,
+            track_ids: [],
+          },
+          {
+            id: "smoke-drag-playlist",
+            name: "Drag Target",
+            folder_id: null,
+            sort_order: 1,
+            track_ids: [],
+          },
+          {
+            id: "smoke-next-playlist",
+            name: "Next Context",
+            folder_id: null,
+            sort_order: 2,
+            track_ids: ["smoke-track-0", "smoke-track-10", "smoke-track-20"],
+          },
+          {
+            id: "smoke-nested-playlist",
+            name: "Nested Playlist",
+            folder_id: "smoke-nested-folder",
+            sort_order: 0,
+            track_ids: [],
+          },
+          {
+            id: "smoke-linked-playlist",
+            name: "Linked M3U",
+            folder_id: null,
+            sort_order: 3,
+            source_path: path.join(temporaryDirectory, "linked.m3u"),
+            source_mtime_ms: null,
+            source_size: null,
+            source_sync_error: null,
+            last_synced_at: null,
+            track_ids: [],
+          },
+        ],
+        folders: [
+          {
+            id: "smoke-folder",
+            name: "Smoke Sets",
+            parent_id: null,
+            sort_order: 0,
+          },
+          {
+            id: "smoke-nested-folder",
+            name: "Nested Sets",
+            parent_id: "smoke-folder",
+            sort_order: 0,
+          },
+        ],
+      };
     if (command === "load_recently_played") return [];
     if (command === "list_playlist_history") {
       return { entries: [], canUndo: false, canRedo: false };
@@ -389,46 +409,46 @@ app.whenReady().then(async () => {
     if (command === "search_artist_images") {
       artistImageSearchArgs = { ...args };
       return [
-      {
-        id: "commons-current",
-        provider: "wikimedia-commons",
-        imageUrl: "https://upload.wikimedia.org/muro-commons.jpg",
-        sourceUrl: smokeArtistProfile.wikimediaCommonsUrl,
-        attribution: "Smoke Photographer",
-        license: "CC BY-SA 4.0",
-        current: true,
-      },
-      {
-        id: "fanart-alternate",
-        provider: "fanart.tv",
-        imageUrl: "https://assets.fanart.tv/muro-alternate.jpg",
-        sourceUrl: smokeArtistProfile.fanartUrl,
-        attribution: "Fanart.tv contributor",
-        width: 1000,
-        height: 1000,
-      },
-      {
-        id: "brave-search-result",
-        provider: "brave-search",
-        imageUrl: "https://imgs.search.brave.com/muro-search-result.jpg",
-        sourceUrl: "https://search.brave.com/images?q=Muro+musician",
-        sourceName: "label.example",
-        title: "Muro artist press portrait",
-        attribution: "label.example",
-        width: 1600,
-        height: 1600,
-      },
-      {
-        id: "deezer-result",
-        provider: "deezer",
-        imageUrl: "https://cdn-images.dzcdn.net/images/artist/muro/1000x1000.jpg",
-        sourceUrl: "https://www.deezer.com/artist/987654",
-        sourceName: "Muro",
-        title: "Muro on Deezer",
-        attribution: "Deezer",
-        width: 1000,
-        height: 1000,
-      },
+        {
+          id: "commons-current",
+          provider: "wikimedia-commons",
+          imageUrl: "https://upload.wikimedia.org/muro-commons.jpg",
+          sourceUrl: smokeArtistProfile.wikimediaCommonsUrl,
+          attribution: "Smoke Photographer",
+          license: "CC BY-SA 4.0",
+          current: true,
+        },
+        {
+          id: "fanart-alternate",
+          provider: "fanart.tv",
+          imageUrl: "https://assets.fanart.tv/muro-alternate.jpg",
+          sourceUrl: smokeArtistProfile.fanartUrl,
+          attribution: "Fanart.tv contributor",
+          width: 1000,
+          height: 1000,
+        },
+        {
+          id: "brave-search-result",
+          provider: "brave-search",
+          imageUrl: "https://imgs.search.brave.com/muro-search-result.jpg",
+          sourceUrl: "https://search.brave.com/images?q=Muro+musician",
+          sourceName: "label.example",
+          title: "Muro artist press portrait",
+          attribution: "label.example",
+          width: 1600,
+          height: 1600,
+        },
+        {
+          id: "deezer-result",
+          provider: "deezer",
+          imageUrl: "https://cdn-images.dzcdn.net/images/artist/muro/1000x1000.jpg",
+          sourceUrl: "https://www.deezer.com/artist/987654",
+          sourceName: "Muro",
+          title: "Muro on Deezer",
+          attribution: "Deezer",
+          width: 1000,
+          height: 1000,
+        },
       ];
     }
     if (command === "set_artist_image") {
@@ -495,32 +515,10 @@ app.whenReady().then(async () => {
       };
     }
     if (command === "search_track_metadata") {
-      return [{
-        id: "smoke-recording:smoke-release",
-        score: 100,
-        recordingId: "99999999-9999-4999-8999-999999999999",
-        releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        title: "Smoke Track Zero",
-        artist: "Muro",
-        album: "Smoke Album 00",
-        albumArtist: "Muro",
-        year: 2000,
-        country: "DE",
-        status: "Official",
-        genre: "House",
-        albumMatch: true,
-      }];
-    }
-    if (command === "identify_track_acoustid") {
-      return {
-        trackId: args.trackId,
-        cached: false,
-        duration: 180,
-        candidates: [{
-          id: "11111111-1111-4111-8111-111111111111:99999999-9999-4999-8999-999999999999:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-          acoustidId: "11111111-1111-4111-8111-111111111111",
-          score: 0.98,
+      return [
+        {
+          id: "smoke-recording:smoke-release",
+          score: 100,
           recordingId: "99999999-9999-4999-8999-999999999999",
           releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -531,25 +529,53 @@ app.whenReady().then(async () => {
           year: 2000,
           country: "DE",
           status: "Official",
-          genre: null,
+          genre: "House",
           albumMatch: true,
-        }],
+        },
+      ];
+    }
+    if (command === "identify_track_acoustid") {
+      return {
+        trackId: args.trackId,
+        cached: false,
+        duration: 180,
+        candidates: [
+          {
+            id: "11111111-1111-4111-8111-111111111111:99999999-9999-4999-8999-999999999999:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            acoustidId: "11111111-1111-4111-8111-111111111111",
+            score: 0.98,
+            recordingId: "99999999-9999-4999-8999-999999999999",
+            releaseId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            title: "Smoke Track Zero",
+            artist: "Muro",
+            album: "Smoke Album 00",
+            albumArtist: "Muro",
+            year: 2000,
+            country: "DE",
+            status: "Official",
+            genre: null,
+            albumMatch: true,
+          },
+        ],
       };
     }
     if (command === "search_album_metadata") {
-      return [{
-        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        score: 100,
-        title: "Smoke Album 00",
-        artist: "Muro",
-        releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        year: 2000,
-        country: "DE",
-        status: "Official",
-        barcode: "1234567890123",
-        trackCount: 10,
-        disambiguation: null,
-      }];
+      return [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          score: 100,
+          title: "Smoke Album 00",
+          artist: "Muro",
+          releaseGroupId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          year: 2000,
+          country: "DE",
+          status: "Official",
+          barcode: "1234567890123",
+          trackCount: 10,
+          disambiguation: null,
+        },
+      ];
     }
     if (command === "load_album_metadata") {
       return {
@@ -609,22 +635,26 @@ app.whenReady().then(async () => {
           ...enterKey,
           type: "rawKeyDown",
         })
-        .then(() => targetDebugger.sendCommand("Input.dispatchKeyEvent", {
-          ...enterKey,
-          type: "char",
-          text: "\r",
-          unmodifiedText: "\r",
-        }))
-        .then(() => targetDebugger.sendCommand("Input.dispatchKeyEvent", {
-          ...enterKey,
-          type: "keyUp",
-        }))
+        .then(() =>
+          targetDebugger.sendCommand("Input.dispatchKeyEvent", {
+            ...enterKey,
+            type: "char",
+            text: "\r",
+            unmodifiedText: "\r",
+          }),
+        )
+        .then(() =>
+          targetDebugger.sendCommand("Input.dispatchKeyEvent", {
+            ...enterKey,
+            type: "keyUp",
+          }),
+        )
         .then(() => true);
     }
     if (command === "test_get_artist_separator_updates") {
-      return ratingUpdates.filter((update) =>
-        typeof update.updates?.artist === "string" ||
-        typeof update.updates?.artists === "string"
+      return ratingUpdates.filter(
+        (update) =>
+          typeof update.updates?.artist === "string" || typeof update.updates?.artists === "string",
       );
     }
     if (command === "export_organized_library") {
@@ -688,7 +718,8 @@ app.whenReady().then(async () => {
       command === "reorder_playlists" ||
       command === "delete_playlist" ||
       command === "update_playlist"
-    ) return undefined;
+    )
+      return undefined;
     if (command === "delete_playlists") {
       return { deleted: args.playlistIds?.length ?? 0 };
     }
@@ -699,35 +730,38 @@ app.whenReady().then(async () => {
       ratingUpdates.push(args);
       return { updated: args.trackIds?.length ?? 0, filesWritten: 0, fileWriteErrors: [] };
     }
-    if (command === "playback_get_state") return {
-      is_playing: false,
-      current_position: 0,
-      duration: 0,
-      volume: 1,
-      current_track: null,
-    };
-    if (command === "cast_get_state") return {
-      state: "idle",
-      deviceId: null,
-      deviceName: null,
-      media: null,
-      track: null,
-      lastError: null,
-      discovery: {
-        devices: [{ id: "cast-smoke", name: "Smoke Speaker", model: "Smoke Cast" }],
-        scanning: false,
-        error: null,
-      },
-    };
-    if (command === "dlna_get_state") return {
-      state: "idle",
-      deviceId: null,
-      deviceName: null,
-      media: null,
-      track: null,
-      lastError: null,
-      discovery: { devices: [], scanning: false, error: null },
-    };
+    if (command === "playback_get_state")
+      return {
+        is_playing: false,
+        current_position: 0,
+        duration: 0,
+        volume: 1,
+        current_track: null,
+      };
+    if (command === "cast_get_state")
+      return {
+        state: "idle",
+        deviceId: null,
+        deviceName: null,
+        media: null,
+        track: null,
+        lastError: null,
+        discovery: {
+          devices: [{ id: "cast-smoke", name: "Smoke Speaker", model: "Smoke Cast" }],
+          scanning: false,
+          error: null,
+        },
+      };
+    if (command === "dlna_get_state")
+      return {
+        state: "idle",
+        deviceId: null,
+        deviceName: null,
+        media: null,
+        track: null,
+        lastError: null,
+        discovery: { devices: [], scanning: false, error: null },
+      };
     if (command === "cast_start_discovery") {
       return {
         devices: [{ id: "cast-smoke", name: "Smoke Speaker", model: "Smoke Cast" }],
@@ -787,14 +821,15 @@ app.whenReady().then(async () => {
       event.sender.send("muro:event", "muro://transition-state", args);
       return undefined;
     }
-    if (command === "delete_tracks") return {
-      deletedTrackIds: [],
-      failures: (args.trackIds ?? []).map((trackId) => ({
-        trackId,
-        path: "smoke.mp3",
-        message: "Simulated locked file",
-      })),
-    };
+    if (command === "delete_tracks")
+      return {
+        deletedTrackIds: [],
+        failures: (args.trackIds ?? []).map((trackId) => ({
+          trackId,
+          path: "smoke.mp3",
+          message: "Simulated locked file",
+        })),
+      };
     // Gapless preload and crossfade configuration: the renderer pushes these
     // whenever the queue or the transport settings change.
     if (
@@ -803,7 +838,8 @@ app.whenReady().then(async () => {
       command === "playback_set_gapless" ||
       command === "playback_set_crossfade" ||
       command === "playback_set_track_gain"
-    ) return undefined;
+    )
+      return undefined;
     // Full-text search: null tells the renderer the index has no opinion, so it
     // uses its in-memory matcher — which is what the search assertions below
     // exercise. The index itself is covered by search-index-smoke.
@@ -828,28 +864,22 @@ app.whenReady().then(async () => {
         checked: 1,
         unavailable: 0,
         outsideRoot: 0,
-        misplaced: libraryStructureValidationCount === 1
-          ? [{
-              trackId: "smoke-track-0",
-              title: "Smoke Track 000",
-              artist: "Renamed Muro",
-              albumArtist: "",
-              album: "Smoke Album 00",
-              filename: "track-0.wav",
-              currentPath: path.join(
-                libraryRoot,
-                "Muro",
-                "Smoke Album 00",
-                "track-0.wav"
-              ),
-              currentFolder: path.join(libraryRoot, "Muro", "Smoke Album 00"),
-              expectedFolder: path.join(
-                libraryRoot,
-                "Renamed Muro",
-                "Smoke Album 00"
-              ),
-            }]
-          : [],
+        misplaced:
+          libraryStructureValidationCount === 1
+            ? [
+                {
+                  trackId: "smoke-track-0",
+                  title: "Smoke Track 000",
+                  artist: "Renamed Muro",
+                  albumArtist: "",
+                  album: "Smoke Album 00",
+                  filename: "track-0.wav",
+                  currentPath: path.join(libraryRoot, "Muro", "Smoke Album 00", "track-0.wav"),
+                  currentFolder: path.join(libraryRoot, "Muro", "Smoke Album 00"),
+                  expectedFolder: path.join(libraryRoot, "Renamed Muro", "Smoke Album 00"),
+                },
+              ]
+            : [],
       };
     }
     if (command === "repair_library_structure") {
@@ -858,12 +888,7 @@ app.whenReady().then(async () => {
         requested: args.trackIds?.length ?? 0,
         moved: (args.trackIds ?? []).map((trackId) => ({
           trackId,
-          sourcePath: path.join(
-            args.libraryRoot,
-            "Renamed Muro",
-            "Smoke Album 00",
-            "track-0.wav"
-          ),
+          sourcePath: path.join(args.libraryRoot, "Renamed Muro", "Smoke Album 00", "track-0.wav"),
           filename: "track-0.wav",
         })),
         skipped: 0,
@@ -937,11 +962,11 @@ app.whenReady().then(async () => {
     })()`);
     releaseStartupTrackLoad();
     if (
-      !startupLoadingState.visible
-      || startupLoadingState.role !== "status"
-      || startupLoadingState.live !== "polite"
-      || !startupLoadingState.text?.includes("Loading")
-      || !startupLoadingState.spinner
+      !startupLoadingState.visible ||
+      startupLoadingState.role !== "status" ||
+      startupLoadingState.live !== "polite" ||
+      !startupLoadingState.text?.includes("Loading") ||
+      !startupLoadingState.spinner
     ) {
       fail(`Startup loading state failed: ${JSON.stringify(startupLoadingState)}`);
       return;
@@ -1002,9 +1027,9 @@ app.whenReady().then(async () => {
     })()`);
     if (!multiArtistPreflight.exact || !multiArtistPreflight.secondLink) {
       fail(
-        `Multi-artist preflight failed: exact=${multiArtistPreflight.exact}, `
-        + `secondLink=${multiArtistPreflight.secondLink}, `
-        + `debug=${JSON.stringify(multiArtistPreflight.debug)}`,
+        `Multi-artist preflight failed: exact=${multiArtistPreflight.exact}, ` +
+          `secondLink=${multiArtistPreflight.secondLink}, ` +
+          `debug=${JSON.stringify(multiArtistPreflight.debug)}`,
       );
       return;
     }
@@ -1236,7 +1261,7 @@ app.whenReady().then(async () => {
         const itunesExportReady = Boolean(
           itunesExportButton &&
           itunesExportArgs?.destinationPath === ${JSON.stringify(
-            path.join(temporaryDirectory, "Muro Music Library.xml")
+            path.join(temporaryDirectory, "Muro Music Library.xml"),
           )} &&
           itunesExportArgs && !Object.hasOwn(itunesExportArgs, "dbPath") &&
           itunesExportStatus?.textContent?.includes("Exported 250 tracks and 5 playlists")
@@ -4657,9 +4682,7 @@ app.whenReady().then(async () => {
       })()`);
     } catch (error) {
       fail(
-        `Renderer smoke sequence failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`
+        `Renderer smoke sequence failed: ${error instanceof Error ? error.message : String(error)}`,
       );
       return;
     }
@@ -4672,8 +4695,8 @@ app.whenReady().then(async () => {
         if (!result.settingsOrganizationReady) {
           fail(
             `Settings organization regression failed: ${JSON.stringify(
-              result.settingsOrganizationDebug
-            )}`
+              result.settingsOrganizationDebug,
+            )}`,
           );
           return;
         }
@@ -4686,8 +4709,8 @@ app.whenReady().then(async () => {
         if (!result.organizedLibraryExportReady) {
           fail(
             `Organized library export regression failed: ${JSON.stringify(
-              result.organizedLibraryExportDebug
-            )}`
+              result.organizedLibraryExportDebug,
+            )}`,
           );
           return;
         }
@@ -4700,8 +4723,8 @@ app.whenReady().then(async () => {
         if (!result.artistSeparatorReviewReady) {
           fail(
             `Artist separator review regression failed: ${JSON.stringify(
-              result.artistSeparatorReviewDebug
-            )}`
+              result.artistSeparatorReviewDebug,
+            )}`,
           );
           return;
         }
@@ -4731,7 +4754,7 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Bulk playlist actions failed: menu=${result.bulkPlaylistMenuReady}, ` +
-          `move=${result.bulkPlaylistMoveReady}, delete=${result.bulkPlaylistDeleteReady}`
+            `move=${result.bulkPlaylistMoveReady}, delete=${result.bulkPlaylistDeleteReady}`,
         );
         return;
       }
@@ -4744,19 +4767,23 @@ app.whenReady().then(async () => {
         return;
       }
       if (Math.abs(result.headerScrollLeft - result.scrollLeft) > 1) {
-        fail(`Header horizontal scroll was not synchronized: ${result.headerScrollLeft} != ${result.scrollLeft}`);
+        fail(
+          `Header horizontal scroll was not synchronized: ${result.headerScrollLeft} != ${result.scrollLeft}`,
+        );
         return;
       }
       if (Math.abs(result.farRightHeaderScrollLeft - result.farRightScrollLeft) > 1) {
         fail(
           `Header and rows diverged at the far-right edge: ` +
-          `${result.farRightHeaderScrollLeft} != ${result.farRightScrollLeft}`
+            `${result.farRightHeaderScrollLeft} != ${result.farRightScrollLeft}`,
         );
         return;
       }
       const expectedSearchShortcut = result.platform === "darwin" ? "⌘F" : "Ctrl F";
       if (result.searchShortcut !== expectedSearchShortcut) {
-        fail(`Unexpected search shortcut hint: ${result.searchShortcut} != ${expectedSearchShortcut}`);
+        fail(
+          `Unexpected search shortcut hint: ${result.searchShortcut} != ${expectedSearchShortcut}`,
+        );
         return;
       }
       if (!result.libraryHeaderControlsReady) {
@@ -4778,14 +4805,14 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Extended columns failed: available=${result.requestedColumnsAvailable}, ` +
-          `values=${result.requestedColumnValuesReady}, scrollable=${result.columnsMenuScrollable}`
+            `values=${result.requestedColumnValuesReady}, scrollable=${result.columnsMenuScrollable}`,
         );
         return;
       }
       if (!result.sidebarAnimationReady || !result.resizeTransitionDisabled) {
         fail(
           `Sidebar animation failed: animated=${result.sidebarAnimationReady}, ` +
-          `resizeDisabled=${result.resizeTransitionDisabled}`
+            `resizeDisabled=${result.resizeTransitionDisabled}`,
         );
         return;
       }
@@ -4821,18 +4848,18 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Camelot suggestions failed: count=${result.mixSuggestionCount}, ` +
-          `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
-          `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
-          `scores=${result.mixScoresReady}, compact=${result.compactMixSuggestionsReady}, ` +
-          `expanded=${result.mixExpanded}, queued=${result.queuedFromMix}, ` +
-          `queueDebug=${JSON.stringify(result.queuedFromMixDebug)}`
+            `reason=${result.firstMixReason}, filters=${result.mixFiltersReady}, ` +
+            `unknownBpmFallback=${result.unknownBpmFallbackReady}, ` +
+            `scores=${result.mixScoresReady}, compact=${result.compactMixSuggestionsReady}, ` +
+            `expanded=${result.mixExpanded}, queued=${result.queuedFromMix}, ` +
+            `queueDebug=${JSON.stringify(result.queuedFromMixDebug)}`,
         );
         return;
       }
       if (!result.setPlannerReady) {
         fail(
           `DJ set planner failed to generate and save an ordered playlist: ` +
-          `${JSON.stringify(result.setPlannerSaveDebug)}`
+            `${JSON.stringify(result.setPlannerSaveDebug)}`,
         );
         return;
       }
@@ -4850,12 +4877,12 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Adding tracks to playlists failed: dropTarget=${result.playlistDropTargetReady}, ` +
-          `contextMenu=${result.contextAddToPlaylistReady}, ` +
-          `undo=${result.truthfulPlaylistUndoReady}, ` +
-          `duplicates=${result.mixedDuplicateUndoReady} ` +
-          `${JSON.stringify(result.mixedDuplicateUndoDebug)}, drag=${result.dragAddToPlaylistReady}, ` +
-          `native=${result.nativeMultiFileDragReady}, prevented=${result.nativeDragDefaultPrevented}, ` +
-          `paths=${JSON.stringify(nativeDraggedFilePaths)}`
+            `contextMenu=${result.contextAddToPlaylistReady}, ` +
+            `undo=${result.truthfulPlaylistUndoReady}, ` +
+            `duplicates=${result.mixedDuplicateUndoReady} ` +
+            `${JSON.stringify(result.mixedDuplicateUndoDebug)}, drag=${result.dragAddToPlaylistReady}, ` +
+            `native=${result.nativeMultiFileDragReady}, prevented=${result.nativeDragDefaultPrevented}, ` +
+            `paths=${JSON.stringify(nativeDraggedFilePaths)}`,
         );
         return;
       }
@@ -4872,11 +4899,11 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Track row selection UI failed: thumbnail=${result.rowThumbnailReady}, ` +
-          `ratingFits=${result.ratingFitsCell}, ratingSet=${result.ratingSetToThree}, ` +
-          `ratingRed=${result.ratingStarsRedReady}, ` +
-          `ratingCleared=${result.threeStarRatingClearsToZero}, ratingUpdates=${JSON.stringify(ratingUpdates)}, ` +
-          `selectedGrey=${result.selectedRowUsesGreyHighlight}, ` +
-          `playingRed=${result.playingRowUsesRedHighlight}`
+            `ratingFits=${result.ratingFitsCell}, ratingSet=${result.ratingSetToThree}, ` +
+            `ratingRed=${result.ratingStarsRedReady}, ` +
+            `ratingCleared=${result.threeStarRatingClearsToZero}, ratingUpdates=${JSON.stringify(ratingUpdates)}, ` +
+            `selectedGrey=${result.selectedRowUsesGreyHighlight}, ` +
+            `playingRed=${result.playingRowUsesRedHighlight}`,
         );
         return;
       }
@@ -4889,29 +4916,29 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Player metadata layout failed: metadata=${result.playerMetadataReady}, ` +
-          `ratingSet=${result.playerRatingSetToFour}, ratingCleared=${result.playerRatingClearsToZero}, ` +
-          `volumeSpacing=${result.playerVolumeEndSpacingReady}, outputRemoved=${result.queueOutputRemoved}`
+            `ratingSet=${result.playerRatingSetToFour}, ratingCleared=${result.playerRatingClearsToZero}, ` +
+            `volumeSpacing=${result.playerVolumeEndSpacingReady}, outputRemoved=${result.queueOutputRemoved}`,
         );
         return;
       }
       if (!result.albumCardContextMenuReady || !result.albumTrackContextMenuReady) {
         fail(
           `Album context menus failed: card=${result.albumCardContextMenuReady}, ` +
-          `track=${result.albumTrackContextMenuReady}`
+            `track=${result.albumTrackContextMenuReady}`,
         );
         return;
       }
       if (!result.albumMetadataMenuReady || !result.albumMetadataModalReady) {
         fail(
           `Album metadata search failed: menu=${result.albumMetadataMenuReady}, ` +
-          `modal=${result.albumMetadataModalReady}`
+            `modal=${result.albumMetadataModalReady}`,
         );
         return;
       }
       if (!result.tableAlbumMetadataMenuReady || !result.albumListMetadataMenuReady) {
         fail(
           `Album metadata surfaces failed: table=${result.tableAlbumMetadataMenuReady}, ` +
-          `list=${result.albumListMetadataMenuReady}`
+            `list=${result.albumListMetadataMenuReady}`,
         );
         return;
       }
@@ -4925,25 +4952,25 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Playing-next order failed: view=${result.playingNextViewReady}, ` +
-          `reorder=${result.playingNextReorderReady}, crossDrop=${result.crossSectionDropTargetReady}, ` +
-          `queueVisible=${result.priorityQueueVisible}, ` +
-          `queuePriority=${result.queueHasPriority}, resumesNext=${result.playingNextFollowsQueue}, ` +
-          `debug=${result.playingNextDebug}`
+            `reorder=${result.playingNextReorderReady}, crossDrop=${result.crossSectionDropTargetReady}, ` +
+            `queueVisible=${result.priorityQueueVisible}, ` +
+            `queuePriority=${result.queueHasPriority}, resumesNext=${result.playingNextFollowsQueue}, ` +
+            `debug=${result.playingNextDebug}`,
         );
         return;
       }
       if (!result.nowPlayingReturnsToSource) {
         fail(
           "Now-playing link did not return to and reveal the current track's source list " +
-          `(hash=${result.nowPlayingHashOk}, row=${result.nowPlayingRowOk}, ` +
-          `focus=${result.nowPlayingFocusOk}, debug=${result.nowPlayingDebug})`
+            `(hash=${result.nowPlayingHashOk}, row=${result.nowPlayingRowOk}, ` +
+            `focus=${result.nowPlayingFocusOk}, debug=${result.nowPlayingDebug})`,
         );
         return;
       }
       if (!result.metadataEditDidNotReplayReveal || !result.viewReturnDidNotReplayReveal) {
         fail(
           "Handled now-playing reveal replayed after editing or returning to Recently Added: " +
-          result.revealRequestConsumptionDebug
+            result.revealRequestConsumptionDebug,
         );
         return;
       }
@@ -4953,15 +4980,14 @@ app.whenReady().then(async () => {
         !result.directBackdropDismissesEdit
       ) {
         fail(
-          "Edit modal Enter or backdrop interaction failed: " +
-          result.editModalInteractionDebug
+          "Edit modal Enter or backdrop interaction failed: " + result.editModalInteractionDebug,
         );
         return;
       }
       if (!result.showInFinderReady || shownItemPaths.at(-1) !== smokeTracks[0].source_path) {
         fail(
           `Show in Finder failed: item=${result.showInFinderReady}, ` +
-          `revealed=${shownItemPaths.at(-1)}, expected=${smokeTracks[0].source_path}`
+            `revealed=${shownItemPaths.at(-1)}, expected=${smokeTracks[0].source_path}`,
         );
         return;
       }
@@ -4972,7 +4998,7 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Table metadata navigation failed: artist=${result.tableArtistNavigationReady}, ` +
-          `album=${result.tableAlbumNavigationReady}, textOnly=${result.tableTextOnlyNavigationReady}`
+            `album=${result.tableAlbumNavigationReady}, textOnly=${result.tableTextOnlyNavigationReady}`,
         );
         return;
       }
@@ -4985,8 +5011,8 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Manual cover fetch failed: menu=${result.manualCoverMenuReady}, ` +
-          `fetch=${result.manualCoverFetchReady}, copy=${result.manualCoverCopyReady}, ` +
-          `selection=${result.coverAppliedToSelectionReady}, bravePicker=${result.braveCoverPickerReady}`
+            `fetch=${result.manualCoverFetchReady}, copy=${result.manualCoverCopyReady}, ` +
+            `selection=${result.coverAppliedToSelectionReady}, bravePicker=${result.braveCoverPickerReady}`,
         );
         return;
       }
@@ -4999,16 +5025,16 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Metadata search failed: menu=${result.searchMetadataMenuReady}, ` +
-          `acoustid=${result.acoustIdMenuReady}, acoustidModal=${result.acoustIdModalReady}, ` +
-          `modal=${result.metadataSearchReady}, ` +
-          `fields=${result.metadataFieldSelectionReady}`
+            `acoustid=${result.acoustIdMenuReady}, acoustidModal=${result.acoustIdModalReady}, ` +
+            `modal=${result.metadataSearchReady}, ` +
+            `fields=${result.metadataFieldSelectionReady}`,
         );
         return;
       }
       if (!result.artistImageChooserReady || !result.artistImageApplied) {
         fail(
           `Artist picture chooser failed: chooser=${result.artistImageChooserReady}, ` +
-          `applied=${result.artistImageApplied}, saves=${artistImageSaveCount}`
+            `applied=${result.artistImageApplied}, saves=${artistImageSaveCount}`,
         );
         return;
       }
@@ -5019,21 +5045,21 @@ app.whenReady().then(async () => {
       if (!result.pausedAfterSecondSpace || !result.pausedRowUsesGreyHighlight) {
         fail(
           `Pressing Space again did not pause cleanly: ` +
-          `paused=${result.pausedAfterSecondSpace}, greyRow=${result.pausedRowUsesGreyHighlight}`
+            `paused=${result.pausedAfterSecondSpace}, greyRow=${result.pausedRowUsesGreyHighlight}`,
         );
         return;
       }
       if (!result.repeatOneReady) {
         fail(
           "Repeat-one advanced the queue instead of replaying the current track: " +
-          JSON.stringify(result.repeatOneDebug)
+            JSON.stringify(result.repeatOneDebug),
         );
         return;
       }
       if (!result.mediaSessionPlayingReady || !result.mediaSessionPausedReady) {
         fail(
           `Media Session integration failed: ` +
-          `playing=${result.mediaSessionPlayingReady}, paused=${result.mediaSessionPausedReady}`
+            `playing=${result.mediaSessionPlayingReady}, paused=${result.mediaSessionPausedReady}`,
         );
         return;
       }
@@ -5044,7 +5070,7 @@ app.whenReady().then(async () => {
       if (result.mediaNextTrackIndex !== "2" || result.mediaPreviousTrackIndex !== "1") {
         fail(
           `Media next/previous failed: next=${result.mediaNextTrackIndex}, ` +
-          `previous=${result.mediaPreviousTrackIndex}`
+            `previous=${result.mediaPreviousTrackIndex}`,
         );
         return;
       }
@@ -5056,17 +5082,17 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Media controls failed after skip/pause: paused=${result.mediaPausedAfterSkip}, ` +
-          `next=${result.mediaNextAfterPauseIndex}, resumed=${result.mediaResumedAfterPause}, ` +
-          `track=${result.mediaResumeTrackIndex}, button=${result.mediaResumeButtonTitle}, ` +
-          `state=${result.mediaResumePlaybackState}, previous=${result.mediaPreviousAfterResumeIndex}, ` +
-          `notifications=${result.mediaResumeNotifications}`
+            `next=${result.mediaNextAfterPauseIndex}, resumed=${result.mediaResumedAfterPause}, ` +
+            `track=${result.mediaResumeTrackIndex}, button=${result.mediaResumeButtonTitle}, ` +
+            `state=${result.mediaResumePlaybackState}, previous=${result.mediaPreviousAfterResumeIndex}, ` +
+            `notifications=${result.mediaResumeNotifications}`,
         );
         return;
       }
       if (!result.keyColumnColorReady || !result.camelotColorsReady) {
         fail(
           `Camelot colors failed: column=${result.keyColumnColorReady}, ` +
-          `wheel=${result.camelotColorsReady}`
+            `wheel=${result.camelotColorsReady}`,
         );
         return;
       }
@@ -5079,8 +5105,8 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Camelot wheel failed: segments=${result.camelotSegmentCount}, ` +
-          `compatible=${result.compatibleCamelotCount}, current=${result.currentCamelotCode}, ` +
-          `selected=${result.selectedCamelotCode}, filtered=${result.wheelFilteredTo9A}`
+            `compatible=${result.compatibleCamelotCount}, current=${result.currentCamelotCode}, ` +
+            `selected=${result.selectedCamelotCode}, filtered=${result.wheelFilteredTo9A}`,
         );
         return;
       }
@@ -5095,7 +5121,7 @@ app.whenReady().then(async () => {
       if (!result.recentlyAddedViewReady) {
         fail(
           "Recently Added navigation or newest-first ordering failed: " +
-          JSON.stringify(result.recentlyAddedDebug)
+            JSON.stringify(result.recentlyAddedDebug),
         );
         return;
       }
@@ -5108,7 +5134,9 @@ app.whenReady().then(async () => {
         return;
       }
       if (!result.batchCommonValuesReady) {
-        fail("Batch metadata editing did not show common values and mark differing values as mixed");
+        fail(
+          "Batch metadata editing did not show common values and mark differing values as mixed",
+        );
         return;
       }
       if (!result.acoustIdSettingsReady) {
@@ -5146,9 +5174,9 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Album view failed: view=${result.albumsViewReady}, cards=${result.albumCardCount}, ` +
-          `detail=${result.albumDetailReady}, tracks=${result.albumDetailTrackCount}, ` +
-          `cardMenu=${result.albumCardContextMenuReady}, trackMenu=${result.albumTrackContextMenuReady}, ` +
-          `list=${result.albumListReady}`
+            `detail=${result.albumDetailReady}, tracks=${result.albumDetailTrackCount}, ` +
+            `cardMenu=${result.albumCardContextMenuReady}, trackMenu=${result.albumTrackContextMenuReady}, ` +
+            `list=${result.albumListReady}`,
         );
         return;
       }
@@ -5162,9 +5190,9 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Context-menu dismissal failed: opened=${result.contextMenuOpened}, ` +
-          `viewport=${result.contextMenuViewportReady}, ` +
-          `inside=${result.contextMenuStayedOpenInside}, outside=${result.contextMenuClosedOutside}, ` +
-          `showInFinder=${result.showInFinderReady}, revealed=${shownItemPaths.at(-1)}`
+            `viewport=${result.contextMenuViewportReady}, ` +
+            `inside=${result.contextMenuStayedOpenInside}, outside=${result.contextMenuClosedOutside}, ` +
+            `showInFinder=${result.showInFinderReady}, revealed=${shownItemPaths.at(-1)}`,
         );
         return;
       }
@@ -5183,10 +5211,10 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Playlist organization failed: folder=${result.playlistFolderReady}, ` +
-          `nested=${result.nestedPlaylistFolderReady}, controls=${result.playlistTransferControlsReady}, ` +
-          `linked=${result.linkedPlaylistIndicatorReady}, ` +
-          `underCollection=${result.playlistsUnderCollection}, ` +
-          `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}`
+            `nested=${result.nestedPlaylistFolderReady}, controls=${result.playlistTransferControlsReady}, ` +
+            `linked=${result.linkedPlaylistIndicatorReady}, ` +
+            `underCollection=${result.playlistsUnderCollection}, ` +
+            `menu=${result.playlistExportMoveMenuReady}, reorder=${result.playlistReorderReady}`,
         );
         return;
       }
@@ -5202,10 +5230,10 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Collection indexes failed: genres=${result.genreIndexReady}, ` +
-          `genreDrilldown=${result.genreDrilldownReady}, genreHistory=${result.genreHistoryReady}, ` +
-          `labels=${result.labelIndexReady}, labelDrilldown=${result.labelDrilldownReady}, ` +
-          `keys=${result.keyIndexReady}, keyDrilldown=${result.keyDrilldownReady}, ` +
-          `removedLinks=${result.removedCollectionLinksReady}`
+            `genreDrilldown=${result.genreDrilldownReady}, genreHistory=${result.genreHistoryReady}, ` +
+            `labels=${result.labelIndexReady}, labelDrilldown=${result.labelDrilldownReady}, ` +
+            `keys=${result.keyIndexReady}, keyDrilldown=${result.keyDrilldownReady}, ` +
+            `removedLinks=${result.removedCollectionLinksReady}`,
         );
         return;
       }
@@ -5228,10 +5256,10 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Navigation history failed: buttons=${result.historyButtonsReady}, ` +
-          `backEnabled=${result.historyBackEnabled}, back=${result.historyBackReachedAlbumDetail}, ` +
-          `forwardEnabled=${result.historyForwardEnabledAfterBack}, ` +
-          `keyboardForward=${result.keyboardForwardReachedAlbumList}, ` +
-          `mouseBack=${result.mouseBackReachedAlbumDetail}, mouseForward=${result.mouseForwardReachedAlbumList}`
+            `backEnabled=${result.historyBackEnabled}, back=${result.historyBackReachedAlbumDetail}, ` +
+            `forwardEnabled=${result.historyForwardEnabledAfterBack}, ` +
+            `keyboardForward=${result.keyboardForwardReachedAlbumList}, ` +
+            `mouseBack=${result.mouseBackReachedAlbumDetail}, mouseForward=${result.mouseForwardReachedAlbumList}`,
         );
         return;
       }
@@ -5243,22 +5271,26 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Table keyboard navigation failed: focus=${result.tableFocusedAfterClick}, ` +
-          `selected=${result.selectedAfterArrowDown}, selectionBar=${result.selectionBarReady}, ` +
-          `playing=${result.playingAfterSpace}`
+            `selected=${result.selectedAfterArrowDown}, selectionBar=${result.selectionBarReady}, ` +
+            `playing=${result.playingAfterSpace}`,
         );
         return;
       }
       if (!result.albumMetadataLinksReady || !result.albumArtistNavigationReady) {
         fail(
           `Album metadata navigation failed: links=${result.albumMetadataLinksReady}, ` +
-          `artist=${result.albumArtistNavigationReady}`
+            `artist=${result.albumArtistNavigationReady}`,
         );
         return;
       }
-      if (!result.albumArtistProfileReady || !result.artistIndexReady || !result.artistDetailReady) {
+      if (
+        !result.albumArtistProfileReady ||
+        !result.artistIndexReady ||
+        !result.artistDetailReady
+      ) {
         fail(
           `Artist profiles failed: albumLink=${result.albumArtistProfileReady}, ` +
-          `index=${result.artistIndexReady}, detail=${result.artistDetailReady}`
+            `index=${result.artistIndexReady}, detail=${result.artistDetailReady}`,
         );
         return;
       }
@@ -5270,8 +5302,8 @@ app.whenReady().then(async () => {
       ) {
         fail(
           `Smart Crate failed: modal=${result.smartCrateModalReady}, ` +
-          `created=${result.smartCrateCreated}, matches=${result.smartCrateMatchedTracks}, ` +
-          `persisted=${result.persistedSmartCrateCount}`
+            `created=${result.smartCrateCreated}, matches=${result.smartCrateMatchedTracks}, ` +
+            `persisted=${result.persistedSmartCrateCount}`,
         );
         return;
       }

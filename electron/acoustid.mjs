@@ -17,41 +17,37 @@ const serviceErrorMessage = (payload, fallback) => {
   }
   return message || fallback;
 };
-const cleanId = (value) => /^[0-9a-f-]{36}$/i.test(cleanText(value)) ? cleanText(value) : null;
+const cleanId = (value) => (/^[0-9a-f-]{36}$/i.test(cleanText(value)) ? cleanText(value) : null);
 const normalized = (value) => cleanText(value).toLocaleLowerCase();
 export const normalizeAcoustIdArtistCredits = (value) => {
   const source = Array.isArray(value) ? value : [];
   const credits = source.flatMap((raw) => {
     if (!raw || typeof raw !== "object") return [];
     const canonicalName = cleanText(
-      raw?.artist?.name
-      ?? raw.canonicalName
-      ?? raw.canonical_name
-      ?? raw.name,
+      raw?.artist?.name ?? raw.canonicalName ?? raw.canonical_name ?? raw.name,
     );
-    const creditedName = cleanText(
-      raw.creditedName
-      ?? raw.credited_name
-      ?? raw.name,
-    ) || canonicalName;
+    const creditedName =
+      cleanText(raw.creditedName ?? raw.credited_name ?? raw.name) || canonicalName;
     const name = canonicalName || creditedName;
     if (!name) return [];
     const musicBrainzId = cleanId(
-      raw.musicbrainzId
-      ?? raw.musicBrainzId
-      ?? raw.musicbrainz_id
-      ?? raw.artistId
-      ?? raw.artist_id
-      ?? raw.id
-      ?? raw?.artist?.id,
+      raw.musicbrainzId ??
+        raw.musicBrainzId ??
+        raw.musicbrainz_id ??
+        raw.artistId ??
+        raw.artist_id ??
+        raw.id ??
+        raw?.artist?.id,
     );
     const joinValue = raw.joinPhrase ?? raw.join_phrase ?? raw.joinphrase;
-    return [{
-      name,
-      creditedName,
-      joinPhrase: joinValue == null ? null : String(joinValue),
-      ...(musicBrainzId ? { musicBrainzId } : {}),
-    }];
+    return [
+      {
+        name,
+        creditedName,
+        joinPhrase: joinValue == null ? null : String(joinValue),
+        ...(musicBrainzId ? { musicBrainzId } : {}),
+      },
+    ];
   });
 
   return credits.map((credit, index) => ({
@@ -60,17 +56,12 @@ export const normalizeAcoustIdArtistCredits = (value) => {
   }));
 };
 
-export const displayAcoustIdArtistCredits = (credits) => (
+export const displayAcoustIdArtistCredits = (credits) =>
   normalizeAcoustIdArtistCredits(credits)
     .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
-    .join("")
-);
-const embeddedReleaseGroup = (release) => (
-  release?.releasegroup
-  ?? release?.releaseGroup
-  ?? release?.["release-group"]
-  ?? null
-);
+    .join("");
+const embeddedReleaseGroup = (release) =>
+  release?.releasegroup ?? release?.releaseGroup ?? release?.["release-group"] ?? null;
 const firstNonEmptyArtistCredits = (...sources) => {
   for (const source of sources) {
     const credits = normalizeAcoustIdArtistCredits(source);
@@ -92,10 +83,10 @@ export const resolveFpcalcBinary = ({ directories = [], platform = process.platf
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? executableName;
 };
 
-export const fingerprintAudioFile = async (sourcePath, {
-  executablePath = resolveFpcalcBinary(),
-  timeoutMs = 180_000,
-} = {}) => {
+export const fingerprintAudioFile = async (
+  sourcePath,
+  { executablePath = resolveFpcalcBinary(), timeoutMs = 180_000 } = {},
+) => {
   try {
     const { stdout } = await execFileAsync(
       executablePath,
@@ -111,7 +102,9 @@ export const fingerprintAudioFile = async (sourcePath, {
     return { duration, fingerprint };
   } catch (error) {
     const code = error?.code === "ENOENT" ? " The fpcalc runtime is missing." : "";
-    throw new Error(`Could not fingerprint ${path.basename(sourcePath)}.${code} ${error instanceof Error ? error.message : error}`.trim());
+    throw new Error(
+      `Could not fingerprint ${path.basename(sourcePath)}.${code} ${error instanceof Error ? error.message : error}`.trim(),
+    );
   }
 };
 
@@ -130,9 +123,10 @@ const candidateFromRelease = ({ result, recording, release, releaseGroup, track 
     nestedReleaseGroup?.artists,
     releaseGroup?.artists,
   );
-  const albumArtistCredits = releaseArtistCredits.length > 0
-    ? releaseArtistCredits
-    : artistCredits.map((credit) => ({ ...credit }));
+  const albumArtistCredits =
+    releaseArtistCredits.length > 0
+      ? releaseArtistCredits
+      : artistCredits.map((credit) => ({ ...credit }));
   const albumArtist = displayAcoustIdArtistCredits(albumArtistCredits) || artist;
   if (!title && !artist) return null;
   return {
@@ -169,7 +163,7 @@ export const parseAcoustIdCandidates = (payload, track = {}) => {
         for (const release of releases) {
           const nestedReleaseGroupId = cleanId(embeddedReleaseGroup(release)?.id);
           const matchedReleaseGroup = nestedReleaseGroupId
-            ? releaseGroups.find((group) => cleanId(group?.id) === nestedReleaseGroupId) ?? null
+            ? (releaseGroups.find((group) => cleanId(group?.id) === nestedReleaseGroupId) ?? null)
             : null;
           const candidate = candidateFromRelease({
             result,
@@ -182,11 +176,23 @@ export const parseAcoustIdCandidates = (payload, track = {}) => {
         }
       } else if (releaseGroups.length > 0) {
         for (const releaseGroup of releaseGroups) {
-          const candidate = candidateFromRelease({ result, recording, release: null, releaseGroup, track });
+          const candidate = candidateFromRelease({
+            result,
+            recording,
+            release: null,
+            releaseGroup,
+            track,
+          });
           if (candidate) candidates.push(candidate);
         }
       } else {
-        const candidate = candidateFromRelease({ result, recording, release: null, releaseGroup: null, track });
+        const candidate = candidateFromRelease({
+          result,
+          recording,
+          release: null,
+          releaseGroup: null,
+          track,
+        });
         if (candidate) candidates.push(candidate);
       }
     }
@@ -197,11 +203,12 @@ export const parseAcoustIdCandidates = (payload, track = {}) => {
     const existing = unique.get(key);
     if (!existing || candidate.score > existing.score) unique.set(key, candidate);
   }
-  return [...unique.values()].sort((left, right) => (
-    Number(right.albumMatch) - Number(left.albumMatch)
-    || right.score - left.score
-    || left.title.localeCompare(right.title)
-  ));
+  return [...unique.values()].sort(
+    (left, right) =>
+      Number(right.albumMatch) - Number(left.albumMatch) ||
+      right.score - left.score ||
+      left.title.localeCompare(right.title),
+  );
 };
 
 export const createAcoustIdService = ({
@@ -212,8 +219,8 @@ export const createAcoustIdService = ({
   requestIntervalMs = 350,
 } = {}) => {
   const executablePath = resolveFpcalcBinary({ directories: binaryDirectories });
-  const createFingerprint = fingerprintFileImpl
-    ?? ((sourcePath) => fingerprintAudioFile(sourcePath, { executablePath }));
+  const createFingerprint =
+    fingerprintFileImpl ?? ((sourcePath) => fingerprintAudioFile(sourcePath, { executablePath }));
   let requestQueue = Promise.resolve();
   let nextRequestAt = 0;
 
@@ -239,16 +246,21 @@ export const createAcoustIdService = ({
             "User-Agent": "MuroMusic/0.1.2",
           },
           body,
-          signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-            ? AbortSignal.timeout(20_000)
-            : undefined,
+          signal:
+            typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+              ? AbortSignal.timeout(20_000)
+              : undefined,
         });
       } catch (error) {
-        throw new Error(`AcoustID is temporarily unreachable. ${error instanceof Error ? error.message : error}`);
+        throw new Error(
+          `AcoustID is temporarily unreachable. ${error instanceof Error ? error.message : error}`,
+        );
       }
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(serviceErrorMessage(payload, `AcoustID lookup failed (${response.status})`));
+        throw new Error(
+          serviceErrorMessage(payload, `AcoustID lookup failed (${response.status})`),
+        );
       }
       return payload;
     });
@@ -262,29 +274,39 @@ export const createAcoustIdService = ({
       if (!CLIENT_KEY_PATTERN.test(normalizedClientKey)) {
         throw new Error("Add a valid AcoustID application key in Settings first");
       }
-      const track = db.prepare(`
+      const track = db
+        .prepare(
+          `
         SELECT id, source_path, title, artist, album FROM tracks WHERE id = ?
-      `).get(cleanText(trackId));
+      `,
+        )
+        .get(cleanText(trackId));
       if (!track) throw new Error("Track was not found in the library");
-      const libraryRoot = db.prepare(
-        "SELECT value FROM app_metadata WHERE key = 'library_root'",
-      ).get()?.value;
+      const libraryRoot = db
+        .prepare("SELECT value FROM app_metadata WHERE key = 'library_root'")
+        .get()?.value;
       const sourcePath = resolveStoredTrackPath(track.source_path, libraryRoot);
       if (!path.isAbsolute(sourcePath)) {
         throw new Error("Choose the music library folder to identify this track");
       }
       const stat = await fs.promises.stat(sourcePath);
-      const cached = db.prepare(`
+      const cached = db
+        .prepare(
+          `
         SELECT source_mtime_ms, source_size, duration_seconds, fingerprint,
           result_json, looked_up_at
         FROM acoustid_fingerprints WHERE track_id = ?
-      `).get(track.id);
-      const sourceMatches = cached
-        && Number(cached.source_mtime_ms) === stat.mtimeMs
-        && Number(cached.source_size) === stat.size;
-      const cacheFresh = sourceMatches
-        && cached.result_json != null
-        && Number(cached.looked_up_at || 0) * 1_000 >= now() - LOOKUP_CACHE_TTL_MS;
+      `,
+        )
+        .get(track.id);
+      const sourceMatches =
+        cached &&
+        Number(cached.source_mtime_ms) === stat.mtimeMs &&
+        Number(cached.source_size) === stat.size;
+      const cacheFresh =
+        sourceMatches &&
+        cached.result_json != null &&
+        Number(cached.looked_up_at || 0) * 1_000 >= now() - LOOKUP_CACHE_TTL_MS;
       if (!force && cacheFresh) {
         return {
           trackId: track.id,
@@ -294,11 +316,13 @@ export const createAcoustIdService = ({
         };
       }
 
-      const fingerprint = sourceMatches && cached.fingerprint
-        ? { duration: Number(cached.duration_seconds), fingerprint: cached.fingerprint }
-        : await createFingerprint(sourcePath);
+      const fingerprint =
+        sourceMatches && cached.fingerprint
+          ? { duration: Number(cached.duration_seconds), fingerprint: cached.fingerprint }
+          : await createFingerprint(sourcePath);
       const timestamp = Math.floor(now() / 1_000);
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO acoustid_fingerprints(
           track_id, source_mtime_ms, source_size, duration_seconds, fingerprint,
           result_json, looked_up_at, updated_at
@@ -317,15 +341,25 @@ export const createAcoustIdService = ({
               AND acoustid_fingerprints.source_size = excluded.source_size
             THEN acoustid_fingerprints.looked_up_at ELSE NULL END,
           updated_at = excluded.updated_at
-      `).run(track.id, stat.mtimeMs, stat.size, fingerprint.duration, fingerprint.fingerprint, timestamp);
+      `,
+      ).run(
+        track.id,
+        stat.mtimeMs,
+        stat.size,
+        fingerprint.duration,
+        fingerprint.fingerprint,
+        timestamp,
+      );
 
       const payload = await lookup(normalizedClientKey, fingerprint);
       const candidates = parseAcoustIdCandidates(payload, track);
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE acoustid_fingerprints
         SET result_json = ?, looked_up_at = ?, updated_at = ?
         WHERE track_id = ?
-      `).run(JSON.stringify(candidates), timestamp, timestamp, track.id);
+      `,
+      ).run(JSON.stringify(candidates), timestamp, timestamp, track.id);
       return { trackId: track.id, cached: false, duration: fingerprint.duration, candidates };
     },
   };

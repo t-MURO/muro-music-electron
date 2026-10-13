@@ -7,9 +7,7 @@ export const join = async (...parts: string[]): Promise<string> => {
   return parts
     .filter(Boolean)
     .map((part, index) =>
-      index === 0
-        ? part.replace(/[\\/]+$/, "")
-        : part.replace(/^[\\/]+|[\\/]+$/g, "")
+      index === 0 ? part.replace(/[\\/]+$/, "") : part.replace(/^[\\/]+|[\\/]+$/g, ""),
     )
     .join(separator);
 };

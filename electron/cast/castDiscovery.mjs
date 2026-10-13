@@ -24,7 +24,10 @@ const encodeDnsName = (name) => {
   return Buffer.concat(parts);
 };
 
-export const buildPtrQuery = (serviceName = CAST_SERVICE_NAME, { unicastResponse = false } = {}) => {
+export const buildPtrQuery = (
+  serviceName = CAST_SERVICE_NAME,
+  { unicastResponse = false } = {},
+) => {
   const header = Buffer.alloc(12);
   header.writeUInt16BE(0, 0); // transaction id (0 for mDNS)
   header.writeUInt16BE(0, 2); // flags: standard query
@@ -76,7 +79,8 @@ const parseRecordData = (buffer, type, dataOffset, dataLength) => {
   if (type === DNS_TYPE_SRV) {
     if (dataLength < 6) throw new Error("Truncated SRV record");
     const parsedTarget = readDnsName(buffer, dataOffset + 6);
-    if (parsedTarget.next > dataOffset + dataLength) throw new Error("SRV name exceeds record data");
+    if (parsedTarget.next > dataOffset + dataLength)
+      throw new Error("SRV name exceeds record data");
     return {
       priority: buffer.readUInt16BE(dataOffset),
       weight: buffer.readUInt16BE(dataOffset + 2),
@@ -169,12 +173,18 @@ export const collectCastRecords = (records) => {
     if (record.type === DNS_TYPE_PTR && record.name.toLowerCase() === CAST_SERVICE_NAME) {
       serviceFor(record.domain);
     }
-    if (record.type === DNS_TYPE_SRV && record.name.toLowerCase().endsWith(`.${CAST_SERVICE_NAME}`)) {
+    if (
+      record.type === DNS_TYPE_SRV &&
+      record.name.toLowerCase().endsWith(`.${CAST_SERVICE_NAME}`)
+    ) {
       const service = serviceFor(record.name);
       service.port = record.port;
       service.target = record.target;
     }
-    if (record.type === DNS_TYPE_TXT && record.name.toLowerCase().endsWith(`.${CAST_SERVICE_NAME}`)) {
+    if (
+      record.type === DNS_TYPE_TXT &&
+      record.name.toLowerCase().endsWith(`.${CAST_SERVICE_NAME}`)
+    ) {
       const service = serviceFor(record.name);
       service.txt = parseTxtEntries(record.entries);
     }

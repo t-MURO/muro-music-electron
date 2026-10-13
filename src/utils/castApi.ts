@@ -88,14 +88,11 @@ export const castErrorCode = (error: unknown): string | null =>
 // Commands
 // ============================================================================
 
-export const castStartDiscovery = () =>
-  invoke<CastDiscoverySnapshot>("cast_start_discovery");
+export const castStartDiscovery = () => invoke<CastDiscoverySnapshot>("cast_start_discovery");
 
-export const castStopDiscovery = () =>
-  invoke<CastDiscoverySnapshot>("cast_stop_discovery");
+export const castStopDiscovery = () => invoke<CastDiscoverySnapshot>("cast_stop_discovery");
 
-export const castGetDevices = () =>
-  invoke<CastDiscoverySnapshot>("cast_get_devices");
+export const castGetDevices = () => invoke<CastDiscoverySnapshot>("cast_get_devices");
 
 export const castConnect = (deviceId: string) =>
   invoke<CastSessionState>("cast_connect", { deviceId });

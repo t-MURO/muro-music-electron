@@ -68,13 +68,7 @@ type SettingsPanelProps = {
   onUseDefaultLocation: () => void;
 };
 
-type SettingsSectionId =
-  | "general"
-  | "library"
-  | "metadata"
-  | "analysis"
-  | "dj"
-  | "advanced";
+type SettingsSectionId = "general" | "library" | "metadata" | "analysis" | "dj" | "advanced";
 
 type SettingsSection = {
   id: SettingsSectionId;
@@ -96,7 +90,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "library",
     label: "Library & Files",
     description: "Database, export, and maintenance",
-    keywords: "database path files export organize structure validate move artist album separator cache index artwork backup restore history snapshots keyboard shortcuts itunes music xml playlists",
+    keywords:
+      "database path files export organize structure validate move artist album separator cache index artwork backup restore history snapshots keyboard shortcuts itunes music xml playlists",
     icon: Database,
   },
   {
@@ -142,8 +137,31 @@ const themeIcons = {
 };
 
 const KEY_NAMES = [
-  "A", "Am", "Bb", "Bbm", "B", "Bm", "C", "Cm", "Db", "Dbm", "D", "Dm",
-  "Eb", "Ebm", "E", "Em", "F", "Fm", "Gb", "Gbm", "G", "Gm", "Ab", "Abm", "Unknown",
+  "A",
+  "Am",
+  "Bb",
+  "Bbm",
+  "B",
+  "Bm",
+  "C",
+  "Cm",
+  "Db",
+  "Dbm",
+  "D",
+  "Dm",
+  "Eb",
+  "Ebm",
+  "E",
+  "Em",
+  "F",
+  "Fm",
+  "Gb",
+  "Gbm",
+  "G",
+  "Gm",
+  "Ab",
+  "Abm",
+  "Unknown",
 ];
 
 const ANALYSIS_OUTPUT_FIELDS: Array<{
@@ -162,8 +180,7 @@ const CROSSFADE_OPTIONS = [2, 3, 4, 6, 8, 12];
 const inputClass =
   "h-[var(--input-height)] w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] text-[var(--color-text-primary)] transition-all duration-[var(--transition-fast)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:outline-none focus:ring-4 focus:ring-[var(--color-accent-light)]";
 
-const selectClass =
-  `${inputClass} appearance-none pr-10`;
+const selectClass = `${inputClass} appearance-none pr-10`;
 
 const primaryButtonClass =
   "flex h-[var(--button-height)] items-center gap-[var(--spacing-sm)] rounded-[var(--radius-md)] bg-[var(--color-accent)] px-[var(--spacing-md)] text-[var(--font-size-sm)] font-medium text-white transition-all duration-[var(--transition-fast)] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:opacity-50";
@@ -171,13 +188,7 @@ const primaryButtonClass =
 const secondaryButtonClass =
   "flex h-[var(--button-height)] items-center gap-[var(--spacing-sm)] rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-[var(--spacing-md)] text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)] transition-all duration-[var(--transition-fast)] hover:bg-[var(--color-bg-hover)] disabled:cursor-not-allowed disabled:opacity-60";
 
-const SettingsPageHeader = ({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) => (
+const SettingsPageHeader = ({ title, description }: { title: string; description: string }) => (
   <header className="mb-6">
     <h2 className="text-[18px] font-semibold text-[var(--color-text-primary)]">{title}</h2>
     <p className="mt-1 text-[var(--font-size-sm)] text-[var(--color-text-secondary)]">
@@ -197,7 +208,9 @@ const SettingsGroup = ({
   children: ReactNode;
   className?: string;
 }) => (
-  <section className={`rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] ${className}`}>
+  <section
+    className={`rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] ${className}`}
+  >
     <div className="border-b border-[var(--color-border-light)] px-5 py-4">
       <h3 className="text-[var(--font-size-sm)] font-semibold text-[var(--color-text-primary)]">
         {title}
@@ -212,7 +225,13 @@ const SettingsGroup = ({
   </section>
 );
 
-const SelectShell = ({ children, className = "w-64" }: { children: ReactNode; className?: string }) => (
+const SelectShell = ({
+  children,
+  className = "w-64",
+}: {
+  children: ReactNode;
+  className?: string;
+}) => (
   <div className={`relative ${className}`}>
     {children}
     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text-muted)]" />
@@ -318,7 +337,9 @@ const ProviderCard = ({
         )}
         <button
           className="inline-flex items-center gap-1.5 text-[var(--font-size-xs)] font-medium text-[var(--color-accent)] hover:underline"
-          onClick={() => { void openExternal(linkUrl); }}
+          onClick={() => {
+            void openExternal(linkUrl);
+          }}
           type="button"
         >
           {linkLabel} <ExternalLink className="h-3 w-3" />
@@ -357,15 +378,9 @@ export const SettingsPanel = ({
   onUseDefaultLocation,
 }: SettingsPanelProps) => {
   const artistSeparatorExceptions = useSettingsStore((s) => s.artistSeparatorExceptions);
-  const addArtistSeparatorException = useSettingsStore(
-    (s) => s.addArtistSeparatorException,
-  );
-  const removeArtistSeparatorException = useSettingsStore(
-    (s) => s.removeArtistSeparatorException,
-  );
-  const clearArtistSeparatorExceptions = useSettingsStore(
-    (s) => s.clearArtistSeparatorExceptions,
-  );
+  const addArtistSeparatorException = useSettingsStore((s) => s.addArtistSeparatorException);
+  const removeArtistSeparatorException = useSettingsStore((s) => s.removeArtistSeparatorException);
+  const clearArtistSeparatorExceptions = useSettingsStore((s) => s.clearArtistSeparatorExceptions);
   const [artistSeparatorExceptionInput, setArtistSeparatorExceptionInput] = useState("");
   const gaplessEnabled = useSettingsStore((s) => s.gaplessEnabled);
   const crossfadeSeconds = useSettingsStore((s) => s.crossfadeSeconds);
@@ -443,7 +458,7 @@ export const SettingsPanel = ({
     return SETTINGS_SECTIONS.filter((section) =>
       `${section.label} ${section.description} ${section.keywords}`
         .toLocaleLowerCase()
-        .includes(query)
+        .includes(query),
     );
   }, [settingsSearch]);
 
@@ -454,7 +469,7 @@ export const SettingsPanel = ({
     const firstMatch = SETTINGS_SECTIONS.find((section) =>
       `${section.label} ${section.description} ${section.keywords}`
         .toLocaleLowerCase()
-        .includes(query)
+        .includes(query),
     );
     if (firstMatch) setActiveSection(firstMatch.id);
   };
@@ -500,7 +515,9 @@ export const SettingsPanel = ({
                 data-settings-section={section.id}
                 aria-current={isActive ? "page" : undefined}
               >
-                <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"}`} />
+                <Icon
+                  className={`h-4 w-4 shrink-0 ${isActive ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"}`}
+                />
                 <span className="min-w-0">
                   <span className="block truncate text-[12px] font-semibold">{section.label}</span>
                   <span className="mt-0.5 hidden truncate text-[10px] text-[var(--color-text-muted)] md:block">
@@ -553,7 +570,11 @@ export const SettingsPanel = ({
                           aria-pressed={isSelected}
                           type="button"
                         >
-                          <div className="theme-preview" data-theme-preview={item.id} aria-hidden="true">
+                          <div
+                            className="theme-preview"
+                            data-theme-preview={item.id}
+                            aria-hidden="true"
+                          >
                             <div className="theme-preview__sidebar">
                               <span className="theme-preview__logo" />
                               <span className="theme-preview__nav theme-preview__nav--active" />
@@ -561,14 +582,23 @@ export const SettingsPanel = ({
                               <span className="theme-preview__nav" />
                             </div>
                             <div className="theme-preview__content">
-                              <div className="theme-preview__toolbar"><span /><span /></div>
+                              <div className="theme-preview__toolbar">
+                                <span />
+                                <span />
+                              </div>
                               <div className="theme-preview__track">
                                 <span className="theme-preview__cover" />
-                                <span className="theme-preview__lines"><i /><i /></span>
+                                <span className="theme-preview__lines">
+                                  <i />
+                                  <i />
+                                </span>
                               </div>
                               <div className="theme-preview__track">
                                 <span className="theme-preview__cover theme-preview__cover--alt" />
-                                <span className="theme-preview__lines"><i /><i /></span>
+                                <span className="theme-preview__lines">
+                                  <i />
+                                  <i />
+                                </span>
                               </div>
                               <div className="theme-preview__waveform" />
                             </div>
@@ -578,7 +608,9 @@ export const SettingsPanel = ({
                             <span className="truncate text-[11px] font-semibold text-[var(--color-text-primary)]">
                               {themeInfo.label}
                             </span>
-                            <span className={`ml-auto h-1.5 w-1.5 rounded-full ${isSelected ? "bg-[var(--color-accent)]" : "bg-transparent"}`} />
+                            <span
+                              className={`ml-auto h-1.5 w-1.5 rounded-full ${isSelected ? "bg-[var(--color-accent)]" : "bg-transparent"}`}
+                            />
                           </span>
                         </button>
                       );
@@ -597,7 +629,9 @@ export const SettingsPanel = ({
                       value={locale}
                     >
                       {localeOptions.map((option) => (
-                        <option key={option.id} value={option.id}>{option.label}</option>
+                        <option key={option.id} value={option.id}>
+                          {option.label}
+                        </option>
                       ))}
                     </select>
                   </SelectShell>
@@ -615,7 +649,9 @@ export const SettingsPanel = ({
                       <SelectShell>
                         <select
                           className={selectClass}
-                          onChange={(event) => onSeekModeChange(event.target.value as "fast" | "accurate")}
+                          onChange={(event) =>
+                            onSeekModeChange(event.target.value as "fast" | "accurate")
+                          }
                           value={seekMode}
                         >
                           <option value="fast">Fast (Recommended)</option>
@@ -715,9 +751,7 @@ export const SettingsPanel = ({
                             data-replaygain-preamp
                             max={15}
                             min={-15}
-                            onChange={(event) =>
-                              setReplayGainPreampDb(Number(event.target.value))
-                            }
+                            onChange={(event) => setReplayGainPreampDb(Number(event.target.value))}
                             step={0.5}
                             type="range"
                             value={replayGainPreampDb}
@@ -732,9 +766,7 @@ export const SettingsPanel = ({
                             checked={replayGainPreventClipping}
                             className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
                             data-replaygain-clipping
-                            onChange={(event) =>
-                              setReplayGainPreventClipping(event.target.checked)
-                            }
+                            onChange={(event) => setReplayGainPreventClipping(event.target.checked)}
                             type="checkbox"
                           />
                           <span className="min-w-0">
@@ -781,7 +813,9 @@ export const SettingsPanel = ({
                           className={primaryButtonClass}
                           data-loudness-scan
                           disabled={loudnessScan.running}
-                          onClick={() => { void loudnessScan.run(); }}
+                          onClick={() => {
+                            void loudnessScan.run();
+                          }}
                           type="button"
                         >
                           {t("loudness.scan.start")}
@@ -834,10 +868,18 @@ export const SettingsPanel = ({
                         data-database-location
                       />
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button className={secondaryButtonClass} type="button" onClick={onOpenDatabase}>
+                        <button
+                          className={secondaryButtonClass}
+                          type="button"
+                          onClick={onOpenDatabase}
+                        >
                           Open existing database…
                         </button>
-                        <button className={secondaryButtonClass} type="button" onClick={onCreateDatabase}>
+                        <button
+                          className={secondaryButtonClass}
+                          type="button"
+                          onClick={onCreateDatabase}
+                        >
                           Create new database…
                         </button>
                         <button
@@ -898,7 +940,9 @@ export const SettingsPanel = ({
                             <input
                               className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2 text-[11px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
                               value={artistSeparatorExceptionInput}
-                              onChange={(event) => setArtistSeparatorExceptionInput(event.target.value)}
+                              onChange={(event) =>
+                                setArtistSeparatorExceptionInput(event.target.value)
+                              }
                               placeholder="Exact artist name to keep together"
                               aria-label="Artist separator exception"
                               data-artist-separator-exception-input
@@ -913,8 +957,8 @@ export const SettingsPanel = ({
                             </button>
                           </form>
                           <p className="mt-1.5 text-[10px] leading-relaxed text-[var(--color-text-muted)]">
-                            Use an exact exception for one artist name that contains a comma,
-                            &amp;, or “feat.”, such as “Tyler, The Creator”.
+                            Use an exact exception for one artist name that contains a comma, &amp;,
+                            or “feat.”, such as “Tyler, The Creator”.
                           </p>
                           {artistSeparatorExceptions.length > 0 && (
                             <div
@@ -923,7 +967,8 @@ export const SettingsPanel = ({
                             >
                               <div className="flex items-center justify-between gap-3">
                                 <span className="text-[11px] font-semibold text-[var(--color-text-secondary)]">
-                                  Saved exceptions ({artistSeparatorExceptions.length.toLocaleString()})
+                                  Saved exceptions (
+                                  {artistSeparatorExceptions.length.toLocaleString()})
                                 </span>
                                 <button
                                   className="text-[10px] font-medium text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
@@ -940,7 +985,9 @@ export const SettingsPanel = ({
                                     className="flex items-center justify-between gap-2 rounded px-2 py-1 text-[11px] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
                                     key={artist}
                                   >
-                                    <span className="min-w-0 truncate" title={artist}>{artist}</span>
+                                    <span className="min-w-0 truncate" title={artist}>
+                                      {artist}
+                                    </span>
                                     <button
                                       aria-label={`Remove ${artist} from artist separator exceptions`}
                                       className="shrink-0 text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-danger)]"
@@ -979,10 +1026,14 @@ export const SettingsPanel = ({
                               className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]"
                               checked={useExportAsCurrentLibrary}
                               disabled={organizedLibraryExportPending}
-                              onChange={(event) => setUseExportAsCurrentLibrary(event.target.checked)}
+                              onChange={(event) =>
+                                setUseExportAsCurrentLibrary(event.target.checked)
+                              }
                               data-use-export-as-current-library
                             />
-                            <span>Use exported files as the current library after a successful export.</span>
+                            <span>
+                              Use exported files as the current library after a successful export.
+                            </span>
                           </label>
                           <button
                             className={`mt-3 ${primaryButtonClass}`}
@@ -1060,10 +1111,7 @@ export const SettingsPanel = ({
                   </div>
                 </SettingsGroup>
 
-                <SettingsGroup
-                  title={t("watch.section")}
-                  description={t("watch.description")}
-                >
+                <SettingsGroup title={t("watch.section")} description={t("watch.description")}>
                   <div className="space-y-4">
                     <label className="flex items-start gap-3">
                       <input
@@ -1071,9 +1119,7 @@ export const SettingsPanel = ({
                         className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
                         data-watch-folder-toggle
                         disabled={!watched.watchedFolder}
-                        onChange={(event) =>
-                          watched.setWatchFolderEnabled(event.target.checked)
-                        }
+                        onChange={(event) => watched.setWatchFolderEnabled(event.target.checked)}
                         type="checkbox"
                       />
                       <span className="text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
@@ -1128,7 +1174,9 @@ export const SettingsPanel = ({
                       <button
                         className={secondaryButtonClass}
                         data-watch-add-folder
-                        onClick={() => { void watched.addFolder(); }}
+                        onClick={() => {
+                          void watched.addFolder();
+                        }}
                         type="button"
                       >
                         {t(watched.watchedFolder ? "watch.change" : "watch.add")}
@@ -1137,7 +1185,9 @@ export const SettingsPanel = ({
                         className={secondaryButtonClass}
                         data-watch-scan-now
                         disabled={watched.scanning || !watched.watchedFolder}
-                        onClick={() => { void watched.scanNow(); }}
+                        onClick={() => {
+                          void watched.scanNow();
+                        }}
                         type="button"
                       >
                         {watched.scanning ? t("watch.scanning") : t("watch.scan")}
@@ -1163,25 +1213,24 @@ export const SettingsPanel = ({
                           organization.validating ||
                           organization.repairing
                         }
-                        onClick={() => { void onValidateLibraryStructure(); }}
+                        onClick={() => {
+                          void onValidateLibraryStructure();
+                        }}
                         type="button"
                       >
-                        {organization.validating
-                          ? t("structure.running")
-                          : t("structure.run")}
+                        {organization.validating ? t("structure.running") : t("structure.run")}
                       </button>
-                      {organization.lastResult &&
-                        organization.lastResult.misplaced.length > 0 && (
-                          <button
-                            className={secondaryButtonClass}
-                            data-show-misplaced-tracks
-                            onClick={() => setMisplacedTracksOpen(true)}
-                            type="button"
-                          >
-                            {t("structure.showMisplaced")} (
-                            {organization.lastResult.misplaced.length})
-                          </button>
-                        )}
+                      {organization.lastResult && organization.lastResult.misplaced.length > 0 && (
+                        <button
+                          className={secondaryButtonClass}
+                          data-show-misplaced-tracks
+                          onClick={() => setMisplacedTracksOpen(true)}
+                          type="button"
+                        >
+                          {t("structure.showMisplaced")} ({organization.lastResult.misplaced.length}
+                          )
+                        </button>
+                      )}
                       {organization.lastResult && (
                         <span
                           className="text-[var(--font-size-xs)] tabular-nums text-[var(--color-text-secondary)]"
@@ -1192,9 +1241,7 @@ export const SettingsPanel = ({
                                 checked: String(organization.lastResult.checked),
                               })
                             : t("structure.found", {
-                                misplaced: String(
-                                  organization.lastResult.misplaced.length
-                                ),
+                                misplaced: String(organization.lastResult.misplaced.length),
                                 checked: String(organization.lastResult.checked),
                               })}
                         </span>
@@ -1206,10 +1253,8 @@ export const SettingsPanel = ({
                       </p>
                     )}
                     {organization.lastResult &&
-                      (
-                        organization.lastResult.outsideRoot > 0 ||
-                        organization.lastResult.unavailable > 0
-                      ) && (
+                      (organization.lastResult.outsideRoot > 0 ||
+                        organization.lastResult.unavailable > 0) && (
                         <p className="text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-muted)]">
                           {t("structure.skipped", {
                             outside: String(organization.lastResult.outsideRoot),
@@ -1220,16 +1265,15 @@ export const SettingsPanel = ({
                   </div>
                 </SettingsGroup>
 
-                <SettingsGroup
-                  title={t("verify.section")}
-                  description={t("verify.description")}
-                >
+                <SettingsGroup title={t("verify.section")} description={t("verify.description")}>
                   <div className="flex flex-wrap items-center gap-3">
                     <button
                       className={primaryButtonClass}
                       data-verify-library
                       disabled={verification.verifying}
-                      onClick={() => { void verification.verify(); }}
+                      onClick={() => {
+                        void verification.verify();
+                      }}
                       type="button"
                     >
                       {verification.verifying ? t("verify.running") : t("verify.run")}
@@ -1365,7 +1409,11 @@ export const SettingsPanel = ({
                       <SelectShell className="max-w-md">
                         <select
                           value={analysisPerformance}
-                          onChange={(event) => setAnalysisPerformance(event.target.value as "stable" | "fast" | "maximum")}
+                          onChange={(event) =>
+                            setAnalysisPerformance(
+                              event.target.value as "stable" | "fast" | "maximum",
+                            )
+                          }
                           data-analysis-performance
                           className={selectClass}
                         >
@@ -1387,7 +1435,9 @@ export const SettingsPanel = ({
                       <SelectShell className="max-w-md">
                         <select
                           value={analysisNotation}
-                          onChange={(event) => setAnalysisNotation(event.target.value as AnalysisNotationMode)}
+                          onChange={(event) =>
+                            setAnalysisNotation(event.target.value as AnalysisNotationMode)
+                          }
                           data-analysis-notation
                           className={selectClass}
                         >
@@ -1406,11 +1456,16 @@ export const SettingsPanel = ({
                         </summary>
                         <div className="mt-3 grid max-h-64 grid-cols-2 gap-2 overflow-auto pr-2 sm:grid-cols-3 md:grid-cols-4">
                           {KEY_NAMES.map((name, index) => (
-                            <label key={name} className="flex items-center gap-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                            <label
+                              key={name}
+                              className="flex items-center gap-2 text-[var(--font-size-xs)] text-[var(--color-text-secondary)]"
+                            >
                               <span className="w-9 shrink-0">{name}</span>
                               <input
                                 value={analysisCustomCodes[index] ?? ""}
-                                onChange={(event) => setAnalysisCustomCode(index, event.target.value)}
+                                onChange={(event) =>
+                                  setAnalysisCustomCode(index, event.target.value)
+                                }
                                 className="h-8 min-w-0 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-2 text-[var(--font-size-xs)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                               />
                             </label>
@@ -1438,14 +1493,16 @@ export const SettingsPanel = ({
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     {ANALYSIS_OUTPUT_FIELDS.map(({ field, label, bpmOnly }) => (
-                      <label key={field} className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
+                      <label
+                        key={field}
+                        className="text-[var(--font-size-xs)] text-[var(--color-text-secondary)]"
+                      >
                         <span className="mb-1 block">{label}</span>
                         <select
                           value={analysisOutputs[field]}
-                          onChange={(event) => setAnalysisOutput(
-                            field,
-                            event.target.value as AnalysisOutputMode,
-                          )}
+                          onChange={(event) =>
+                            setAnalysisOutput(field, event.target.value as AnalysisOutputMode)
+                          }
                           className="h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-2 text-[var(--font-size-sm)] text-[var(--color-text-primary)] focus:border-[var(--color-accent)] focus:outline-none"
                         >
                           <option value="none">Do not write</option>
@@ -1456,7 +1513,9 @@ export const SettingsPanel = ({
                       </label>
                     ))}
                   </div>
-                  <p className={`mt-4 text-[var(--font-size-xs)] ${writesAudioTags ? "text-amber-500" : "text-[var(--color-text-muted)]"}`}>
+                  <p
+                    className={`mt-4 text-[var(--font-size-xs)] ${writesAudioTags ? "text-amber-500" : "text-[var(--color-text-muted)]"}`}
+                  >
                     {writesAudioTags
                       ? "Enabled outputs modify tags in the source audio files during analysis."
                       : "Source audio files are not modified."}
@@ -1491,7 +1550,10 @@ export const SettingsPanel = ({
                 </p>
 
                 {djMixEnabled && (
-                  <div className="mt-5 space-y-5 border-t border-[var(--color-border)] pt-5" data-dj-mix-settings>
+                  <div
+                    className="mt-5 space-y-5 border-t border-[var(--color-border)] pt-5"
+                    data-dj-mix-settings
+                  >
                     <div>
                       <label className="flex items-center gap-[var(--spacing-sm)] text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
                         <input
@@ -1519,7 +1581,9 @@ export const SettingsPanel = ({
                           data-mix-bars
                         >
                           {MIX_BAR_OPTIONS.map((bars) => (
-                            <option key={bars} value={bars}>{bars} bars</option>
+                            <option key={bars} value={bars}>
+                              {bars} bars
+                            </option>
                           ))}
                         </select>
                       </SelectShell>
@@ -1557,8 +1621,8 @@ export const SettingsPanel = ({
                       Empty song database
                     </h4>
                     <p className="mt-1 text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
-                      Removes all songs from Muro's database for a clean development state.
-                      Source audio files are not deleted.
+                      Removes all songs from Muro's database for a clean development state. Source
+                      audio files are not deleted.
                     </p>
                   </div>
                   <button
@@ -1581,15 +1645,21 @@ export const SettingsPanel = ({
         tracks={verification.missingTracks}
         relinking={verification.relinking}
         onClose={() => setMissingTracksOpen(false)}
-        onRelinkTrack={(trackId) => { void verification.relinkTrack(trackId); }}
-        onAutoRelink={() => { void verification.autoRelink(); }}
+        onRelinkTrack={(trackId) => {
+          void verification.relinkTrack(trackId);
+        }}
+        onAutoRelink={() => {
+          void verification.autoRelink();
+        }}
       />
       <MisplacedTracksModal
         isOpen={misplacedTracksOpen}
         tracks={organization.lastResult?.misplaced ?? []}
         repairing={organization.repairing}
         onClose={() => setMisplacedTracksOpen(false)}
-        onRepair={() => { void onRepairLibraryStructure(); }}
+        onRepair={() => {
+          void onRepairLibraryStructure();
+        }}
       />
     </div>
   );

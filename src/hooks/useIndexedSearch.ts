@@ -66,7 +66,7 @@ export const useIndexedSearch = (query: string, revision = 0) => {
             current,
             { query: activeQuery, sequence, ids },
             activeQueryRef.current,
-          )
+          ),
         );
         if (sequenceRef.current === sequence) setPending(false);
       })();

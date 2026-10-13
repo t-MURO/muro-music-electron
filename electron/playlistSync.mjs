@@ -15,19 +15,27 @@ const WATCH_DEBOUNCE_MS = 400;
 const arraysEqual = (left, right) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
-const playlistTrackIds = (db, playlistId) => db.prepare(`
+const playlistTrackIds = (db, playlistId) =>
+  db
+    .prepare(
+      `
   SELECT track_id
   FROM playlist_tracks
   WHERE playlist_id = ?
   ORDER BY position
-`).all(playlistId).map((row) => String(row.track_id));
+`,
+    )
+    .all(playlistId)
+    .map((row) => String(row.track_id));
 
 const updateSyncError = (db, playlistId, message) => {
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE playlists
     SET source_sync_error = ?, last_synced_at = ?
     WHERE id = ?
-  `).run(message, Math.floor(Date.now() / 1000), playlistId);
+  `,
+  ).run(message, Math.floor(Date.now() / 1000), playlistId);
 };
 
 /**
@@ -44,11 +52,15 @@ export const syncLinkedPlaylist = async ({
   reason = "manual",
 }) => {
   const db = openDatabase(dbPath);
-  const playlist = db.prepare(`
+  const playlist = db
+    .prepare(
+      `
     SELECT id, name, source_path, source_mtime_ms, source_size, source_sync_error
     FROM playlists
     WHERE id = ?
-  `).get(playlistId);
+  `,
+    )
+    .get(playlistId);
   if (!playlist?.source_path) return null;
 
   const sourcePath = resolveLibraryPath(dbPath, playlist.source_path);
@@ -79,8 +91,8 @@ export const syncLinkedPlaylist = async ({
   }
 
   const unchangedOnDisk =
-    Number(playlist.source_mtime_ms) === stats.mtimeMs
-    && Number(playlist.source_size) === stats.size;
+    Number(playlist.source_mtime_ms) === stats.mtimeMs &&
+    Number(playlist.source_size) === stats.size;
   if (!force && unchangedOnDisk && !playlist.source_sync_error) {
     return {
       playlistId: String(playlist.id),
@@ -121,13 +133,14 @@ export const syncLinkedPlaylist = async ({
   }
 
   const trackIdByPath = new Map(
-    db.prepare("SELECT id, source_path FROM tracks").all()
+    db
+      .prepare("SELECT id, source_path FROM tracks")
+      .all()
       .flatMap((row) => {
         try {
-          return [[
-            normalizePlaylistPath(resolveTrackPath(dbPath, row.source_path)),
-            String(row.id),
-          ]];
+          return [
+            [normalizePlaylistPath(resolveTrackPath(dbPath, row.source_path)), String(row.id)],
+          ];
         } catch {
           return [];
         }
@@ -148,10 +161,7 @@ export const syncLinkedPlaylist = async ({
       } catch {
         // Missing references remain unavailable and are retried on the next sync.
       }
-      if (
-        entryStats?.isFile()
-        && AUDIO_EXTENSIONS.has(path.extname(entry).toLocaleLowerCase())
-      ) {
+      if (entryStats?.isFile() && AUDIO_EXTENSIONS.has(path.extname(entry).toLocaleLowerCase())) {
         try {
           const importedTrack = await importAudioFile(dbPath, entry, cacheDir);
           if (importedTrack) {
@@ -159,9 +169,9 @@ export const syncLinkedPlaylist = async ({
             trackId = String(importedTrack.id);
             trackIdByPath.set(normalizedEntry, trackId);
           } else {
-            const existing = db.prepare(
-              "SELECT id FROM tracks WHERE source_path = ?",
-            ).get(storeTrackPath(dbPath, entry));
+            const existing = db
+              .prepare("SELECT id FROM tracks WHERE source_path = ?")
+              .get(storeTrackPath(dbPath, entry));
             trackId = existing ? String(existing.id) : null;
           }
         } catch {
@@ -186,9 +196,10 @@ export const syncLinkedPlaylist = async ({
   const nextSet = new Set(orderedTrackIds);
   const added = orderedTrackIds.filter((trackId) => !previousSet.has(trackId)).length;
   const removed = previousTrackIds.filter((trackId) => !nextSet.has(trackId)).length;
-  const sourceSyncError = skipped > 0
-    ? `${skipped} playlist ${skipped === 1 ? "entry is" : "entries are"} unavailable`
-    : null;
+  const sourceSyncError =
+    skipped > 0
+      ? `${skipped} playlist ${skipped === 1 ? "entry is" : "entries are"} unavailable`
+      : null;
   const errorChanged = (playlist.source_sync_error ?? null) !== sourceSyncError;
   const now = Math.floor(Date.now() / 1000);
 
@@ -203,12 +214,14 @@ export const syncLinkedPlaylist = async ({
         insert.run(playlistId, trackId, position);
       });
     }
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE playlists
       SET source_path = ?, source_mtime_ms = ?, source_size = ?,
         source_sync_error = ?, last_synced_at = ?
       WHERE id = ?
-    `).run(
+    `,
+    ).run(
       storeLibraryPath(dbPath, sourcePath),
       stats.mtimeMs,
       stats.size,
@@ -259,13 +272,9 @@ export const createPlaylistSyncService = ({ cacheDir, emit, getSender }) => {
         reason,
       });
       if (
-        result
-        && reason !== "manual"
-        && (
-          result.changed
-          || result.imported.length > 0
-          || result.errorChanged
-        )
+        result &&
+        reason !== "manual" &&
+        (result.changed || result.imported.length > 0 || result.errorChanged)
       ) {
         notify(result);
       }
@@ -279,17 +288,20 @@ export const createPlaylistSyncService = ({ cacheDir, emit, getSender }) => {
     if (!currentDbPath) return;
     const existing = pendingTimers.get(playlistId);
     if (existing) clearTimeout(existing);
-    pendingTimers.set(playlistId, setTimeout(() => {
-      pendingTimers.delete(playlistId);
-      void enqueueSync({
-        dbPath: currentDbPath,
-        playlistId,
-        force: true,
-        reason: "watch",
-      }).catch((error) => {
-        console.warn(`Playlist sync failed for ${playlistId}:`, error);
-      });
-    }, WATCH_DEBOUNCE_MS));
+    pendingTimers.set(
+      playlistId,
+      setTimeout(() => {
+        pendingTimers.delete(playlistId);
+        void enqueueSync({
+          dbPath: currentDbPath,
+          playlistId,
+          force: true,
+          reason: "watch",
+        }).catch((error) => {
+          console.warn(`Playlist sync failed for ${playlistId}:`, error);
+        });
+      }, WATCH_DEBOUNCE_MS),
+    );
   };
 
   const watchDirectory = (directory) => {
@@ -301,9 +313,7 @@ export const createPlaylistSyncService = ({ cacheDir, emit, getSender }) => {
           directoryIds.forEach(scheduleSync);
           return;
         }
-        const changedPath = normalizePlaylistPath(
-          path.resolve(directory, filename.toString()),
-        );
+        const changedPath = normalizePlaylistPath(path.resolve(directory, filename.toString()));
         (sourceIdsByPath.get(changedPath) ?? []).forEach(scheduleSync);
       });
       watcher.on("error", (error) => {
@@ -322,11 +332,15 @@ export const createPlaylistSyncService = ({ cacheDir, emit, getSender }) => {
   };
 
   const rebuildWatchers = (dbPath) => {
-    const rows = openDatabase(dbPath).prepare(`
+    const rows = openDatabase(dbPath)
+      .prepare(
+        `
       SELECT id, source_path
       FROM playlists
       WHERE source_path IS NOT NULL AND source_path <> ''
-    `).all();
+    `,
+      )
+      .all();
     const nextByPath = new Map();
     const nextByDirectory = new Map();
     for (const row of rows) {

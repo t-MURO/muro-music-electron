@@ -5,9 +5,9 @@ import {
   backfillSearchText,
   clearTracks,
   loadPlaylists,
-    loadRecentlyPlayed,
-    loadTracks,
-    migrateArtistCredits,
+  loadRecentlyPlayed,
+  loadTracks,
+  migrateArtistCredits,
   importedTrackToTrack,
   scanTechnicalMetadata,
 } from "../utils";
@@ -68,14 +68,16 @@ export const useLibraryInit = () => {
             sourceSyncError: playlist.source_sync_error ?? undefined,
             lastSyncedAt: playlist.last_synced_at ?? undefined,
             trackIds: playlist.track_ids,
-          }))
+          })),
         );
-        setPlaylistFolders(playlistSnapshot.folders.map((folder) => ({
-          id: folder.id,
-          name: folder.name,
-          parentId: folder.parent_id ?? undefined,
-          sortOrder: folder.sort_order,
-        })));
+        setPlaylistFolders(
+          playlistSnapshot.folders.map((folder) => ({
+            id: folder.id,
+            name: folder.name,
+            parentId: folder.parent_id ?? undefined,
+            sortOrder: folder.sort_order,
+          })),
+        );
         setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
       } catch (error) {
         if (isMounted) notify.error(t("toast.library.loadFailed"));
@@ -84,7 +86,7 @@ export const useLibraryInit = () => {
       }
     };
 
-    loadLibrary();
+    void loadLibrary();
     return () => {
       isMounted = false;
     };
@@ -102,7 +104,7 @@ export const useLibraryInit = () => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = (delayMs: number) => {
-      if (!cancelled) timer = setTimeout(run, delayMs);
+      if (!cancelled) timer = setTimeout(() => void run(), delayMs);
     };
     const run = async () => {
       try {
@@ -111,12 +113,14 @@ export const useLibraryInit = () => {
         // Patch only the scanned rows; reloading the whole library per batch
         // made a large first scan cost one full load every 25 tracks.
         if (result.tracks?.length) {
-          patchTracks(result.tracks.map((track) => ({
-            id: track.id,
-            sampleRate: track.sample_rate_hz ?? undefined,
-            bitDepth: track.bit_depth ?? undefined,
-            fileSize: track.file_size_bytes ?? undefined,
-          })));
+          patchTracks(
+            result.tracks.map((track) => ({
+              id: track.id,
+              sampleRate: track.sample_rate_hz ?? undefined,
+              bitDepth: track.bit_depth ?? undefined,
+              fileSize: track.file_size_bytes ?? undefined,
+            })),
+          );
         }
         if (result.remaining > 0) schedule(CONTINUE_TECHNICAL_SCAN_DELAY_MS);
       } catch (error) {
@@ -138,8 +142,7 @@ export const useLibraryInit = () => {
       const updated = await backfillSearchText();
       setBackfillStatus(`Updated ${updated} tracks.`);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Backfill failed.";
+      const message = error instanceof Error ? error.message : "Backfill failed.";
       setBackfillStatus(message);
     } finally {
       setBackfillPending(false);
@@ -157,8 +160,7 @@ export const useLibraryInit = () => {
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Cover art cache rebuild failed.";
+      const message = error instanceof Error ? error.message : "Cover art cache rebuild failed.";
       setCoverArtBackfillStatus(message);
     } finally {
       setCoverArtBackfillPending(false);
@@ -171,13 +173,10 @@ export const useLibraryInit = () => {
       return;
     }
 
-    const shouldClear = await confirm(
-      t("settings.dev.clearSongs.confirm.body"),
-      {
-        title: t("settings.dev.clearSongs.confirm.title"),
-        kind: "warning",
-      }
-    );
+    const shouldClear = await confirm(t("settings.dev.clearSongs.confirm.body"), {
+      title: t("settings.dev.clearSongs.confirm.title"),
+      kind: "warning",
+    });
     if (!shouldClear) {
       return;
     }

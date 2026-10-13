@@ -60,9 +60,7 @@ export const listPlaylistFilesForImport = async (directoryPath) => {
     files,
     entries,
     folders: [...folderPaths]
-      .sort((a, b) => (
-        a.split("/").length - b.split("/").length || a.localeCompare(b)
-      ))
+      .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b))
       .map((folderPath) => {
         const segments = folderPath.split("/");
         return {
@@ -75,7 +73,9 @@ export const listPlaylistFilesForImport = async (directoryPath) => {
 };
 
 const resolvePlaylistEntry = (entry, playlistDirectory) => {
-  const trimmed = String(entry || "").trim().replace(/^"|"$/g, "");
+  const trimmed = String(entry || "")
+    .trim()
+    .replace(/^"|"$/g, "");
   if (!trimmed) return null;
   try {
     if (/^file:/i.test(trimmed)) return fileURLToPath(trimmed);
@@ -93,37 +93,28 @@ export const parsePlaylistFile = async (filePath) => {
     throw new Error("Unsupported playlist format");
   }
   const buffer = await fs.promises.readFile(resolvedPath);
-  const text = buffer[0] === 0xff && buffer[1] === 0xfe
-    ? buffer.subarray(2).toString("utf16le")
-    : buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const text =
+    buffer[0] === 0xff && buffer[1] === 0xfe
+      ? buffer.subarray(2).toString("utf16le")
+      : buffer.toString("utf8").replace(/^\uFEFF/, "");
   const extension = path.extname(resolvedPath).toLocaleLowerCase();
   const lines = text.split(/\r?\n/);
-  const rawEntries = extension === ".pls"
-    ? lines
-        .map((line) => /^File\d+=(.*)$/i.exec(line.trim())?.[1])
-        .filter(Boolean)
-    : lines
-        .map((line) => line.trim())
-        .filter((line) => line && !line.startsWith("#"));
+  const rawEntries =
+    extension === ".pls"
+      ? lines.map((line) => /^File\d+=(.*)$/i.exec(line.trim())?.[1]).filter(Boolean)
+      : lines.map((line) => line.trim()).filter((line) => line && !line.startsWith("#"));
   const directory = path.dirname(resolvedPath);
-  return rawEntries
-    .map((entry) => resolvePlaylistEntry(entry, directory))
-    .filter(Boolean);
+  return rawEntries.map((entry) => resolvePlaylistEntry(entry, directory)).filter(Boolean);
 };
 
 export const readPlaylistForImport = async (dbPath, filePath) => {
   const resolvedPath = path.resolve(String(filePath || ""));
   const entries = await parsePlaylistFile(resolvedPath);
-  const rows = openDatabase(dbPath)
-    .prepare("SELECT id, source_path FROM tracks")
-    .all();
+  const rows = openDatabase(dbPath).prepare("SELECT id, source_path FROM tracks").all();
   const trackIdByPath = new Map(
     rows.flatMap((row) => {
       try {
-        return [[
-          normalizePlaylistPath(resolveTrackPath(dbPath, row.source_path)),
-          String(row.id),
-        ]];
+        return [[normalizePlaylistPath(resolveTrackPath(dbPath, row.source_path)), String(row.id)]];
       } catch {
         return [];
       }

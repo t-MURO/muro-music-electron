@@ -77,7 +77,7 @@ export const useTrackEdit = () => {
         );
       }
     },
-    [setTracks, setInboxTracks]
+    [setTracks, setInboxTracks],
   );
 
   const handleFetchCoverArt = useCallback(
@@ -93,10 +93,13 @@ export const useTrackEdit = () => {
         providerError = error;
       }
 
-      const candidates = await searchAlbumCoverImages({
-        album: metadata.album ?? "",
-        artist: metadata.artist ?? "",
-      }, braveSearchApiKey);
+      const candidates = await searchAlbumCoverImages(
+        {
+          album: metadata.album ?? "",
+          artist: metadata.artist ?? "",
+        },
+        braveSearchApiKey,
+      );
       if (candidates.length > 0) return { candidates };
 
       if (providerError) throw providerError;
@@ -112,11 +115,12 @@ export const useTrackEdit = () => {
   );
 
   const handleSearchMetadata = useCallback(
-    (track: Track): Promise<MetadataSearchCandidate[]> => searchTrackMetadata({
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
-    }),
+    (track: Track): Promise<MetadataSearchCandidate[]> =>
+      searchTrackMetadata({
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+      }),
     [],
   );
 

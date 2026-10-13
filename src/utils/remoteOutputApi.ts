@@ -55,8 +55,7 @@ export type RemoteErrorPayload = CastErrorPayload;
 export type RemoteLoadedTrack = CastLoadedTrack;
 export type RemoteLoadTrackPayload = CastLoadTrackPayload;
 
-export const remoteDeviceKey = (protocol: RemoteOutputProtocol, id: string) =>
-  `${protocol}:${id}`;
+export const remoteDeviceKey = (protocol: RemoteOutputProtocol, id: string) => `${protocol}:${id}`;
 
 export const toRemoteDevices = (
   protocol: RemoteOutputProtocol,
@@ -72,7 +71,8 @@ export const toRemoteDevices = (
 
 // Stable CAST_*/DLNA_* codes ride in error messages across IPC.
 export const remoteErrorCode = (error: unknown): string | null =>
-  /((?:CAST|DLNA)_[A-Z_]+)/.exec(error instanceof Error ? error.message : String(error))?.[1] ?? null;
+  /((?:CAST|DLNA)_[A-Z_]+)/.exec(error instanceof Error ? error.message : String(error))?.[1] ??
+  null;
 
 export const isRemoteUnsupportedFormat = (error: unknown): boolean => {
   const code = remoteErrorCode(error);
@@ -93,10 +93,8 @@ export const remoteConnect = (device: RemoteDevice) =>
 export const remoteDisconnect = (protocol: RemoteOutputProtocol) =>
   protocol === "cast" ? castDisconnect() : dlnaDisconnect();
 
-export const remoteLoadTrack = (
-  protocol: RemoteOutputProtocol,
-  payload: RemoteLoadTrackPayload,
-) => (protocol === "cast" ? castLoadTrack(payload) : dlnaLoadTrack(payload));
+export const remoteLoadTrack = (protocol: RemoteOutputProtocol, payload: RemoteLoadTrackPayload) =>
+  protocol === "cast" ? castLoadTrack(payload) : dlnaLoadTrack(payload);
 
 export const remotePlay = (protocol: RemoteOutputProtocol) =>
   protocol === "cast" ? castPlay() : dlnaPlay();

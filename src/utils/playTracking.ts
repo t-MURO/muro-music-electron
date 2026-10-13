@@ -10,11 +10,10 @@ export const PLAY_RESTART_WINDOW_SECONDS = 2;
 export const RECORD_PLAY_RETRY_DELAYS_MS = [2_000, 10_000, 30_000] as const;
 
 export const isPlayRestart = (previousPosition: number, position: number): boolean =>
-  position < PLAY_RESTART_WINDOW_SECONDS
-  && previousPosition - position >= PLAY_RESTART_WINDOW_SECONDS;
+  position < PLAY_RESTART_WINDOW_SECONDS &&
+  previousPosition - position >= PLAY_RESTART_WINDOW_SECONDS;
 
-const wait = (delayMs: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+const wait = (delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs));
 
 export const retryWithBackoff = async <T>(
   task: () => Promise<T>,
@@ -44,9 +43,8 @@ export const revertRecordedPlay = (track: Track, play: RecordedPlay): Track => {
   return {
     ...track,
     playCount: Math.max(0, (track.playCount || 0) - 1),
-    lastPlayedAt: track.lastPlayedAt === play.playedAt
-      ? play.previousLastPlayedAt
-      : track.lastPlayedAt,
+    lastPlayedAt:
+      track.lastPlayedAt === play.playedAt ? play.previousLastPlayedAt : track.lastPlayedAt,
   };
 };
 

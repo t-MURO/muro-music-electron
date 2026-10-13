@@ -122,7 +122,13 @@ import {
   findArtistSeparatorCandidates,
   type ArtistSeparatorCandidate,
 } from "./lib/metadata/artistSeparators";
-import type { ArtistImageCandidate, ColumnConfig, SmartCrate, Track, TrackMetadataUpdates } from "./types";
+import type {
+  ArtistImageCandidate,
+  ColumnConfig,
+  SmartCrate,
+  Track,
+  TrackMetadataUpdates,
+} from "./types";
 import { shortcutDisplay } from "./keyboard/shortcuts";
 
 type ArtistSeparatorReviewSession = {
@@ -135,27 +141,33 @@ type ArtistSeparatorReviewSession = {
 const SettingsPanel = lazy(() =>
   import("./components/layout/SettingsPanel").then((module) => ({
     default: module.SettingsPanel,
-  })));
+  })),
+);
 const ListeningStatisticsView = lazy(() =>
   import("./components/library/ListeningStatisticsView").then((module) => ({
     default: module.ListeningStatisticsView,
-  })));
+  })),
+);
 const AlbumsView = lazy(() =>
   import("./components/library/AlbumsView").then((module) => ({
     default: module.AlbumsView,
-  })));
+  })),
+);
 const AnalysisModal = lazy(() =>
   import("./components/ui/AnalysisModal").then((module) => ({
     default: module.AnalysisModal,
-  })));
+  })),
+);
 const EditTrackModal = lazy(() =>
   import("./components/ui/EditTrackModal").then((module) => ({
     default: module.EditTrackModal,
-  })));
+  })),
+);
 const SmartCrateModal = lazy(() =>
   import("./components/ui/SmartCrateModal").then((module) => ({
     default: module.SmartCrateModal,
-  })));
+  })),
+);
 
 const shuffleTrackIds = (trackIds: string[]) => {
   const shuffled = [...trackIds];
@@ -311,9 +323,9 @@ function App() {
 
   const navigateToView = useCallback(
     (newView: LibraryView) => {
-      navigate(getPathForView(newView));
+      void navigate(getPathForView(newView));
     },
-    [navigate]
+    [navigate],
   );
   const handleOpenPlaylist = useCallback(
     (playlistId: string) => {
@@ -327,55 +339,56 @@ function App() {
   }, [activateSortView, view]);
 
   const isAlbumsView = view === "collection:albums";
-  const collectionParams = useMemo(
-    () => new URLSearchParams(location.search),
-    [location.search],
-  );
+  const collectionParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const collectionFilterValue = collectionMatch?.params.facet
     ? collectionParams.get("value")
     : null;
-  const collectionFilterArtistId = view === "collection:artists"
-    ? collectionParams.get("artistId")
-    : null;
+  const collectionFilterArtistId =
+    view === "collection:artists" ? collectionParams.get("artistId") : null;
   const hasArtistFilter = Boolean(collectionFilterValue || collectionFilterArtistId);
   const isArtistIndex = view === "collection:artists" && !hasArtistFilter;
   const isArtistDetail = view === "collection:artists" && hasArtistFilter;
-  const collectionIndexFacet = !collectionFilterValue && view === "collection:genres"
-    ? "genres"
-    : !collectionFilterValue && view === "collection:labels"
-      ? "labels"
-      : !collectionFilterValue && view === "collection:keys"
-        ? "keys"
-        : null;
-  const selectedAlbumId = isAlbumsView
-    ? collectionParams.get("album")
-    : null;
+  const collectionIndexFacet =
+    !collectionFilterValue && view === "collection:genres"
+      ? "genres"
+      : !collectionFilterValue && view === "collection:labels"
+        ? "labels"
+        : !collectionFilterValue && view === "collection:keys"
+          ? "keys"
+          : null;
+  const selectedAlbumId = isAlbumsView ? collectionParams.get("album") : null;
 
   const handleSelectAlbum = useCallback(
     (albumId: string | null) => {
       if (!albumId) {
-        navigate("/collection/albums");
+        void navigate("/collection/albums");
         return;
       }
       const params = new URLSearchParams();
       params.set("album", albumId);
-      navigate({ pathname: "/collection/albums", search: params.toString() });
+      void navigate({ pathname: "/collection/albums", search: params.toString() });
     },
-    [navigate]
+    [navigate],
   );
 
-  const handleOpenCollectionValue = useCallback((facet: "genres" | "labels" | "keys", value: string) => {
-    const params = new URLSearchParams();
-    params.set("value", value);
-    navigate({ pathname: `/collection/${facet}`, search: params.toString() });
-  }, [navigate]);
+  const handleOpenCollectionValue = useCallback(
+    (facet: "genres" | "labels" | "keys", value: string) => {
+      const params = new URLSearchParams();
+      params.set("value", value);
+      void navigate({ pathname: `/collection/${facet}`, search: params.toString() });
+    },
+    [navigate],
+  );
 
-  const handleOpenArtist = useCallback((artist: ArtistTarget) => {
-    const params = new URLSearchParams();
-    params.set("value", artist.name);
-    params.set("artistId", artistIdentityKey(artist));
-    navigate({ pathname: "/collection/artists", search: params.toString() });
-  }, [navigate]);
+  const handleOpenArtist = useCallback(
+    (artist: ArtistTarget) => {
+      const params = new URLSearchParams();
+      params.set("value", artist.name);
+      params.set("artistId", artistIdentityKey(artist));
+      void navigate({ pathname: "/collection/artists", search: params.toString() });
+    },
+    [navigate],
+  );
 
   const handleOpenArtistSource = useCallback((url: string) => {
     void openExternal(url).catch(() => notify.error(t("toast.artist.openSourceFailed")));
@@ -395,7 +408,7 @@ function App() {
       pathname.startsWith("/playlists/") ||
       pathname.startsWith("/smart-crates/");
     if (!isKnownPath) {
-      navigate("/", { replace: true });
+      void navigate("/", { replace: true });
     }
   }, [location, navigate]);
 
@@ -433,10 +446,10 @@ function App() {
   );
   const albumResults = useMemo(
     () => filterAlbumsBySearch(albums, searchQuery),
-    [albums, searchQuery]
+    [albums, searchQuery],
   );
   const collectionIndexItems = useMemo(
-    () => collectionIndexFacet ? buildCollectionIndexItems(tracks, collectionIndexFacet) : [],
+    () => (collectionIndexFacet ? buildCollectionIndexItems(tracks, collectionIndexFacet) : []),
     [collectionIndexFacet, tracks],
   );
   const collectionIndexResults = useMemo(() => {
@@ -453,18 +466,15 @@ function App() {
       : artistIndexItems;
   }, [artistIndexItems, searchQuery]);
   const selectedArtistTarget = isArtistDetail
-    ? artistIndexItems.find(
-        (artist) => artistIdentityKey(artist) === collectionFilterArtistId,
-      )
-      ?? artistIndexItems.find(
-        (artist) => artist.name.trim().toLocaleLowerCase()
-          === collectionFilterValue?.trim().toLocaleLowerCase(),
-      )
+    ? (artistIndexItems.find((artist) => artistIdentityKey(artist) === collectionFilterArtistId) ??
+      artistIndexItems.find(
+        (artist) =>
+          artist.name.trim().toLocaleLowerCase() ===
+          collectionFilterValue?.trim().toLocaleLowerCase(),
+      ))
     : undefined;
   const selectedArtistName = isArtistDetail
-    ? collectionFilterValue?.trim()
-      || selectedArtistTarget?.name
-      || ""
+    ? collectionFilterValue?.trim() || selectedArtistTarget?.name || ""
     : "";
   const selectedArtistNameKey = normalizeArtistProfileKey(selectedArtistName);
   const selectedArtistKey = selectedArtistTarget
@@ -474,74 +484,80 @@ function App() {
     artistProfiles[selectedArtistKey] ?? artistProfiles[selectedArtistNameKey];
   const selectedArtistProfileLoading = artistProfileLoadingKeys.has(selectedArtistKey);
   const selectedArtistProfileError = artistProfileErrors[selectedArtistKey];
-  const selectedArtistAlbumCount = useMemo(() => new Set(
-    displayedTracks
-      .map((track) => track.album.trim().toLocaleLowerCase())
-      .filter(Boolean),
-  ).size, [displayedTracks]);
+  const selectedArtistAlbumCount = useMemo(
+    () =>
+      new Set(
+        displayedTracks.map((track) => track.album.trim().toLocaleLowerCase()).filter(Boolean),
+      ).size,
+    [displayedTracks],
+  );
 
   useEffect(() => {
     if (!selectedArtistName) return;
     void loadArtistProfile(selectedArtistName, false, selectedArtistTarget);
   }, [loadArtistProfile, selectedArtistName, selectedArtistTarget]);
 
-  const handleSearchArtistImages = useCallback((artistName: string) => (
-    searchArtistProfileImages(artistName, artistImageTarget ?? undefined)
-  ), [artistImageTarget, searchArtistProfileImages]);
-
-  const handleSelectArtistImage = useCallback(async (
-    artistName: string,
-    candidate: ArtistImageCandidate,
-  ) => {
-    await selectArtistProfileImage(artistName, candidate, artistImageTarget ?? undefined);
-    notify.success(t("toast.artist.imageUpdated"));
-  }, [artistImageTarget, selectArtistProfileImage]);
-
-  const handleMergeArtists = useCallback(async (
-    source: ArtistIndexItem,
-    target: ArtistIndexItem,
-  ) => {
-    const result = await mergeArtists({
-      artistId: source.artistId,
-      musicBrainzId: source.musicBrainzId,
-    }, {
-      artistId: target.artistId,
-      musicBrainzId: target.musicBrainzId,
-    });
-    const [snapshot, recentlyPlayedSnapshot] = await Promise.all([
-      loadTracks(libraryRoot, artistSeparatorExceptions),
-      loadRecentlyPlayed(50, libraryRoot, artistSeparatorExceptions),
-    ]);
-    setTracks(snapshot.library.map(importedTrackToTrack));
-    setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
-    setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
-
-    const params = new URLSearchParams();
-    params.set("value", result.name);
-    params.set(
-      "artistId",
-      result.musicBrainzId
-        ? `mbid:${result.musicBrainzId.toLocaleLowerCase()}`
-        : result.artistId,
-    );
-    navigate({ pathname: "/collection/artists", search: params.toString() }, { replace: true });
-    notify.success(t("toast.artist.merged", {
-      source: source.name,
-      target: result.name,
-    }));
-  }, [
-    artistSeparatorExceptions,
-    libraryRoot,
-    navigate,
-    setInboxTracks,
-    setRecentlyPlayedTracks,
-    setTracks,
-  ]);
-
-  const filterFormats = useMemo(
-    () => listTrackFormats(displayedTracks),
-    [displayedTracks],
+  const handleSearchArtistImages = useCallback(
+    (artistName: string) => searchArtistProfileImages(artistName, artistImageTarget ?? undefined),
+    [artistImageTarget, searchArtistProfileImages],
   );
+
+  const handleSelectArtistImage = useCallback(
+    async (artistName: string, candidate: ArtistImageCandidate) => {
+      await selectArtistProfileImage(artistName, candidate, artistImageTarget ?? undefined);
+      notify.success(t("toast.artist.imageUpdated"));
+    },
+    [artistImageTarget, selectArtistProfileImage],
+  );
+
+  const handleMergeArtists = useCallback(
+    async (source: ArtistIndexItem, target: ArtistIndexItem) => {
+      const result = await mergeArtists(
+        {
+          artistId: source.artistId,
+          musicBrainzId: source.musicBrainzId,
+        },
+        {
+          artistId: target.artistId,
+          musicBrainzId: target.musicBrainzId,
+        },
+      );
+      const [snapshot, recentlyPlayedSnapshot] = await Promise.all([
+        loadTracks(libraryRoot, artistSeparatorExceptions),
+        loadRecentlyPlayed(50, libraryRoot, artistSeparatorExceptions),
+      ]);
+      setTracks(snapshot.library.map(importedTrackToTrack));
+      setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
+      setRecentlyPlayedTracks(recentlyPlayedSnapshot.map(importedTrackToTrack));
+
+      const params = new URLSearchParams();
+      params.set("value", result.name);
+      params.set(
+        "artistId",
+        result.musicBrainzId ? `mbid:${result.musicBrainzId.toLocaleLowerCase()}` : result.artistId,
+      );
+      void navigate(
+        { pathname: "/collection/artists", search: params.toString() },
+        { replace: true },
+      );
+      notify.success(
+        t("toast.artist.merged", {
+          source: source.name,
+          target: result.name,
+        }),
+      );
+    },
+    [
+      artistSeparatorExceptions,
+      libraryRoot,
+      navigate,
+      setInboxTracks,
+      setRecentlyPlayedTracks,
+      setTracks,
+    ],
+  );
+
+  const filterFormats = useMemo(() => listTrackFormats(displayedTracks), [displayedTracks]);
   const activeTrackFilterCount = useMemo(
     () => countAdvancedTrackFilters(advancedTrackFilters),
     [advancedTrackFilters],
@@ -596,29 +612,22 @@ function App() {
     (key: ColumnConfig["key"]) => {
       toggleSort(key);
     },
-    [toggleSort]
+    [toggleSort],
   );
 
   // Keep selection behavior aligned with the current sorted track order.
   const handleRowSelect = useCallback(
-    (
-      index: number,
-      id: string,
-      options?: { isMetaKey?: boolean; isShiftKey?: boolean }
-    ) => {
+    (index: number, id: string, options?: { isMetaKey?: boolean; isShiftKey?: boolean }) => {
       selectTrack(index, id, options, sortedTracks);
     },
-    [selectTrack, sortedTracks]
+    [selectTrack, sortedTracks],
   );
 
   // Columns
-  const {
-    autoFitColumn,
-    columns,
-    handleColumnResize,
-    reorderColumns,
-    toggleColumn,
-  } = useColumns({ tracks, playlistMembershipByTrackId });
+  const { autoFitColumn, columns, handleColumnResize, reorderColumns, toggleColumn } = useColumns({
+    tracks,
+    playlistMembershipByTrackId,
+  });
 
   // Context menus
   const { closeMenu, menuPosition, menuSelection, openForRow, openForSelection, openMenuId } =
@@ -699,38 +708,38 @@ function App() {
     pause,
     seek,
     setVolume,
-  } = useAudioPlayback({ onTrackEnd: handleTrackEnd, onMediaControl: handleMediaControl, seekMode });
+  } = useAudioPlayback({
+    onTrackEnd: handleTrackEnd,
+    onMediaControl: handleMediaControl,
+    seekMode,
+  });
 
   const playbackContextIdsRef = useRef<string[]>([]);
   const playbackSourceRef = useRef<{ path: string; trackIds: string[] } | null>(null);
-  const playTrackById = useCallback((trackId: string, contextTracks?: Track[], sourcePath?: string) => {
-    const track = allTracksById.get(trackId);
-    if (!track) return;
-    if (contextTracks && contextTracks.some((item) => item.id === trackId)) {
-      const trackIds = contextTracks.map((item) => item.id);
-      const currentIndex = trackIds.indexOf(trackId);
-      playbackContextIdsRef.current = trackIds;
-      playbackSourceRef.current = {
-        path: sourcePath ?? `${location.pathname}${location.search}`,
-        trackIds,
-      };
-      setPlayingNext(
-        shuffleEnabled
-          ? shuffleTrackIds(trackIds.filter((id) => id !== trackId))
-          : trackIds.slice(currentIndex + 1)
-      );
-    } else {
-      setPlayingNext([]);
-    }
-    void playTrack(track);
-  }, [
-    allTracksById,
-    location.pathname,
-    location.search,
-    playTrack,
-    setPlayingNext,
-    shuffleEnabled,
-  ]);
+  const playTrackById = useCallback(
+    (trackId: string, contextTracks?: Track[], sourcePath?: string) => {
+      const track = allTracksById.get(trackId);
+      if (!track) return;
+      if (contextTracks && contextTracks.some((item) => item.id === trackId)) {
+        const trackIds = contextTracks.map((item) => item.id);
+        const currentIndex = trackIds.indexOf(trackId);
+        playbackContextIdsRef.current = trackIds;
+        playbackSourceRef.current = {
+          path: sourcePath ?? `${location.pathname}${location.search}`,
+          trackIds,
+        };
+        setPlayingNext(
+          shuffleEnabled
+            ? shuffleTrackIds(trackIds.filter((id) => id !== trackId))
+            : trackIds.slice(currentIndex + 1),
+        );
+      } else {
+        setPlayingNext([]);
+      }
+      void playTrack(track);
+    },
+    [allTracksById, location.pathname, location.search, playTrack, setPlayingNext, shuffleEnabled],
+  );
 
   const handleOpenCurrentTrack = useCallback(() => {
     const activeTrackId = usePlaybackStore.getState().currentTrack?.id;
@@ -746,33 +755,34 @@ function App() {
       targetPath: destination,
     });
     if (`${location.pathname}${location.search}` !== destination) {
-      navigate(destination);
+      void navigate(destination);
     }
   }, [location.pathname, location.search, navigate, setSearchQuery]);
 
   const handleRevealTrackHandled = useCallback((requestId: number) => {
-    setRevealTrackRequest((current) => (
-      current?.requestId === requestId ? null : current
-    ));
+    setRevealTrackRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
 
-  const activeRevealTrackRequest = revealTrackRequest?.targetPath
-    === `${location.pathname}${location.search}`
-    ? revealTrackRequest
-    : null;
+  const activeRevealTrackRequest =
+    revealTrackRequest?.targetPath === `${location.pathname}${location.search}`
+      ? revealTrackRequest
+      : null;
 
-  const getPlaybackContext = useCallback((activeTrackId: string | null) => {
-    const remembered = playbackContextIdsRef.current
-      .map((id) => allTracksById.get(id))
-      .filter((track): track is Track => track !== undefined);
-    if (activeTrackId && remembered.some((track) => track.id === activeTrackId)) {
-      return remembered;
-    }
-    if (activeTrackId && sortedTracks.some((track) => track.id === activeTrackId)) {
-      return sortedTracks;
-    }
-    return allTracks;
-  }, [allTracks, allTracksById, sortedTracks]);
+  const getPlaybackContext = useCallback(
+    (activeTrackId: string | null) => {
+      const remembered = playbackContextIdsRef.current
+        .map((id) => allTracksById.get(id))
+        .filter((track): track is Track => track !== undefined);
+      if (activeTrackId && remembered.some((track) => track.id === activeTrackId)) {
+        return remembered;
+      }
+      if (activeTrackId && sortedTracks.some((track) => track.id === activeTrackId)) {
+        return sortedTracks;
+      }
+      return allTracks;
+    },
+    [allTracks, allTracksById, sortedTracks],
+  );
   const previousShuffleEnabledRef = useRef(shuffleEnabled);
   useEffect(() => {
     if (previousShuffleEnabledRef.current === shuffleEnabled) return;
@@ -784,7 +794,7 @@ function App() {
     setPlayingNext(
       shuffleEnabled
         ? shuffleTrackIds(playbackListIds.filter((id) => id !== activeTrackId))
-        : playbackListIds.slice(currentIndex + 1)
+        : playbackListIds.slice(currentIndex + 1),
     );
   }, [getPlaybackContext, setPlayingNext, shuffleEnabled]);
 
@@ -919,13 +929,16 @@ function App() {
     (trackId: string) => {
       playTrackById(trackId, sortedTracks.length > 0 ? sortedTracks : allTracks);
     },
-    [allTracks, playTrackById, sortedTracks]
+    [allTracks, playTrackById, sortedTracks],
   );
 
-  const handlePlayAlbumTrack = useCallback((trackId: string) => {
-    const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
-    playTrackById(trackId, album?.tracks);
-  }, [albums, playTrackById]);
+  const handlePlayAlbumTrack = useCallback(
+    (trackId: string) => {
+      const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
+      playTrackById(trackId, album?.tracks);
+    },
+    [albums, playTrackById],
+  );
 
   const handlePlayAlbum = useCallback(
     (trackIds: string[]) => {
@@ -939,15 +952,11 @@ function App() {
         : undefined;
       playTrackById(trackIds[0], contextTracks, sourcePath);
     },
-    [albums, allTracksById, playTrackById]
+    [albums, allTracksById, playTrackById],
   );
 
-  const {
-    importPlaylist,
-    importPlaylistFolder,
-    exportPlaylist,
-    exportAllPlaylists,
-  } = usePlaylistTransfer();
+  const { importPlaylist, importPlaylistFolder, exportPlaylist, exportAllPlaylists } =
+    usePlaylistTransfer();
 
   // Track ratings
   const { handleRatingChange } = useTrackRatings();
@@ -997,7 +1006,7 @@ function App() {
 
   const playlistMenuTarget = useMemo(
     () => playlists.find((playlist) => playlist.id === playlistMenuId) ?? null,
-    [playlists, playlistMenuId]
+    [playlists, playlistMenuId],
   );
   const playlistMenuSelection = useMemo(() => {
     if (!playlistMenuId) return [];
@@ -1060,13 +1069,8 @@ function App() {
     currentView: view,
     navigateToView,
   });
-  const {
-    createFolder,
-    renameFolder,
-    removeFolder,
-    movePlaylists,
-    reorderPlaylist,
-  } = usePlaylistFolders();
+  const { createFolder, renameFolder, removeFolder, movePlaylists, reorderPlaylist } =
+    usePlaylistFolders();
 
   // Inbox operations
   const { handleAcceptTracks, handleRejectTracks } = useInboxOperations();
@@ -1086,9 +1090,10 @@ function App() {
   // the live library: any library update (a background import, or a save of the
   // analysis results) would otherwise hand the modal a new array and restart
   // the running job. A new request (new analysisTrackIds) starts a new job.
-  const resolveAnalysisTracks = (trackIds: string[]) => trackIds
-    .map((id) => allTracksById.get(id))
-    .filter((track): track is Track => track !== undefined);
+  const resolveAnalysisTracks = (trackIds: string[]) =>
+    trackIds
+      .map((id) => allTracksById.get(id))
+      .filter((track): track is Track => track !== undefined);
   const [analysisJob, setAnalysisJob] = useState(() => ({
     id: 0,
     trackIds: analysisTrackIds,
@@ -1118,42 +1123,51 @@ function App() {
   } = useTrackEdit();
 
   const metadataSearchTrack = metadataSearchTrackId
-    ? allTracksById.get(metadataSearchTrackId) ?? null
+    ? (allTracksById.get(metadataSearchTrackId) ?? null)
     : null;
 
-  const handleApplySearchedMetadata = useCallback(async (updates: TrackMetadataUpdates) => {
-    if (!metadataSearchTrackId) return;
-    await handleSaveMetadata([metadataSearchTrackId], updates);
-  }, [handleSaveMetadata, metadataSearchTrackId]);
+  const handleApplySearchedMetadata = useCallback(
+    async (updates: TrackMetadataUpdates) => {
+      if (!metadataSearchTrackId) return;
+      await handleSaveMetadata([metadataSearchTrackId], updates);
+    },
+    [handleSaveMetadata, metadataSearchTrackId],
+  );
 
   const albumMetadataTracks = useMemo(
-    () => albumMetadataTrackIds.map((id) => allTracksById.get(id)).filter((track): track is Track => Boolean(track)),
+    () =>
+      albumMetadataTrackIds
+        .map((id) => allTracksById.get(id))
+        .filter((track): track is Track => Boolean(track)),
     [albumMetadataTrackIds, allTracksById],
   );
 
-  const handleApplyAlbumMetadata = useCallback(async (
-    entries: Array<{ trackId: string; updates: TrackMetadataUpdates }>,
-  ) => {
-    for (const entry of entries) {
-      await handleSaveMetadata([entry.trackId], entry.updates);
-    }
-  }, [handleSaveMetadata]);
+  const handleApplyAlbumMetadata = useCallback(
+    async (entries: Array<{ trackId: string; updates: TrackMetadataUpdates }>) => {
+      for (const entry of entries) {
+        await handleSaveMetadata([entry.trackId], entry.updates);
+      }
+    },
+    [handleSaveMetadata],
+  );
 
   const acoustIdTracks = useMemo(
-    () => acoustIdTrackIds
-      .map((id) => allTracksById.get(id))
-      .filter((track): track is Track => Boolean(track)),
+    () =>
+      acoustIdTrackIds
+        .map((id) => allTracksById.get(id))
+        .filter((track): track is Track => Boolean(track)),
     [acoustIdTrackIds, allTracksById],
   );
 
-  const handleApplyAcoustIdMatches = useCallback(async (
-    entries: Array<{ trackId: string; updates: TrackMetadataUpdates }>,
-  ) => {
-    for (const entry of entries) {
-      await handleSaveMetadata([entry.trackId], entry.updates);
-    }
-    notify.success(t("toast.acoustid.applied", { count: String(entries.length) }));
-  }, [handleSaveMetadata]);
+  const handleApplyAcoustIdMatches = useCallback(
+    async (entries: Array<{ trackId: string; updates: TrackMetadataUpdates }>) => {
+      for (const entry of entries) {
+        await handleSaveMetadata([entry.trackId], entry.updates);
+      }
+      notify.success(t("toast.acoustid.applied", { count: String(entries.length) }));
+    },
+    [handleSaveMetadata],
+  );
 
   const handleOpenArtistSeparatorReview = useCallback(() => {
     if (artistSeparatorCandidates.length === 0) {
@@ -1168,59 +1182,65 @@ function App() {
     });
   }, [artistSeparatorCandidates]);
 
-  const advanceArtistSeparatorReview = useCallback((didApply: boolean) => {
-    if (!artistSeparatorReview) return;
-    const candidates = artistSeparatorReview.candidates.slice(1);
-    const applied = artistSeparatorReview.applied + (didApply ? 1 : 0);
-    if (candidates.length === 0) {
-      setArtistSeparatorReview(null);
-      notify.success(
-        `Artist separator review complete: updated ${applied} of ${artistSeparatorReview.total} ${
-          artistSeparatorReview.total === 1 ? "field" : "fields"
-        }`,
-      );
-      return;
-    }
-    setArtistSeparatorReview({
-      ...artistSeparatorReview,
-      candidates,
-      completed: artistSeparatorReview.completed + 1,
-      applied,
-    });
-  }, [artistSeparatorReview]);
+  const advanceArtistSeparatorReview = useCallback(
+    (didApply: boolean) => {
+      if (!artistSeparatorReview) return;
+      const candidates = artistSeparatorReview.candidates.slice(1);
+      const applied = artistSeparatorReview.applied + (didApply ? 1 : 0);
+      if (candidates.length === 0) {
+        setArtistSeparatorReview(null);
+        notify.success(
+          `Artist separator review complete: updated ${applied} of ${artistSeparatorReview.total} ${
+            artistSeparatorReview.total === 1 ? "field" : "fields"
+          }`,
+        );
+        return;
+      }
+      setArtistSeparatorReview({
+        ...artistSeparatorReview,
+        candidates,
+        completed: artistSeparatorReview.completed + 1,
+        applied,
+      });
+    },
+    [artistSeparatorReview],
+  );
 
-  const handleApplyArtistSeparator = useCallback(async (value: string) => {
-    const candidate = artistSeparatorReview?.candidates[0];
-    if (!candidate || artistSeparatorApplying) return;
-    setArtistSeparatorApplying(true);
-    try {
-      const credits = reviewedCommaSeparatedArtistCredits(value);
-      const reviewedValue = formatArtistCredits(credits);
-      await handleSaveMetadata(
-        [candidate.trackId],
-        candidate.field === "albumArtist"
-          ? {
-              albumArtist: reviewedValue,
-              artists: reviewedValue,
-              albumArtistCredits: credits,
-            }
-          : {
-              artist: reviewedValue,
-              artistCredits: credits,
-            },
-      );
-      advanceArtistSeparatorReview(true);
-    } catch (error) {
-      notify.error(error instanceof Error ? error.message : "Could not update the artist");
-    } finally {
-      setArtistSeparatorApplying(false);
-    }
-  }, [
-    advanceArtistSeparatorReview,
-    artistSeparatorApplying,
-    artistSeparatorReview,
-    handleSaveMetadata,
-  ]);
+  const handleApplyArtistSeparator = useCallback(
+    async (value: string) => {
+      const candidate = artistSeparatorReview?.candidates[0];
+      if (!candidate || artistSeparatorApplying) return;
+      setArtistSeparatorApplying(true);
+      try {
+        const credits = reviewedCommaSeparatedArtistCredits(value);
+        const reviewedValue = formatArtistCredits(credits);
+        await handleSaveMetadata(
+          [candidate.trackId],
+          candidate.field === "albumArtist"
+            ? {
+                albumArtist: reviewedValue,
+                artists: reviewedValue,
+                albumArtistCredits: credits,
+              }
+            : {
+                artist: reviewedValue,
+                artistCredits: credits,
+              },
+        );
+        advanceArtistSeparatorReview(true);
+      } catch (error) {
+        notify.error(error instanceof Error ? error.message : "Could not update the artist");
+      } finally {
+        setArtistSeparatorApplying(false);
+      }
+    },
+    [
+      advanceArtistSeparatorReview,
+      artistSeparatorApplying,
+      artistSeparatorReview,
+      handleSaveMetadata,
+    ],
+  );
 
   const handleSaveArtistSeparatorException = useCallback(() => {
     const review = artistSeparatorReview;
@@ -1244,11 +1264,7 @@ function App() {
       });
     }
     notify.success(`Saved “${candidate.originalValue}” as an artist separator exception`);
-  }, [
-    addArtistSeparatorException,
-    artistSeparatorApplying,
-    artistSeparatorReview,
-  ]);
+  }, [addArtistSeparatorException, artistSeparatorApplying, artistSeparatorReview]);
 
   const {
     pendingTracks: pendingDeleteTracks,
@@ -1261,12 +1277,8 @@ function App() {
   } = useTrackDeletion();
 
   // Panel state
-  const {
-    sidebarCollapsed,
-    sidebarWidth,
-    startSidebarResize,
-    toggleSidebarCollapsed,
-  } = useSidebarPanel();
+  const { sidebarCollapsed, sidebarWidth, startSidebarResize, toggleSidebarCollapsed } =
+    useSidebarPanel();
   const {
     queuePanelCollapsed,
     queuePanelExpanded,
@@ -1288,23 +1300,23 @@ function App() {
     handleBackfillCoverArt,
     handleClearSongs,
   } = useLibraryInit();
-  const {
-    organizedLibraryExportPending,
-    organizedLibraryExportStatus,
-    exportOrganizedLibrary,
-  } = useOrganizedLibraryExport();
+  const { organizedLibraryExportPending, organizedLibraryExportStatus, exportOrganizedLibrary } =
+    useOrganizedLibraryExport();
 
-  const handleExportOrganizedLibrary = useCallback(async (useAsCurrentLibrary: boolean) => {
-    try {
-      const result = await open({ directory: true });
-      const destinationPath = Array.isArray(result) ? result[0] : result;
-      if (destinationPath) {
-        await exportOrganizedLibrary(destinationPath, useAsCurrentLibrary);
+  const handleExportOrganizedLibrary = useCallback(
+    async (useAsCurrentLibrary: boolean) => {
+      try {
+        const result = await open({ directory: true });
+        const destinationPath = Array.isArray(result) ? result[0] : result;
+        if (destinationPath) {
+          await exportOrganizedLibrary(destinationPath, useAsCurrentLibrary);
+        }
+      } catch {
+        notify.error(t("toast.picker.libraryExportFailed"));
       }
-    } catch {
-      notify.error(t("toast.picker.libraryExportFailed"));
-    }
-  }, [exportOrganizedLibrary]);
+    },
+    [exportOrganizedLibrary],
+  );
 
   const editingSmartCrate = useMemo(
     () => smartCrates.find((crate) => crate.id === editingSmartCrateId) ?? null,
@@ -1326,37 +1338,43 @@ function App() {
     setEditingSmartCrateId(null);
   }, []);
 
-  const handleSaveSmartCrate = useCallback((crate: Omit<SmartCrate, "id">) => {
-    if (editingSmartCrateId) {
-      updateSmartCrate(editingSmartCrateId, crate);
-      notify.success(t("toast.smartCrate.updated", { name: crate.name }));
-      navigateToView(`smartCrate:${editingSmartCrateId}` as LibraryView);
-    } else {
-      const id = createSmartCrate(crate);
-      notify.success(t("toast.smartCrate.created", { name: crate.name }));
-      navigateToView(`smartCrate:${id}` as LibraryView);
-    }
-    handleCloseSmartCrateModal();
-  }, [
-    createSmartCrate,
-    editingSmartCrateId,
-    handleCloseSmartCrateModal,
-    navigateToView,
-    updateSmartCrate,
-  ]);
+  const handleSaveSmartCrate = useCallback(
+    (crate: Omit<SmartCrate, "id">) => {
+      if (editingSmartCrateId) {
+        updateSmartCrate(editingSmartCrateId, crate);
+        notify.success(t("toast.smartCrate.updated", { name: crate.name }));
+        navigateToView(`smartCrate:${editingSmartCrateId}` as LibraryView);
+      } else {
+        const id = createSmartCrate(crate);
+        notify.success(t("toast.smartCrate.created", { name: crate.name }));
+        navigateToView(`smartCrate:${id}` as LibraryView);
+      }
+      handleCloseSmartCrateModal();
+    },
+    [
+      createSmartCrate,
+      editingSmartCrateId,
+      handleCloseSmartCrateModal,
+      navigateToView,
+      updateSmartCrate,
+    ],
+  );
 
-  const handleDeleteSmartCrate = useCallback(async (id: string) => {
-    const crate = smartCrates.find((item) => item.id === id);
-    if (!crate) return;
-    const shouldDelete = await confirm(
-      `Delete the Smart Crate “${crate.name}”? Your tracks will stay in the library.`,
-      { title: "Delete Smart Crate", kind: "warning" },
-    );
-    if (!shouldDelete) return;
-    deleteSmartCrate(id);
-    if (view === `smartCrate:${id}`) navigateToView("library");
-    notify.success(t("toast.smartCrate.deleted", { name: crate.name }));
-  }, [deleteSmartCrate, navigateToView, smartCrates, view]);
+  const handleDeleteSmartCrate = useCallback(
+    async (id: string) => {
+      const crate = smartCrates.find((item) => item.id === id);
+      if (!crate) return;
+      const shouldDelete = await confirm(
+        `Delete the Smart Crate “${crate.name}”? Your tracks will stay in the library.`,
+        { title: "Delete Smart Crate", kind: "warning" },
+      );
+      if (!shouldDelete) return;
+      deleteSmartCrate(id);
+      if (view === `smartCrate:${id}`) navigateToView("library");
+      notify.success(t("toast.smartCrate.deleted", { name: crate.name }));
+    },
+    [deleteSmartCrate, navigateToView, smartCrates, view],
+  );
 
   useEffect(() => {
     const available = new Set(playlists.map((playlist) => playlist.id));
@@ -1371,26 +1389,26 @@ function App() {
     setSelectedPlaylistIds(new Set(ids));
   }, []);
 
-  const handleOpenPlaylistMenu = useCallback((
-    event: React.MouseEvent<HTMLButtonElement>,
-    playlistId: string,
-  ) => {
-    setFolderMenu(null);
-    setSelectedPlaylistIds((current) => current.has(playlistId)
-      ? current
-      : new Set([playlistId]));
-    openPlaylistMenu(event, playlistId);
-  }, [openPlaylistMenu]);
+  const handleOpenPlaylistMenu = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>, playlistId: string) => {
+      setFolderMenu(null);
+      setSelectedPlaylistIds((current) =>
+        current.has(playlistId) ? current : new Set([playlistId]),
+      );
+      openPlaylistMenu(event, playlistId);
+    },
+    [openPlaylistMenu],
+  );
 
-  const handleOpenFolderMenu = useCallback((
-    event: React.MouseEvent<HTMLButtonElement>,
-    folderId: string,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    closePlaylistMenu();
-    setFolderMenu({ folderId, position: { x: event.clientX, y: event.clientY } });
-  }, [closePlaylistMenu]);
+  const handleOpenFolderMenu = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>, folderId: string) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closePlaylistMenu();
+      setFolderMenu({ folderId, position: { x: event.clientX, y: event.clientY } });
+    },
+    [closePlaylistMenu],
+  );
 
   const handleImportPlaylistFile = useCallback(async () => {
     try {
@@ -1439,13 +1457,12 @@ function App() {
     setIsFolderCreateOpen(true);
   }, []);
 
-  const handlePlaylistReorder = useCallback((
-    sourceId: string,
-    targetId: string,
-    placement: "before" | "after",
-  ) => {
-    void reorderPlaylist(sourceId, targetId, placement);
-  }, [reorderPlaylist]);
+  const handlePlaylistReorder = useCallback(
+    (sourceId: string, targetId: string, placement: "before" | "after") => {
+      void reorderPlaylist(sourceId, targetId, placement);
+    },
+    [reorderPlaylist],
+  );
 
   // Sidebar props
   const sidebarProps = useSidebarData({
@@ -1468,7 +1485,9 @@ function App() {
     onPlaylistFolderContextMenu: handleOpenFolderMenu,
     onCreateSmartCrate: handleCreateSmartCrate,
     onEditSmartCrate: handleEditSmartCrate,
-    onDeleteSmartCrate: (id) => { void handleDeleteSmartCrate(id); },
+    onDeleteSmartCrate: (id) => {
+      void handleDeleteSmartCrate(id);
+    },
   });
 
   // Native drag
@@ -1482,29 +1501,30 @@ function App() {
 
   // Context menu handlers
   const handleRowContextMenu = useCallback(
-    (
-      event: React.MouseEvent,
-      trackId: string,
-      index: number,
-      isSelected: boolean
-    ) => {
+    (event: React.MouseEvent, trackId: string, index: number, isSelected: boolean) => {
       openForRow(event, trackId, index, isSelected);
     },
-    [openForRow]
+    [openForRow],
   );
 
   const handleAlbumTracksContextMenu = useCallback(
     (event: React.MouseEvent, trackIds: string[]) => {
       openForSelection(event, trackIds);
     },
-    [openForSelection]
+    [openForSelection],
   );
 
-  const handleTableAlbumContextMenu = useCallback((event: React.MouseEvent, trackId: string) => {
-    const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
-    if (!album) return;
-    openForSelection(event, album.tracks.map((track) => track.id));
-  }, [albums, openForSelection]);
+  const handleTableAlbumContextMenu = useCallback(
+    (event: React.MouseEvent, trackId: string) => {
+      const album = albums.find((item) => item.tracks.some((track) => track.id === trackId));
+      if (!album) return;
+      openForSelection(
+        event,
+        album.tracks.map((track) => track.id),
+      );
+    },
+    [albums, openForSelection],
+  );
 
   const handleShowBpmKey = useCallback(() => {
     openAnalysisModal(menuSelection);
@@ -1512,9 +1532,10 @@ function App() {
   }, [menuSelection, closeMenu, openAnalysisModal]);
 
   const handleShowInFinder = useCallback(() => {
-    const track = menuSelection.length === 1
-      ? allTracks.find((item) => item.id === menuSelection[0])
-      : undefined;
+    const track =
+      menuSelection.length === 1
+        ? allTracks.find((item) => item.id === menuSelection[0])
+        : undefined;
     closeMenu();
     if (!track) return;
     void showItemInFolder(track.sourcePath).catch(() => {
@@ -1534,15 +1555,21 @@ function App() {
   }, [closeMenu, menuSelection]);
 
   const menuAlbumTracks = useMemo(
-    () => menuSelection.map((id) => allTracksById.get(id)).filter((track): track is Track => Boolean(track)),
+    () =>
+      menuSelection
+        .map((id) => allTracksById.get(id))
+        .filter((track): track is Track => Boolean(track)),
     [allTracksById, menuSelection],
   );
-  const menuIsSingleAlbum = menuAlbumTracks.length > 1
-    && menuAlbumTracks.every((track) => (
-      track.album.trim().toLocaleLowerCase() === menuAlbumTracks[0].album.trim().toLocaleLowerCase()
-      && albumArtistDisplay(track).trim().toLocaleLowerCase()
-        === albumArtistDisplay(menuAlbumTracks[0]).trim().toLocaleLowerCase()
-    ));
+  const menuIsSingleAlbum =
+    menuAlbumTracks.length > 1 &&
+    menuAlbumTracks.every(
+      (track) =>
+        track.album.trim().toLocaleLowerCase() ===
+          menuAlbumTracks[0].album.trim().toLocaleLowerCase() &&
+        albumArtistDisplay(track).trim().toLocaleLowerCase() ===
+          albumArtistDisplay(menuAlbumTracks[0]).trim().toLocaleLowerCase(),
+    );
 
   const handleOpenAlbumMetadataSearch = useCallback(() => {
     const trackIds = menuIsSingleAlbum ? menuAlbumTracks.map((track) => track.id) : [];
@@ -1623,7 +1650,7 @@ function App() {
     (rating: number) => {
       for (const trackId of shortcutTargetIds()) handleRatingChange(trackId, rating);
     },
-    [handleRatingChange, shortcutTargetIds]
+    [handleRatingChange, shortcutTargetIds],
   );
 
   const handleQueueShortcut = useCallback(() => {
@@ -1641,13 +1668,13 @@ function App() {
   }, []);
 
   useKeyboardShortcuts({
-    onTogglePlay: togglePlay,
+    onTogglePlay: () => void togglePlay(),
     onSkipPrevious: handleSkipPrevious,
     onSkipNext: handleSkipNext,
-    onSeek: seek,
+    onSeek: (position) => void seek(position),
     currentPosition,
     volume,
-    onSetVolume: setVolume,
+    onSetVolume: (nextVolume) => void setVolume(nextVolume),
     onToggleMute: handleToggleMute,
     onToggleShuffle: toggleShuffle,
     onCycleRepeat: toggleRepeat,
@@ -1656,8 +1683,8 @@ function App() {
     onPlaySelectionNext: handlePlayNextShortcut,
     onDeleteSelection: handleDeleteSelected,
     onToggleShortcutHelp: handleToggleShortcutHelp,
-    onUndo: undo,
-    onRedo: redo,
+    onUndo: () => void undo(),
+    onRedo: () => void redo(),
     onOpenCommandPalette: () => setIsCommandPaletteOpen(true),
   });
 
@@ -1693,12 +1720,15 @@ function App() {
     }
   }, [closePlaylistMenu, exportPlaylist, playlistMenuTarget]);
 
-  const handleMovePlaylist = useCallback((folderId: string | null) => {
-    const ids = playlistMenuSelection.map((playlist) => playlist.id);
-    if (ids.length === 0) return;
-    closePlaylistMenu();
-    void movePlaylists(ids, folderId);
-  }, [closePlaylistMenu, movePlaylists, playlistMenuSelection]);
+  const handleMovePlaylist = useCallback(
+    (folderId: string | null) => {
+      const ids = playlistMenuSelection.map((playlist) => playlist.id);
+      if (ids.length === 0) return;
+      closePlaylistMenu();
+      void movePlaylists(ids, folderId);
+    },
+    [closePlaylistMenu, movePlaylists, playlistMenuSelection],
+  );
 
   const handleFolderCreateSubmit = useCallback(async () => {
     if (await createFolder(folderCreateName)) {
@@ -1755,16 +1785,7 @@ function App() {
         filters: [
           {
             name: "Audio",
-            extensions: [
-              "mp3",
-              "flac",
-              "wav",
-              "m4a",
-              "aac",
-              "ogg",
-              "aiff",
-              "alac",
-            ],
+            extensions: ["mp3", "flac", "wav", "m4a", "aac", "ogg", "aiff", "alac"],
           },
         ],
       });
@@ -1774,7 +1795,7 @@ function App() {
       }
 
       const paths = Array.isArray(result) ? result : [result];
-      handleImportPaths(paths);
+      void handleImportPaths(paths);
     } catch (error) {
       notify.error(t("toast.picker.fileFailed"));
     }
@@ -1788,7 +1809,7 @@ function App() {
       }
 
       const paths = Array.isArray(result) ? result : [result];
-      handleImportPaths(paths);
+      void handleImportPaths(paths);
     } catch (error) {
       notify.error(t("toast.picker.folderFailed"));
     }
@@ -1810,31 +1831,81 @@ function App() {
         100,
         importProgress.total > 0
           ? Math.round((importProgress.imported / importProgress.total) * 100)
-          : 0
+          : 0,
       )
     : 0;
 
-  const commandPaletteItems = useMemo(() => [
-    { id: "library", label: "Go to Library", keywords: "songs tracks", run: () => navigateToView("library") },
-    { id: "inbox", label: "Go to Inbox", keywords: "imports", run: () => navigateToView("inbox") },
-    { id: "recent", label: "Go to Recently Added", run: () => navigateToView("recentlyAdded") },
-    { id: "statistics", label: "Open Listening Statistics", keywords: "charts history plays", run: () => navigateToView("statistics") },
-    { id: "settings", label: "Open Settings", run: () => navigateToView("settings") },
-    { id: "play", label: "Toggle Play / Pause", keywords: "music playback", shortcut: shortcutDisplay(keyboardShortcuts.togglePlay), run: togglePlay },
-    { id: "import-files", label: "Import Music Files", keywords: "add songs", run: () => { void handleEmptyImport(); } },
-    { id: "import-folder", label: "Import Music Folder", keywords: "scan add songs", run: () => { void handleEmptyImportFolder(); } },
-    { id: "create-playlist", label: "Create Playlist", run: openPlaylistModal },
-    { id: "export-playlists", label: "Export All Playlists (M3U8 only)", keywords: "backup no music", run: () => { void handleExportAllPlaylists(); } },
-    { id: "shortcut-help", label: "Show Keyboard Shortcuts", shortcut: shortcutDisplay(keyboardShortcuts.help), run: () => setIsShortcutHelpOpen(true) },
-  ], [
-    handleEmptyImport,
-    handleEmptyImportFolder,
-    handleExportAllPlaylists,
-    keyboardShortcuts,
-    navigateToView,
-    openPlaylistModal,
-    togglePlay,
-  ]);
+  const commandPaletteItems = useMemo(
+    () => [
+      {
+        id: "library",
+        label: "Go to Library",
+        keywords: "songs tracks",
+        run: () => navigateToView("library"),
+      },
+      {
+        id: "inbox",
+        label: "Go to Inbox",
+        keywords: "imports",
+        run: () => navigateToView("inbox"),
+      },
+      { id: "recent", label: "Go to Recently Added", run: () => navigateToView("recentlyAdded") },
+      {
+        id: "statistics",
+        label: "Open Listening Statistics",
+        keywords: "charts history plays",
+        run: () => navigateToView("statistics"),
+      },
+      { id: "settings", label: "Open Settings", run: () => navigateToView("settings") },
+      {
+        id: "play",
+        label: "Toggle Play / Pause",
+        keywords: "music playback",
+        shortcut: shortcutDisplay(keyboardShortcuts.togglePlay),
+        run: togglePlay,
+      },
+      {
+        id: "import-files",
+        label: "Import Music Files",
+        keywords: "add songs",
+        run: () => {
+          void handleEmptyImport();
+        },
+      },
+      {
+        id: "import-folder",
+        label: "Import Music Folder",
+        keywords: "scan add songs",
+        run: () => {
+          void handleEmptyImportFolder();
+        },
+      },
+      { id: "create-playlist", label: "Create Playlist", run: openPlaylistModal },
+      {
+        id: "export-playlists",
+        label: "Export All Playlists (M3U8 only)",
+        keywords: "backup no music",
+        run: () => {
+          void handleExportAllPlaylists();
+        },
+      },
+      {
+        id: "shortcut-help",
+        label: "Show Keyboard Shortcuts",
+        shortcut: shortcutDisplay(keyboardShortcuts.help),
+        run: () => setIsShortcutHelpOpen(true),
+      },
+    ],
+    [
+      handleEmptyImport,
+      handleEmptyImportFolder,
+      handleExportAllPlaylists,
+      keyboardShortcuts,
+      navigateToView,
+      openPlaylistModal,
+      togglePlay,
+    ],
+  );
 
   return (
     <div
@@ -1848,10 +1919,7 @@ function App() {
     >
       <GlobalButtonTooltips />
       <ToastContainer />
-      <ShortcutHelpModal
-        isOpen={isShortcutHelpOpen}
-        onClose={() => setIsShortcutHelpOpen(false)}
-      />
+      <ShortcutHelpModal isOpen={isShortcutHelpOpen} onClose={() => setIsShortcutHelpOpen(false)} />
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         commands={commandPaletteItems}
@@ -1882,7 +1950,9 @@ function App() {
         value={folderCreateName}
         onChange={setFolderCreateName}
         onClose={() => setIsFolderCreateOpen(false)}
-        onSubmit={() => { void handleFolderCreateSubmit(); }}
+        onSubmit={() => {
+          void handleFolderCreateSubmit();
+        }}
         title="New playlist folder"
         subtitle="Group related playlists without changing their tracks."
         placeholder="Folder name"
@@ -1896,7 +1966,9 @@ function App() {
           setEditingFolderId(null);
           setFolderEditName("");
         }}
-        onSubmit={() => { void handleFolderEditSubmit(); }}
+        onSubmit={() => {
+          void handleFolderEditSubmit();
+        }}
         title="Rename playlist folder"
         subtitle="Choose a name that makes this playlist group easy to find."
         placeholder="Folder name"
@@ -2038,12 +2110,16 @@ function App() {
                     const firstTrack = allTracksById.get(menuSelection[0]);
                     if (firstTrack) {
                       const album = isAlbumsView
-                        ? albums.find((item) => item.tracks.some((track) => track.id === firstTrack.id))
+                        ? albums.find((item) =>
+                            item.tracks.some((track) => track.id === firstTrack.id),
+                          )
                         : undefined;
                       playTrackById(
                         firstTrack.id,
                         album?.tracks ?? (sortedTracks.length > 0 ? sortedTracks : allTracks),
-                        album ? `/collection/albums?album=${encodeURIComponent(album.id)}` : undefined,
+                        album
+                          ? `/collection/albums?album=${encodeURIComponent(album.id)}`
+                          : undefined,
                       );
                     }
                   }
@@ -2065,7 +2141,9 @@ function App() {
                 }}
                 onShowInFinder={menuSelection.length === 1 ? handleShowInFinder : undefined}
                 onSearchMetadata={menuSelection.length === 1 ? handleOpenMetadataSearch : undefined}
-                onSearchAlbumMetadata={menuIsSingleAlbum ? handleOpenAlbumMetadataSearch : undefined}
+                onSearchAlbumMetadata={
+                  menuIsSingleAlbum ? handleOpenAlbumMetadataSearch : undefined
+                }
                 onIdentifyWithAcoustId={menuSelection.length > 0 ? handleOpenAcoustId : undefined}
                 onRemoveFromPlaylist={
                   viewConfig.type === "playlist" && viewConfig.playlist
@@ -2079,15 +2157,21 @@ function App() {
               <PlaylistContextMenu
                 isOpen={isPlaylistMenuOpen}
                 position={playlistMenuPosition}
-                playlistName={playlistMenuSelection.length > 1
-                  ? `${playlistMenuSelection.length} playlists selected`
-                  : playlistMenuTarget?.name}
+                playlistName={
+                  playlistMenuSelection.length > 1
+                    ? `${playlistMenuSelection.length} playlists selected`
+                    : playlistMenuTarget?.name
+                }
                 selectionCount={playlistMenuSelection.length}
                 onClose={closePlaylistMenu}
                 onEdit={playlistMenuSelection.length === 1 ? handlePlaylistMenuEdit : undefined}
-                onExport={playlistMenuSelection.length === 1
-                  ? () => { void handlePlaylistMenuExport(); }
-                  : undefined}
+                onExport={
+                  playlistMenuSelection.length === 1
+                    ? () => {
+                        void handlePlaylistMenuExport();
+                      }
+                    : undefined
+                }
                 folders={playlistMenuSelection.length > 0 ? playlistFolderOptions : []}
                 currentFolderId={playlistMenuCommonFolderId}
                 showRootMoveOption={playlistMenuSelection.some((playlist) => playlist.folderId)}
@@ -2100,7 +2184,9 @@ function App() {
                 playlistName={folderMenuTarget?.name}
                 onClose={() => setFolderMenu(null)}
                 onEdit={handleFolderMenuEdit}
-                onDelete={() => { void handleFolderMenuDelete(); }}
+                onDelete={() => {
+                  void handleFolderMenuDelete();
+                }}
               />
               <ColumnsMenu
                 isOpen={showColumns}
@@ -2114,7 +2200,15 @@ function App() {
                   title={viewConfig.title}
                   subtitle={viewConfig.subtitle}
                   isSettings={viewConfig.type === "settings" || viewConfig.type === "statistics"}
-                  resultCount={isArtistIndex ? artistIndexResults.length : collectionIndexFacet ? collectionIndexResults.length : isAlbumsView ? albumResults.length : sortedTracks.length}
+                  resultCount={
+                    isArtistIndex
+                      ? artistIndexResults.length
+                      : collectionIndexFacet
+                        ? collectionIndexResults.length
+                        : isAlbumsView
+                          ? albumResults.length
+                          : sortedTracks.length
+                  }
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   advancedFilters={advancedTrackFilters}
@@ -2122,17 +2216,27 @@ function App() {
                   onAdvancedFiltersChange={setAdvancedTrackFilters}
                   onAdvancedFiltersReset={resetAdvancedTrackFilters}
                   onShowColumns={openColumnsMenu}
-                  contentMode={isArtistIndex || collectionIndexFacet ? "collections" : isAlbumsView ? "albums" : "tracks"}
-                  resultLabel={isArtistIndex ? "artists" : collectionIndexFacet ?? undefined}
+                  contentMode={
+                    isArtistIndex || collectionIndexFacet
+                      ? "collections"
+                      : isAlbumsView
+                        ? "albums"
+                        : "tracks"
+                  }
+                  resultLabel={isArtistIndex ? "artists" : (collectionIndexFacet ?? undefined)}
                 />
                 {viewConfig.type === "recentlyAdded" && (
                   <div className="flex items-center gap-2 border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-4 py-2">
-                    <span className="mr-1 text-[11px] font-semibold text-[var(--color-text-muted)]">Show:</span>
-                    {([
-                      [1, "Today"],
-                      [7, "7 days"],
-                      [30, "30 days"],
-                    ] as const).map(([days, label]) => (
+                    <span className="mr-1 text-[11px] font-semibold text-[var(--color-text-muted)]">
+                      Show:
+                    </span>
+                    {(
+                      [
+                        [1, "Today"],
+                        [7, "7 days"],
+                        [30, "30 days"],
+                      ] as const
+                    ).map(([days, label]) => (
                       <button
                         key={days}
                         className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
@@ -2151,8 +2255,7 @@ function App() {
                 {viewConfig.trackTable && importProgress && (
                   <div className="border-b border-[var(--color-border-light)] bg-[var(--color-bg-primary)] px-[var(--spacing-lg)] py-[var(--spacing-md)]">
                     <div className="mb-[var(--spacing-xs)] text-[length:var(--font-size-xs)] font-semibold text-[color:var(--color-text-secondary)]">
-                      {importProgress.phase === "scanning" ||
-                      importProgress.total === 0
+                      {importProgress.phase === "scanning" || importProgress.total === 0
                         ? "Scanning files..."
                         : `${importProgress.imported} of ${importProgress.total} songs imported`}
                     </div>
@@ -2166,7 +2269,13 @@ function App() {
                 )}
                 <section className="flex min-h-0 flex-1 flex-col bg-[var(--color-bg-primary)]">
                   {viewConfig.type === "settings" ? (
-                    <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
+                    <Suspense
+                      fallback={
+                        <div className="p-6 text-[13px] text-[var(--color-text-muted)]">
+                          {t("common.loading")}
+                        </div>
+                      }
+                    >
                       <SettingsPanel
                         theme={theme}
                         locale={locale}
@@ -2197,7 +2306,13 @@ function App() {
                       />
                     </Suspense>
                   ) : viewConfig.type === "statistics" ? (
-                    <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
+                    <Suspense
+                      fallback={
+                        <div className="p-6 text-[13px] text-[var(--color-text-muted)]">
+                          {t("common.loading")}
+                        </div>
+                      }
+                    >
                       <ListeningStatisticsView />
                     </Suspense>
                   ) : libraryLoading && allTracks.length === 0 ? (
@@ -2208,7 +2323,10 @@ function App() {
                       aria-live="polite"
                     >
                       <div className="flex flex-col items-center gap-3 text-[var(--color-text-muted)]">
-                        <LoaderCircle className="h-7 w-7 animate-spin text-[var(--color-accent)]" aria-hidden="true" />
+                        <LoaderCircle
+                          className="h-7 w-7 animate-spin text-[var(--color-accent)]"
+                          aria-hidden="true"
+                        />
                         <span className="text-[var(--font-size-sm)]">{t("common.loading")}</span>
                       </div>
                     </div>
@@ -2225,7 +2343,13 @@ function App() {
                       onSelect={(value) => handleOpenCollectionValue(collectionIndexFacet, value)}
                     />
                   ) : isAlbumsView ? (
-                    <Suspense fallback={<div className="p-6 text-[13px] text-[var(--color-text-muted)]">{t("common.loading")}</div>}>
+                    <Suspense
+                      fallback={
+                        <div className="p-6 text-[13px] text-[var(--color-text-muted)]">
+                          {t("common.loading")}
+                        </div>
+                      }
+                    >
                       <AlbumsView
                         albums={albums}
                         searchQuery={searchQuery}
@@ -2268,9 +2392,11 @@ function App() {
                                 selectedArtistTarget,
                               );
                             }}
-                            onChangePicture={() => setArtistImageTarget(
-                              selectedArtistTarget ?? legacyArtistCredit(selectedArtistName),
-                            )}
+                            onChangePicture={() =>
+                              setArtistImageTarget(
+                                selectedArtistTarget ?? legacyArtistCredit(selectedArtistName),
+                              )
+                            }
                             onMerge={
                               selectedArtistTarget && artistIndexItems.length > 1
                                 ? () => setArtistMergeSource(selectedArtistTarget)
@@ -2296,8 +2422,7 @@ function App() {
                           emptyActionLabel={
                             hasTrackSearchFilters && sortedTracks.length === 0
                               ? undefined
-                              : viewConfig.trackTable.emptyState.primaryAction
-                                  ?.label
+                              : viewConfig.trackTable.emptyState.primaryAction?.label
                           }
                           onEmptyAction={
                             hasTrackSearchFilters && sortedTracks.length === 0
@@ -2309,8 +2434,7 @@ function App() {
                           emptySecondaryActionLabel={
                             hasTrackSearchFilters && sortedTracks.length === 0
                               ? undefined
-                              : viewConfig.trackTable.emptyState.secondaryAction
-                                  ?.label
+                              : viewConfig.trackTable.emptyState.secondaryAction?.label
                           }
                           onEmptySecondaryAction={
                             hasTrackSearchFilters && sortedTracks.length === 0
@@ -2342,9 +2466,13 @@ function App() {
                         <TrackSelectionBar
                           selectedCount={selectedVisibleTrackIds.length}
                           onPlay={handlePlaySelected}
-                          onMix={djMixEnabled
-                            ? () => { void mixSelectedPair(selectedVisibleTrackIds); }
-                            : undefined}
+                          onMix={
+                            djMixEnabled
+                              ? () => {
+                                  void mixSelectedPair(selectedVisibleTrackIds);
+                                }
+                              : undefined
+                          }
                           onPlayNext={() => playNext(selectedVisibleTrackIds)}
                           onAddToQueue={() => addToQueue(selectedVisibleTrackIds)}
                           onAnalyze={handleAnalyzeSelected}
@@ -2383,7 +2511,9 @@ function App() {
               libraryTracks={tracks}
               playlists={playlists}
               currentTrack={currentTrack}
-              currentTrackDetails={currentTrack ? allTracks.find((track) => track.id === currentTrack.id) : null}
+              currentTrackDetails={
+                currentTrack ? allTracks.find((track) => track.id === currentTrack.id) : null
+              }
               currentPlaylist={viewConfig.playlist}
               onRemoveFromQueue={removeFromQueue}
               onReorderQueue={reorderQueue}
@@ -2395,9 +2525,13 @@ function App() {
               onCreatePlaylist={handleCreatePlaylist}
               onPlayTrack={(trackId) => playTrackById(trackId)}
               onPlayNext={(trackId) => playNext([trackId])}
-              onMixWithCurrent={djMixEnabled
-                ? (trackId) => { void mixCurrentWith(trackId); }
-                : undefined}
+              onMixWithCurrent={
+                djMixEnabled
+                  ? (trackId) => {
+                      void mixCurrentWith(trackId);
+                    }
+                  : undefined
+              }
             />
           }
         />

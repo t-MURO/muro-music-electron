@@ -31,7 +31,7 @@ export const useTrackAnalysis = () => {
       setTracks(updateTrackList);
       setInboxTracks(updateTrackList);
     },
-    [setTracks, setInboxTracks]
+    [setTracks, setInboxTracks],
   );
 
   return {

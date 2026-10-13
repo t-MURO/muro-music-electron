@@ -12,7 +12,7 @@ export const useQueuePanel = () => {
     {
       parse: parseDetailWidth,
       serialize: (value) => String(value),
-    }
+    },
   );
   const [queuePanelCollapsed, setQueuePanelCollapsed] = useStickyState(
     "muro-queue-panel-collapsed",
@@ -20,7 +20,7 @@ export const useQueuePanel = () => {
     {
       parse: (raw) => raw === "true",
       serialize: (value) => String(value),
-    }
+    },
   );
   const [queuePanelExpanded, setQueuePanelExpanded] = useStickyState(
     "muro-queue-panel-expanded",
@@ -28,13 +28,11 @@ export const useQueuePanel = () => {
     {
       parse: (raw) => raw === "true",
       serialize: (value) => String(value),
-    }
+    },
   );
   const widthRef = useRef(storedQueuePanelWidth);
   const { startResize } = useResizable();
-  const queuePanelWidth = queuePanelCollapsed
-    ? COLLAPSED_QUEUE_PANEL_WIDTH
-    : storedQueuePanelWidth;
+  const queuePanelWidth = queuePanelCollapsed ? COLLAPSED_QUEUE_PANEL_WIDTH : storedQueuePanelWidth;
 
   useEffect(() => {
     if (queuePanelCollapsed || queuePanelExpanded) {
@@ -81,10 +79,10 @@ export const useQueuePanel = () => {
         (nextWidth) => {
           setQueuePanelWidth(Math.min(720, nextWidth));
         },
-        { minSize: 240, maxSize: 720, direction: -1 }
+        { minSize: 240, maxSize: 720, direction: -1 },
       );
     },
-    [queuePanelWidth, setQueuePanelWidth, startResize]
+    [queuePanelWidth, setQueuePanelWidth, startResize],
   );
 
   return {

@@ -44,9 +44,10 @@ const CODE_PREFIX_PATTERN = /^(DLNA_[A-Z_]+):\s*/;
 export const toDlnaErrorPayload = (error) => {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const embedded = CODE_PREFIX_PATTERN.exec(rawMessage);
-  const code = typeof error?.code === "string" && error.code.startsWith("DLNA_")
-    ? error.code
-    : embedded?.[1] ?? DLNA_ERROR_CODES.commandFailed;
+  const code =
+    typeof error?.code === "string" && error.code.startsWith("DLNA_")
+      ? error.code
+      : (embedded?.[1] ?? DLNA_ERROR_CODES.commandFailed);
   return { code, message: rawMessage.replace(CODE_PREFIX_PATTERN, "") };
 };
 

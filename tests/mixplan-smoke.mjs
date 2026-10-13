@@ -40,7 +40,7 @@ const grid = (
 const approx = (actual, expected, epsilon, label) => {
   assert.ok(
     Math.abs(actual - expected) <= epsilon,
-    `${label}: expected ${expected} ±${epsilon}, got ${actual}`
+    `${label}: expected ${expected} ±${epsilon}, got ${actual}`,
   );
 };
 
@@ -60,13 +60,10 @@ const approx = (actual, expected, epsilon, label) => {
   assert.ok(plan.startAtSec >= 0, "startAtSec >= 0");
   const barsFromDownbeat = (plan.startAtSec - 0.5) / barSec;
   approx(barsFromDownbeat, Math.round(barsFromDownbeat), 1e-6, "start lands on a downbeat");
-  assert.ok(
-    plan.startAtSec <= 300 - plan.durationSec - 1.5,
-    "start leaves tail margin"
-  );
+  assert.ok(plan.startAtSec <= 300 - plan.durationSec - 1.5, "start leaves tail margin");
   assert.ok(
     plan.startAtSec + barSec > 300 - plan.durationSec - 1.5,
-    "start is the LATEST fitting downbeat"
+    "start is the LATEST fitting downbeat",
   );
   approx(plan.cueInSec, 0.5, 1e-9, "cue at B's first downbeat");
 }
@@ -249,7 +246,7 @@ for (const plan of [
   // material correlated enough to clip under equal power would not have dipped
   // under complementary gain in the first place.
   for (let sample = 0; sample <= 200; sample += 1) {
-    const offset = plan.durationSec * sample / 200;
+    const offset = (plan.durationSec * sample) / 200;
     const automation = transitionAutomationAt(plan, offset);
     assert.ok(automation.incomingGain >= 0 && automation.incomingGain <= 1);
     assert.ok(automation.outgoingGain >= 0 && automation.outgoingGain <= 1);
@@ -307,8 +304,12 @@ for (const plan of [
     approx(actual, expected, 1e-9, label);
   }
   assert.deepEqual(
-    [Math.round(start.incomingGain), Math.round(start.outgoingGain),
-      Math.round(end.incomingGain), Math.round(end.outgoingGain)],
+    [
+      Math.round(start.incomingGain),
+      Math.round(start.outgoingGain),
+      Math.round(end.incomingGain),
+      Math.round(end.outgoingGain),
+    ],
     [0, 1, 1, 0],
   );
 }
@@ -324,14 +325,8 @@ for (const plan of [
   });
   assert.equal(getTransitionSeekPhase(plan, plan.startAtSec - 1), "before");
   assert.equal(getTransitionSeekPhase(plan, plan.startAtSec), "inside");
-  assert.equal(
-    getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec - 0.01),
-    "inside",
-  );
-  assert.equal(
-    getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec),
-    "after",
-  );
+  assert.equal(getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec - 0.01), "inside");
+  assert.equal(getTransitionSeekPhase(plan, plan.startAtSec + plan.durationSec), "after");
 }
 
 // Phrase alignment: the blend must begin on a phrase line of A and cue B at a
@@ -466,12 +461,7 @@ for (const plan of [
     durationBSec: 300,
     bars: 32,
   });
-  approx(
-    shortOutro.durationSec,
-    32 * barSecA,
-    1e-6,
-    "a short outro must not shorten the blend",
-  );
+  approx(shortOutro.durationSec, 32 * barSecA, 1e-6, "a short outro must not shorten the blend");
   assert.ok(
     shortOutro.startAtSec < 300 - 8 * barSecA,
     "with a short outro the blend must start before it, not inside it",
@@ -519,12 +509,16 @@ for (const plan of [
   const relaxed = planTransition({
     gridA: grid(128, 0.5, 0.9),
     gridB: grid(128, 0.5, 0.9),
-    durationASec: 300, durationBSec: 300, bars: 16,
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
   });
   const strained = planTransition({
     gridA: grid(128, 0.5, 0.9),
     gridB: grid(120, 0.5, 0.9), // ~6.5% pull, past the old strain threshold
-    durationASec: 300, durationBSec: 300, bars: 16,
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
   });
   approx(
     strained.durationSec,
@@ -536,7 +530,9 @@ for (const plan of [
   const shaky = planTransition({
     gridA: grid(128, 0.5, 0.3),
     gridB: grid(128, 0.5, 0.3),
-    durationASec: 300, durationBSec: 300, bars: 16,
+    durationASec: 300,
+    durationBSec: 300,
+    bars: 16,
   });
   approx(
     shaky.durationSec,
@@ -556,7 +552,12 @@ for (const plan of [
   for (const phraseConfidence of [0, 0.6]) {
     for (const phraseOffsetBars of [0, 3, 7]) {
       for (const hasOutro of [false, true]) {
-        for (const [bpmA, bpmB] of [[128, 128], [128, 124], [128, 174], [124, 128]]) {
+        for (const [bpmA, bpmB] of [
+          [128, 128],
+          [128, 124],
+          [128, 174],
+          [124, 128],
+        ]) {
           for (const bars of [4, 8, 16, 32]) {
             cases.push({ phraseConfidence, phraseOffsetBars, hasOutro, bpmA, bpmB, bars });
           }
@@ -583,7 +584,11 @@ for (const plan of [
       phraseConfidence: testCase.phraseConfidence,
     });
     const plan = planTransition({
-      gridA, gridB, durationASec: 300, durationBSec: 300, bars: testCase.bars,
+      gridA,
+      gridB,
+      durationASec: 300,
+      durationBSec: 300,
+      bars: testCase.bars,
     });
     if (plan.mode !== "beatmatch") continue;
     checked += 1;
@@ -596,7 +601,9 @@ for (const plan of [
       0,
       1e-9,
       `A must start on a downbeat, off by ${(
-        (barsFromDownbeatA - Math.round(barsFromDownbeatA)) * barSecA * 1000
+        (barsFromDownbeatA - Math.round(barsFromDownbeatA)) *
+        barSecA *
+        1000
       ).toFixed(1)} ms — ${label}`,
     );
 
@@ -611,10 +618,7 @@ for (const plan of [
     );
 
     // The blend has to finish inside the outgoing track.
-    assert.ok(
-      plan.startAtSec + plan.durationSec <= 300,
-      `blend must end within A — ${label}`,
-    );
+    assert.ok(plan.startAtSec + plan.durationSec <= 300, `blend must end within A — ${label}`);
     // And the incoming track must have the material to cover it.
     assert.ok(
       plan.cueInSec + plan.durationSec * plan.rate <= 300,

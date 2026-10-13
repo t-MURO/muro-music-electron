@@ -68,8 +68,10 @@ const unescapeXml = (value) =>
 // First occurrence of <tag>...</tag> anywhere in the document (namespace
 // prefixes tolerated), unescaped.
 export const extractXmlValue = (xml, tag) => {
-  const match = new RegExp(`<(?:[\\w-]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w-]+:)?${tag}>`, "i")
-    .exec(String(xml ?? ""));
+  const match = new RegExp(
+    `<(?:[\\w-]+:)?${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:[\\w-]+:)?${tag}>`,
+    "i",
+  ).exec(String(xml ?? ""));
   return match ? unescapeXml(match[1].trim()) : null;
 };
 
@@ -93,13 +95,20 @@ export const hmsToSeconds = (value) => {
 
 // DIDL-Lite metadata for SetAVTransportURI so the renderer's display shows
 // title/artist/album/artwork instead of a bare URL.
-export const buildDidlMetadata = ({ url, contentType, title, artist, album, artUrl, durationSeconds }) => {
-  const duration = Number.isFinite(durationSeconds) && durationSeconds > 0
-    ? ` duration="${secondsToHms(durationSeconds)}"`
-    : "";
-  const art = artUrl
-    ? `<upnp:albumArtURI>${escapeXml(artUrl)}</upnp:albumArtURI>`
-    : "";
+export const buildDidlMetadata = ({
+  url,
+  contentType,
+  title,
+  artist,
+  album,
+  artUrl,
+  durationSeconds,
+}) => {
+  const duration =
+    Number.isFinite(durationSeconds) && durationSeconds > 0
+      ? ` duration="${secondsToHms(durationSeconds)}"`
+      : "";
+  const art = artUrl ? `<upnp:albumArtURI>${escapeXml(artUrl)}</upnp:albumArtURI>` : "";
   return (
     '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" ' +
     'xmlns:dc="http://purl.org/dc/elements/1.1/" ' +
@@ -151,9 +160,10 @@ export const createDlnaClient = ({
         SOAPACTION: `"${serviceType}#${action}"`,
       },
       body: buildSoapEnvelope(serviceType, action, args),
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(SOAP_TIMEOUT_MS)
-        : undefined,
+      signal:
+        typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(SOAP_TIMEOUT_MS)
+          : undefined,
     });
     const text = await readDlnaXmlResponse(response);
     if (!response.ok) {

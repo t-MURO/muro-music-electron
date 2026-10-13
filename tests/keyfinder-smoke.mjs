@@ -55,8 +55,12 @@ const sampleRate = 8_000;
 const sampleCount = sampleRate;
 const pcm = Buffer.alloc(sampleCount * 2);
 for (let index = 0; index < sampleCount; index += 1) {
-  const envelope = index < sampleCount / 2 ? index / (sampleCount / 2) : (sampleCount - index) / (sampleCount / 2);
-  pcm.writeInt16LE(Math.round(Math.sin((index / sampleRate) * Math.PI * 2 * 220) * envelope * 28_000), index * 2);
+  const envelope =
+    index < sampleCount / 2 ? index / (sampleCount / 2) : (sampleCount - index) / (sampleCount / 2);
+  pcm.writeInt16LE(
+    Math.round(Math.sin((index / sampleRate) * Math.PI * 2 * 220) * envelope * 28_000),
+    index * 2,
+  );
 }
 const wav = Buffer.alloc(44 + pcm.length);
 wav.write("RIFF", 0);
@@ -83,53 +87,72 @@ try {
   assert.equal(waveform.peaks.length, 64);
   assert.ok(Math.max(...waveform.peaks) > 0.5);
 
-  const started = await service.startAnalysis([{
-    id: "missing-track",
-    title: "Missing",
-    artist: "",
-    album: "",
-    sourcePath: path.join(here, "does-not-exist.wav"),
-    durationSeconds: 60,
-  }], sender, {
-    performance: "stable",
-    notation: "djCombined",
-    customCodes: [],
-    delimiter: " / ",
-    outputs: {
-      comment: "append",
-      grouping: "none",
-      initialKey: "overwrite",
-      bpm: "overwrite",
+  const started = await service.startAnalysis(
+    [
+      {
+        id: "missing-track",
+        title: "Missing",
+        artist: "",
+        album: "",
+        sourcePath: path.join(here, "does-not-exist.wav"),
+        durationSeconds: 60,
+      },
+    ],
+    sender,
+    {
+      performance: "stable",
+      notation: "djCombined",
+      customCodes: [],
+      delimiter: " / ",
+      outputs: {
+        comment: "append",
+        grouping: "none",
+        initialKey: "overwrite",
+        bpm: "overwrite",
+      },
     },
-  }, true);
+    true,
+  );
   assert.match(started.jobId, /^job-/);
 
   const completed = await waitForFinishedJob(started.jobId);
   assert.equal(completed.payload.total, 1);
-  assert.ok(events.some((event) =>
-    event.event === "trackUpdated" && event.payload.track.status === "failed"));
+  assert.ok(
+    events.some(
+      (event) => event.event === "trackUpdated" && event.payload.track.status === "failed",
+    ),
+  );
 
-  const isolatedJobs = await Promise.all(Array.from({ length: 4 }, (_, index) => (
-    service.startAnalysis([{
-      id: `isolated-missing-${index}`,
-      title: `Isolated missing ${index}`,
-      artist: "",
-      album: "",
-      sourcePath: path.join(temporaryDirectory, `isolated-missing-${index}.wav`),
-      durationSeconds: 60,
-    }], sender, {
-      performance: "maximum",
-      notation: "custom",
-      customCodes: [],
-      delimiter: " - ",
-      outputs: {
-        comment: "none",
-        grouping: "none",
-        initialKey: "none",
-        bpm: "none",
-      },
-    }, false)
-  )));
+  const isolatedJobs = await Promise.all(
+    Array.from({ length: 4 }, (_, index) =>
+      service.startAnalysis(
+        [
+          {
+            id: `isolated-missing-${index}`,
+            title: `Isolated missing ${index}`,
+            artist: "",
+            album: "",
+            sourcePath: path.join(temporaryDirectory, `isolated-missing-${index}.wav`),
+            durationSeconds: 60,
+          },
+        ],
+        sender,
+        {
+          performance: "maximum",
+          notation: "custom",
+          customCodes: [],
+          delimiter: " - ",
+          outputs: {
+            comment: "none",
+            grouping: "none",
+            initialKey: "none",
+            bpm: "none",
+          },
+        },
+        false,
+      ),
+    ),
+  );
   assert.equal(new Set(isolatedJobs.map((job) => job.jobId)).size, isolatedJobs.length);
   const isolatedResults = await Promise.all(
     isolatedJobs.map((job) => waitForFinishedJob(job.jobId)),
@@ -150,9 +173,12 @@ try {
   const largeBatchCompleted = await waitForFinishedJob(largeBatchJob.jobId, 30_000);
   assert.equal(largeBatchCompleted.payload.completed, largeBatch.length);
   assert.equal(largeBatchCompleted.payload.total, largeBatch.length);
-  const failedTrackIds = new Set(events.slice(largeBatchStartIndex)
-    .filter((event) => event.event === "trackUpdated" && event.payload.track.status === "failed")
-    .map((event) => event.payload.track.id));
+  const failedTrackIds = new Set(
+    events
+      .slice(largeBatchStartIndex)
+      .filter((event) => event.event === "trackUpdated" && event.payload.track.status === "failed")
+      .map((event) => event.payload.track.id),
+  );
   assert.equal(failedTrackIds.size, largeBatch.length);
 } finally {
   service.close();

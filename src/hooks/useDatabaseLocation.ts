@@ -27,17 +27,14 @@ export const useDatabaseLocation = () => {
     };
   }, []);
 
-  const switchDatabase = useCallback(
-    async (change: () => Promise<DatabaseLocation | null>) => {
-      try {
-        const next = await change();
-        if (next) window.location.reload();
-      } catch (error) {
-        notify.error(error instanceof Error ? error.message : String(error));
-      }
-    },
-    [],
-  );
+  const switchDatabase = useCallback(async (change: () => Promise<DatabaseLocation | null>) => {
+    try {
+      const next = await change();
+      if (next) window.location.reload();
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
 
   const openDatabase = useCallback(
     () => switchDatabase(() => chooseDatabaseLocation("open")),

@@ -111,10 +111,7 @@ const blockLoudness = (weightedMeanSquare: number): number =>
  *   arrays are filtered in place, so pass copies if the caller still needs the
  *   original PCM.
  */
-export const measureLoudness = (
-  channels: Float32Array[],
-  sampleRate: number
-): LoudnessResult => {
+export const measureLoudness = (channels: Float32Array[], sampleRate: number): LoudnessResult => {
   if (channels.length === 0 || channels[0].length === 0 || sampleRate <= 0) {
     return { integratedLufs: null, samplePeak: 0 };
   }
@@ -163,25 +160,21 @@ export const measureLoudness = (
 
   // Absolute gate.
   const aboveAbsolute = blockPowers.filter(
-    (power) => power > 0 && blockLoudness(power) > ABSOLUTE_GATE_LUFS
+    (power) => power > 0 && blockLoudness(power) > ABSOLUTE_GATE_LUFS,
   );
   if (aboveAbsolute.length === 0) {
     return { integratedLufs: null, samplePeak };
   }
 
   // Relative gate, referenced to the mean of the absolute-gated blocks.
-  const absoluteMean =
-    aboveAbsolute.reduce((sum, power) => sum + power, 0) / aboveAbsolute.length;
+  const absoluteMean = aboveAbsolute.reduce((sum, power) => sum + power, 0) / aboveAbsolute.length;
   const relativeThreshold = blockLoudness(absoluteMean) + RELATIVE_GATE_LU;
-  const aboveRelative = aboveAbsolute.filter(
-    (power) => blockLoudness(power) > relativeThreshold
-  );
+  const aboveRelative = aboveAbsolute.filter((power) => blockLoudness(power) > relativeThreshold);
   if (aboveRelative.length === 0) {
     return { integratedLufs: blockLoudness(absoluteMean), samplePeak };
   }
 
-  const gatedMean =
-    aboveRelative.reduce((sum, power) => sum + power, 0) / aboveRelative.length;
+  const gatedMean = aboveRelative.reduce((sum, power) => sum + power, 0) / aboveRelative.length;
   return { integratedLufs: blockLoudness(gatedMean), samplePeak };
 };
 
@@ -194,7 +187,7 @@ export const REFERENCE_LUFS = -18;
 /** Gain in dB that brings `integratedLufs` to the reference level. */
 export const replayGainFromLoudness = (
   integratedLufs: number,
-  referenceLufs: number = REFERENCE_LUFS
+  referenceLufs: number = REFERENCE_LUFS,
 ): number => referenceLufs - integratedLufs;
 
 /** Convert a dB gain to the linear multiplier used for playback. */

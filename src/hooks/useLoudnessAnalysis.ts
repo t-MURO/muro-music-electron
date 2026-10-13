@@ -71,7 +71,7 @@ export const useLoudnessAnalysis = () => {
       try {
         await analyzeAndStoreLoudness(
           { id: track.id, sourcePath: track.source_path },
-          referenceLufs
+          referenceLufs,
         );
         analyzed += 1;
       } catch {
@@ -90,10 +90,7 @@ export const useLoudnessAnalysis = () => {
         // Track gain is still usable without it.
       }
       try {
-        const snapshot = await loadTracks(
-          undefined,
-          artistSeparatorExceptions,
-        );
+        const snapshot = await loadTracks(undefined, artistSeparatorExceptions);
         setTracks(snapshot.library.map(importedTrackToTrack));
         setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
       } catch {
@@ -109,7 +106,7 @@ export const useLoudnessAnalysis = () => {
         t("loudness.scan.finishedWithFailures", {
           analyzed: String(analyzed),
           failed: String(failed),
-        })
+        }),
       );
     } else {
       notify.success(t("loudness.scan.finished", { analyzed: String(analyzed) }));

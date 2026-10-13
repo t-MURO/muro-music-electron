@@ -121,6 +121,6 @@ export const MissingTracksModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

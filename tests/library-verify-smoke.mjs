@@ -55,11 +55,13 @@ const writeAudioFile = (dir, name) => {
 
 const insertTrack = (db, { title, sourcePath, durationSeconds = 0 }) => {
   const id = randomUUID();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO tracks (id, title, artist, album, filename, source_path,
       import_status, added_at, duration_seconds, is_missing)
     VALUES (?, ?, 'Artist', 'Album', ?, ?, 'library', ?, ?, 0)
-  `).run(
+  `,
+  ).run(
     id,
     title,
     path.basename(sourcePath),
@@ -123,7 +125,9 @@ const run = async () => {
 
   // Relinking by hand.
   await backend.invoke("relink_track", { dbPath, trackId: missingId, newPath: relocatedPath });
-  const relinked = db.prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?").get(missingId);
+  const relinked = db
+    .prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?")
+    .get(missingId);
   assert.equal(
     relinked.source_path,
     "moved/vanishing.wav",
@@ -133,11 +137,12 @@ const run = async () => {
 
   // Relinking to a path that does not exist must fail rather than corrupt the row.
   await assert.rejects(
-    () => backend.invoke("relink_track", {
-      dbPath,
-      trackId: missingId,
-      newPath: path.join(movedDir, "nope.wav"),
-    }),
+    () =>
+      backend.invoke("relink_track", {
+        dbPath,
+        trackId: missingId,
+        newPath: path.join(movedDir, "nope.wav"),
+      }),
     /does not exist/,
     "relinking to a missing file is rejected",
   );
@@ -189,7 +194,9 @@ const run = async () => {
     dryRun: false,
   });
   assert.equal(applied.relinked, 1, "the real run reconnects the track");
-  const reconnected = db.prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?").get(missingId);
+  const reconnected = db
+    .prepare("SELECT source_path, is_missing FROM tracks WHERE id = ?")
+    .get(missingId);
   assert.equal(reconnected.source_path, "moved/nested/vanishing.wav");
   assert.equal(Number(reconnected.is_missing), 0);
   assert.equal(

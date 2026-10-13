@@ -130,9 +130,8 @@ export function computeOnsetEnvelopes(
   sampleRate: number,
 ): { full: OnsetEnvelope; low: OnsetEnvelope; bands: BandSpectrogram } {
   const frameRate = sampleRate / HOP_SIZE;
-  const frameCount = samples.length >= FRAME_SIZE
-    ? Math.floor((samples.length - FRAME_SIZE) / HOP_SIZE) + 1
-    : 0;
+  const frameCount =
+    samples.length >= FRAME_SIZE ? Math.floor((samples.length - FRAME_SIZE) / HOP_SIZE) + 1 : 0;
   const fullFlux = new Float32Array(Math.max(0, frameCount));
   const lowFlux = new Float32Array(Math.max(0, frameCount));
   const binCount = FRAME_SIZE / 2 + 1;
@@ -231,8 +230,7 @@ export function estimateTempo(
   };
 
   // Mild log-normal preference for the 90-180 BPM range (centered ~127).
-  const rangePrior = (bpm: number): number =>
-    Math.exp(-0.5 * (Math.log2(bpm / 127) / 0.9) ** 2);
+  const rangePrior = (bpm: number): number => Math.exp(-0.5 * (Math.log2(bpm / 127) / 0.9) ** 2);
   const gaussian = (bpm: number, center: number): number =>
     Math.exp(-0.5 * (Math.log2(bpm / center) / 0.08) ** 2);
   const hintBias = (bpm: number): number => {
@@ -650,10 +648,7 @@ const QUIET_SECTION_RATIO = 0.9;
  * section is over, so a blend no longer runs across whatever happens to occupy
  * a track's final bars — an outro, a fade, applause, or silence.
  */
-export function detectSections(
-  features: BarFeatures,
-  novelty: Float32Array,
-): TrackStructure {
+export function detectSections(features: BarFeatures, novelty: Float32Array): TrackStructure {
   const { barCount, level } = features;
 
   let strongest = 0;
@@ -694,10 +689,7 @@ export function detectSections(
     return { sections: [], introEndBar: 0, outroStartBar: barCount };
   }
 
-  const loudest = sections.reduce(
-    (highest, section) => Math.max(highest, section.level),
-    0,
-  );
+  const loudest = sections.reduce((highest, section) => Math.max(highest, section.level), 0);
   const quiet = loudest * QUIET_SECTION_RATIO;
 
   let introEndBar = 0;
@@ -750,17 +742,15 @@ export function analyzeBeatGrid(
   const downbeat = estimateDownbeat(low, tempo.bpm, phase.firstBeatSec);
   const features = computeBarFeatures(bands, tempo.bpm, downbeat.firstDownbeatSec);
   const novelty = features ? computeBarNovelty(features) : null;
-  const phrase = features && novelty
-    ? estimatePhrase(features, novelty)
-    : { phraseBars: 8, firstPhraseSec: downbeat.firstDownbeatSec, confidence: 0 };
+  const phrase =
+    features && novelty
+      ? estimatePhrase(features, novelty)
+      : { phraseBars: 8, firstPhraseSec: downbeat.firstDownbeatSec, confidence: 0 };
   const structure = features && novelty ? detectSections(features, novelty) : null;
 
   const trackEndSec = samples.length / sampleRate;
-  const barToSec = (bar: number) =>
-    features ? features.firstBarSec + bar * features.barSec : 0;
-  const hasOutro = Boolean(
-    structure && features && structure.outroStartBar < features.barCount,
-  );
+  const barToSec = (bar: number) => (features ? features.firstBarSec + bar * features.barSec : 0);
+  const hasOutro = Boolean(structure && features && structure.outroStartBar < features.barCount);
 
   const confidence = clamp01(0.45 * tempo.strength + 0.55 * phase.confidence);
   return {
@@ -774,9 +764,7 @@ export function analyzeBeatGrid(
     // Exactly 0 when there is no intro. Emitting the first downbeat instead
     // reads as a zero-length intro to the planner, which then treats the track
     // as having no room for a blend at all.
-    introEndSec: structure && structure.introEndBar > 0
-      ? barToSec(structure.introEndBar)
-      : 0,
+    introEndSec: structure && structure.introEndBar > 0 ? barToSec(structure.introEndBar) : 0,
     outroStartSec: hasOutro && structure ? barToSec(structure.outroStartBar) : trackEndSec,
     hasOutro,
     confidence,

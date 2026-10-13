@@ -12,10 +12,7 @@ export const emitLocal = (event: string, payload: unknown): void => {
   }
 };
 
-export const listen = async <T>(
-  event: string,
-  handler: EventCallback<T>
-): Promise<UnlistenFn> => {
+export const listen = async <T>(event: string, handler: EventCallback<T>): Promise<UnlistenFn> => {
   const localHandler = (payload: unknown) => handler({ payload: payload as T });
   const listeners = localListeners.get(event) ?? new Set();
   listeners.add(localHandler);

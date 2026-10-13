@@ -45,47 +45,40 @@ export const useInboxOperations = () => {
         trackIdsToAccept = result.acceptedTrackIds;
         const acceptedIdSet = new Set(acceptedTrackIds);
         tracksToAccept = tracksToAccept.filter((track) => acceptedIdSet.has(track.id));
-        const movedPaths = new Map(
-          result.moved.map((entry) => [entry.trackId, entry.sourcePath]),
-        );
+        const movedPaths = new Map(result.moved.map((entry) => [entry.trackId, entry.sourcePath]));
         organizedFileCount = result.moved.length;
-        const applyMovedPaths = (track: typeof tracksToAccept[number]) => {
+        const applyMovedPaths = (track: (typeof tracksToAccept)[number]) => {
           const sourcePath = movedPaths.get(track.id);
           return sourcePath ? { ...track, sourcePath } : track;
         };
         tracksToAccept = tracksToAccept.map(applyMovedPaths);
-        setInboxTracks((current) =>
-          current.filter((t) => !acceptedIdSet.has(t.id))
-        );
+        setInboxTracks((current) => current.filter((t) => !acceptedIdSet.has(t.id)));
         setTracks((current) => [
           ...tracksToAccept,
           ...current.filter((track) => !acceptedIdSet.has(track.id)),
         ]);
         if (result.failures.length > 0) {
-          notify.error(t("toast.inbox.organizeFailed", {
-            count: String(result.failures.length),
-          }));
+          notify.error(
+            t("toast.inbox.organizeFailed", {
+              count: String(result.failures.length),
+            }),
+          );
         }
         return t(
-          result.accepted === 1
-            ? "history.inbox.accepted.one"
-            : "history.inbox.accepted.many",
+          result.accepted === 1 ? "history.inbox.accepted.one" : "history.inbox.accepted.many",
           { count: String(result.accepted) },
         );
       },
       undo: async () => {
         await unacceptTracks(acceptedTrackIds);
         const acceptedIdSet = new Set(acceptedTrackIds);
-        setTracks((current) =>
-          current.filter((t) => !acceptedIdSet.has(t.id))
-        );
+        setTracks((current) => current.filter((t) => !acceptedIdSet.has(t.id)));
         setInboxTracks((current) => [
           ...tracksToAccept,
           ...current.filter((track) => !acceptedIdSet.has(track.id)),
         ]);
-        const organizedNote = organizedFileCount > 0
-          ? ` ${t("history.inbox.organizedFilesKept")}`
-          : "";
+        const organizedNote =
+          organizedFileCount > 0 ? ` ${t("history.inbox.organizedFilesKept")}` : "";
         return `${t(
           acceptedTrackIds.length === 1
             ? "history.inbox.returned.one"
@@ -116,13 +109,10 @@ export const useInboxOperations = () => {
       return;
     }
 
-
     clearSelection();
     try {
       await rejectTracks(selectedTrackIds);
-      setInboxTracks((current) =>
-        current.filter((track) => !selectedTrackIds.includes(track.id))
-      );
+      setInboxTracks((current) => current.filter((track) => !selectedTrackIds.includes(track.id)));
       notify.info(
         t(
           selectedTrackIds.length === 1

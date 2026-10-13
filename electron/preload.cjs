@@ -85,7 +85,7 @@ window.addEventListener("drop", (event) => {
   event.preventDefault();
   dragDepth = 0;
   const paths = Array.from(event.dataTransfer.files, (file) =>
-    webUtils.getPathForFile(file)
+    webUtils.getPathForFile(file),
   ).filter(Boolean);
   ipcRenderer.send("muro:native-drag", { kind: "drop", paths });
 });

@@ -1,8 +1,5 @@
 import type { ArtistCredit } from "../../types";
-import {
-  artistCreditSegments,
-  type ArtistTarget,
-} from "../../utils/artistCredits";
+import { artistCreditSegments, type ArtistTarget } from "../../utils/artistCredits";
 
 type ArtistCreditLinksProps = {
   display: string;
@@ -18,7 +15,7 @@ export const ArtistCreditLinks = ({
   kind = "track",
 }: ArtistCreditLinksProps) => (
   <span className="block min-w-0 max-w-full truncate whitespace-nowrap" title={display}>
-    {artistCreditSegments(display, credits).map((segment, index) => (
+    {artistCreditSegments(display, credits).map((segment, index) =>
       segment.kind === "artist" ? (
         <button
           key={`${segment.credit.artistId}:${index}`}
@@ -37,7 +34,7 @@ export const ArtistCreditLinks = ({
         </button>
       ) : (
         <span key={`text:${index}`}>{segment.text}</span>
-      )
-    ))}
+      ),
+    )}
   </span>
 );

@@ -37,15 +37,12 @@ export const buildCollectionIndexItems = (
   const items = new Map<string, CollectionIndexItem>();
 
   tracks.forEach((track) => {
-    const rawValue = facet === "genres"
-      ? track.genre
-      : facet === "labels"
-        ? track.label
-        : track.key;
+    const rawValue =
+      facet === "genres" ? track.genre : facet === "labels" ? track.label : track.key;
     const trimmedValue = rawValue?.trim();
     if (!trimmedValue) return;
 
-    const value = facet === "keys" ? toCamelotCode(trimmedValue) ?? trimmedValue : trimmedValue;
+    const value = facet === "keys" ? (toCamelotCode(trimmedValue) ?? trimmedValue) : trimmedValue;
     const identity = value.toLocaleLowerCase();
     const existing = items.get(identity);
     if (existing) {
@@ -74,10 +71,7 @@ export const CollectionIndexView = ({ facet, items, onSelect }: CollectionIndexV
   const singularLabel = facet === "keys" ? "key" : facet === "labels" ? "release label" : "genre";
 
   return (
-    <div
-      className="collection-index min-h-0 flex-1 overflow-y-auto"
-      data-collection-index={facet}
-    >
+    <div className="collection-index min-h-0 flex-1 overflow-y-auto" data-collection-index={facet}>
       {items.length > 0 ? (
         <div className="collection-index-grid">
           {items.map((item) => (
@@ -89,9 +83,7 @@ export const CollectionIndexView = ({ facet, items, onSelect }: CollectionIndexV
               key={item.value}
               onClick={() => onSelect(item.value)}
               style={
-                item.color
-                  ? ({ "--collection-key-color": item.color } as CSSProperties)
-                  : undefined
+                item.color ? ({ "--collection-key-color": item.color } as CSSProperties) : undefined
               }
               type="button"
             >
@@ -100,7 +92,9 @@ export const CollectionIndexView = ({ facet, items, onSelect }: CollectionIndexV
               </span>
               <span className="min-w-0 flex-1 text-left">
                 <strong>{item.value}</strong>
-                <span>{item.count.toLocaleString()} {item.count === 1 ? "track" : "tracks"}</span>
+                <span>
+                  {item.count.toLocaleString()} {item.count === 1 ? "track" : "tracks"}
+                </span>
               </span>
               <ArrowRight className="collection-index-arrow" aria-hidden="true" />
             </button>

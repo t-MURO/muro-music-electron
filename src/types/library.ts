@@ -130,7 +130,14 @@ export type ArtistProfile = {
   biography?: string | null;
   imagePath?: string | null;
   imageUrl?: string | null;
-  imageProvider?: "wikimedia-commons" | "wikipedia" | "theaudiodb" | "fanart.tv" | "deezer" | "brave-search" | null;
+  imageProvider?:
+    | "wikimedia-commons"
+    | "wikipedia"
+    | "theaudiodb"
+    | "fanart.tv"
+    | "deezer"
+    | "brave-search"
+    | null;
   imageAttribution?: string | null;
   imageLicense?: string | null;
   imageLicenseUrl?: string | null;
@@ -158,7 +165,8 @@ export type ArtistProfile = {
 
 export type ArtistImageCandidate = {
   id: string;
-  provider: "wikimedia-commons" | "wikipedia" | "theaudiodb" | "fanart.tv" | "deezer" | "brave-search";
+  provider:
+    "wikimedia-commons" | "wikipedia" | "theaudiodb" | "fanart.tv" | "deezer" | "brave-search";
   imageUrl: string;
   sourceUrl?: string | null;
   sourceName?: string | null;
@@ -197,12 +205,7 @@ export type SmartCrateField =
   | "comment";
 
 export type SmartCrateOperator =
-  | "equals"
-  | "contains"
-  | "atLeast"
-  | "atMost"
-  | "between"
-  | "withinDays";
+  "equals" | "contains" | "atLeast" | "atMost" | "between" | "withinDays";
 
 export type SmartCrateRule = {
   id: string;

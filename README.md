@@ -180,7 +180,7 @@ compact fingerprint and track duration are sent to AcoustID. Candidate
 recordings and proposed changes are reviewed before they are applied.
 
 AcoustID identification requires an **application API key** created under
-AcoustID's *My Applications* page. A personal user API key is not accepted for
+AcoustID's _My Applications_ page. A personal user API key is not accepted for
 identification lookups.
 
 ### Cleans up artist separators safely
@@ -302,17 +302,17 @@ DJ transitions are disabled.
 Muro is usable as a local library and player without online-service keys.
 These integrations are optional:
 
-| Service | Used for | Key required |
-| --- | --- | --- |
-| MusicBrainz | Track, album, and artist metadata | No |
-| Cover Art Archive | On-demand album artwork | No |
-| AcoustID | Fingerprint-based recording identification | Application API key |
-| Wikidata / Wikipedia / Wikimedia Commons | Artist information and images | No |
-| Deezer | Artist-image search and on-demand album-cover fallback | No |
-| Last.fm | Artist biographies, tags, links, and similar artists | API key |
-| TheAudioDB | Artist biography, genre, country, and image fallback | Premium API key |
-| Fanart.tv | Final artist-artwork fallback | Project API key |
-| Brave Image Search | Selectable artist images and manual album-cover fallback | API key |
+| Service                                  | Used for                                                 | Key required        |
+| ---------------------------------------- | -------------------------------------------------------- | ------------------- |
+| MusicBrainz                              | Track, album, and artist metadata                        | No                  |
+| Cover Art Archive                        | On-demand album artwork                                  | No                  |
+| AcoustID                                 | Fingerprint-based recording identification               | Application API key |
+| Wikidata / Wikipedia / Wikimedia Commons | Artist information and images                            | No                  |
+| Deezer                                   | Artist-image search and on-demand album-cover fallback   | No                  |
+| Last.fm                                  | Artist biographies, tags, links, and similar artists     | API key             |
+| TheAudioDB                               | Artist biography, genre, country, and image fallback     | Premium API key     |
+| Fanart.tv                                | Final artist-artwork fallback                            | Project API key     |
+| Brave Image Search                       | Selectable artist images and manual album-cover fallback | API key             |
 
 API keys are stored in Muro's local application settings. Each external
 service remains subject to its own API terms, availability, attribution

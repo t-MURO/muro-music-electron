@@ -1,11 +1,9 @@
-import type {
-  SmartCrate,
-  SmartCrateField,
-  SmartCrateRule,
-  Track,
-} from "../types";
+import type { SmartCrate, SmartCrateField, SmartCrateRule, Track } from "../types";
 
-const normalizeText = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase();
+const normalizeText = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLocaleLowerCase();
 
 const getTrackFieldValue = (track: Track, field: SmartCrateField): string | number | undefined => {
   if (field === "bpm") return track.bpm;

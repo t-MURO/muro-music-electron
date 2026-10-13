@@ -102,7 +102,12 @@ const AlbumCard = ({
       data-album-context-target={album.id}
     >
       <div className="album-card-artwork-wrap">
-        <button className="album-card-open" onClick={onOpen} type="button" aria-label={`Open ${album.title}`}>
+        <button
+          className="album-card-open"
+          onClick={onOpen}
+          type="button"
+          aria-label={`Open ${album.title}`}
+        >
           <AlbumArtwork album={album} />
         </button>
         <button
@@ -119,7 +124,8 @@ const AlbumCard = ({
         <span>{subtitle || "Unknown artist"}</span>
         {layout === "list" && (
           <span className="album-card-stats">
-            {album.tracks.length} {album.tracks.length === 1 ? "track" : "tracks"} · {formatDuration(album.durationSeconds)}
+            {album.tracks.length} {album.tracks.length === 1 ? "track" : "tracks"} ·{" "}
+            {formatDuration(album.durationSeconds)}
           </span>
         )}
       </button>
@@ -169,8 +175,9 @@ const AlbumDetail = ({
     if (handledRevealRequestIdRef.current === revealRequest.requestId) return;
     // Run synchronously: rAF callbacks can starve indefinitely while the
     // window is hidden or occluded, so the reveal must not wait on a frame.
-    const row = Array.from(document.querySelectorAll<HTMLElement>("[data-album-track]"))
-      .find((element) => element.dataset.albumTrack === revealRequest.trackId);
+    const row = Array.from(document.querySelectorAll<HTMLElement>("[data-album-track]")).find(
+      (element) => element.dataset.albumTrack === revealRequest.trackId,
+    );
     if (!row) return;
     handledRevealRequestIdRef.current = revealRequest.requestId;
     row.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -194,23 +201,53 @@ const AlbumDetail = ({
           <div className="album-detail-copy">
             <span className="album-eyebrow">Album</span>
             <h1>{album.title}</h1>
-            <button className="album-detail-link album-detail-artist" onClick={() => onOpenArtist(album.artist)} data-album-artist type="button">{album.artist}</button>
+            <button
+              className="album-detail-link album-detail-artist"
+              onClick={() => onOpenArtist(album.artist)}
+              data-album-artist
+              type="button"
+            >
+              {album.artist}
+            </button>
             <p className="album-detail-meta">
               {album.year && <span>{album.year}</span>}
-              <span>{album.tracks.length} {album.tracks.length === 1 ? "track" : "tracks"}</span>
+              <span>
+                {album.tracks.length} {album.tracks.length === 1 ? "track" : "tracks"}
+              </span>
               <span>{formatDuration(album.durationSeconds)}</span>
-              {album.genres[0] && <button className="album-detail-link" onClick={() => onOpenGenre(album.genres[0])} data-album-genre type="button">{album.genres[0]}</button>}
+              {album.genres[0] && (
+                <button
+                  className="album-detail-link"
+                  onClick={() => onOpenGenre(album.genres[0])}
+                  data-album-genre
+                  type="button"
+                >
+                  {album.genres[0]}
+                </button>
+              )}
             </p>
             <div className="album-detail-actions">
-              <button className="album-primary-action" onClick={() => currentAlbumIsActive ? onTogglePlay() : onPlayAlbum(trackIds)} type="button">
+              <button
+                className="album-primary-action"
+                onClick={() => (currentAlbumIsActive ? onTogglePlay() : onPlayAlbum(trackIds))}
+                type="button"
+              >
                 {currentAlbumIsPlaying ? <Pause /> : <Play fill="currentColor" />}
                 <span>{currentAlbumIsPlaying ? "Pause" : "Play"}</span>
               </button>
-              <button className="album-secondary-action" onClick={() => onPlayNext(trackIds)} type="button">
+              <button
+                className="album-secondary-action"
+                onClick={() => onPlayNext(trackIds)}
+                type="button"
+              >
                 <ListEnd />
                 <span>Play next</span>
               </button>
-              <button className="album-secondary-action" onClick={() => onAddToQueue(trackIds)} type="button">
+              <button
+                className="album-secondary-action"
+                onClick={() => onAddToQueue(trackIds)}
+                type="button"
+              >
                 <Plus />
                 <span>Queue</span>
               </button>
@@ -221,11 +258,16 @@ const AlbumDetail = ({
 
       <div className="album-track-list" role="table" aria-label={`${album.title} tracks`}>
         <div className="album-track-header" role="row">
-          <span>#</span><span>Title</span><span>Key</span><span>BPM</span><Clock3 />
+          <span>#</span>
+          <span>Title</span>
+          <span>Key</span>
+          <span>BPM</span>
+          <Clock3 />
         </div>
         {album.tracks.map((track, index) => {
           const disc = track.discNumber ?? 1;
-          const showDisc = album.tracks.some((item) => (item.discNumber ?? 1) > 1) && disc !== previousDisc;
+          const showDisc =
+            album.tracks.some((item) => (item.discNumber ?? 1) > 1) && disc !== previousDisc;
           previousDisc = disc;
           const isCurrent = track.id === currentTrackId;
           return (
@@ -240,7 +282,13 @@ const AlbumDetail = ({
                 data-album-track={track.id}
               >
                 <span className="album-track-number">
-                  <span>{isCurrent && isPlaying ? <Pause fill="currentColor" /> : track.trackNumber ?? index + 1}</span>
+                  <span>
+                    {isCurrent && isPlaying ? (
+                      <Pause fill="currentColor" />
+                    ) : (
+                      (track.trackNumber ?? index + 1)
+                    )}
+                  </span>
                   <Play className="album-track-play" fill="currentColor" />
                 </span>
                 <span className="album-track-title">
@@ -249,7 +297,9 @@ const AlbumDetail = ({
                 </span>
                 <span className="album-track-key">{track.key || "—"}</span>
                 <span className="album-track-bpm">{track.bpm ? Math.round(track.bpm) : "—"}</span>
-                <span className="album-track-duration">{formatTrackDuration(track.durationSeconds)}</span>
+                <span className="album-track-duration">
+                  {formatTrackDuration(track.durationSeconds)}
+                </span>
               </button>
             </div>
           );
@@ -281,7 +331,7 @@ export const AlbumsView = ({
 }: AlbumsViewProps) => {
   const [sort, setSort] = useState<AlbumSort>("title");
   const [layout, setLayout] = useState<AlbumLayout>(() =>
-    window.localStorage.getItem("muro-album-layout") === "list" ? "list" : "grid"
+    window.localStorage.getItem("muro-album-layout") === "list" ? "list" : "grid",
   );
 
   useEffect(() => {
@@ -298,16 +348,22 @@ export const AlbumsView = ({
         return (right.year ?? -1) - (left.year ?? -1) || left.title.localeCompare(right.title);
       }
       if (sort === "recent") {
-        return (right.dateAdded ?? "").localeCompare(left.dateAdded ?? "") || left.title.localeCompare(right.title);
+        return (
+          (right.dateAdded ?? "").localeCompare(left.dateAdded ?? "") ||
+          left.title.localeCompare(right.title)
+        );
       }
-      return left.title.localeCompare(right.title, undefined, { numeric: true, sensitivity: "base" });
+      return left.title.localeCompare(right.title, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
     });
     return filtered;
   }, [albums, searchQuery, sort]);
 
   const selectedAlbum = albums.find((album) => album.id === selectedAlbumId);
   const currentAlbumId = albums.find((album) =>
-    album.tracks.some((track) => track.id === currentTrackId)
+    album.tracks.some((track) => track.id === currentTrackId),
   )?.id;
 
   if (selectedAlbum) {
@@ -334,12 +390,19 @@ export const AlbumsView = ({
   if (albums.length === 0) {
     return (
       <div className="album-empty-state" data-albums-view>
-        <div className="album-empty-icon"><Music2 /></div>
+        <div className="album-empty-icon">
+          <Music2 />
+        </div>
         <h2>Your albums will live here</h2>
         <p>Import music with album metadata and Muro will organize it into a visual collection.</p>
         <div>
-          <button className="album-primary-action" onClick={onImportFiles} type="button"><Plus /><span>Add music</span></button>
-          <button className="album-secondary-action" onClick={onImportFolder} type="button">Add folder</button>
+          <button className="album-primary-action" onClick={onImportFiles} type="button">
+            <Plus />
+            <span>Add music</span>
+          </button>
+          <button className="album-secondary-action" onClick={onImportFolder} type="button">
+            Add folder
+          </button>
         </div>
       </div>
     );
@@ -349,13 +412,19 @@ export const AlbumsView = ({
     <div className="albums-view" data-albums-view>
       <div className="albums-toolbar">
         <div>
-          <strong>{searchQuery ? `${visibleAlbums.length} matching albums` : "Browse your collection"}</strong>
+          <strong>
+            {searchQuery ? `${visibleAlbums.length} matching albums` : "Browse your collection"}
+          </strong>
           <span>Albums are grouped by title and album artist</span>
         </div>
         <div className="albums-toolbar-actions">
           <label>
             <span className="sr-only">Sort albums</span>
-            <select value={sort} onChange={(event) => setSort(event.target.value as AlbumSort)} data-album-sort>
+            <select
+              value={sort}
+              onChange={(event) => setSort(event.target.value as AlbumSort)}
+              data-album-sort
+            >
               <option value="title">Title</option>
               <option value="artist">Artist</option>
               <option value="year">Newest year</option>
@@ -363,8 +432,24 @@ export const AlbumsView = ({
             </select>
           </label>
           <div className="album-layout-toggle" aria-label="Album layout">
-            <button className={layout === "grid" ? "is-active" : ""} onClick={() => setLayout("grid")} aria-label="Grid view" aria-pressed={layout === "grid"} type="button"><Grid2X2 /></button>
-            <button className={layout === "list" ? "is-active" : ""} onClick={() => setLayout("list")} aria-label="List view" aria-pressed={layout === "list"} type="button"><List /></button>
+            <button
+              className={layout === "grid" ? "is-active" : ""}
+              onClick={() => setLayout("grid")}
+              aria-label="Grid view"
+              aria-pressed={layout === "grid"}
+              type="button"
+            >
+              <Grid2X2 />
+            </button>
+            <button
+              className={layout === "list" ? "is-active" : ""}
+              onClick={() => setLayout("list")}
+              aria-label="List view"
+              aria-pressed={layout === "list"}
+              type="button"
+            >
+              <List />
+            </button>
           </div>
         </div>
       </div>
@@ -383,10 +468,12 @@ export const AlbumsView = ({
                 if (album.id === currentAlbumId) onTogglePlay();
                 else onPlayAlbum(album.tracks.map((track) => track.id));
               }}
-              onContextMenu={(event) => onTracksContextMenu(
-                event,
-                album.tracks.map((track) => track.id),
-              )}
+              onContextMenu={(event) =>
+                onTracksContextMenu(
+                  event,
+                  album.tracks.map((track) => track.id),
+                )
+              }
             />
           ))}
         </div>

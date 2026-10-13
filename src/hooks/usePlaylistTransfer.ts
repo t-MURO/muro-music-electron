@@ -20,8 +20,7 @@ import {
 import { t } from "../i18n";
 import type { Playlist } from "../types";
 
-const normalizePath = (value: string) =>
-  value.replace(/\//g, "\\").toLocaleLowerCase();
+const normalizePath = (value: string) => value.replace(/\//g, "\\").toLocaleLowerCase();
 
 export const usePlaylistTransfer = () => {
   const sequenceRef = useRef(0);
@@ -44,23 +43,22 @@ export const usePlaylistTransfer = () => {
           if (converted.length > 0) {
             setInboxTracks((current) => {
               const existing = new Set(current.map((track) => track.id));
-              return [
-                ...converted.filter((track) => !existing.has(track.id)),
-                ...current,
-              ];
+              return [...converted.filter((track) => !existing.has(track.id)), ...current];
             });
           }
-          setPlaylists((current) => current.map((playlist) =>
-            playlist.id === result.playlistId
-              ? {
-                  ...playlist,
-                  trackIds: result.trackIds,
-                  sourcePath: result.sourcePath,
-                  sourceSyncError: result.sourceSyncError ?? undefined,
-                  lastSyncedAt: Math.floor(Date.now() / 1000),
-                }
-              : playlist
-          ));
+          setPlaylists((current) =>
+            current.map((playlist) =>
+              playlist.id === result.playlistId
+                ? {
+                    ...playlist,
+                    trackIds: result.trackIds,
+                    sourcePath: result.sourcePath,
+                    sourceSyncError: result.sourceSyncError ?? undefined,
+                    lastSyncedAt: Math.floor(Date.now() / 1000),
+                  }
+                : playlist,
+            ),
+          );
 
           if (result.sourceSyncError) {
             notify.error(
@@ -72,11 +70,13 @@ export const usePlaylistTransfer = () => {
                 : t("toast.playlist.syncFailed", { name: result.name }),
             );
           } else if (result.changed) {
-            notify.success(t("toast.playlist.synced", {
-              name: result.name,
-              added: String(result.added),
-              removed: String(result.removed),
-            }));
+            notify.success(
+              t("toast.playlist.synced", {
+                name: result.name,
+                added: String(result.added),
+                removed: String(result.removed),
+              }),
+            );
           }
         },
       );
@@ -96,223 +96,234 @@ export const usePlaylistTransfer = () => {
     };
   }, [setInboxTracks, setPlaylists]);
 
-  const importPlaylistIntoStore = useCallback(async (
-    filePath: string,
-    folderId?: string,
-  ) => {
-    const parsed = await importPlaylistFile(filePath);
-    const libraryTrackIdByPath = new Map(
-      useLibraryStore.getState().tracks.map((track) => [normalizePath(track.sourcePath), track.id])
-    );
-    const missingPaths = [...new Set(
-      parsed.entries
-        .filter((entry) => (
-          !entry.track_id
-          && !libraryTrackIdByPath.has(normalizePath(entry.path))
-          && entry.exists
-        ))
-        .map((entry) => entry.path)
-    )];
-    const importResult = missingPaths.length > 0
-      ? await importFiles(missingPaths)
-      : { imported: [], scanned: 0, failures: [] };
-    const imported = importResult.imported;
-    const converted = imported.map(importedTrackToTrack);
-    if (converted.length > 0) {
-      setInboxTracks((current) => {
-        const existing = new Set(current.map((track) => track.id));
-        return [...converted.filter((track) => !existing.has(track.id)), ...current];
-      });
-    }
-
-    const importedIdByPath = new Map(
-      imported.map((track) => [normalizePath(track.source_path), track.id])
-    );
-    const orderedTrackIds = parsed.entries
-      .map((entry) => {
-        const normalizedPath = normalizePath(entry.path);
-        return entry.track_id
-          ?? libraryTrackIdByPath.get(normalizedPath)
-          ?? importedIdByPath.get(normalizedPath)
-          ?? null;
-      })
-      .filter((trackId): trackId is string => Boolean(trackId));
-    const trackIds = [...new Set(orderedTrackIds)];
-
-    sequenceRef.current += 1;
-    const sortOrder = useLibraryStore.getState().playlists
-      .filter((item) => item.folderId === folderId)
-      .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1;
-    const playlist: Playlist = {
-      id: `playlist-import-${Date.now()}-${sequenceRef.current}`,
-      name: parsed.name || "Imported Playlist",
-      trackIds,
-      folderId,
-      sortOrder,
-      sourcePath: parsed.source_path,
-    };
-    await createPlaylist(
-      playlist.id,
-      playlist.name,
-      folderId,
-      sortOrder,
-      parsed.source_path,
-    );
-    try {
-      if (playlist.trackIds.length > 0) {
-        await addTracksToPlaylist(playlist.id, playlist.trackIds);
-      }
-    } catch (error) {
-      await deletePlaylist(playlist.id).catch(() => undefined);
-      throw error;
-    }
-    setPlaylists((current) => [...current, playlist]);
-    const initialSync = await syncPlaylistSource(playlist.id).catch((error) => {
-      console.warn(`Initial playlist sync failed for ${playlist.name}`, error);
-      return null;
-    });
-    if (initialSync) {
-      const initiallyImported = initialSync.imported.map(importedTrackToTrack);
-      if (initiallyImported.length > 0) {
+  const importPlaylistIntoStore = useCallback(
+    async (filePath: string, folderId?: string) => {
+      const parsed = await importPlaylistFile(filePath);
+      const libraryTrackIdByPath = new Map(
+        useLibraryStore
+          .getState()
+          .tracks.map((track) => [normalizePath(track.sourcePath), track.id]),
+      );
+      const missingPaths = [
+        ...new Set(
+          parsed.entries
+            .filter(
+              (entry) =>
+                !entry.track_id &&
+                !libraryTrackIdByPath.has(normalizePath(entry.path)) &&
+                entry.exists,
+            )
+            .map((entry) => entry.path),
+        ),
+      ];
+      const importResult =
+        missingPaths.length > 0
+          ? await importFiles(missingPaths)
+          : { imported: [], scanned: 0, failures: [] };
+      const imported = importResult.imported;
+      const converted = imported.map(importedTrackToTrack);
+      if (converted.length > 0) {
         setInboxTracks((current) => {
           const existing = new Set(current.map((track) => track.id));
-          return [
-            ...initiallyImported.filter((track) => !existing.has(track.id)),
-            ...current,
-          ];
+          return [...converted.filter((track) => !existing.has(track.id)), ...current];
         });
       }
-      setPlaylists((current) => current.map((item) =>
-        item.id === playlist.id
-          ? {
-              ...item,
-              trackIds: initialSync.trackIds,
-              sourceSyncError: initialSync.sourceSyncError ?? undefined,
-              lastSyncedAt: Math.floor(Date.now() / 1000),
-            }
-          : item
-      ));
-      playlist.trackIds = initialSync.trackIds;
-      playlist.sourceSyncError = initialSync.sourceSyncError ?? undefined;
-      playlist.lastSyncedAt = Math.floor(Date.now() / 1000);
-    }
 
-    const skipped = initialSync?.skipped ?? parsed.entries.length - trackIds.length;
-    return { playlist, skipped };
-  }, [setInboxTracks, setPlaylists]);
-
-  const importPlaylist = useCallback(async (filePath: string) => {
-    try {
-      const result = await importPlaylistIntoStore(filePath);
-      if (!result) {
-        notify.error(t("toast.playlist.noAvailableFiles"));
-        return null;
-      }
-      notify.success(
-        result.skipped > 0
-          ? t("toast.playlist.importedLinkedPartial", {
-              name: result.playlist.name,
-              count: String(result.playlist.trackIds.length),
-              skipped: String(result.skipped),
-            })
-          : t("toast.playlist.importedLinked", {
-              name: result.playlist.name,
-              count: String(result.playlist.trackIds.length),
-            })
+      const importedIdByPath = new Map(
+        imported.map((track) => [normalizePath(track.source_path), track.id]),
       );
-      return result.playlist.id;
-    } catch {
-      notify.error(t("toast.playlist.importFailed"));
-      return null;
-    }
-  }, [importPlaylistIntoStore]);
-
-  const importPlaylistFolder = useCallback(async (directoryPath: string) => {
-    const createdFolderIds: string[] = [];
-    const cleanupFolders = async () => {
-      if (createdFolderIds.length === 0) return;
-      for (const folderId of [...createdFolderIds].reverse()) {
-        await deletePlaylistFolder(folderId).catch(() => undefined);
-      }
-      const created = new Set(createdFolderIds);
-      setPlaylistFolders((current) => current.filter((folder) => !created.has(folder.id)));
-    };
-    try {
-      const scan = await listPlaylistFiles(directoryPath);
-      if (scan.files.length === 0) {
-        notify.error(t("toast.playlist.noPlaylistsInFolder"));
-        return null;
-      }
+      const orderedTrackIds = parsed.entries
+        .map((entry) => {
+          const normalizedPath = normalizePath(entry.path);
+          return (
+            entry.track_id ??
+            libraryTrackIdByPath.get(normalizedPath) ??
+            importedIdByPath.get(normalizedPath) ??
+            null
+          );
+        })
+        .filter((trackId): trackId is string => Boolean(trackId));
+      const trackIds = [...new Set(orderedTrackIds)];
 
       sequenceRef.current += 1;
-      const rootFolder = {
-        id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
-        name: scan.name || "Imported Playlists",
-        sortOrder: useLibraryStore.getState().playlistFolders
-          .filter((folder) => !folder.parentId)
-          .reduce((highest, folder) => Math.max(highest, folder.sortOrder), -1) + 1,
+      const sortOrder =
+        useLibraryStore
+          .getState()
+          .playlists.filter((item) => item.folderId === folderId)
+          .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1;
+      const playlist: Playlist = {
+        id: `playlist-import-${Date.now()}-${sequenceRef.current}`,
+        name: parsed.name || "Imported Playlist",
+        trackIds,
+        folderId,
+        sortOrder,
+        sourcePath: parsed.source_path,
       };
-      await createPlaylistFolder(
-        rootFolder.id,
-        rootFolder.name,
-        undefined,
-        rootFolder.sortOrder,
-      );
-      createdFolderIds.push(rootFolder.id);
-
-      const folderIdByPath = new Map<string, string>([["", rootFolder.id]]);
-      const nextSortOrderByParent = new Map<string, number>();
-      const importedFolders = [rootFolder];
-      for (const scannedFolder of scan.folders) {
-        const parentId = folderIdByPath.get(scannedFolder.parentPath ?? "") ?? rootFolder.id;
-        const sortOrder = nextSortOrderByParent.get(parentId) ?? 0;
-        nextSortOrderByParent.set(parentId, sortOrder + 1);
-        sequenceRef.current += 1;
-        const folder = {
-          id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
-          name: scannedFolder.name,
-          parentId,
-          sortOrder,
-        };
-        await createPlaylistFolder(folder.id, folder.name, parentId, sortOrder);
-        createdFolderIds.push(folder.id);
-        folderIdByPath.set(scannedFolder.path, folder.id);
-        importedFolders.push(folder);
-      }
-      setPlaylistFolders((current) => [...current, ...importedFolders]);
-
-      notify.info(t("toast.playlist.importing", { count: String(scan.files.length), folder: rootFolder.name }));
-      const playlistIds: string[] = [];
-      for (const entry of scan.entries) {
-        try {
-          const folderId = folderIdByPath.get(entry.folderPath ?? "") ?? rootFolder.id;
-          const result = await importPlaylistIntoStore(entry.path, folderId);
-          if (result) playlistIds.push(result.playlist.id);
-        } catch {
-          // Keep importing the remaining files and summarize partial failures.
+      await createPlaylist(playlist.id, playlist.name, folderId, sortOrder, parsed.source_path);
+      try {
+        if (playlist.trackIds.length > 0) {
+          await addTracksToPlaylist(playlist.id, playlist.trackIds);
         }
+      } catch (error) {
+        await deletePlaylist(playlist.id).catch(() => undefined);
+        throw error;
+      }
+      setPlaylists((current) => [...current, playlist]);
+      const initialSync = await syncPlaylistSource(playlist.id).catch((error) => {
+        console.warn(`Initial playlist sync failed for ${playlist.name}`, error);
+        return null;
+      });
+      if (initialSync) {
+        const initiallyImported = initialSync.imported.map(importedTrackToTrack);
+        if (initiallyImported.length > 0) {
+          setInboxTracks((current) => {
+            const existing = new Set(current.map((track) => track.id));
+            return [...initiallyImported.filter((track) => !existing.has(track.id)), ...current];
+          });
+        }
+        setPlaylists((current) =>
+          current.map((item) =>
+            item.id === playlist.id
+              ? {
+                  ...item,
+                  trackIds: initialSync.trackIds,
+                  sourceSyncError: initialSync.sourceSyncError ?? undefined,
+                  lastSyncedAt: Math.floor(Date.now() / 1000),
+                }
+              : item,
+          ),
+        );
+        playlist.trackIds = initialSync.trackIds;
+        playlist.sourceSyncError = initialSync.sourceSyncError ?? undefined;
+        playlist.lastSyncedAt = Math.floor(Date.now() / 1000);
       }
 
-      if (playlistIds.length === 0) {
-        await cleanupFolders();
-        notify.error(t("toast.playlist.importedNone", { count: String(scan.files.length) }));
+      const skipped = initialSync?.skipped ?? parsed.entries.length - trackIds.length;
+      return { playlist, skipped };
+    },
+    [setInboxTracks, setPlaylists],
+  );
+
+  const importPlaylist = useCallback(
+    async (filePath: string) => {
+      try {
+        const result = await importPlaylistIntoStore(filePath);
+        if (!result) {
+          notify.error(t("toast.playlist.noAvailableFiles"));
+          return null;
+        }
+        notify.success(
+          result.skipped > 0
+            ? t("toast.playlist.importedLinkedPartial", {
+                name: result.playlist.name,
+                count: String(result.playlist.trackIds.length),
+                skipped: String(result.skipped),
+              })
+            : t("toast.playlist.importedLinked", {
+                name: result.playlist.name,
+                count: String(result.playlist.trackIds.length),
+              }),
+        );
+        return result.playlist.id;
+      } catch {
+        notify.error(t("toast.playlist.importFailed"));
         return null;
       }
+    },
+    [importPlaylistIntoStore],
+  );
 
-      notify.success(
-        t("toast.playlistFolder.importedLinked", {
-          imported: String(playlistIds.length),
-          count: String(scan.files.length),
-          folder: rootFolder.name,
-        })
-      );
-      return { folderId: rootFolder.id, playlistIds };
-    } catch {
-      await cleanupFolders();
-      notify.error(t("toast.playlistFolder.importFailed"));
-      return null;
-    }
-  }, [importPlaylistIntoStore, setPlaylistFolders]);
+  const importPlaylistFolder = useCallback(
+    async (directoryPath: string) => {
+      const createdFolderIds: string[] = [];
+      const cleanupFolders = async () => {
+        if (createdFolderIds.length === 0) return;
+        for (const folderId of [...createdFolderIds].reverse()) {
+          await deletePlaylistFolder(folderId).catch(() => undefined);
+        }
+        const created = new Set(createdFolderIds);
+        setPlaylistFolders((current) => current.filter((folder) => !created.has(folder.id)));
+      };
+      try {
+        const scan = await listPlaylistFiles(directoryPath);
+        if (scan.files.length === 0) {
+          notify.error(t("toast.playlist.noPlaylistsInFolder"));
+          return null;
+        }
+
+        sequenceRef.current += 1;
+        const rootFolder = {
+          id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
+          name: scan.name || "Imported Playlists",
+          sortOrder:
+            useLibraryStore
+              .getState()
+              .playlistFolders.filter((folder) => !folder.parentId)
+              .reduce((highest, folder) => Math.max(highest, folder.sortOrder), -1) + 1,
+        };
+        await createPlaylistFolder(rootFolder.id, rootFolder.name, undefined, rootFolder.sortOrder);
+        createdFolderIds.push(rootFolder.id);
+
+        const folderIdByPath = new Map<string, string>([["", rootFolder.id]]);
+        const nextSortOrderByParent = new Map<string, number>();
+        const importedFolders = [rootFolder];
+        for (const scannedFolder of scan.folders) {
+          const parentId = folderIdByPath.get(scannedFolder.parentPath ?? "") ?? rootFolder.id;
+          const sortOrder = nextSortOrderByParent.get(parentId) ?? 0;
+          nextSortOrderByParent.set(parentId, sortOrder + 1);
+          sequenceRef.current += 1;
+          const folder = {
+            id: `playlist-folder-import-${Date.now()}-${sequenceRef.current}`,
+            name: scannedFolder.name,
+            parentId,
+            sortOrder,
+          };
+          await createPlaylistFolder(folder.id, folder.name, parentId, sortOrder);
+          createdFolderIds.push(folder.id);
+          folderIdByPath.set(scannedFolder.path, folder.id);
+          importedFolders.push(folder);
+        }
+        setPlaylistFolders((current) => [...current, ...importedFolders]);
+
+        notify.info(
+          t("toast.playlist.importing", {
+            count: String(scan.files.length),
+            folder: rootFolder.name,
+          }),
+        );
+        const playlistIds: string[] = [];
+        for (const entry of scan.entries) {
+          try {
+            const folderId = folderIdByPath.get(entry.folderPath ?? "") ?? rootFolder.id;
+            const result = await importPlaylistIntoStore(entry.path, folderId);
+            if (result) playlistIds.push(result.playlist.id);
+          } catch {
+            // Keep importing the remaining files and summarize partial failures.
+          }
+        }
+
+        if (playlistIds.length === 0) {
+          await cleanupFolders();
+          notify.error(t("toast.playlist.importedNone", { count: String(scan.files.length) }));
+          return null;
+        }
+
+        notify.success(
+          t("toast.playlistFolder.importedLinked", {
+            imported: String(playlistIds.length),
+            count: String(scan.files.length),
+            folder: rootFolder.name,
+          }),
+        );
+        return { folderId: rootFolder.id, playlistIds };
+      } catch {
+        await cleanupFolders();
+        notify.error(t("toast.playlistFolder.importFailed"));
+        return null;
+      }
+    },
+    [importPlaylistIntoStore, setPlaylistFolders],
+  );
 
   const exportPlaylist = useCallback(async (playlistId: string, filePath: string) => {
     try {
@@ -329,8 +340,8 @@ export const usePlaylistTransfer = () => {
     try {
       const result = await exportAllPlaylistFiles(destinationPath);
       notify.success(
-        `Exported ${result.playlistsExported} playlists with `
-        + `${result.playlistEntriesExported} track entries`
+        `Exported ${result.playlistsExported} playlists with ` +
+          `${result.playlistEntriesExported} track entries`,
       );
       return result;
     } catch {

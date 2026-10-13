@@ -48,8 +48,7 @@ const initialState: RemoteOutputState = {
   lastError: null,
 };
 
-const sessionActive = (state: RemoteSessionStateName) =>
-  state !== "idle" && state !== "error";
+const sessionActive = (state: RemoteSessionStateName) => state !== "idle" && state !== "error";
 
 export const useRemoteOutputStore = create<RemoteOutputStore>()((set) => ({
   ...initialState,

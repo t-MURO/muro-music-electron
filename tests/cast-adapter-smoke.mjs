@@ -62,7 +62,9 @@ const makeFakeConnection = ({ openBehavior } = {}) => {
   const adapter = createCastClientAdapter({ connectionFactory: () => fake.handle });
   await adapter.connect({ host: "192.0.2.2", port: 8009 });
   let received = null;
-  adapter.on("error", (error) => { received = error; });
+  adapter.on("error", (error) => {
+    received = error;
+  });
   fake.emitter.emit("error", new Error("mid-session drop"));
   assert.equal(received?.message, "mid-session drop");
   adapter.close();
@@ -77,7 +79,9 @@ const makeFakeConnection = ({ openBehavior } = {}) => {
     status: { applications: [{ appId: "CC1AD845", transportId: "transport-1", sessionId: "s1" }] },
   }));
   fake.respondWith("LOAD", () => ({ status: [{ mediaSessionId: 42, playerState: "PAUSED" }] }));
-  fake.respondWith("SEEK", () => ({ status: [{ mediaSessionId: 42, playerState: "PAUSED", currentTime: 30 }] }));
+  fake.respondWith("SEEK", () => ({
+    status: [{ mediaSessionId: 42, playerState: "PAUSED", currentTime: 30 }],
+  }));
 
   const adapter = createCastClientAdapter({ connectionFactory: () => fake.handle });
   await adapter.connect({ host: "192.0.2.3", port: 8009 });

@@ -4,10 +4,7 @@ import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const source = path.resolve(
-  root,
-  process.argv[2] ?? "assets/branding/muro-music-logo.svg",
-);
+const source = path.resolve(root, process.argv[2] ?? "assets/branding/muro-music-logo.svg");
 const iconDirectory = path.join(root, "build", "icons");
 const rendererAsset = path.join(root, "src", "assets", "app-logo.png");
 
@@ -34,12 +31,12 @@ const renderPng = (size) =>
 const ICNS_ENTRIES = [
   ["icp4", 16],
   ["icp5", 32],
-  ["ic11", 32],   // 16pt @2x
-  ["ic12", 64],   // 32pt @2x
+  ["ic11", 32], // 16pt @2x
+  ["ic12", 64], // 32pt @2x
   ["ic07", 128],
-  ["ic13", 256],  // 128pt @2x
+  ["ic13", 256], // 128pt @2x
   ["ic08", 256],
-  ["ic14", 512],  // 256pt @2x
+  ["ic14", 512], // 256pt @2x
   ["ic09", 512],
   ["ic10", 1024], // 512pt @2x
 ];

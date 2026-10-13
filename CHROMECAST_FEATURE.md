@@ -375,9 +375,7 @@ Do not duplicate the main queue in this store.
 The playback layer should have one active output:
 
 ```ts
-type PlaybackOutput =
-  | { kind: "local" }
-  | { kind: "cast"; deviceId: string; deviceName: string };
+type PlaybackOutput = { kind: "local" } | { kind: "cast"; deviceId: string; deviceName: string };
 ```
 
 `useAudioPlayback` or a new higher-level `usePlaybackController` should route commands to the local HTML audio runtime or Cast service. `PlayerBar` should not decide which backend receives each command.
@@ -609,18 +607,18 @@ The MVP is complete only when all of the following are true:
 
 ## Known risks and decisions
 
-| Risk | Impact | MVP decision |
-|---|---|---|
-| Official Web Sender may not be available in Electron | High | Use a main-process adapter; verify in spike |
-| Common Node CastV2 package is old | High | Isolate dependency and assess maintained alternatives |
-| Windows Firewall blocks receiver requests | High | Detect timeout, explain, retry; no elevated rule changes |
-| Multiple network interfaces choose the wrong LAN IP | High | Select based on receiver route when possible and test VPNs |
-| AIFF/ALAC or unusual codecs fail | Medium | Conservative allowlist; no MVP transcoding |
-| Device disconnects or sleeps | Medium | Clear state and recoverable reconnect action |
-| Receiver and sender state drift | Medium | Treat receiver status as authoritative while casting |
-| Queue semantics become duplicated | Medium | Keep queue in Muro and cast one track at a time |
-| Media URL exposes local files | High | Random tokens mapped to exact approved paths only |
-| Cast device uses a different network/VLAN | Medium | Explain same-network requirement; do not bypass isolation |
+| Risk                                                 | Impact | MVP decision                                               |
+| ---------------------------------------------------- | ------ | ---------------------------------------------------------- |
+| Official Web Sender may not be available in Electron | High   | Use a main-process adapter; verify in spike                |
+| Common Node CastV2 package is old                    | High   | Isolate dependency and assess maintained alternatives      |
+| Windows Firewall blocks receiver requests            | High   | Detect timeout, explain, retry; no elevated rule changes   |
+| Multiple network interfaces choose the wrong LAN IP  | High   | Select based on receiver route when possible and test VPNs |
+| AIFF/ALAC or unusual codecs fail                     | Medium | Conservative allowlist; no MVP transcoding                 |
+| Device disconnects or sleeps                         | Medium | Clear state and recoverable reconnect action               |
+| Receiver and sender state drift                      | Medium | Treat receiver status as authoritative while casting       |
+| Queue semantics become duplicated                    | Medium | Keep queue in Muro and cast one track at a time            |
+| Media URL exposes local files                        | High   | Random tokens mapped to exact approved paths only          |
+| Cast device uses a different network/VLAN            | Medium | Explain same-network requirement; do not bypass isolation  |
 
 ## Suggested branch and commit sequence
 
@@ -660,4 +658,3 @@ The following can be copied into another task:
 - [Google Cast media playback messages](https://developers.google.com/cast/docs/media/messages)
 - [Electron Chrome extension support](https://www.electronjs.org/docs/latest/api/extensions/)
 - [`castv2-client` reference implementation and maintenance history](https://github.com/thibauts/node-castv2-client)
-

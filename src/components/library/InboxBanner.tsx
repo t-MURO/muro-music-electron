@@ -15,9 +15,7 @@ export const InboxBanner = ({ selectedCount, onAccept, onReject }: InboxBannerPr
         </div>
         <div className="flex items-center gap-2 rounded-full bg-[var(--color-bg-tertiary)] px-3 py-1.5 text-[var(--font-size-xs)]">
           <span className="text-[var(--color-text-secondary)]">{t("inbox.selected")}</span>
-          <span className="font-bold text-[var(--color-accent)]">
-            {selectedCount}
-          </span>
+          <span className="font-bold text-[var(--color-accent)]">{selectedCount}</span>
         </div>
         <div className="ml-auto flex items-center gap-3">
           <button

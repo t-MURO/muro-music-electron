@@ -1,9 +1,5 @@
 import { EventEmitter } from "node:events";
-import {
-  createCastConnection,
-  NAMESPACES,
-  PLATFORM_RECEIVER_ID,
-} from "./castProtocol.mjs";
+import { createCastConnection, NAMESPACES, PLATFORM_RECEIVER_ID } from "./castProtocol.mjs";
 
 const DEFAULT_MEDIA_RECEIVER_APP_ID = "CC1AD845";
 
@@ -44,7 +40,11 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
       emitter.emit("receiverStatus", payload.status ?? null);
       return;
     }
-    if (namespace === NAMESPACES.connection && payload.type === "CLOSE" && sourceId === transportId) {
+    if (
+      namespace === NAMESPACES.connection &&
+      payload.type === "CLOSE" &&
+      sourceId === transportId
+    ) {
       // The receiver application went away underneath the session.
       transportId = null;
       mediaSessionId = null;
@@ -80,8 +80,9 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
       throw new Error(`Receiver refused to launch: ${response.reason ?? "unknown reason"}`);
     }
     const applications = response.status?.applications ?? [];
-    const application = applications.find((entry) => entry.appId === DEFAULT_MEDIA_RECEIVER_APP_ID)
-      ?? applications[0];
+    const application =
+      applications.find((entry) => entry.appId === DEFAULT_MEDIA_RECEIVER_APP_ID) ??
+      applications[0];
     if (!application?.transportId) {
       throw new Error("Receiver did not report a media application transport");
     }
@@ -123,7 +124,11 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
       },
       requireTransport(),
     );
-    if (response.type === "LOAD_FAILED" || response.type === "LOAD_CANCELLED" || response.type === "ERROR") {
+    if (
+      response.type === "LOAD_FAILED" ||
+      response.type === "LOAD_CANCELLED" ||
+      response.type === "ERROR"
+    ) {
       const failure = new Error(`Receiver could not load the track (${response.type})`);
       failure.code = "CAST_LOAD_FAILED";
       throw failure;
@@ -153,9 +158,10 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
     // resumeState is intentionally omitted: PLAYBACK_START would force a
     // paused receiver to resume on every scrub. Omitting it preserves the
     // current play/pause state across the seek.
-    seek: (positionSecs) => mediaCommand("SEEK", {
-      currentTime: Math.max(0, Number(positionSecs) || 0),
-    }),
+    seek: (positionSecs) =>
+      mediaCommand("SEEK", {
+        currentTime: Math.max(0, Number(positionSecs) || 0),
+      }),
     getMediaStatus: async () => {
       const response = await requireConnection().request(
         NAMESPACES.media,
@@ -166,11 +172,12 @@ export const createCastClientAdapter = ({ connectionFactory = createCastConnecti
       if (status?.mediaSessionId != null) mediaSessionId = status.mediaSessionId;
       return status ?? null;
     },
-    setVolume: (level) => requireConnection().request(
-      NAMESPACES.receiver,
-      { type: "SET_VOLUME", volume: { level: Math.max(0, Math.min(1, Number(level) || 0)) } },
-      PLATFORM_RECEIVER_ID,
-    ),
+    setVolume: (level) =>
+      requireConnection().request(
+        NAMESPACES.receiver,
+        { type: "SET_VOLUME", volume: { level: Math.max(0, Math.min(1, Number(level) || 0)) } },
+        PLATFORM_RECEIVER_ID,
+      ),
     stopReceiverApp: async () => {
       if (!connection || closed || !sessionId) return;
       try {

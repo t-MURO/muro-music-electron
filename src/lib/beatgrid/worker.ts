@@ -9,9 +9,7 @@ type AnalyzeRequest = {
   bpmHint: number | null;
 };
 
-type AnalyzeResponse =
-  | { ok: true; grid: BeatGrid }
-  | { ok: false; error: string };
+type AnalyzeResponse = { ok: true; grid: BeatGrid } | { ok: false; error: string };
 
 type WorkerScope = {
   onmessage: ((event: MessageEvent<AnalyzeRequest>) => void) | null;

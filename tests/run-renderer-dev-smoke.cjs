@@ -64,10 +64,12 @@ const run = async () => {
   process.exitCode = result;
 };
 
-run().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-}).finally(() => {
-  if (viteProcess && viteProcess.exitCode === null) viteProcess.kill();
-  cleanupTemporaryDirectories();
-});
+run()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    if (viteProcess && viteProcess.exitCode === null) viteProcess.kill();
+    cleanupTemporaryDirectories();
+  });

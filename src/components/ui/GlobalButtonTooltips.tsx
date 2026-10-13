@@ -23,8 +23,7 @@ const getTooltipTarget = (target: EventTarget | null): TooltipTarget | null => {
   if (!(button instanceof HTMLButtonElement)) return null;
   if (button.textContent?.trim()) return null;
 
-  const label = button.getAttribute("aria-label")?.trim()
-    || button.getAttribute("title")?.trim();
+  const label = button.getAttribute("aria-label")?.trim() || button.getAttribute("title")?.trim();
   return label ? { button, label } : null;
 };
 
@@ -60,28 +59,22 @@ export const GlobalButtonTooltips = () => {
 
     const hide = (button?: HTMLButtonElement) => {
       if (!button || pendingRef.current?.button === button) clearHoverTimer();
-      setTarget((current) => (
-        !button || current?.button === button ? null : current
-      ));
+      setTarget((current) => (!button || current?.button === button ? null : current));
     };
 
     const handlePointerOver = (event: PointerEvent) => {
       const nextTarget = getTooltipTarget(event.target);
       if (!nextTarget) return;
-      if (
-        event.relatedTarget instanceof Node
-        && nextTarget.button.contains(event.relatedTarget)
-      ) return;
+      if (event.relatedTarget instanceof Node && nextTarget.button.contains(event.relatedTarget))
+        return;
       show(nextTarget, true);
     };
 
     const handlePointerOut = (event: PointerEvent) => {
       const currentTarget = getTooltipTarget(event.target);
       if (!currentTarget) return;
-      if (
-        event.relatedTarget instanceof Node
-        && currentTarget.button.contains(event.relatedTarget)
-      ) return;
+      if (event.relatedTarget instanceof Node && currentTarget.button.contains(event.relatedTarget))
+        return;
       hide(currentTarget.button);
     };
 
@@ -148,12 +141,13 @@ export const GlobalButtonTooltips = () => {
       );
       const topPosition = buttonRect.top - TOOLTIP_GAP - tooltipRect.height;
       const placement = topPosition >= VIEWPORT_MARGIN ? "top" : "bottom";
-      const top = placement === "top"
-        ? topPosition
-        : Math.min(
-            buttonRect.bottom + TOOLTIP_GAP,
-            window.innerHeight - VIEWPORT_MARGIN - tooltipRect.height,
-          );
+      const top =
+        placement === "top"
+          ? topPosition
+          : Math.min(
+              buttonRect.bottom + TOOLTIP_GAP,
+              window.innerHeight - VIEWPORT_MARGIN - tooltipRect.height,
+            );
       setPosition({ left, top: Math.max(VIEWPORT_MARGIN, top), placement });
     };
 

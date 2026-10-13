@@ -48,10 +48,17 @@ export const KeyboardShortcutSettings = () => {
       </div>
       <div className="mt-4 grid gap-2 md:grid-cols-2">
         {SHORTCUT_DEFINITIONS.map((definition) => (
-          <div key={definition.action} className="flex items-center justify-between gap-3 rounded border border-[var(--color-border-light)] px-3 py-2">
+          <div
+            key={definition.action}
+            className="flex items-center justify-between gap-3 rounded border border-[var(--color-border-light)] px-3 py-2"
+          >
             <span className="min-w-0">
-              <span className="block truncate text-[12px] text-[var(--color-text-primary)]">{definition.label}</span>
-              <span className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">{definition.group}</span>
+              <span className="block truncate text-[12px] text-[var(--color-text-primary)]">
+                {definition.label}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                {definition.group}
+              </span>
             </span>
             <button
               className={`${buttonClass} min-w-24 tabular-nums ${recording === definition.action ? "border-[var(--color-accent)] text-[var(--color-accent)]" : ""}`}
@@ -68,7 +75,9 @@ export const KeyboardShortcutSettings = () => {
               }}
               type="button"
             >
-              {recording === definition.action ? "Press keys…" : shortcutDisplay(shortcuts[definition.action])}
+              {recording === definition.action
+                ? "Press keys…"
+                : shortcutDisplay(shortcuts[definition.action])}
             </button>
           </div>
         ))}

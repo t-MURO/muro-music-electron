@@ -39,8 +39,14 @@ const makeMocks = () => {
       clientState.position = positionSecs;
     },
     getTransportInfo: async () => ({ transportState: clientState.transportState }),
-    getPositionInfo: async () => ({ positionSecs: clientState.position, durationSecs: clientState.duration }),
-    getMediaInfo: async () => ({ currentUri: clientState.uriSet ? "http://set" : null, durationSecs: null }),
+    getPositionInfo: async () => ({
+      positionSecs: clientState.position,
+      durationSecs: clientState.duration,
+    }),
+    getMediaInfo: async () => ({
+      currentUri: clientState.uriSet ? "http://set" : null,
+      durationSecs: null,
+    }),
     setVolume: async (level) => calls.push(["setVolume", level]),
     hasVolumeControl: () => true,
   };
@@ -57,7 +63,15 @@ const makeMocks = () => {
     start: async () => ({ devices: [record], scanning: true, error: null }),
     stop: () => {},
     getDevices: () => ({
-      devices: [{ id: record.id, name: record.name, model: record.model, host: record.host, port: record.port }],
+      devices: [
+        {
+          id: record.id,
+          name: record.name,
+          model: record.model,
+          host: record.host,
+          port: record.port,
+        },
+      ],
       scanning: true,
       error: null,
     }),
@@ -76,7 +90,10 @@ const makeMocks = () => {
       this.sessionActive = false;
     },
     revokeAuthorizations: () => calls.push(["revoke"]),
-    authorizeFile: (filePath, kind) => ({ token: "tok", path: `/${kind}/session/tok-${path.basename(filePath)}` }),
+    authorizeFile: (filePath, kind) => ({
+      token: "tok",
+      path: `/${kind}/session/tok-${path.basename(filePath)}`,
+    }),
     urlFor: (pathname) => `http://192.168.1.2:45001${pathname}`,
     getLanAddress: () => "192.168.1.2",
     isRunning: () => true,
@@ -109,11 +126,17 @@ try {
   assert.ok(mocks.mediaServer.sessionActive);
 
   await assert.rejects(
-    () => service.commands.dlna_load_track({ trackId: "t", sourcePath: "/x/track.xyz", title: "A" }),
+    () =>
+      service.commands.dlna_load_track({ trackId: "t", sourcePath: "/x/track.xyz", title: "A" }),
     /DLNA_UNSUPPORTED_FORMAT/,
   );
   await assert.rejects(
-    () => service.commands.dlna_load_track({ trackId: "t", sourcePath: path.join(tempDir, "gone.flac"), title: "A" }),
+    () =>
+      service.commands.dlna_load_track({
+        trackId: "t",
+        sourcePath: path.join(tempDir, "gone.flac"),
+        title: "A",
+      }),
     /DLNA_LOAD_FAILED/,
   );
 
@@ -132,7 +155,10 @@ try {
   assert.equal(setUriCall.url, "http://192.168.1.2:45001/media/session/tok-track.flac");
   assert.ok(setUriCall.metadata.includes("Rise Again"));
   assert.ok(setUriCall.metadata.includes("audio/flac"));
-  assert.deepEqual(mocks.calls.find(([name]) => name === "seek"), ["seek", 30]);
+  assert.deepEqual(
+    mocks.calls.find(([name]) => name === "seek"),
+    ["seek", 30],
+  );
 
   // #4: a load must never emit a finished transition. The synthetic post-load
   // status is pushed while sessionState is "loading", and real renderers pass

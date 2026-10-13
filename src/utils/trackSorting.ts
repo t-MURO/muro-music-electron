@@ -69,10 +69,7 @@ export const getSortableValue = (
  * Compares two sortable values for ordering.
  * Handles both numeric and string comparisons with locale-aware string sorting.
  */
-export const compareSortValues = (
-  left: string | number,
-  right: string | number
-): number => {
+export const compareSortValues = (left: string | number, right: string | number): number => {
   if (typeof left === "number" && typeof right === "number") {
     return left - right;
   }

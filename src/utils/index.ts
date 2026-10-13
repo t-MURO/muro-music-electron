@@ -56,15 +56,8 @@ export {
   type TrackAnalysisFilter,
 } from "./trackFilters";
 export { getPathForView } from "./viewRouting";
-export {
-  filterAlbumsBySearch,
-  groupTracksIntoAlbums,
-  type Album,
-} from "./albums";
-export {
-  filterTracksBySmartCrate,
-  matchesSmartCrateRule,
-} from "./smartCrates";
+export { filterAlbumsBySearch, groupTracksIntoAlbums, type Album } from "./albums";
+export { filterTracksBySmartCrate, matchesSmartCrateRule } from "./smartCrates";
 export {
   loadTracks,
   clearTracks,

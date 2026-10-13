@@ -50,12 +50,14 @@ const findFile = (root, name) => {
 
 const main = async () => {
   if (!asset) {
-    throw new Error(`AcoustID fingerprinting is not available for ${process.platform}-${process.arch}`);
+    throw new Error(
+      `AcoustID fingerprinting is not available for ${process.platform}-${process.arch}`,
+    );
   }
   if (
-    fs.existsSync(destination)
-    && fs.existsSync(versionFile)
-    && fs.readFileSync(versionFile, "utf8").trim() === VERSION
+    fs.existsSync(destination) &&
+    fs.existsSync(versionFile) &&
+    fs.readFileSync(versionFile, "utf8").trim() === VERSION
   ) {
     console.log(`Chromaprint fpcalc ${VERSION} is already staged.`);
     return;

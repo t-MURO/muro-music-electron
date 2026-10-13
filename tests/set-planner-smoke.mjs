@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  camelotDistance,
-  planDjSet,
-} from "../src/lib/mix/setPlanner.ts";
+import { camelotDistance, planDjSet } from "../src/lib/mix/setPlanner.ts";
 
 const track = (id, bpm, key, title = id) => ({
   id,
@@ -77,45 +74,47 @@ assert.ok(
   "a falling preference produces a falling overall arc",
 );
 
-const harmonicDetour = planDjSet([
-  track("detour-start", 120, "8A"),
-  track("closer-key", 118, "9A"),
-  track("higher-bpm", 124, "8A"),
-  track("detour-end", 126, "10A"),
-], {
-  bpmFlow: "rising",
-  trackCount: 3,
-  startKey: "8A",
-  endKey: "10A",
-});
+const harmonicDetour = planDjSet(
+  [
+    track("detour-start", 120, "8A"),
+    track("closer-key", 118, "9A"),
+    track("higher-bpm", 124, "8A"),
+    track("detour-end", 126, "10A"),
+  ],
+  {
+    bpmFlow: "rising",
+    trackCount: 3,
+    startKey: "8A",
+    endKey: "10A",
+  },
+);
 assert.deepEqual(
   harmonicDetour.tracks.map((entry) => entry.id),
   ["detour-start", "closer-key", "detour-end"],
   "a small BPM dip is allowed when it creates a better harmonic path to the target key",
 );
 
-const tempoDetour = planDjSet([
-  track("tempo-start", 120, "8A"),
-  track("large-drop-closer-key", 105, "9A"),
-  track("tempo-step", 124, "8A"),
-  track("tempo-end", 128, "10A"),
-], {
-  bpmFlow: "rising",
-  trackCount: 3,
-  startKey: "8A",
-  endKey: "10A",
-});
+const tempoDetour = planDjSet(
+  [
+    track("tempo-start", 120, "8A"),
+    track("large-drop-closer-key", 105, "9A"),
+    track("tempo-step", 124, "8A"),
+    track("tempo-end", 128, "10A"),
+  ],
+  {
+    bpmFlow: "rising",
+    trackCount: 3,
+    startKey: "8A",
+    endKey: "10A",
+  },
+);
 assert.deepEqual(
   tempoDetour.tracks.map((entry) => entry.id),
   ["tempo-start", "tempo-step", "tempo-end"],
   "a large BPM reversal is rejected when the tempo arc outweighs the key improvement",
 );
 
-const deduplicated = planDjSet([
-  risingSource[0],
-  risingSource[0],
-  risingSource[1],
-], {
+const deduplicated = planDjSet([risingSource[0], risingSource[0], risingSource[1]], {
   bpmFlow: "steady",
   trackCount: 3,
 });
@@ -123,10 +122,7 @@ assert.equal(deduplicated.sourceTrackCount, 2);
 assert.equal(deduplicated.tracks.length, 2);
 assert.equal(new Set(deduplicated.tracks.map((entry) => entry.id)).size, 2);
 
-const noTempo = planDjSet([
-  track("unknown-one", undefined, "8A"),
-  track("unknown-two", 0, "8B"),
-], {
+const noTempo = planDjSet([track("unknown-one", undefined, "8A"), track("unknown-two", 0, "8B")], {
   bpmFlow: "flexible",
   trackCount: 10,
 });

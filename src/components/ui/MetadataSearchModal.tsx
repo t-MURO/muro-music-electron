@@ -4,10 +4,7 @@ import { DatabaseZap, LoaderCircle, SearchX } from "lucide-react";
 import { t } from "../../i18n";
 import type { Track, TrackMetadataUpdates } from "../../types";
 import type { MetadataSearchCandidate } from "../../utils/database";
-import {
-  albumArtistDisplay,
-  coerceArtistCredits,
-} from "../../utils/artistCredits";
+import { albumArtistDisplay, coerceArtistCredits } from "../../utils/artistCredits";
 
 type MetadataSearchModalProps = {
   track: Track | null;
@@ -54,12 +51,15 @@ export const MetadataSearchModal = ({
         setSelectedId(results[0]?.id ?? null);
       })
       .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : t("metadataSearch.failed"));
+        if (!cancelled)
+          setError(reason instanceof Error ? reason.message : t("metadataSearch.failed"));
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [onSearch, track]);
 
   useEffect(() => {
@@ -78,17 +78,57 @@ export const MetadataSearchModal = ({
 
   const fieldRows = useMemo((): MetadataFieldRow[] => {
     if (!track || !selected) return [];
-    const values: Array<Omit<MetadataFieldRow, "current" | "proposed" | "changed"> & { currentValue: string | number | null }> = [
-      { key: "title", label: t("edit.field.title"), currentValue: track.title, value: selected.title || null },
-      { key: "artist", label: t("edit.field.artist"), currentValue: track.artist, value: selected.artist || null },
-      { key: "artists", label: t("edit.field.albumArtist"), currentValue: albumArtistDisplay(track), value: selected.albumArtist || null },
-      { key: "album", label: t("edit.field.album"), currentValue: track.album, value: selected.album || null },
-      { key: "year", label: t("edit.field.year"), currentValue: track.year ?? null, value: selected.year },
-      { key: "genre", label: t("edit.field.genre"), currentValue: track.genre ?? null, value: selected.genre },
+    const values: Array<
+      Omit<MetadataFieldRow, "current" | "proposed" | "changed"> & {
+        currentValue: string | number | null;
+      }
+    > = [
+      {
+        key: "title",
+        label: t("edit.field.title"),
+        currentValue: track.title,
+        value: selected.title || null,
+      },
+      {
+        key: "artist",
+        label: t("edit.field.artist"),
+        currentValue: track.artist,
+        value: selected.artist || null,
+      },
+      {
+        key: "artists",
+        label: t("edit.field.albumArtist"),
+        currentValue: albumArtistDisplay(track),
+        value: selected.albumArtist || null,
+      },
+      {
+        key: "album",
+        label: t("edit.field.album"),
+        currentValue: track.album,
+        value: selected.album || null,
+      },
+      {
+        key: "year",
+        label: t("edit.field.year"),
+        currentValue: track.year ?? null,
+        value: selected.year,
+      },
+      {
+        key: "genre",
+        label: t("edit.field.genre"),
+        currentValue: track.genre ?? null,
+        value: selected.genre,
+      },
     ];
     return values.map(({ currentValue, ...row }) => {
-      const current = currentValue === null || currentValue === "" ? t("metadataSearch.empty") : String(currentValue);
-      const proposed = row.value === null || row.value === "" ? t("metadataSearch.unavailable") : String(row.value);
+      const current =
+        currentValue === null || currentValue === ""
+          ? t("metadataSearch.empty")
+          : String(currentValue);
+      const proposed =
+        row.value === null || row.value === ""
+          ? t("metadataSearch.unavailable")
+          : String(row.value);
       return {
         ...row,
         current,
@@ -99,9 +139,7 @@ export const MetadataSearchModal = ({
   }, [selected, track]);
 
   useEffect(() => {
-    setSelectedFields(new Set(
-      fieldRows.filter((row) => row.changed).map((row) => row.key),
-    ));
+    setSelectedFields(new Set(fieldRows.filter((row) => row.changed).map((row) => row.key)));
   }, [fieldRows]);
 
   if (!track || typeof document === "undefined") return null;
@@ -114,10 +152,7 @@ export const MetadataSearchModal = ({
       if (row.key === "year") updates.year = Number(row.value);
       else if (row.key === "artist") {
         updates.artist = String(row.value);
-        updates.artistCredits = coerceArtistCredits(
-          selected.artistCredits,
-          String(row.value),
-        );
+        updates.artistCredits = coerceArtistCredits(selected.artistCredits, String(row.value));
       } else if (row.key === "artists") {
         updates.albumArtist = String(row.value);
         updates.artists = String(row.value);
@@ -153,8 +188,12 @@ export const MetadataSearchModal = ({
         <div className="flex items-start gap-3 border-b border-[var(--color-border)] p-5">
           <DatabaseZap className="mt-0.5 h-5 w-5 shrink-0 text-[var(--color-accent)]" />
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">{t("metadataSearch.title")}</h2>
-            <p className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">{track.artist} — {track.title}</p>
+            <h2 className="text-[15px] font-semibold text-[var(--color-text-primary)]">
+              {t("metadataSearch.title")}
+            </h2>
+            <p className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">
+              {track.artist} — {track.title}
+            </p>
           </div>
         </div>
 
@@ -165,7 +204,9 @@ export const MetadataSearchModal = ({
               <span className="text-[12px]">{t("metadataSearch.searching")}</span>
             </div>
           ) : error ? (
-            <div className="flex min-h-56 items-center justify-center px-8 text-center text-[12px] text-red-500">{error}</div>
+            <div className="flex min-h-56 items-center justify-center px-8 text-center text-[12px] text-red-500">
+              {error}
+            </div>
           ) : candidates.length === 0 ? (
             <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-[var(--color-text-muted)]">
               <SearchX className="h-6 w-6" />
@@ -173,7 +214,11 @@ export const MetadataSearchModal = ({
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="max-h-56 space-y-1 overflow-y-auto" role="radiogroup" aria-label={t("metadataSearch.results")}>
+              <div
+                className="max-h-56 space-y-1 overflow-y-auto"
+                role="radiogroup"
+                aria-label={t("metadataSearch.results")}
+              >
                 {candidates.map((candidate) => (
                   <button
                     key={candidate.id}
@@ -185,28 +230,45 @@ export const MetadataSearchModal = ({
                     data-metadata-candidate
                   >
                     <span className="min-w-0">
-                      <span className="block truncate text-[12px] font-semibold text-[var(--color-text-primary)]">{candidate.title}</span>
-                      <span className="mt-0.5 block truncate text-[11px] text-[var(--color-text-secondary)]">{candidate.artist}</span>
+                      <span className="block truncate text-[12px] font-semibold text-[var(--color-text-primary)]">
+                        {candidate.title}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-[var(--color-text-secondary)]">
+                        {candidate.artist}
+                      </span>
                       <span className="mt-1 block truncate text-[10px] text-[var(--color-text-muted)]">
                         {candidate.album || t("metadataSearch.recordingOnly")}
                         {candidate.year ? ` · ${candidate.year}` : ""}
                         {candidate.country ? ` · ${candidate.country}` : ""}
                       </span>
                     </span>
-                    <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">{candidate.score}%</span>
+                    <span className="rounded-full border border-[var(--color-border)] px-2 py-0.5 text-[9px] tabular-nums text-[var(--color-text-muted)]">
+                      {candidate.score}%
+                    </span>
                   </button>
                 ))}
               </div>
 
               {selected && (
-                <section className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]" data-metadata-fields>
+                <section
+                  className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]"
+                  data-metadata-fields
+                >
                   <div className="flex items-center border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 py-2">
-                    <h3 className="text-[11px] font-semibold text-[var(--color-text-primary)]">{t("metadataSearch.fieldsTitle")}</h3>
-                    <span className="ml-2 text-[9px] text-[var(--color-text-muted)]">{t("metadataSearch.fieldsHint")}</span>
+                    <h3 className="text-[11px] font-semibold text-[var(--color-text-primary)]">
+                      {t("metadataSearch.fieldsTitle")}
+                    </h3>
+                    <span className="ml-2 text-[9px] text-[var(--color-text-muted)]">
+                      {t("metadataSearch.fieldsHint")}
+                    </span>
                     <button
                       type="button"
                       className="ml-auto text-[10px] text-[var(--color-accent)] hover:underline"
-                      onClick={() => setSelectedFields(new Set(fieldRows.filter((row) => row.changed).map((row) => row.key)))}
+                      onClick={() =>
+                        setSelectedFields(
+                          new Set(fieldRows.filter((row) => row.changed).map((row) => row.key)),
+                        )
+                      }
                       data-metadata-select-all
                     >
                       {t("metadataSearch.selectAll")}
@@ -231,17 +293,31 @@ export const MetadataSearchModal = ({
                           type="checkbox"
                           checked={selectedFields.has(row.key)}
                           disabled={!row.changed}
-                          onChange={(event) => setSelectedFields((current) => {
-                            const next = new Set(current);
-                            if (event.target.checked) next.add(row.key);
-                            else next.delete(row.key);
-                            return next;
-                          })}
+                          onChange={(event) =>
+                            setSelectedFields((current) => {
+                              const next = new Set(current);
+                              if (event.target.checked) next.add(row.key);
+                              else next.delete(row.key);
+                              return next;
+                            })
+                          }
                         />
-                        <span className="font-semibold text-[var(--color-text-secondary)]">{row.label}</span>
-                        <span className="truncate text-[var(--color-text-muted)]" title={row.current}>{row.current}</span>
+                        <span className="font-semibold text-[var(--color-text-secondary)]">
+                          {row.label}
+                        </span>
+                        <span
+                          className="truncate text-[var(--color-text-muted)]"
+                          title={row.current}
+                        >
+                          {row.current}
+                        </span>
                         <span className="text-center text-[var(--color-text-muted)]">→</span>
-                        <span className={`truncate ${row.changed ? "font-medium text-[var(--color-text-primary)]" : "text-[var(--color-text-muted)]"}`} title={row.proposed}>{row.proposed}</span>
+                        <span
+                          className={`truncate ${row.changed ? "font-medium text-[var(--color-text-primary)]" : "text-[var(--color-text-muted)]"}`}
+                          title={row.proposed}
+                        >
+                          {row.proposed}
+                        </span>
                       </label>
                     ))}
                   </div>
@@ -252,13 +328,23 @@ export const MetadataSearchModal = ({
         </div>
 
         <div className="flex items-center border-t border-[var(--color-border)] p-4">
-          <p className="mr-4 text-[10px] text-[var(--color-text-muted)]">{t("metadataSearch.sourceNote")}</p>
-          <button type="button" className="ml-auto px-3 py-2 text-[12px] text-[var(--color-text-secondary)]" onClick={onClose}>{t("edit.cancel")}</button>
+          <p className="mr-4 text-[10px] text-[var(--color-text-muted)]">
+            {t("metadataSearch.sourceNote")}
+          </p>
+          <button
+            type="button"
+            className="ml-auto px-3 py-2 text-[12px] text-[var(--color-text-secondary)]"
+            onClick={onClose}
+          >
+            {t("edit.cancel")}
+          </button>
           <button
             type="button"
             className="rounded-[var(--radius-md)] bg-[var(--color-accent)] px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
             disabled={!selected || selectedFields.size === 0 || isApplying}
-            onClick={() => { void applySelected(); }}
+            onClick={() => {
+              void applySelected();
+            }}
             data-apply-metadata
           >
             {isApplying ? t("metadataSearch.applying") : t("metadataSearch.apply")}

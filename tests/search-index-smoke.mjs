@@ -39,14 +39,16 @@ const backend = createBackend({
 let nextFixtureNumber = 0;
 const insertTrack = (db, { title, artist, album, genre = [], key = null, bpm = null }) => {
   const id = randomUUID();
-  const filename = `fixture-${nextFixtureNumber += 1}.mp3`;
-  db.prepare(`
+  const filename = `fixture-${(nextFixtureNumber += 1)}.mp3`;
+  db.prepare(
+    `
     INSERT INTO tracks (
       id, title, artist, album, genre_json, key, bpm, filename,
       source_path, import_status, added_at
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'library', ?)
-  `).run(
+  `,
+  ).run(
     id,
     title,
     artist,
@@ -140,15 +142,32 @@ const run = async () => {
   db.prepare("UPDATE tracks SET title = ? WHERE id = ?").run("Renamed Track", darkSide);
   refreshSearchText(db, darkSide);
   assert.deepEqual(searchTrackIds(dbPath, "renamed"), [darkSide], "an update reindexes the row");
-  assert.deepEqual(searchTrackIds(dbPath, "money"), [], "the previous title is gone from the index");
+  assert.deepEqual(
+    searchTrackIds(dbPath, "money"),
+    [],
+    "the previous title is gone from the index",
+  );
 
   db.prepare("DELETE FROM tracks WHERE id = ?").run(darkSide);
-  assert.deepEqual(searchTrackIds(dbPath, "renamed"), [], "a delete removes the row from the index");
+  assert.deepEqual(
+    searchTrackIds(dbPath, "renamed"),
+    [],
+    "a delete removes the row from the index",
+  );
 
   // Every write path that changes a searchable field has to reindex the row,
   // or the renderer's refreshed query keeps returning the old answer.
-  const analyzed = insertTrack(db, { title: "Unanalyzed", artist: "Index Test", album: "Analysis" });
-  await backend.invoke("update_track_analysis", { dbPath, trackId: analyzed, bpm: 174, key: "11B" });
+  const analyzed = insertTrack(db, {
+    title: "Unanalyzed",
+    artist: "Index Test",
+    album: "Analysis",
+  });
+  await backend.invoke("update_track_analysis", {
+    dbPath,
+    trackId: analyzed,
+    bpm: 174,
+    key: "11B",
+  });
   assert.deepEqual(searchTrackIds(dbPath, "174"), [analyzed], "an analyzed BPM is searchable");
   assert.deepEqual(searchTrackIds(dbPath, "11B"), [analyzed], "an analyzed key is searchable");
 
@@ -159,12 +178,18 @@ const run = async () => {
   fs.writeFileSync(path.join(inboxDir, "collide.mp3"), "incoming");
   fs.writeFileSync(path.join(libraryDir, "collide.mp3"), "already in the library");
   const staged = randomUUID();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO tracks (id, title, artist, album, filename, source_path, import_status, added_at)
     VALUES (?, 'Staged', 'Index Test', 'Inbox', 'collide.mp3', ?, 'staged', ?)
-  `).run(staged, path.join(inboxDir, "collide.mp3"), Math.floor(Date.now() / 1000));
+  `,
+  ).run(staged, path.join(inboxDir, "collide.mp3"), Math.floor(Date.now() / 1000));
   refreshSearchText(db, staged);
-  const accepted = await acceptInboxTracks({ dbPath, trackIds: [staged], libraryFolder: libraryDir });
+  const accepted = await acceptInboxTracks({
+    dbPath,
+    trackIds: [staged],
+    libraryFolder: libraryDir,
+  });
   assert.equal(accepted.moved[0]?.filename, "collide (2).mp3", "the collision renamed the file");
   assert.deepEqual(
     searchTrackIds(dbPath, "collide 2"),

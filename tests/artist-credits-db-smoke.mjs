@@ -20,19 +20,15 @@ const renderCredits = (credits) =>
   credits.map((credit) => credit.creditedName + credit.joinPhrase).join("");
 
 assert.equal(normalizeArtistName("  SHDW   & Obscure  "), "shdw & obscure");
-assert.deepEqual(
-  parseLegacyArtistCredits(" SHDW & Obscure ", ["shdw & obscure"]),
-  [{
+assert.deepEqual(parseLegacyArtistCredits(" SHDW & Obscure ", ["shdw & obscure"]), [
+  {
     name: "SHDW & Obscure",
     creditedName: " SHDW & Obscure ",
     joinPhrase: "",
-  }],
-);
+  },
+]);
 const protectedSubstring = "SHDW & Obscure feat. Guest, Other";
-const protectedCredits = parseLegacyArtistCredits(
-  protectedSubstring,
-  ["SHDW & Obscure"],
-);
+const protectedCredits = parseLegacyArtistCredits(protectedSubstring, ["SHDW & Obscure"]);
 assert.deepEqual(
   protectedCredits.map(({ name, creditedName, joinPhrase }) => ({
     name,
@@ -51,10 +47,7 @@ assert.deepEqual(
 );
 assert.equal(renderCredits(protectedCredits), protectedSubstring);
 const hyphenatedSubstring = "Jay-Z feat. Guest";
-const hyphenatedCredits = parseLegacyArtistCredits(
-  hyphenatedSubstring,
-  ["Jay-Z"],
-);
+const hyphenatedCredits = parseLegacyArtistCredits(hyphenatedSubstring, ["Jay-Z"]);
 assert.deepEqual(
   hyphenatedCredits.map(({ name, creditedName, joinPhrase }) => ({
     name,
@@ -123,31 +116,18 @@ try {
   );
 
   // Ordinary loads synthesize missing structured DTOs without writing.
-  const beforeBackfill = loadTracks(
-    dbPath,
-    temporaryDirectory,
-    ["SHDW & Obscure"],
-  );
-  assert.equal(
-    db.prepare("SELECT COUNT(*) count FROM track_artist_credit_sets").get().count,
-    0,
-  );
+  const beforeBackfill = loadTracks(dbPath, temporaryDirectory, ["SHDW & Obscure"]);
+  assert.equal(db.prepare("SELECT COUNT(*) count FROM track_artist_credit_sets").get().count, 0);
   const beforeMulti = beforeBackfill.library.find((track) => track.id === "multi");
   const beforeAtomic = beforeBackfill.library.find((track) => track.id === "atomic");
   assert.equal(beforeMulti.artist_credits.length, 4);
   assert.equal(beforeMulti.album_artist_credits.length, 2);
   assert.equal(renderCredits(beforeMulti.artist_credits), beforeMulti.artist);
-  assert.equal(
-    renderCredits(beforeMulti.album_artist_credits),
-    beforeMulti.album_artist,
-  );
+  assert.equal(renderCredits(beforeMulti.album_artist_credits), beforeMulti.album_artist);
   assert.equal(beforeAtomic.artist_credits.length, 1);
   assert.match(beforeAtomic.artist_credits[0].artistId, /^legacy:/);
 
-  const firstBackfill = ensureStructuredArtistCredits(
-    dbPath,
-    ["SHDW & Obscure"],
-  );
+  const firstBackfill = ensureStructuredArtistCredits(dbPath, ["SHDW & Obscure"]);
   assert.deepEqual(firstBackfill, {
     tracksChecked: 3,
     setsCreated: 5,
@@ -158,15 +138,12 @@ try {
     db.prepare("SELECT artist FROM tracks WHERE id = 'multi'").get().artist,
     "Alpha, Beta & Gamma feat. Delta",
   );
-  assert.deepEqual(
-    ensureStructuredArtistCredits(dbPath, ["SHDW & Obscure"]),
-    {
-      tracksChecked: 3,
-      setsCreated: 0,
-      setsReplaced: 0,
-      creditsCreated: 0,
-    },
-  );
+  assert.deepEqual(ensureStructuredArtistCredits(dbPath, ["SHDW & Obscure"]), {
+    tracksChecked: 3,
+    setsCreated: 0,
+    setsReplaced: 0,
+    creditsCreated: 0,
+  });
 
   const soloCredits = loadArtistCredits(db, ["solo"]).get("solo");
   assert.equal(soloCredits.artist_credits.length, 1);
@@ -177,9 +154,9 @@ try {
   );
   assert.equal(soloCredits.artist_credits[0].musicBrainzId, soloMusicBrainzId);
   assert.equal(
-    db.prepare(
-      "SELECT COUNT(*) count FROM artist_entities WHERE musicbrainz_id = ?",
-    ).get(soloMusicBrainzId).count,
+    db
+      .prepare("SELECT COUNT(*) count FROM artist_entities WHERE musicbrainz_id = ?")
+      .get(soloMusicBrainzId).count,
     1,
   );
 
@@ -191,21 +168,27 @@ try {
     trackId: "solo",
     scope: "track",
     displayText: fileTagAlias,
-    credits: [{
-      name: providerCanonicalName,
-      creditedName: fileTagAlias,
-      joinPhrase: "",
-      musicBrainzId: soloMusicBrainzId,
-    }],
+    credits: [
+      {
+        name: providerCanonicalName,
+        creditedName: fileTagAlias,
+        joinPhrase: "",
+        musicBrainzId: soloMusicBrainzId,
+      },
+    ],
     provenance: "provider",
   });
   assert.equal(providerSet.credits[0].name, providerCanonicalName);
   assert.deepEqual(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT canonical_name, normalized_name
       FROM artist_entities
       WHERE musicbrainz_id = ?
-    `).get(soloMusicBrainzId),
+    `,
+      )
+      .get(soloMusicBrainzId),
     {
       canonical_name: providerCanonicalName,
       normalized_name: normalizeArtistName(providerCanonicalName),
@@ -221,20 +204,26 @@ try {
     trackId: "solo",
     scope: "track",
     displayText: fileTagAlias,
-    credits: [{
-      name: fileTagAlias,
-      creditedName: fileTagAlias,
-      joinPhrase: "",
-      musicBrainzId: soloMusicBrainzId,
-    }],
+    credits: [
+      {
+        name: fileTagAlias,
+        creditedName: fileTagAlias,
+        joinPhrase: "",
+        musicBrainzId: soloMusicBrainzId,
+      },
+    ],
     provenance: "legacy",
   });
   assert.deepEqual(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT canonical_name, normalized_name
       FROM artist_entities
       WHERE musicbrainz_id = ?
-    `).get(soloMusicBrainzId),
+    `,
+      )
+      .get(soloMusicBrainzId),
     {
       canonical_name: providerCanonicalName,
       normalized_name: normalizeArtistName(providerCanonicalName),
@@ -263,19 +252,20 @@ try {
     trackId: "stale-identity",
     scope: "track",
     displayText: "Shared Artist",
-    credits: [{
-      name: "Shared Artist",
-      creditedName: "Shared Artist",
-      joinPhrase: "",
-      musicBrainzId: staleMusicBrainzId,
-    }],
+    credits: [
+      {
+        name: "Shared Artist",
+        creditedName: "Shared Artist",
+        joinPhrase: "",
+        musicBrainzId: staleMusicBrainzId,
+      },
+    ],
     provenance: "file-tags",
   });
   const staleArtistId = staleSet.credits[0].artistId;
   db.prepare("DELETE FROM tracks WHERE id = 'stale-identity'").run();
   assert.equal(
-    db.prepare("SELECT COUNT(*) count FROM artist_entities WHERE id = ?")
-      .get(staleArtistId).count,
+    db.prepare("SELECT COUNT(*) count FROM artist_entities WHERE id = ?").get(staleArtistId).count,
     1,
     "the regression requires an unreferenced MBID entity",
   );
@@ -297,17 +287,20 @@ try {
     trackId: "homonymous-no-id",
     scope: "track",
     displayText: "Shared Artist",
-    credits: [{
-      name: "Shared Artist",
-      creditedName: "Shared Artist",
-      joinPhrase: "",
-    }],
+    credits: [
+      {
+        name: "Shared Artist",
+        creditedName: "Shared Artist",
+        joinPhrase: "",
+      },
+    ],
     provenance: "file-tags",
   });
   assert.notEqual(homonymousSet.credits[0].artistId, staleArtistId);
   assert.equal(homonymousSet.credits[0].musicBrainzId, undefined);
   assert.equal(
-    db.prepare("SELECT musicbrainz_id FROM artist_entities WHERE id = ?")
+    db
+      .prepare("SELECT musicbrainz_id FROM artist_entities WHERE id = ?")
       .get(homonymousSet.credits[0].artistId).musicbrainz_id,
     null,
   );
@@ -334,12 +327,14 @@ try {
     trackId: "merge-target",
     scope: "track",
     displayText: "Duplicate Artist",
-    credits: [{
-      name: "Duplicate Artist",
-      creditedName: "Duplicate Artist",
-      joinPhrase: "",
-      musicBrainzId: mergeMusicBrainzId,
-    }],
+    credits: [
+      {
+        name: "Duplicate Artist",
+        creditedName: "Duplicate Artist",
+        joinPhrase: "",
+        musicBrainzId: mergeMusicBrainzId,
+      },
+    ],
     provenance: "file-tags",
   });
   insert.run(
@@ -359,28 +354,29 @@ try {
     trackId: "merge-source",
     scope: "track",
     displayText: "Duplicate Artist",
-    credits: [{
-      name: "Duplicate Artist",
-      creditedName: "Duplicate Artist",
-      joinPhrase: "",
-    }],
+    credits: [
+      {
+        name: "Duplicate Artist",
+        creditedName: "Duplicate Artist",
+        joinPhrase: "",
+      },
+    ],
     provenance: "file-tags",
   });
   replaceTrackArtistCredits(db, {
     trackId: "merge-source",
     scope: "album",
     displayText: "Duplicate Artist",
-    credits: [{
-      name: "Duplicate Artist",
-      creditedName: "Duplicate Artist",
-      joinPhrase: "",
-    }],
+    credits: [
+      {
+        name: "Duplicate Artist",
+        creditedName: "Duplicate Artist",
+        joinPhrase: "",
+      },
+    ],
     provenance: "file-tags",
   });
-  assert.notEqual(
-    mergeSourceSet.credits[0].artistId,
-    mergeTargetSet.credits[0].artistId,
-  );
+  assert.notEqual(mergeSourceSet.credits[0].artistId, mergeTargetSet.credits[0].artistId);
 
   const mergeResult = mergeArtistEntities(dbPath, {
     sourceArtistId: mergeSourceSet.credits[0].artistId,
@@ -391,16 +387,21 @@ try {
   assert.equal(mergeResult.creditsMerged, 2);
   assert.equal(mergeResult.tracksAffected, 1);
   assert.equal(
-    db.prepare("SELECT COUNT(*) count FROM artist_entities WHERE id = ?")
+    db
+      .prepare("SELECT COUNT(*) count FROM artist_entities WHERE id = ?")
       .get(mergeSourceSet.credits[0].artistId).count,
     0,
   );
   assert.equal(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT artist_id
       FROM artist_identity_bindings
       WHERE normalized_name = 'duplicate artist'
-    `).get().artist_id,
+    `,
+      )
+      .get().artist_id,
     mergeTargetSet.credits[0].artistId,
   );
   assert.equal(
@@ -425,11 +426,13 @@ try {
     trackId: "merge-later",
     scope: "track",
     displayText: "Duplicate Artist",
-    credits: [{
-      name: "Duplicate Artist",
-      creditedName: "Duplicate Artist",
-      joinPhrase: "",
-    }],
+    credits: [
+      {
+        name: "Duplicate Artist",
+        creditedName: "Duplicate Artist",
+        joinPhrase: "",
+      },
+    ],
     provenance: "file-tags",
   });
   assert.equal(laterSet.credits[0].artistId, mergeTargetSet.credits[0].artistId);
@@ -453,57 +456,61 @@ try {
     trackId: "merge-conflict",
     scope: "track",
     displayText: "Other Identity",
-    credits: [{
-      name: "Other Identity",
-      creditedName: "Other Identity",
-      joinPhrase: "",
-      musicBrainzId: conflictingMusicBrainzId,
-    }],
+    credits: [
+      {
+        name: "Other Identity",
+        creditedName: "Other Identity",
+        joinPhrase: "",
+        musicBrainzId: conflictingMusicBrainzId,
+      },
+    ],
     provenance: "file-tags",
   });
   assert.throws(
-    () => mergeArtistEntities(dbPath, {
-      sourceArtistId: conflictingSet.credits[0].artistId,
-      targetArtistId: mergeTargetSet.credits[0].artistId,
-    }),
+    () =>
+      mergeArtistEntities(dbPath, {
+        sourceArtistId: conflictingSet.credits[0].artistId,
+        targetArtistId: mergeTargetSet.credits[0].artistId,
+      }),
     /different MusicBrainz IDs/,
   );
-  db.prepare(`
+  db.prepare(
+    `
     DELETE FROM tracks
     WHERE id IN ('merge-target', 'merge-source', 'merge-later', 'merge-conflict')
-  `).run();
-  db.prepare(`
+  `,
+  ).run();
+  db.prepare(
+    `
     DELETE FROM artist_entities
     WHERE normalized_name IN ('duplicate artist', 'other identity')
-  `).run();
+  `,
+  ).run();
 
   // A newly saved exception can safely revise legacy provenance only.
-  const exceptionRefresh = ensureStructuredArtistCredits(
-    dbPath,
-    ["SHDW & Obscure", "Alpha, Beta & Gamma"],
-  );
+  const exceptionRefresh = ensureStructuredArtistCredits(dbPath, [
+    "SHDW & Obscure",
+    "Alpha, Beta & Gamma",
+  ]);
   assert.equal(exceptionRefresh.setsReplaced, 1);
   assert.equal(exceptionRefresh.creditsCreated, 2);
+  assert.equal(loadArtistCredits(db, ["multi"]).get("multi").artist_credits.length, 2);
   assert.equal(
-    loadArtistCredits(db, ["multi"]).get("multi").artist_credits.length,
-    2,
-  );
-  assert.equal(
-    ensureStructuredArtistCredits(
-      dbPath,
-      ["SHDW & Obscure", "Alpha, Beta & Gamma"],
-    ).setsReplaced,
+    ensureStructuredArtistCredits(dbPath, ["SHDW & Obscure", "Alpha, Beta & Gamma"]).setsReplaced,
     0,
   );
 
-  db.prepare("UPDATE tracks SET artist = ? WHERE id = 'multi'")
-    .run("Alias One & Alias Two");
+  db.prepare("UPDATE tracks SET artist = ? WHERE id = 'multi'").run("Alias One & Alias Two");
   assert.equal(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT COUNT(*) count
       FROM track_artist_credit_sets
       WHERE track_id = 'multi' AND scope = 'track'
-    `).get().count,
+    `,
+      )
+      .get().count,
     0,
     "legacy scalar edits invalidate only the stale scope",
   );
@@ -531,44 +538,41 @@ try {
     /canonical one/,
   );
   assert.throws(
-    () => replaceTrackArtistCredits(db, {
-      trackId: "multi",
-      scope: "track",
-      displayText: "Does not match",
-      credits: [{ name: "Different", creditedName: "Different", joinPhrase: "" }],
-    }),
+    () =>
+      replaceTrackArtistCredits(db, {
+        trackId: "multi",
+        scope: "track",
+        displayText: "Does not match",
+        credits: [{ name: "Different", creditedName: "Different", joinPhrase: "" }],
+      }),
     /reproduce display text exactly/,
   );
 
   // Explicit legacy ensure never overwrites a user/provider set.
   ensureStructuredArtistCredits(dbPath, ["Alias One & Alias Two"]);
+  assert.equal(loadArtistCredits(db, ["multi"]).get("multi").artist_credits.length, 2);
   assert.equal(
-    loadArtistCredits(db, ["multi"]).get("multi").artist_credits.length,
-    2,
-  );
-  assert.equal(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT provenance
       FROM track_artist_credit_sets
       WHERE track_id = 'multi' AND scope = 'track'
-    `).get().provenance,
+    `,
+      )
+      .get().provenance,
     "user",
   );
 
-  const recentlyPlayed = loadRecentlyPlayed(
-    dbPath,
-    10,
-    temporaryDirectory,
-    ["SHDW & Obscure"],
-  );
+  const recentlyPlayed = loadRecentlyPlayed(dbPath, 10, temporaryDirectory, ["SHDW & Obscure"]);
   assert.equal(recentlyPlayed[0].id, "multi");
   assert.equal(recentlyPlayed[0].artist_credits[0].name, "Canonical One");
   assert.doesNotMatch(recentlyPlayed[0].artist_credits[0].artistId, /^legacy:/);
 
-  const versionedMigration = migrateStructuredArtistCredits(
-    dbPath,
-    ["SHDW & Obscure", "Alias One & Alias Two"],
-  );
+  const versionedMigration = migrateStructuredArtistCredits(dbPath, [
+    "SHDW & Obscure",
+    "Alias One & Alias Two",
+  ]);
   assert.equal(versionedMigration.skipped, false);
   assert.equal(
     loadArtistCredits(db, ["multi"]).get("multi").artist_credits.length,
@@ -576,10 +580,7 @@ try {
     "an exact saved exception is authoritative during the versioned migration",
   );
   assert.equal(
-    migrateStructuredArtistCredits(
-      dbPath,
-      ["SHDW & Obscure", "Alias One & Alias Two"],
-    ).skipped,
+    migrateStructuredArtistCredits(dbPath, ["SHDW & Obscure", "Alias One & Alias Two"]).skipped,
     true,
     "the same exception-versioned migration must not rescan or rewrite the library",
   );

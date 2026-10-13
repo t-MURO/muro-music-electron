@@ -60,16 +60,9 @@ import {
   repairLibraryStructure,
   validateLibraryStructure,
 } from "./inboxOrganizer.mjs";
-import {
-  listPlaylistFilesForImport,
-  readPlaylistForImport,
-} from "./playlistFiles.mjs";
+import { listPlaylistFilesForImport, readPlaylistForImport } from "./playlistFiles.mjs";
 import { createPlaylistSyncService } from "./playlistSync.mjs";
-import {
-  createPathAccess,
-  createPathAccessError,
-  normalizeAccessPath,
-} from "./pathAccess.mjs";
+import { createPathAccess, createPathAccessError, normalizeAccessPath } from "./pathAccess.mjs";
 import { portablePathKey } from "./libraryPaths.mjs";
 
 const allowedUpdates = {
@@ -99,7 +92,8 @@ const allowedUpdates = {
 
 const MUSICBRAINZ_RECORDING_SEARCH = "https://musicbrainz.org/ws/2/recording/";
 const MUSICBRAINZ_RELEASE_SEARCH = "https://musicbrainz.org/ws/2/release/";
-const MUSICBRAINZ_USER_AGENT = "MuroMusicElectron/0.1.2 (https://github.com/t-MURO/muro-music-electron)";
+const MUSICBRAINZ_USER_AGENT =
+  "MuroMusicElectron/0.1.2 (https://github.com/t-MURO/muro-music-electron)";
 const MUSICBRAINZ_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -118,9 +112,10 @@ const createMusicBrainzFetcher = ({
     nextRequestAt = Date.now() + intervalMs;
     return fetchImpl(url, {
       headers: { Accept: "application/json", "User-Agent": MUSICBRAINZ_USER_AGENT },
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(requestTimeoutMs)
-        : undefined,
+      signal:
+        typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(requestTimeoutMs)
+          : undefined,
     });
   };
 
@@ -146,42 +141,51 @@ const createMusicBrainzFetcher = ({
         { cause: lastError },
       );
     });
-    requestQueue = request.then(() => undefined, () => undefined);
+    requestQueue = request.then(
+      () => undefined,
+      () => undefined,
+    );
     return request;
   };
 };
 
-const quotedMusicBrainzTerm = (value) => `"${String(value ?? "")
-  .trim()
-  .replace(/([\\"])/g, "\\$1")}"`;
+const quotedMusicBrainzTerm = (value) =>
+  `"${String(value ?? "")
+    .trim()
+    .replace(/([\\"])/g, "\\$1")}"`;
 
-const artistCreditParts = (credit) => (Array.isArray(credit) ? credit : []).flatMap((entry) => {
-  const creditedName = String(entry?.name ?? entry?.artist?.name ?? "").trim();
-  if (!creditedName) return [];
-  const canonicalName = String(entry?.artist?.name ?? creditedName).trim() || creditedName;
-  const musicBrainzId = String(entry?.artist?.id ?? "").trim();
-  return [{
-    name: canonicalName,
-    creditedName,
-    joinPhrase: String(entry?.joinphrase ?? ""),
-    musicBrainzId: /^[0-9a-f-]{36}$/i.test(musicBrainzId) ? musicBrainzId : null,
-  }];
-});
+const artistCreditParts = (credit) =>
+  (Array.isArray(credit) ? credit : []).flatMap((entry) => {
+    const creditedName = String(entry?.name ?? entry?.artist?.name ?? "").trim();
+    if (!creditedName) return [];
+    const canonicalName = String(entry?.artist?.name ?? creditedName).trim() || creditedName;
+    const musicBrainzId = String(entry?.artist?.id ?? "").trim();
+    return [
+      {
+        name: canonicalName,
+        creditedName,
+        joinPhrase: String(entry?.joinphrase ?? ""),
+        musicBrainzId: /^[0-9a-f-]{36}$/i.test(musicBrainzId) ? musicBrainzId : null,
+      },
+    ];
+  });
 
 const fallbackArtistCredit = (displayText) => {
   const name = String(displayText ?? "").trim();
   return name ? [{ name, creditedName: name, joinPhrase: "", musicBrainzId: null }] : [];
 };
 
-const artistCreditName = (credit) => artistCreditParts(credit)
-  .map((entry) => `${entry.creditedName}${entry.joinPhrase}`)
-  .join("")
-  .trim();
+const artistCreditName = (credit) =>
+  artistCreditParts(credit)
+    .map((entry) => `${entry.creditedName}${entry.joinPhrase}`)
+    .join("")
+    .trim();
 
 const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) => {
   const cleanTitle = String(title ?? "").trim();
   const cleanArtist = String(artist ?? "").trim();
-  if (!cleanTitle || !cleanArtist) throw new Error("Title and artist are required to search for metadata");
+  if (!cleanTitle || !cleanArtist)
+    throw new Error("Title and artist are required to search for metadata");
 
   const url = new URL(MUSICBRAINZ_RECORDING_SEARCH);
   url.searchParams.set(
@@ -195,9 +199,10 @@ const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) =
   const payload = await response.json();
   const candidates = [];
   for (const recording of Array.isArray(payload?.recordings) ? payload.recordings : []) {
-    const releases = Array.isArray(recording?.releases) && recording.releases.length > 0
-      ? recording.releases
-      : [null];
+    const releases =
+      Array.isArray(recording?.releases) && recording.releases.length > 0
+        ? recording.releases
+        : [null];
     for (const release of releases) {
       const releaseTitle = String(release?.title ?? "").trim();
       const recordingArtistCredits = artistCreditParts(recording?.["artist-credit"]);
@@ -214,50 +219,66 @@ const searchTrackMetadata = async ({ title, artist, album }, fetchMusicBrainz) =
         releaseGroupId: release?.["release-group"]?.id ?? null,
         title: String(recording?.title ?? cleanTitle),
         artist: recordingArtist,
-        artistCredits: recordingArtistCredits.length > 0
-          ? recordingArtistCredits
-          : fallbackArtistCredit(recordingArtist),
+        artistCredits:
+          recordingArtistCredits.length > 0
+            ? recordingArtistCredits
+            : fallbackArtistCredit(recordingArtist),
         album: releaseTitle,
         albumArtist: releaseArtist,
-        albumArtistCredits: releaseArtistCredits.length > 0
-          ? releaseArtistCredits
-          : recordingArtistCredits.length > 0
-            ? recordingArtistCredits
-            : fallbackArtistCredit(releaseArtist),
-        year: /^\d{4}/.test(String(release?.date ?? "")) ? Number(String(release.date).slice(0, 4)) : null,
+        albumArtistCredits:
+          releaseArtistCredits.length > 0
+            ? releaseArtistCredits
+            : recordingArtistCredits.length > 0
+              ? recordingArtistCredits
+              : fallbackArtistCredit(releaseArtist),
+        year: /^\d{4}/.test(String(release?.date ?? ""))
+          ? Number(String(release.date).slice(0, 4))
+          : null,
         country: release?.country ?? null,
         status: release?.status ?? null,
         genre: tags[0]?.name ?? null,
-        albumMatch: Boolean(album && releaseTitle.localeCompare(String(album), undefined, { sensitivity: "base" }) === 0),
+        albumMatch: Boolean(
+          album &&
+          releaseTitle.localeCompare(String(album), undefined, { sensitivity: "base" }) === 0,
+        ),
       });
     }
   }
-  candidates.sort((left, right) => (
-    Number(right.albumMatch) - Number(left.albumMatch)
-    || right.score - left.score
-    || (left.year ?? 9999) - (right.year ?? 9999)
-  ));
+  candidates.sort(
+    (left, right) =>
+      Number(right.albumMatch) - Number(left.albumMatch) ||
+      right.score - left.score ||
+      (left.year ?? 9999) - (right.year ?? 9999),
+  );
   return candidates.slice(0, 30);
 };
 
-const releaseYear = (release) => /^\d{4}/.test(String(release?.date ?? ""))
-  ? Number(String(release.date).slice(0, 4))
-  : null;
+const releaseYear = (release) =>
+  /^\d{4}/.test(String(release?.date ?? "")) ? Number(String(release.date).slice(0, 4)) : null;
 
 const releaseLabel = (release) => {
   const labels = Array.isArray(release?.["label-info"]) ? release["label-info"] : [];
-  return labels.map((entry) => entry?.label?.name).filter(Boolean).join(", ") || null;
+  return (
+    labels
+      .map((entry) => entry?.label?.name)
+      .filter(Boolean)
+      .join(", ") || null
+  );
 };
 
 const releaseTrackCount = (release) => {
   const media = Array.isArray(release?.media) ? release.media : [];
-  return media.reduce((total, medium) => total + Number(medium?.["track-count"] ?? medium?.tracks?.length ?? 0), 0);
+  return media.reduce(
+    (total, medium) => total + Number(medium?.["track-count"] ?? medium?.tracks?.length ?? 0),
+    0,
+  );
 };
 
 const searchAlbumMetadata = async ({ album, artist }, fetchMusicBrainz) => {
   const cleanAlbum = String(album ?? "").trim();
   const cleanArtist = String(artist ?? "").trim();
-  if (!cleanAlbum || !cleanArtist) throw new Error("Album and album artist are required to search for metadata");
+  if (!cleanAlbum || !cleanArtist)
+    throw new Error("Album and album artist are required to search for metadata");
   const url = new URL(MUSICBRAINZ_RELEASE_SEARCH);
   url.searchParams.set(
     "query",
@@ -268,24 +289,26 @@ const searchAlbumMetadata = async ({ album, artist }, fetchMusicBrainz) => {
   const response = await fetchMusicBrainz(url);
   if (!response.ok) throw new Error(`MusicBrainz album search failed (${response.status})`);
   const payload = await response.json();
-  return (Array.isArray(payload?.releases) ? payload.releases : []).map((release) => {
-    const credits = artistCreditParts(release?.["artist-credit"]);
-    const artist = artistCreditName(release?.["artist-credit"]) || cleanArtist;
-    return {
-      id: release.id,
-      score: Number(release?.score ?? 0),
-      title: String(release?.title ?? cleanAlbum),
-      artist,
-      artistCredits: credits.length > 0 ? credits : fallbackArtistCredit(artist),
-      releaseGroupId: release?.["release-group"]?.id ?? null,
-      year: releaseYear(release),
-      country: release?.country ?? null,
-      status: release?.status ?? null,
-      barcode: release?.barcode ?? null,
-      trackCount: releaseTrackCount(release),
-      disambiguation: release?.disambiguation ?? null,
-    };
-  }).sort((left, right) => right.score - left.score || (left.year ?? 9999) - (right.year ?? 9999));
+  return (Array.isArray(payload?.releases) ? payload.releases : [])
+    .map((release) => {
+      const credits = artistCreditParts(release?.["artist-credit"]);
+      const artist = artistCreditName(release?.["artist-credit"]) || cleanArtist;
+      return {
+        id: release.id,
+        score: Number(release?.score ?? 0),
+        title: String(release?.title ?? cleanAlbum),
+        artist,
+        artistCredits: credits.length > 0 ? credits : fallbackArtistCredit(artist),
+        releaseGroupId: release?.["release-group"]?.id ?? null,
+        year: releaseYear(release),
+        country: release?.country ?? null,
+        status: release?.status ?? null,
+        barcode: release?.barcode ?? null,
+        trackCount: releaseTrackCount(release),
+        disambiguation: release?.disambiguation ?? null,
+      };
+    })
+    .sort((left, right) => right.score - left.score || (left.year ?? 9999) - (right.year ?? 9999));
 };
 
 const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
@@ -306,9 +329,8 @@ const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
     id: release.id,
     title: String(release?.title ?? ""),
     artist: releaseArtist,
-    artistCredits: releaseArtistCredits.length > 0
-      ? releaseArtistCredits
-      : fallbackArtistCredit(releaseArtist),
+    artistCredits:
+      releaseArtistCredits.length > 0 ? releaseArtistCredits : fallbackArtistCredit(releaseArtist),
     releaseGroupId: release?.["release-group"]?.id ?? null,
     year: releaseYear(release),
     country: release?.country ?? null,
@@ -331,9 +353,7 @@ const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
           recordingId: track?.recording?.id ?? null,
           title: String(track?.title ?? track?.recording?.title ?? ""),
           artist,
-          artistCredits: artistCredits.length > 0
-            ? artistCredits
-            : fallbackArtistCredit(artist),
+          artistCredits: artistCredits.length > 0 ? artistCredits : fallbackArtistCredit(artist),
           trackNumber: Number(track?.position ?? trackIndex + 1),
           trackTotal: Number(medium?.["track-count"] ?? tracks.length),
           discNumber: Number(medium?.position ?? mediumIndex + 1),
@@ -344,25 +364,32 @@ const loadAlbumMetadata = async ({ releaseId }, fetchMusicBrainz) => {
   };
 };
 
-const listJson = (value) => JSON.stringify(
-  String(value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-);
+const listJson = (value) =>
+  JSON.stringify(
+    String(value ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
 
 const exportPlaylistFile = async (dbPath, playlistId, filePath) => {
-  const rows = openDatabase(dbPath).prepare(`
+  const rows = openDatabase(dbPath)
+    .prepare(
+      `
     SELECT t.source_path, t.duration_seconds, t.artist, t.title
     FROM playlist_tracks pt
     JOIN tracks t ON t.id = pt.track_id
     WHERE pt.playlist_id = ?
     ORDER BY pt.position ASC
-  `).all(playlistId);
+  `,
+    )
+    .all(playlistId);
   const lines = ["#EXTM3U"];
   for (const row of rows) {
     const duration = Math.max(-1, Math.round(Number(row.duration_seconds) || -1));
-    lines.push(`#EXTINF:${duration},${row.artist || "Unknown Artist"} - ${row.title || "Unknown Title"}`);
+    lines.push(
+      `#EXTINF:${duration},${row.artist || "Unknown Artist"} - ${row.title || "Unknown Title"}`,
+    );
     lines.push(resolveTrackPath(dbPath, row.source_path));
   }
   await fs.promises.mkdir(path.dirname(path.resolve(filePath)), { recursive: true });
@@ -389,26 +416,30 @@ const metadataValueFromDatabase = (key, value) => {
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
-const normalizedArtistCredits = (value) => (Array.isArray(value) ? value : []).map((credit) => {
-  const creditedName = String(credit?.creditedName ?? credit?.credited_name ?? credit?.name ?? "");
-  const name = String(credit?.name ?? creditedName).trim() || creditedName.trim();
-  return {
-    ...(credit?.artistId || credit?.artist_id
-      ? { artistId: String(credit.artistId ?? credit.artist_id) }
-      : {}),
-    name,
-    creditedName,
-    joinPhrase: String(credit?.joinPhrase ?? credit?.join_phrase ?? ""),
-    ...(credit?.musicBrainzId || credit?.musicbrainz_id
-      ? { musicBrainzId: String(credit.musicBrainzId ?? credit.musicbrainz_id) }
-      : {}),
-    ...(credit?.role ? { role: String(credit.role) } : {}),
-  };
-});
+const normalizedArtistCredits = (value) =>
+  (Array.isArray(value) ? value : []).map((credit) => {
+    const creditedName = String(
+      credit?.creditedName ?? credit?.credited_name ?? credit?.name ?? "",
+    );
+    const name = String(credit?.name ?? creditedName).trim() || creditedName.trim();
+    return {
+      ...(credit?.artistId || credit?.artist_id
+        ? { artistId: String(credit.artistId ?? credit.artist_id) }
+        : {}),
+      name,
+      creditedName,
+      joinPhrase: String(credit?.joinPhrase ?? credit?.join_phrase ?? ""),
+      ...(credit?.musicBrainzId || credit?.musicbrainz_id
+        ? { musicBrainzId: String(credit.musicBrainzId ?? credit.musicbrainz_id) }
+        : {}),
+      ...(credit?.role ? { role: String(credit.role) } : {}),
+    };
+  });
 
-const displayArtistCredits = (credits) => normalizedArtistCredits(credits)
-  .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
-  .join("");
+const displayArtistCredits = (credits) =>
+  normalizedArtistCredits(credits)
+    .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
+    .join("");
 
 const legacyCreditForDisplay = (displayText) => {
   const creditedName = String(displayText ?? "");
@@ -442,13 +473,14 @@ const artistCreditPlan = (updates, scope) => {
   return { scope, displayKey, creditsKey, displayText, credits };
 };
 
-const comparableArtistCredits = (credits) => normalizedArtistCredits(credits).map((credit) => ({
-  name: credit.name,
-  creditedName: credit.creditedName,
-  joinPhrase: credit.joinPhrase,
-  musicBrainzId: credit.musicBrainzId ?? null,
-  role: credit.role ?? null,
-}));
+const comparableArtistCredits = (credits) =>
+  normalizedArtistCredits(credits).map((credit) => ({
+    name: credit.name,
+    creditedName: credit.creditedName,
+    joinPhrase: credit.joinPhrase,
+    musicBrainzId: credit.musicBrainzId ?? null,
+    role: credit.role ?? null,
+  }));
 
 // TagLib reports file-system failures as opaque WASM error codes. Probe the
 // file directly so the renderer can explain the usual causes.
@@ -526,12 +558,12 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
       for (const plan of creditPlans) {
         const column = allowedUpdates[plan.displayKey];
         const beforeDisplay = String(current[column] ?? "");
-        const beforeCredits = plan.scope === "track"
-          ? prior.artist_credits
-          : prior.album_artist_credits;
-        const normalizedBeforeCredits = beforeCredits.length > 0
-          ? comparableArtistCredits(beforeCredits)
-          : comparableArtistCredits(legacyCreditForDisplay(beforeDisplay));
+        const beforeCredits =
+          plan.scope === "track" ? prior.artist_credits : prior.album_artist_credits;
+        const normalizedBeforeCredits =
+          beforeCredits.length > 0
+            ? comparableArtistCredits(beforeCredits)
+            : comparableArtistCredits(legacyCreditForDisplay(beforeDisplay));
         const normalizedAfterCredits = comparableArtistCredits(plan.credits);
         if (JSON.stringify(normalizedBeforeCredits) === JSON.stringify(normalizedAfterCredits)) {
           continue;
@@ -550,15 +582,20 @@ const updateTrackMetadata = async (dbPath, trackIds, updates, source = "user") =
     }
     const set = entries.map(([column]) => `${column} = ?`).join(", ");
     const placeholders = trackIds.map(() => "?").join(", ");
-    db.prepare(`UPDATE tracks SET ${set}, updated_at = ? WHERE id IN (${placeholders})`)
-      .run(...entries.map(([, value]) => value), Math.floor(Date.now() / 1000), ...trackIds);
+    db.prepare(`UPDATE tracks SET ${set}, updated_at = ? WHERE id IN (${placeholders})`).run(
+      ...entries.map(([, value]) => value),
+      Math.floor(Date.now() / 1000),
+      ...trackIds,
+    );
     for (const id of trackIds) {
       for (const plan of creditPlans) {
         if (!plan.displayText.trim() || plan.credits.length === 0) {
-          db.prepare(`
+          db.prepare(
+            `
             DELETE FROM track_artist_credit_sets
             WHERE track_id = ? AND scope = ?
-          `).run(id, plan.scope);
+          `,
+          ).run(id, plan.scope);
           continue;
         }
         replaceTrackArtistCredits(db, {
@@ -644,17 +681,22 @@ export const createBackend = ({
       return null;
     }
   };
-  const artworkRoots = () => [cacheDir, artistCacheDir, restoredArtworkDir]
-    .map((root) => path.resolve(root));
+  const artworkRoots = () =>
+    [cacheDir, artistCacheDir, restoredArtworkDir].map((root) => path.resolve(root));
   const isInsideArtworkRoot = (filePath) => {
     const candidate = normalizeAccessPath(filePath);
-    return Boolean(candidate) && artworkRoots().some((root) => {
-      const relative = path.relative(root, candidate);
-      return relative !== ""
-        && relative !== ".."
-        && !relative.startsWith(`..${path.sep}`)
-        && !path.isAbsolute(relative);
-    });
+    return (
+      Boolean(candidate) &&
+      artworkRoots().some((root) => {
+        const relative = path.relative(root, candidate);
+        return (
+          relative !== "" &&
+          relative !== ".." &&
+          !relative.startsWith(`..${path.sep}`) &&
+          !path.isAbsolute(relative)
+        );
+      })
+    );
   };
   const IMAGE_EXTENSIONS = new Set([".gif", ".jpeg", ".jpg", ".png", ".webp"]);
   const referencedPathCache = new Set();
@@ -669,16 +711,22 @@ export const createBackend = ({
     const stored = storeTrackPath(dbPath, filePath);
     const caseInsensitive = process.platform === "win32" ? " COLLATE NOCASE" : "";
     let referenced = Boolean(
-      db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(stored)
-      || (caseInsensitive
-        && db.prepare(`SELECT 1 FROM tracks WHERE source_path = ?${caseInsensitive}`).get(stored)),
+      db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(stored) ||
+      (caseInsensitive &&
+        db.prepare(`SELECT 1 FROM tracks WHERE source_path = ?${caseInsensitive}`).get(stored)),
     );
     if (!referenced && IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
-      referenced = Boolean(db.prepare(`
+      referenced = Boolean(
+        db
+          .prepare(
+            `
         SELECT 1 FROM tracks
         WHERE cover_art_path = ?${caseInsensitive} OR cover_art_thumb_path = ?${caseInsensitive}
         LIMIT 1
-      `).get(filePath, filePath));
+      `,
+          )
+          .get(filePath, filePath),
+      );
     }
     if (referenced) {
       referencedPathCache.add(key);
@@ -688,10 +736,12 @@ export const createBackend = ({
     }
     return referenced;
   };
-  const pathAccess = pathAccessOverride ?? createPathAccess({
-    trustedRoots: () => [...artworkRoots(), currentLibraryRoot()].filter(Boolean),
-    isTrustedFile: isDatabaseReferencedPath,
-  });
+  const pathAccess =
+    pathAccessOverride ??
+    createPathAccess({
+      trustedRoots: () => [...artworkRoots(), currentLibraryRoot()].filter(Boolean),
+      isTrustedFile: isDatabaseReferencedPath,
+    });
   /**
    * A library root sent by the renderer is honoured only when it is the root
    * the database already uses or a folder the user picked in a dialog.
@@ -715,9 +765,16 @@ export const createBackend = ({
     if (value == null || value === "") return value;
     const candidate = normalizeAccessPath(String(value));
     if (candidate && isInsideArtworkRoot(candidate)) return candidate;
-    if (candidate && openDatabase(dbPath).prepare(`
+    if (
+      candidate &&
+      openDatabase(dbPath)
+        .prepare(
+          `
       SELECT 1 FROM tracks WHERE cover_art_path = ? OR cover_art_thumb_path = ? LIMIT 1
-    `).get(candidate, candidate)) {
+    `,
+        )
+        .get(candidate, candidate)
+    ) {
       return candidate;
     }
     throw createPathAccessError("cover art file");
@@ -750,15 +807,18 @@ export const createBackend = ({
   const authorizedRemotePlayback = (dbPath, args) => {
     const fromTrack = args?.trackId ? trackSourcePathForId(dbPath, args.trackId) : null;
     const sourcePath = fromTrack ?? pathAccess.assertReadable(args?.sourcePath, "track file");
-    const coverArtPath = args?.coverArtPath && pathAccess.canRead(args.coverArtPath)
-      ? normalizeAccessPath(args.coverArtPath)
-      : null;
+    const coverArtPath =
+      args?.coverArtPath && pathAccess.canRead(args.coverArtPath)
+        ? normalizeAccessPath(args.coverArtPath)
+        : null;
     return { ...args, sourcePath, coverArtPath };
   };
   const artistProfiles = createArtistProfileService({ cacheDir: artistCacheDir });
-  const acoustId = acoustIdServiceOverride ?? createAcoustIdService({
-    binaryDirectories: fpcalcBinaryDirectories,
-  });
+  const acoustId =
+    acoustIdServiceOverride ??
+    createAcoustIdService({
+      binaryDirectories: fpcalcBinaryDirectories,
+    });
   const albumCovers = createAlbumCoverService({ cacheDir });
   const fetchMusicBrainz = createMusicBrainzFetcher({
     fetchImpl: metadataFetchImpl,
@@ -787,21 +847,17 @@ export const createBackend = ({
     ...dlnaService.commands,
     ...(castService.commands.cast_load_track
       ? {
-        cast_load_track: (args) =>
-          castService.commands.cast_load_track(authorizedRemotePlayback(currentDbPath(), args)),
-      }
+          cast_load_track: (args) =>
+            castService.commands.cast_load_track(authorizedRemotePlayback(currentDbPath(), args)),
+        }
       : {}),
     ...(dlnaService.commands.dlna_load_track
       ? {
-        dlna_load_track: (args) =>
-          dlnaService.commands.dlna_load_track(authorizedRemotePlayback(currentDbPath(), args)),
-      }
+          dlna_load_track: (args) =>
+            dlnaService.commands.dlna_load_track(authorizedRemotePlayback(currentDbPath(), args)),
+        }
       : {}),
-    async import_files({
-      paths,
-      dbPath,
-      libraryFolder,
-    }, sender) {
+    async import_files({ paths, dbPath, libraryFolder }, sender) {
       const failures = [];
       const inputPaths = (Array.isArray(paths) ? paths : []).filter((inputPath) => {
         if (pathAccess.canRead(inputPath)) return true;
@@ -865,12 +921,13 @@ export const createBackend = ({
       sourceMusicBrainzId,
       targetArtistId,
       targetMusicBrainzId,
-    }) => mergeArtistEntities(dbPath, {
-      sourceArtistId,
-      sourceMusicBrainzId,
-      targetArtistId,
-      targetMusicBrainzId,
-    }),
+    }) =>
+      mergeArtistEntities(dbPath, {
+        sourceArtistId,
+        sourceMusicBrainzId,
+        targetArtistId,
+        targetMusicBrainzId,
+      }),
     create_library_backup: ({ dbPath, destinationPath, settingsJson, smartCratesJson }) =>
       createLibraryBackup({
         dbPath,
@@ -949,14 +1006,12 @@ export const createBackend = ({
         artist,
         apiKey: braveSearchApiKey,
       }),
-    cache_album_cover_candidate: ({ candidate }) =>
-      albumCovers.cacheCoverCandidate(candidate),
+    cache_album_cover_candidate: ({ candidate }) => albumCovers.cacheCoverCandidate(candidate),
     search_track_metadata: ({ title, artist, album }) =>
       searchTrackMetadata({ title, artist, album }, fetchMusicBrainz),
     search_album_metadata: ({ album, artist }) =>
       searchAlbumMetadata({ album, artist }, fetchMusicBrainz),
-    load_album_metadata: ({ releaseId }) =>
-      loadAlbumMetadata({ releaseId }, fetchMusicBrainz),
+    load_album_metadata: ({ releaseId }) => loadAlbumMetadata({ releaseId }, fetchMusicBrainz),
     identify_track_acoustid: ({ dbPath, trackId, clientKey, force }) =>
       acoustId.identifyTrack(openDatabase(dbPath), { trackId, clientKey, force }),
 
@@ -996,17 +1051,21 @@ export const createBackend = ({
         trackIds,
       }),
     unaccept_tracks: ({ dbPath, trackIds }) =>
-      bulkTrackOperation(dbPath, trackIds, "UPDATE tracks SET import_status = 'staged' WHERE id IN"),
+      bulkTrackOperation(
+        dbPath,
+        trackIds,
+        "UPDATE tracks SET import_status = 'staged' WHERE id IN",
+      ),
     reject_tracks: ({ dbPath, trackIds }) => {
       referencedPathCache.clear();
       return bulkTrackOperation(dbPath, trackIds, "DELETE FROM tracks WHERE id IN");
     },
     delete_tracks: async ({ dbPath, trackIds, deleteFromDisk }) => {
-      const ids = [...new Set(
-        (Array.isArray(trackIds) ? trackIds : [])
-          .map((id) => String(id))
-          .filter(Boolean),
-      )];
+      const ids = [
+        ...new Set(
+          (Array.isArray(trackIds) ? trackIds : []).map((id) => String(id)).filter(Boolean),
+        ),
+      ];
       if (ids.length === 0) return { deletedTrackIds: [], failures: [] };
       referencedPathCache.clear();
 
@@ -1043,14 +1102,7 @@ export const createBackend = ({
       return { deletedTrackIds, failures };
     },
 
-    create_playlist: async ({
-      dbPath,
-      id,
-      name,
-      folderId,
-      sortOrder,
-      sourcePath,
-    }) => {
+    create_playlist: async ({ dbPath, id, name, folderId, sortOrder, sourcePath }) => {
       const db = openDatabase(dbPath);
       const linkedSourcePath = sourcePath
         ? storeTrackPath(dbPath, pathAccess.assertReadable(String(sourcePath), "playlist file"))
@@ -1059,17 +1111,23 @@ export const createBackend = ({
         const targetFolderId = folderId || null;
         const nextSortOrder = Number.isInteger(sortOrder)
           ? sortOrder
-          : db.prepare(`
+          : db
+              .prepare(
+                `
               SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
               FROM playlists
               WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
-            `).get(targetFolderId, targetFolderId).next;
-        db.prepare(`
+            `,
+              )
+              .get(targetFolderId, targetFolderId).next;
+        db.prepare(
+          `
           INSERT INTO playlists(
             id, name, folder_id, sort_order, source_path, created_at
           )
           VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
+        `,
+        ).run(
           id,
           String(name).trim(),
           targetFolderId,
@@ -1083,33 +1141,46 @@ export const createBackend = ({
     },
     update_playlist: ({ dbPath, playlistId, name, folderId, sortOrder }) => {
       const db = openDatabase(dbPath);
-      return withPlaylistHistory(db, name !== undefined ? "Rename playlist" : "Move playlist", () => {
-        if (name !== undefined) {
-          db.prepare("UPDATE playlists SET name = ? WHERE id = ?")
-            .run(String(name).trim(), playlistId);
-        }
-        if (folderId !== undefined) {
-          const targetFolderId = folderId || null;
-          const nextSortOrder = Number.isInteger(sortOrder)
-            ? sortOrder
-            : db.prepare(`
+      return withPlaylistHistory(
+        db,
+        name !== undefined ? "Rename playlist" : "Move playlist",
+        () => {
+          if (name !== undefined) {
+            db.prepare("UPDATE playlists SET name = ? WHERE id = ?").run(
+              String(name).trim(),
+              playlistId,
+            );
+          }
+          if (folderId !== undefined) {
+            const targetFolderId = folderId || null;
+            const nextSortOrder = Number.isInteger(sortOrder)
+              ? sortOrder
+              : db
+                  .prepare(
+                    `
                 SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
                 FROM playlists
                 WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
-              `).get(targetFolderId, targetFolderId).next;
-          db.prepare("UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?")
-            .run(targetFolderId, nextSortOrder, playlistId);
-        } else if (Number.isInteger(sortOrder)) {
-          db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?")
-            .run(sortOrder, playlistId);
-        }
-      });
+              `,
+                  )
+                  .get(targetFolderId, targetFolderId).next;
+            db.prepare("UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?").run(
+              targetFolderId,
+              nextSortOrder,
+              playlistId,
+            );
+          } else if (Number.isInteger(sortOrder)) {
+            db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?").run(
+              sortOrder,
+              playlistId,
+            );
+          }
+        },
+      );
     },
     reorder_playlists: ({ dbPath, items }) => {
       const db = openDatabase(dbPath);
-      const update = db.prepare(
-        "UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?"
-      );
+      const update = db.prepare("UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?");
       withPlaylistHistory(db, "Reorder playlists", () => {
         for (const item of Array.isArray(items) ? items : []) {
           update.run(item.folderId || null, Number(item.sortOrder) || 0, item.id);
@@ -1120,22 +1191,25 @@ export const createBackend = ({
       const db = openDatabase(dbPath);
       grantLinkedPlaylistSources(dbPath, [playlistId]);
       const result = withPlaylistHistory(db, "Delete playlist", () =>
-        db.prepare("DELETE FROM playlists WHERE id = ?").run(playlistId));
+        db.prepare("DELETE FROM playlists WHERE id = ?").run(playlistId),
+      );
       await playlistSync.refreshSources({ dbPath, syncChanged: false });
       return result;
     },
     delete_playlists: async ({ dbPath, playlistIds }) => {
-      const ids = [...new Set(
-        (Array.isArray(playlistIds) ? playlistIds : [])
-          .map((id) => String(id))
-          .filter(Boolean),
-      )];
+      const ids = [
+        ...new Set(
+          (Array.isArray(playlistIds) ? playlistIds : []).map((id) => String(id)).filter(Boolean),
+        ),
+      ];
       if (ids.length === 0) return { deleted: 0 };
       const db = openDatabase(dbPath);
       grantLinkedPlaylistSources(dbPath, ids);
       const placeholders = ids.map(() => "?").join(", ");
       const result = withPlaylistHistory(db, `Delete ${ids.length} playlists`, () => {
-        const result = db.prepare(`DELETE FROM playlists WHERE id IN (${placeholders})`).run(...ids);
+        const result = db
+          .prepare(`DELETE FROM playlists WHERE id IN (${placeholders})`)
+          .run(...ids);
         return { deleted: Number(result.changes) || 0 };
       });
       await playlistSync.refreshSources({ dbPath, syncChanged: false });
@@ -1146,7 +1220,10 @@ export const createBackend = ({
       if (requested.length === 0) return { restored: 0 };
       const db = openDatabase(dbPath);
       const existingTrackIds = new Set(
-        db.prepare("SELECT id FROM tracks").all().map((row) => String(row.id)),
+        db
+          .prepare("SELECT id FROM tracks")
+          .all()
+          .map((row) => String(row.id)),
       );
       const insertPlaylist = db.prepare(`
         INSERT INTO playlists(
@@ -1172,9 +1249,9 @@ export const createBackend = ({
             Number(playlist.sortOrder) || 0,
             playlist.sourcePath
               ? storeTrackPath(
-                dbPath,
-                pathAccess.assertReadable(String(playlist.sourcePath), "playlist file"),
-              )
+                  dbPath,
+                  pathAccess.assertReadable(String(playlist.sourcePath), "playlist file"),
+                )
               : null,
             playlist.sourceMtimeMs == null ? null : Number(playlist.sourceMtimeMs),
             playlist.sourceSize == null ? null : Number(playlist.sourceSize),
@@ -1182,11 +1259,13 @@ export const createBackend = ({
             playlist.lastSyncedAt == null ? null : Number(playlist.lastSyncedAt),
             Math.floor(Date.now() / 1000),
           );
-          const trackIds = [...new Set(
-            (Array.isArray(playlist.trackIds) ? playlist.trackIds : [])
-              .map((trackId) => String(trackId))
-              .filter((trackId) => existingTrackIds.has(trackId)),
-          )];
+          const trackIds = [
+            ...new Set(
+              (Array.isArray(playlist.trackIds) ? playlist.trackIds : [])
+                .map((trackId) => String(trackId))
+                .filter((trackId) => existingTrackIds.has(trackId)),
+            ),
+          ];
           trackIds.forEach((trackId, position) => insertTrack.run(id, trackId, position));
           restored += 1;
         }
@@ -1200,64 +1279,106 @@ export const createBackend = ({
       const targetParentId = parentId || null;
       const nextSortOrder = Number.isInteger(sortOrder)
         ? sortOrder
-        : db.prepare(`
+        : db
+            .prepare(
+              `
             SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
             FROM playlist_folders
             WHERE parent_id = ? OR (parent_id IS NULL AND ? IS NULL)
-          `).get(targetParentId, targetParentId).next;
+          `,
+            )
+            .get(targetParentId, targetParentId).next;
       return withPlaylistHistory(db, `Create playlist folder: ${String(name).trim()}`, () =>
-        db.prepare(`
+        db
+          .prepare(
+            `
           INSERT INTO playlist_folders(id, name, parent_id, sort_order, created_at)
           VALUES (?, ?, ?, ?, ?)
-        `).run(id, String(name).trim(), targetParentId, nextSortOrder, Math.floor(Date.now() / 1000)));
+        `,
+          )
+          .run(
+            id,
+            String(name).trim(),
+            targetParentId,
+            nextSortOrder,
+            Math.floor(Date.now() / 1000),
+          ),
+      );
     },
     update_playlist_folder: ({ dbPath, folderId, name, parentId, sortOrder }) => {
       const db = openDatabase(dbPath);
-      return withPlaylistHistory(db, name !== undefined ? "Rename playlist folder" : "Move playlist folder", () => {
-        if (name !== undefined) {
-          db.prepare("UPDATE playlist_folders SET name = ? WHERE id = ?")
-            .run(String(name).trim(), folderId);
-        }
-        if (parentId !== undefined) {
-          db.prepare("UPDATE playlist_folders SET parent_id = ? WHERE id = ?")
-            .run(parentId || null, folderId);
-        }
-        if (Number.isInteger(sortOrder)) {
-          db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?")
-            .run(sortOrder, folderId);
-        }
-      });
+      return withPlaylistHistory(
+        db,
+        name !== undefined ? "Rename playlist folder" : "Move playlist folder",
+        () => {
+          if (name !== undefined) {
+            db.prepare("UPDATE playlist_folders SET name = ? WHERE id = ?").run(
+              String(name).trim(),
+              folderId,
+            );
+          }
+          if (parentId !== undefined) {
+            db.prepare("UPDATE playlist_folders SET parent_id = ? WHERE id = ?").run(
+              parentId || null,
+              folderId,
+            );
+          }
+          if (Number.isInteger(sortOrder)) {
+            db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?").run(
+              sortOrder,
+              folderId,
+            );
+          }
+        },
+      );
     },
     delete_playlist_folder: ({ dbPath, folderId }) => {
       const db = openDatabase(dbPath);
       return withPlaylistHistory(db, "Delete playlist folder", () => {
-        const parentId = db.prepare("SELECT parent_id FROM playlist_folders WHERE id = ?")
-          .get(folderId)?.parent_id ?? null;
-        let playlistSortOrder = db.prepare(`
+        const parentId =
+          db.prepare("SELECT parent_id FROM playlist_folders WHERE id = ?").get(folderId)
+            ?.parent_id ?? null;
+        let playlistSortOrder = db
+          .prepare(
+            `
           SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
           FROM playlists
           WHERE folder_id = ? OR (folder_id IS NULL AND ? IS NULL)
-        `).get(parentId, parentId).next;
+        `,
+          )
+          .get(parentId, parentId).next;
         const movePlaylist = db.prepare(
-          "UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?"
+          "UPDATE playlists SET folder_id = ?, sort_order = ? WHERE id = ?",
         );
-        for (const playlist of db.prepare(`
+        for (const playlist of db
+          .prepare(
+            `
           SELECT id FROM playlists WHERE folder_id = ? ORDER BY sort_order, id
-        `).all(folderId)) {
+        `,
+          )
+          .all(folderId)) {
           movePlaylist.run(parentId, playlistSortOrder, playlist.id);
           playlistSortOrder += 1;
         }
-        let folderSortOrder = db.prepare(`
+        let folderSortOrder = db
+          .prepare(
+            `
           SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
           FROM playlist_folders
           WHERE id <> ? AND (parent_id = ? OR (parent_id IS NULL AND ? IS NULL))
-        `).get(folderId, parentId, parentId).next;
+        `,
+          )
+          .get(folderId, parentId, parentId).next;
         const moveFolder = db.prepare(
-          "UPDATE playlist_folders SET parent_id = ?, sort_order = ? WHERE id = ?"
+          "UPDATE playlist_folders SET parent_id = ?, sort_order = ? WHERE id = ?",
         );
-        for (const folder of db.prepare(`
+        for (const folder of db
+          .prepare(
+            `
           SELECT id FROM playlist_folders WHERE parent_id = ? ORDER BY sort_order, id
-        `).all(folderId)) {
+        `,
+          )
+          .all(folderId)) {
           moveFolder.run(parentId, folderSortOrder, folder.id);
           folderSortOrder += 1;
         }
@@ -1299,14 +1420,16 @@ export const createBackend = ({
       if (!trackIds.length) return;
       const db = openDatabase(dbPath);
       return withPlaylistHistory(db, "Add tracks to playlist", () => {
-        let position = db.prepare(
-          "SELECT COALESCE(MAX(position), -1) + 1 AS next FROM playlist_tracks WHERE playlist_id = ?"
-        ).get(playlistId).next;
+        let position = db
+          .prepare(
+            "SELECT COALESCE(MAX(position), -1) + 1 AS next FROM playlist_tracks WHERE playlist_id = ?",
+          )
+          .get(playlistId).next;
         const exists = db.prepare(
-          "SELECT 1 FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?"
+          "SELECT 1 FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?",
         );
         const insert = db.prepare(
-          "INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)"
+          "INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)",
         );
         for (const trackId of [...new Set(trackIds)]) {
           if (exists.get(playlistId, trackId)) continue;
@@ -1316,15 +1439,15 @@ export const createBackend = ({
     },
     set_playlist_tracks: ({ dbPath, playlistId, trackIds }) => {
       const db = openDatabase(dbPath);
-      const ids = [...new Set(
-        (Array.isArray(trackIds) ? trackIds : [])
-          .map((id) => String(id))
-          .filter(Boolean),
-      )];
+      const ids = [
+        ...new Set(
+          (Array.isArray(trackIds) ? trackIds : []).map((id) => String(id)).filter(Boolean),
+        ),
+      ];
       return withPlaylistHistory(db, "Reorder playlist tracks", () => {
         db.prepare("DELETE FROM playlist_tracks WHERE playlist_id = ?").run(playlistId);
         const insert = db.prepare(
-          "INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)"
+          "INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)",
         );
         ids.forEach((trackId, position) => insert.run(playlistId, trackId, position));
       });
@@ -1332,12 +1455,17 @@ export const createBackend = ({
     remove_last_tracks_from_playlist: ({ dbPath, playlistId, count }) => {
       const db = openDatabase(dbPath);
       return withPlaylistHistory(db, "Remove tracks from playlist", () =>
-        db.prepare(`
+        db
+          .prepare(
+            `
           DELETE FROM playlist_tracks WHERE rowid IN (
             SELECT rowid FROM playlist_tracks WHERE playlist_id = ?
             ORDER BY position DESC LIMIT ?
           )
-        `).run(playlistId, Math.max(0, Number(count) || 0)));
+        `,
+          )
+          .run(playlistId, Math.max(0, Number(count) || 0)),
+      );
     },
 
     update_track_metadata: ({ dbPath, trackIds, updates }) => {
@@ -1353,7 +1481,9 @@ export const createBackend = ({
       const db = openDatabase(dbPath);
       const bounded = Math.max(1, Math.min(Number(limit) || 100, 500));
       const where = trackId ? "WHERE h.track_id = ?" : "";
-      return db.prepare(`
+      return db
+        .prepare(
+          `
         SELECT h.id, h.track_id, h.changed_at, h.source, h.changes_json,
                t.title, t.artist
         FROM metadata_change_history h
@@ -1361,20 +1491,27 @@ export const createBackend = ({
         ${where}
         ORDER BY h.id DESC
         LIMIT ?
-      `).all(...(trackId ? [trackId, bounded] : [bounded])).map((row) => ({
-        id: Number(row.id),
-        trackId: String(row.track_id),
-        changedAt: String(row.changed_at),
-        source: String(row.source),
-        changes: JSON.parse(row.changes_json),
-        title: row.title ?? "Unknown Title",
-        artist: row.artist ?? "Unknown Artist",
-      }));
+      `,
+        )
+        .all(...(trackId ? [trackId, bounded] : [bounded]))
+        .map((row) => ({
+          id: Number(row.id),
+          trackId: String(row.track_id),
+          changedAt: String(row.changed_at),
+          source: String(row.source),
+          changes: JSON.parse(row.changes_json),
+          title: row.title ?? "Unknown Title",
+          artist: row.artist ?? "Unknown Artist",
+        }));
     },
     rollback_metadata_change: async ({ dbPath, historyId, field }) => {
-      const row = openDatabase(dbPath).prepare(`
+      const row = openDatabase(dbPath)
+        .prepare(
+          `
         SELECT track_id, changes_json FROM metadata_change_history WHERE id = ?
-      `).get(historyId);
+      `,
+        )
+        .get(historyId);
       if (!row) throw new Error("Metadata history entry was not found");
       const changes = JSON.parse(row.changes_json);
       if (!allowedUpdates[field] || !Object.hasOwn(changes, field)) {
@@ -1393,8 +1530,7 @@ export const createBackend = ({
       // The caller needs the applied updates to retry a failed tag write.
       return { ...result, trackId, updates: rollbackUpdates };
     },
-    list_playlist_history: ({ dbPath, limit }) =>
-      listPlaylistHistory(openDatabase(dbPath), limit),
+    list_playlist_history: ({ dbPath, limit }) => listPlaylistHistory(openDatabase(dbPath), limit),
     undo_playlist_history: async ({ dbPath }) => {
       const result = undoPlaylistHistory(openDatabase(dbPath));
       await playlistSync.refreshSources({ dbPath, syncChanged: false });
@@ -1407,8 +1543,7 @@ export const createBackend = ({
     },
     create_playlist_snapshot: ({ dbPath, name }) =>
       createPlaylistSnapshot(openDatabase(dbPath), name),
-    list_playlist_snapshots: ({ dbPath }) =>
-      listPlaylistSnapshots(openDatabase(dbPath)),
+    list_playlist_snapshots: ({ dbPath }) => listPlaylistSnapshots(openDatabase(dbPath)),
     restore_playlist_snapshot: async ({ dbPath, snapshotId }) => {
       const result = restorePlaylistSnapshot(openDatabase(dbPath), snapshotId);
       await playlistSync.refreshSources({ dbPath, syncChanged: false });
@@ -1418,8 +1553,12 @@ export const createBackend = ({
       deletePlaylistSnapshot(openDatabase(dbPath), snapshotId),
     update_track_analysis: ({ dbPath, trackId, bpm, key }) => {
       const db = openDatabase(dbPath);
-      db.prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?")
-        .run(bpm ?? null, key ?? null, Math.floor(Date.now() / 1000), trackId);
+      db.prepare("UPDATE tracks SET bpm = ?, key = ?, updated_at = ? WHERE id = ?").run(
+        bpm ?? null,
+        key ?? null,
+        Math.floor(Date.now() / 1000),
+        trackId,
+      );
       // BPM and key are searchable, so the index must see the new values.
       refreshSearchText(db, trackId);
     },
@@ -1475,20 +1614,25 @@ export const createBackend = ({
     },
 
     list_missing_tracks: ({ dbPath }) =>
-      openDatabase(dbPath).prepare(`
+      openDatabase(dbPath)
+        .prepare(
+          `
         SELECT id, title, artist, album, source_path, filename, duration_seconds
         FROM tracks
         WHERE is_missing = 1
         ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, track_number
-      `).all().map((row) => ({
-        id: String(row.id),
-        title: row.title || "",
-        artist: row.artist || "",
-        album: row.album || "",
-        source_path: resolveLibraryPath(dbPath, row.source_path),
-        filename: row.filename || "",
-        duration_seconds: row.duration_seconds || 0,
-      })),
+      `,
+        )
+        .all()
+        .map((row) => ({
+          id: String(row.id),
+          title: row.title || "",
+          artist: row.artist || "",
+          album: row.album || "",
+          source_path: resolveLibraryPath(dbPath, row.source_path),
+          filename: row.filename || "",
+          duration_seconds: row.duration_seconds || 0,
+        })),
 
     /** Point a track at a new file. The replacement must actually exist. */
     relink_track: ({ dbPath, trackId, newPath }) => {
@@ -1509,11 +1653,13 @@ export const createBackend = ({
         .get(storedPath, trackId);
       if (clash) throw new Error("Another track already uses that file");
 
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE tracks
         SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
         WHERE id = ?
-      `).run(storedPath, path.basename(resolved), Math.floor(Date.now() / 1000), trackId);
+      `,
+      ).run(storedPath, path.basename(resolved), Math.floor(Date.now() / 1000), trackId);
       refreshSearchText(db, trackId);
       return { relinked: true, sourcePath: resolved };
     },
@@ -1535,15 +1681,21 @@ export const createBackend = ({
       referencedPathCache.clear();
 
       const db = openDatabase(dbPath);
-      const missing = db.prepare(`
+      const missing = db
+        .prepare(
+          `
         SELECT id, filename, source_path, duration_seconds
         FROM tracks WHERE is_missing = 1
-      `).all();
+      `,
+        )
+        .all();
       if (missing.length === 0) return { matched: 0, relinked: 0, matches: [] };
 
       const candidatePaths = await collectAudioPaths([root]);
       const knownPaths = new Set(
-        db.prepare("SELECT source_path FROM tracks WHERE is_missing = 0").all()
+        db
+          .prepare("SELECT source_path FROM tracks WHERE is_missing = 0")
+          .all()
           .map((row) => resolveLibraryPath(dbPath, row.source_path))
           .filter((sourcePath) => path.isAbsolute(sourcePath)),
       );
@@ -1620,20 +1772,24 @@ export const createBackend = ({
       }
       const number = (value) =>
         typeof value === "number" && Number.isFinite(value) ? value : null;
-      const result = openDatabase(dbPath).prepare(`
+      const result = openDatabase(dbPath)
+        .prepare(
+          `
         UPDATE tracks SET
           loudness_lufs = ?,
           replaygain_track_gain_db = ?,
           replaygain_track_peak = ?,
           loudness_source = ?
         WHERE id = ?
-      `).run(
-        number(integratedLufs),
-        number(gainDb),
-        number(peak),
-        source === "tag" ? "tag" : "analyzed",
-        trackId,
-      );
+      `,
+        )
+        .run(
+          number(integratedLufs),
+          number(gainDb),
+          number(peak),
+          source === "tag" ? "tag" : "analyzed",
+          trackId,
+        );
       return { updated: result.changes > 0 };
     },
 
@@ -1643,7 +1799,9 @@ export const createBackend = ({
      */
     list_tracks_needing_loudness: ({ dbPath, limit }) => {
       const max = Math.max(1, Math.min(Number(limit) || 250, 2000));
-      return openDatabase(dbPath).prepare(`
+      return openDatabase(dbPath)
+        .prepare(
+          `
         SELECT id, source_path
         FROM tracks
         WHERE replaygain_track_gain_db IS NULL
@@ -1651,10 +1809,13 @@ export const createBackend = ({
           AND COALESCE(is_missing, 0) = 0
         ORDER BY added_at DESC
         LIMIT ?
-      `).all(max).map((row) => ({
-        id: String(row.id),
-        source_path: resolveTrackPath(dbPath, row.source_path),
-      }));
+      `,
+        )
+        .all(max)
+        .map((row) => ({
+          id: String(row.id),
+          source_path: resolveTrackPath(dbPath, row.source_path),
+        }));
     },
 
     /**
@@ -1666,15 +1827,17 @@ export const createBackend = ({
     recompute_album_gain: ({ dbPath, referenceLufs }) => {
       const db = openDatabase(dbPath);
       const reference =
-        typeof referenceLufs === "number" && Number.isFinite(referenceLufs)
-          ? referenceLufs
-          : -18;
-      const rows = db.prepare(`
+        typeof referenceLufs === "number" && Number.isFinite(referenceLufs) ? referenceLufs : -18;
+      const rows = db
+        .prepare(
+          `
         SELECT id, album, COALESCE(NULLIF(album_artist, ''), artist) AS grouping_artist,
           loudness_lufs, replaygain_track_peak
         FROM tracks
         WHERE loudness_lufs IS NOT NULL AND album IS NOT NULL AND album != ''
-      `).all();
+      `,
+        )
+        .all();
 
       const albums = new Map();
       for (const row of rows) {
@@ -1689,7 +1852,7 @@ export const createBackend = ({
       }
 
       const update = db.prepare(
-        "UPDATE tracks SET replaygain_album_gain_db = ?, replaygain_album_peak = ? WHERE id = ?"
+        "UPDATE tracks SET replaygain_album_gain_db = ?, replaygain_album_peak = ? WHERE id = ?",
       );
       let updated = 0;
       db.transaction(() => {
@@ -1730,7 +1893,7 @@ export const createBackend = ({
     generate_track_waveform: ({ sourcePath, points }) => {
       const authorizedPath = pathAccess.assertReadable(sourcePath, "track file");
       return waveformCache.getOrCreate(authorizedPath, points, (normalizedPoints) =>
-        keyFinder.generateWaveform(authorizedPath, normalizedPoints)
+        keyFinder.generateWaveform(authorizedPath, normalizedPoints),
       );
     },
     get_track_source_path: ({ dbPath, trackId }) =>
@@ -1743,42 +1906,58 @@ export const createBackend = ({
     record_track_play: ({ dbPath, trackId }) => {
       const db = openDatabase(dbPath);
       return db.transaction(() => {
-        const track = db.prepare(`
+        const track = db
+          .prepare(
+            `
           SELECT id, title, artist, album, duration_seconds, added_at FROM tracks WHERE id = ?
-        `).get(trackId);
+        `,
+          )
+          .get(trackId);
         if (!track) throw new Error("Track was not found");
         const playedAt = new Date().toISOString();
-        db.prepare(`
+        db.prepare(
+          `
           UPDATE tracks SET last_played_at = ?, play_count = COALESCE(play_count, 0) + 1
           WHERE id = ?
-        `).run(playedAt, trackId);
-        const result = db.prepare(`
+        `,
+        ).run(playedAt, trackId);
+        const result = db
+          .prepare(
+            `
           INSERT INTO play_history(
             track_id, played_at, listened_seconds, duration_seconds,
             title, artist, album, track_added_at
           ) VALUES (?, ?, 30, ?, ?, ?, ?, ?)
-        `).run(
-          trackId,
-          playedAt,
-          track.duration_seconds ?? null,
-          track.title || "Unknown Title",
-          track.artist || "Unknown Artist",
-          track.album || "Unknown Album",
-          track.added_at ?? null,
-        );
+        `,
+          )
+          .run(
+            trackId,
+            playedAt,
+            track.duration_seconds ?? null,
+            track.title || "Unknown Title",
+            track.artist || "Unknown Artist",
+            track.album || "Unknown Album",
+            track.added_at ?? null,
+          );
         return { historyId: Number(result.lastInsertRowid), playedAt };
       })();
     },
     update_play_history: ({ dbPath, historyId, listenedSeconds }) => {
       const value = Math.max(0, Math.min(Number(listenedSeconds) || 0, 86_400));
-      const result = openDatabase(dbPath).prepare(`
+      const result = openDatabase(dbPath)
+        .prepare(
+          `
         UPDATE play_history SET listened_seconds = ? WHERE id = ?
-      `).run(value, historyId);
+      `,
+        )
+        .run(value, historyId);
       return { updated: result.changes > 0 };
     },
     load_listening_statistics: ({ dbPath }) => {
       const db = openDatabase(dbPath);
-      const totals = db.prepare(`
+      const totals = db
+        .prepare(
+          `
         SELECT COALESCE(SUM(listened_seconds), 0) AS listening_seconds,
                COUNT(*) AS plays,
                COUNT(DISTINCT track_id) AS unique_tracks,
@@ -1788,27 +1967,42 @@ export const createBackend = ({
                  THEN 1 ELSE 0 END
                ), 0) AS discovery_plays
         FROM play_history
-      `).get();
-      const top = (field) => db.prepare(`
+      `,
+        )
+        .get();
+      const top = (field) =>
+        db
+          .prepare(
+            `
         SELECT ${field} AS name, COUNT(*) AS plays,
                COALESCE(SUM(listened_seconds), 0) AS listening_seconds
         FROM play_history
         GROUP BY ${field}
         ORDER BY listening_seconds DESC, plays DESC, name COLLATE NOCASE
         LIMIT 10
-      `).all().map((row) => ({
-        name: String(row.name),
-        plays: Number(row.plays),
-        listeningSeconds: Number(row.listening_seconds),
-      }));
-      const monthlyRows = new Map(db.prepare(`
+      `,
+          )
+          .all()
+          .map((row) => ({
+            name: String(row.name),
+            plays: Number(row.plays),
+            listeningSeconds: Number(row.listening_seconds),
+          }));
+      const monthlyRows = new Map(
+        db
+          .prepare(
+            `
         SELECT strftime('%Y-%m', played_at) AS month,
                COUNT(*) AS plays,
                COALESCE(SUM(listened_seconds), 0) AS listening_seconds
         FROM play_history
         WHERE played_at >= datetime('now', '-11 months', 'start of month')
         GROUP BY month
-      `).all().map((row) => [row.month, row]));
+      `,
+          )
+          .all()
+          .map((row) => [row.month, row]),
+      );
       const monthly = [];
       const now = new Date();
       for (let offset = 11; offset >= 0; offset -= 1) {
@@ -1821,7 +2015,9 @@ export const createBackend = ({
           listeningSeconds: Number(row?.listening_seconds) || 0,
         });
       }
-      const neglectedTracks = db.prepare(`
+      const neglectedTracks = db
+        .prepare(
+          `
         SELECT id, title, artist, album, last_played_at, play_count
         FROM tracks
         WHERE import_status = 'accepted'
@@ -1829,14 +2025,17 @@ export const createBackend = ({
         ORDER BY CASE WHEN last_played_at IS NULL THEN 0 ELSE 1 END,
                  last_played_at ASC, added_at ASC
         LIMIT 50
-      `).all().map((row) => ({
-        id: String(row.id),
-        title: row.title || "Unknown Title",
-        artist: row.artist || "Unknown Artist",
-        album: row.album || "Unknown Album",
-        lastPlayedAt: row.last_played_at ?? null,
-        playCount: Number(row.play_count) || 0,
-      }));
+      `,
+        )
+        .all()
+        .map((row) => ({
+          id: String(row.id),
+          title: row.title || "Unknown Title",
+          artist: row.artist || "Unknown Artist",
+          album: row.album || "Unknown Album",
+          lastPlayedAt: row.last_played_at ?? null,
+          playCount: Number(row.play_count) || 0,
+        }));
       const plays = Number(totals.plays) || 0;
       return {
         listeningSeconds: Number(totals.listening_seconds) || 0,
@@ -1893,16 +2092,20 @@ export const createBackend = ({
     },
     backfill_cover_art: async ({ dbPath }) => {
       const db = openDatabase(dbPath);
-      const rows = db.prepare(`
+      const rows = db
+        .prepare(
+          `
         SELECT id, source_path, musicbrainz_albumid, musicbrainz_releasegroupid FROM tracks
-      `).all();
+      `,
+        )
+        .all();
       const update = db.prepare(
         `UPDATE tracks SET
           cover_art_path = COALESCE(?, cover_art_path),
           cover_art_thumb_path = COALESCE(?, cover_art_thumb_path),
           musicbrainz_albumid = COALESCE(NULLIF(musicbrainz_albumid, ''), ?),
           musicbrainz_releasegroupid = COALESCE(NULLIF(musicbrainz_releasegroupid, ''), ?)
-        WHERE id = ?`
+        WHERE id = ?`,
       );
       let count = 0;
       for (const row of rows) {
@@ -1926,12 +2129,16 @@ export const createBackend = ({
     scan_technical_metadata: async ({ dbPath, limit }) => {
       const db = openDatabase(dbPath);
       const batchSize = Math.max(1, Math.min(200, Number(limit) || 25));
-      const rows = db.prepare(`
+      const rows = db
+        .prepare(
+          `
         SELECT id, source_path FROM tracks
         WHERE sample_rate_hz IS NULL OR file_size_bytes IS NULL
         ORDER BY added_at DESC
         LIMIT ?
-      `).all(batchSize);
+      `,
+        )
+        .all(batchSize);
       const update = db.prepare(`
         UPDATE tracks SET sample_rate_hz = ?, bit_depth = ?, file_size_bytes = ?
         WHERE id = ?
@@ -1962,10 +2169,15 @@ export const createBackend = ({
           console.warn(`Failed to extract technical metadata from ${sourcePath}:`, error);
         }
       }
-      const remaining = db.prepare(`
+      const remaining =
+        db
+          .prepare(
+            `
         SELECT COUNT(*) AS count FROM tracks
         WHERE sample_rate_hz IS NULL OR file_size_bytes IS NULL
-      `).get()?.count ?? 0;
+      `,
+          )
+          .get()?.count ?? 0;
       return { checked: rows.length, updated, failed, remaining, tracks };
     },
     cache_cover_art_from_file: ({ filePath }) =>
@@ -1989,7 +2201,8 @@ export const createBackend = ({
       // Never trust a renderer-supplied database location. The main-process
       // location is resolved lazily so commands that do not touch the
       // database keep working before one is configured.
-      const { dbPath: _ignoredDbPath, ...commandArgs } = args && typeof args === "object" ? args : {};
+      const { dbPath: _ignoredDbPath, ...commandArgs } =
+        args && typeof args === "object" ? args : {};
       Object.defineProperty(commandArgs, "dbPath", { get: currentDbPath, enumerable: false });
       return handler(commandArgs, sender);
     },

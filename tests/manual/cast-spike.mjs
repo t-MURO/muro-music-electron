@@ -11,7 +11,8 @@ import { createCastDiscovery } from "../../electron/cast/castDiscovery.mjs";
 import { createCastClientAdapter } from "../../electron/cast/castClientAdapter.mjs";
 import { createLanMediaServer } from "../../electron/lanMediaServer.mjs";
 
-const audioPath = process.argv[2] ?? "C:/Users/Tadeo/Music/Music/Boston 168/303 Regiment/Rise Again.mp3";
+const audioPath =
+  process.argv[2] ?? "C:/Users/Tadeo/Music/Music/Boston 168/303 Regiment/Rise Again.mp3";
 const DISCOVERY_WINDOW_MS = 8_000;
 const PLAY_OBSERVATION_MS = 6_000;
 
@@ -40,7 +41,10 @@ try {
     process.exit(3);
   }
   for (const device of devices) {
-    log("found", `${device.name} (${device.model}) at ${device.host}:${device.port} id=${device.id}`);
+    log(
+      "found",
+      `${device.name} (${device.model}) at ${device.host}:${device.port} id=${device.id}`,
+    );
   }
 
   const device = devices[0];
@@ -68,25 +72,37 @@ try {
     album: "Spike",
     autoplay: true,
   });
-  log("load response", `playerState=${loadStatus?.playerState} mediaSessionId=${loadStatus?.mediaSessionId}`);
+  log(
+    "load response",
+    `playerState=${loadStatus?.playerState} mediaSessionId=${loadStatus?.mediaSessionId}`,
+  );
 
   for (let tick = 0; tick < PLAY_OBSERVATION_MS / 1000; tick += 1) {
     await sleep(1_000);
     const status = await adapter.getMediaStatus();
-    log("status", `playerState=${status?.playerState} position=${status?.currentTime?.toFixed?.(1)}`);
+    log(
+      "status",
+      `playerState=${status?.playerState} position=${status?.currentTime?.toFixed?.(1)}`,
+    );
   }
 
   log("seeking to 60s (exercises HTTP range requests)");
   const seekStatus = await adapter.seek(60);
   await sleep(2_000);
   const afterSeek = await adapter.getMediaStatus();
-  log("after seek", `playerState=${afterSeek?.playerState ?? seekStatus?.playerState} position=${afterSeek?.currentTime?.toFixed?.(1)}`);
+  log(
+    "after seek",
+    `playerState=${afterSeek?.playerState ?? seekStatus?.playerState} position=${afterSeek?.currentTime?.toFixed?.(1)}`,
+  );
 
-  const playing = (afterSeek?.playerState === "PLAYING" || afterSeek?.playerState === "BUFFERING");
+  const playing = afterSeek?.playerState === "PLAYING" || afterSeek?.playerState === "BUFFERING";
   const seeked = (afterSeek?.currentTime ?? 0) >= 58;
-  log("RESULT", playing && seeked
-    ? `SUCCESS — "${device.name}" played the local MP3 and honored the seek`
-    : `PARTIAL — playerState=${afterSeek?.playerState} position=${afterSeek?.currentTime}`);
+  log(
+    "RESULT",
+    playing && seeked
+      ? `SUCCESS — "${device.name}" played the local MP3 and honored the seek`
+      : `PARTIAL — playerState=${afterSeek?.playerState} position=${afterSeek?.currentTime}`,
+  );
   if (!playing || !seeked) exitCode = 4;
 } catch (spikeError) {
   console.error(`[spike] FAILED: ${spikeError.message}`);

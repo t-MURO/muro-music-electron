@@ -61,10 +61,7 @@ const crossfadeCurves = (durationSec: number) => {
   return { incoming, outgoing };
 };
 
-export const valueAtAutomationPoint = (
-  points: AutomationPoint[],
-  offsetSec: number,
-): number => {
+export const valueAtAutomationPoint = (points: AutomationPoint[], offsetSec: number): number => {
   if (points.length === 0) return 0;
   if (offsetSec <= points[0].at) return points[0].value;
   for (let index = 1; index < points.length; index += 1) {
@@ -91,9 +88,7 @@ export const buildTransitionAutomation = (plan: TransitionPlan): TransitionAutom
   const beatmatchedIncoming: AutomationPoint[] = [
     { at: 0, value: 0 },
     { at: swapStart, value: SWAP_START_GAIN },
-    ...(swapEnd < plan.durationSec
-      ? [{ at: swapEnd, value: SWAP_END_GAIN }]
-      : []),
+    ...(swapEnd < plan.durationSec ? [{ at: swapEnd, value: SWAP_END_GAIN }] : []),
     { at: plan.durationSec, value: 1 },
   ];
   const crossfade = plan.mode === "fade" ? crossfadeCurves(plan.durationSec) : null;

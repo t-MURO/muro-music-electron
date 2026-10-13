@@ -1,9 +1,7 @@
 import { convertFileSrc, invoke } from "@muro/desktop/runtime";
 import { REFERENCE_LUFS, replayGainFromLoudness, type LoudnessResult } from "./r128";
 
-type WorkerReply =
-  | { ok: true; result: LoudnessResult }
-  | { ok: false; error: string };
+type WorkerReply = { ok: true; result: LoudnessResult } | { ok: false; error: string };
 
 export type TrackLoudness = {
   integratedLufs: number | null;
@@ -28,7 +26,7 @@ const ensureWorker = (): Worker => {
 
 const runWorkerMeasurement = (
   channels: Float32Array[],
-  sampleRate: number
+  sampleRate: number,
 ): Promise<LoudnessResult> =>
   new Promise<LoudnessResult>((resolve, reject) => {
     const worker = ensureWorker();
@@ -50,18 +48,18 @@ const runWorkerMeasurement = (
     worker.addEventListener("error", handleError);
     worker.postMessage(
       { channels, sampleRate },
-      channels.map((channel) => channel.buffer)
+      channels.map((channel) => channel.buffer),
     );
   });
 
 const decodeAndMeasure = async (
   sourcePath: string,
-  referenceLufs: number
+  referenceLufs: number,
 ): Promise<TrackLoudness> => {
   const response = await fetch(convertFileSrc(sourcePath));
   if (!response.ok) {
     throw new Error(
-      `Could not read audio file for loudness analysis (HTTP ${response.status}): ${sourcePath}`
+      `Could not read audio file for loudness analysis (HTTP ${response.status}): ${sourcePath}`,
     );
   }
   const encoded = await response.arrayBuffer();
@@ -74,7 +72,7 @@ const decodeAndMeasure = async (
   } catch (error) {
     const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
     throw new Error(
-      `Could not decode audio for loudness analysis${detail} — the format may be unsupported: ${sourcePath}`
+      `Could not decode audio for loudness analysis${detail} — the format may be unsupported: ${sourcePath}`,
     );
   }
 
@@ -98,11 +96,11 @@ const decodeAndMeasure = async (
 
 export function analyzeSourceLoudness(
   sourcePath: string,
-  referenceLufs: number = REFERENCE_LUFS
+  referenceLufs: number = REFERENCE_LUFS,
 ): Promise<TrackLoudness> {
   const task = analysisChain.then(
     () => decodeAndMeasure(sourcePath, referenceLufs),
-    () => decodeAndMeasure(sourcePath, referenceLufs)
+    () => decodeAndMeasure(sourcePath, referenceLufs),
   );
   analysisChain = task.catch(() => undefined);
   return task;
@@ -114,7 +112,7 @@ export function analyzeSourceLoudness(
  */
 export async function analyzeAndStoreLoudness(
   track: { id: string; sourcePath: string },
-  referenceLufs: number = REFERENCE_LUFS
+  referenceLufs: number = REFERENCE_LUFS,
 ): Promise<TrackLoudness> {
   const loudness = await analyzeSourceLoudness(track.sourcePath, referenceLufs);
   await invoke("update_track_loudness", {

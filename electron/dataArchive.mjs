@@ -52,15 +52,11 @@ const collectArtworkPaths = (db) => {
     }
   };
 
-  for (const row of db.prepare(
-    "SELECT cover_art_path, cover_art_thumb_path FROM tracks",
-  ).all()) {
+  for (const row of db.prepare("SELECT cover_art_path, cover_art_thumb_path FROM tracks").all()) {
     add(row.cover_art_path);
     add(row.cover_art_thumb_path);
   }
-  for (const row of db.prepare(
-    "SELECT full_path, thumb_path FROM album_cover_cache",
-  ).all()) {
+  for (const row of db.prepare("SELECT full_path, thumb_path FROM album_cover_cache").all()) {
     add(row.full_path);
     add(row.thumb_path);
   }
@@ -74,12 +70,10 @@ const collectArtworkPaths = (db) => {
 const countLibrary = (db) => ({
   tracks: Number(db.prepare("SELECT COUNT(*) AS count FROM tracks").get().count) || 0,
   playlists: Number(db.prepare("SELECT COUNT(*) AS count FROM playlists").get().count) || 0,
-  playlistFolders: Number(
-    db.prepare("SELECT COUNT(*) AS count FROM playlist_folders").get().count,
-  ) || 0,
-  playlistEntries: Number(
-    db.prepare("SELECT COUNT(*) AS count FROM playlist_tracks").get().count,
-  ) || 0,
+  playlistFolders:
+    Number(db.prepare("SELECT COUNT(*) AS count FROM playlist_folders").get().count) || 0,
+  playlistEntries:
+    Number(db.prepare("SELECT COUNT(*) AS count FROM playlist_tracks").get().count) || 0,
 });
 
 const validateJsonPayload = (value, maxBytes, label) => {
@@ -100,19 +94,14 @@ const sanitizeSettings = (settingsJson) => {
   if (!persisted || typeof persisted !== "object") {
     throw new Error("The settings payload is not valid persisted state");
   }
-  const state = persisted.state && typeof persisted.state === "object"
-    ? { ...persisted.state }
-    : {};
+  const state =
+    persisted.state && typeof persisted.state === "object" ? { ...persisted.state } : {};
   for (const key of SENSITIVE_SETTING_KEYS) delete state[key];
   return JSON.stringify({ ...persisted, state });
 };
 
 const validateSmartCrates = (smartCratesJson) => {
-  const normalized = validateJsonPayload(
-    smartCratesJson,
-    MAX_SMART_CRATES_BYTES,
-    "Smart Crates",
-  );
+  const normalized = validateJsonPayload(smartCratesJson, MAX_SMART_CRATES_BYTES, "Smart Crates");
   if (!normalized) return "";
   const persisted = safeJson(normalized);
   const crates = persisted?.state?.smartCrates;
@@ -139,9 +128,7 @@ export const createLibraryBackup = async ({
     await db.backup(snapshotPath);
     const portableSnapshot = new Database(snapshotPath);
     try {
-      portableSnapshot.prepare(
-        "DELETE FROM app_metadata WHERE key = 'library_root'",
-      ).run();
+      portableSnapshot.prepare("DELETE FROM app_metadata WHERE key = 'library_root'").run();
     } finally {
       portableSnapshot.close();
     }
@@ -149,23 +136,17 @@ export const createLibraryBackup = async ({
     const artworkIndex = [];
     const archiveEntries = {
       "database/muro.db": new Uint8Array(await fs.promises.readFile(snapshotPath)),
-      "playlists/playlists.json": strToU8(
-        JSON.stringify(capturePlaylistState(db), null, 2),
-      ),
+      "playlists/playlists.json": strToU8(JSON.stringify(capturePlaylistState(db), null, 2)),
       "settings/muro-settings.json": strToU8(sanitizeSettings(settingsJson)),
       "settings/muro-smart-crates.json": strToU8(validateSmartCrates(smartCratesJson)),
     };
 
     for (const artworkPath of artworkPaths) {
       const archivePath = archiveNameForFile(artworkPath);
-      archiveEntries[archivePath] = new Uint8Array(
-        await fs.promises.readFile(artworkPath),
-      );
+      archiveEntries[archivePath] = new Uint8Array(await fs.promises.readFile(artworkPath));
       artworkIndex.push({ originalPath: artworkPath, archivePath });
     }
-    archiveEntries["artwork/index.json"] = strToU8(
-      JSON.stringify(artworkIndex, null, 2),
-    );
+    archiveEntries["artwork/index.json"] = strToU8(JSON.stringify(artworkIndex, null, 2));
 
     const manifest = {
       format: ARCHIVE_FORMAT,
@@ -220,13 +201,15 @@ const restoreArtworkReferences = (db, artworkMap) => {
   const updateTrack = db.prepare(`
     UPDATE tracks SET cover_art_path = ?, cover_art_thumb_path = ? WHERE id = ?
   `);
-  for (const row of db.prepare(
-    "SELECT id, cover_art_path, cover_art_thumb_path FROM tracks",
-  ).all()) {
+  for (const row of db
+    .prepare("SELECT id, cover_art_path, cover_art_thumb_path FROM tracks")
+    .all()) {
     updateTrack.run(
-      row.cover_art_path ? artworkMap.get(path.resolve(row.cover_art_path)) ?? row.cover_art_path : null,
+      row.cover_art_path
+        ? (artworkMap.get(path.resolve(row.cover_art_path)) ?? row.cover_art_path)
+        : null,
       row.cover_art_thumb_path
-        ? artworkMap.get(path.resolve(row.cover_art_thumb_path)) ?? row.cover_art_thumb_path
+        ? (artworkMap.get(path.resolve(row.cover_art_thumb_path)) ?? row.cover_art_thumb_path)
         : null,
       row.id,
     );
@@ -235,12 +218,12 @@ const restoreArtworkReferences = (db, artworkMap) => {
   const updateAlbum = db.prepare(`
     UPDATE album_cover_cache SET full_path = ?, thumb_path = ? WHERE cover_key = ?
   `);
-  for (const row of db.prepare(
-    "SELECT cover_key, full_path, thumb_path FROM album_cover_cache",
-  ).all()) {
+  for (const row of db
+    .prepare("SELECT cover_key, full_path, thumb_path FROM album_cover_cache")
+    .all()) {
     updateAlbum.run(
-      row.full_path ? artworkMap.get(path.resolve(row.full_path)) ?? row.full_path : null,
-      row.thumb_path ? artworkMap.get(path.resolve(row.thumb_path)) ?? row.thumb_path : null,
+      row.full_path ? (artworkMap.get(path.resolve(row.full_path)) ?? row.full_path) : null,
+      row.thumb_path ? (artworkMap.get(path.resolve(row.thumb_path)) ?? row.thumb_path) : null,
       row.cover_key,
     );
   }
@@ -248,41 +231,30 @@ const restoreArtworkReferences = (db, artworkMap) => {
   const updateArtist = db.prepare(
     "UPDATE artist_profiles SET profile_json = ? WHERE artist_key = ?",
   );
-  for (const row of db.prepare(
-    "SELECT artist_key, profile_json FROM artist_profiles",
-  ).all()) {
+  for (const row of db.prepare("SELECT artist_key, profile_json FROM artist_profiles").all()) {
     const profile = safeJson(row.profile_json);
     if (profile) {
-      updateArtist.run(
-        JSON.stringify(replaceArtworkStrings(profile, artworkMap)),
-        row.artist_key,
-      );
+      updateArtist.run(JSON.stringify(replaceArtworkStrings(profile, artworkMap)), row.artist_key);
     }
   }
 };
 
-export const restoreLibraryBackup = async ({
-  dbPath,
-  archivePath,
-  artworkRoot,
-}) => {
+export const restoreLibraryBackup = async ({ dbPath, archivePath, artworkRoot }) => {
   const resolvedDbPath = path.resolve(dbPath);
   const resolvedArchivePath = path.resolve(archivePath);
   const entries = unzipSync(new Uint8Array(await fs.promises.readFile(resolvedArchivePath)));
   const manifest = safeJson(strFromU8(requireArchiveEntry(entries, "manifest.json")));
   if (
-    manifest?.format !== ARCHIVE_FORMAT
-    || !SUPPORTED_ARCHIVE_VERSIONS.has(Number(manifest?.version))
-    || typeof manifest?.backupId !== "string"
+    manifest?.format !== ARCHIVE_FORMAT ||
+    !SUPPORTED_ARCHIVE_VERSIONS.has(Number(manifest?.version)) ||
+    typeof manifest?.backupId !== "string"
   ) {
     throw new Error("This is not a supported Muro library backup");
   }
 
   const databaseBytes = requireArchiveEntry(entries, "database/muro.db");
   const settingsJson = sanitizeSettings(
-    entries["settings/muro-settings.json"]
-      ? strFromU8(entries["settings/muro-settings.json"])
-      : "",
+    entries["settings/muro-settings.json"] ? strFromU8(entries["settings/muro-settings.json"]) : "",
   );
   const smartCratesJson = validateSmartCrates(
     entries["settings/muro-smart-crates.json"]
@@ -294,16 +266,18 @@ export const restoreLibraryBackup = async ({
   const restoredDbPath = path.join(tempDir, "muro.db");
   const recoveryPath = `${resolvedDbPath}.before-restore-${Date.now()}.bak`;
   let originalMoved = false;
-  const currentLibraryRoot = openDatabase(resolvedDbPath)
-    .prepare("SELECT value FROM app_metadata WHERE key = 'library_root'")
-    .get()?.value ?? null;
+  const currentLibraryRoot =
+    openDatabase(resolvedDbPath)
+      .prepare("SELECT value FROM app_metadata WHERE key = 'library_root'")
+      .get()?.value ?? null;
 
   try {
     await fs.promises.writeFile(restoredDbPath, Buffer.from(databaseBytes));
     const validationDb = new Database(restoredDbPath, { readonly: true });
     try {
       const integrity = validationDb.pragma("integrity_check", { simple: true });
-      if (integrity !== "ok") throw new Error(`Backup database integrity check failed: ${integrity}`);
+      if (integrity !== "ok")
+        throw new Error(`Backup database integrity check failed: ${integrity}`);
     } finally {
       validationDb.close();
     }
@@ -312,18 +286,15 @@ export const restoreLibraryBackup = async ({
       entries["artwork/index.json"] ? strFromU8(entries["artwork/index.json"]) : "[]",
       [],
     );
-    const restoreRoot = path.resolve(
-      artworkRoot,
-      "restored-artwork",
-      manifest.backupId,
-    );
+    const restoreRoot = path.resolve(artworkRoot, "restored-artwork", manifest.backupId);
     const artworkMap = new Map();
     for (const [index, item] of (Array.isArray(artworkIndex) ? artworkIndex : []).entries()) {
       if (
-        typeof item?.originalPath !== "string"
-        || typeof item?.archivePath !== "string"
-        || !item.archivePath.startsWith("artwork/files/")
-      ) continue;
+        typeof item?.originalPath !== "string" ||
+        typeof item?.archivePath !== "string" ||
+        !item.archivePath.startsWith("artwork/files/")
+      )
+        continue;
       const bytes = entries[item.archivePath];
       if (!bytes) continue;
       const extension = path.extname(item.archivePath).slice(0, 12);
@@ -346,10 +317,14 @@ export const restoreLibraryBackup = async ({
     restoredDb.transaction(() => {
       restoreArtworkReferences(restoredDb, artworkMap);
       if (currentLibraryRoot) {
-        restoredDb.prepare(`
+        restoredDb
+          .prepare(
+            `
           INSERT INTO app_metadata(key, value) VALUES ('library_root', ?)
           ON CONFLICT(key) DO UPDATE SET value = excluded.value
-        `).run(currentLibraryRoot);
+        `,
+          )
+          .run(currentLibraryRoot);
       }
     })();
     // Loads no longer rewrite paths under an unchanged root, so make any

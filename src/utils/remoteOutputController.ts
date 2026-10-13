@@ -11,12 +11,7 @@ import {
   remoteStopDiscovery,
   type RemoteDevice,
 } from "./remoteOutputApi";
-import {
-  playbackGetState,
-  playbackPause,
-  playbackPlayFile,
-  playbackSeek,
-} from "./playbackApi";
+import { playbackGetState, playbackPause, playbackPlayFile, playbackSeek } from "./playbackApi";
 
 // Output-switching choreography shared by both remote protocols: exactly one
 // output plays at a time, and switching never silently drops the listening
@@ -104,11 +99,11 @@ export const connectToRemoteDevice = async (device: RemoteDevice): Promise<void>
       playback.setIsPlaying(false);
     }
     notify.error(
-      `${isRemoteUnsupportedFormat(error)
-        ? t("player.output.unsupported")
-        : t("player.output.loadFailed")} ${t(
-          localRestored ? "player.output.returnedLocal" : "player.output.localRestoreFailed",
-        )}`,
+      `${
+        isRemoteUnsupportedFormat(error)
+          ? t("player.output.unsupported")
+          : t("player.output.loadFailed")
+      } ${t(localRestored ? "player.output.returnedLocal" : "player.output.localRestoreFailed")}`,
     );
   }
 };
@@ -120,7 +115,8 @@ export const disconnectFromRemote = async (): Promise<void> => {
   const remoteState = useRemoteOutputStore.getState();
   const protocol = remoteState.protocol;
   const playbackBeforeDisconnect = usePlaybackStore.getState();
-  const remoteTrackId = remoteState.remoteTrack?.trackId ?? playbackBeforeDisconnect.currentTrack?.id ?? null;
+  const remoteTrackId =
+    remoteState.remoteTrack?.trackId ?? playbackBeforeDisconnect.currentTrack?.id ?? null;
   if (!protocol) return;
 
   const { lastPositionSecs } = await remoteDisconnect(protocol);
@@ -133,9 +129,9 @@ export const disconnectFromRemote = async (): Promise<void> => {
 
     if (remoteTrackId && localTrackId !== remoteTrackId) {
       const library = useLibraryStore.getState();
-      const track = [...library.tracks, ...library.inboxTracks]
-        .find((entry) => entry.id === remoteTrackId)
-        ?? (playbackBeforeDisconnect.currentTrack?.id === remoteTrackId
+      const track =
+        [...library.tracks, ...library.inboxTracks].find((entry) => entry.id === remoteTrackId) ??
+        (playbackBeforeDisconnect.currentTrack?.id === remoteTrackId
           ? playbackBeforeDisconnect.currentTrack
           : null);
       if (track) {

@@ -27,13 +27,13 @@ export const resolveGainFactor = (
     Track,
     "replayGainTrackDb" | "replayGainAlbumDb" | "replayGainTrackPeak" | "replayGainAlbumPeak"
   >,
-  settings: ReplayGainSettings
+  settings: ReplayGainSettings,
 ): number => {
   if (settings.mode === "off") return DEFAULT_FALLBACK_GAIN;
 
   const gainDb =
     settings.mode === "album"
-      ? track.replayGainAlbumDb ?? track.replayGainTrackDb
+      ? (track.replayGainAlbumDb ?? track.replayGainTrackDb)
       : track.replayGainTrackDb;
 
   if (gainDb === undefined || !Number.isFinite(gainDb)) {
@@ -45,7 +45,7 @@ export const resolveGainFactor = (
   if (settings.preventClipping) {
     const peak =
       settings.mode === "album"
-        ? track.replayGainAlbumPeak ?? track.replayGainTrackPeak
+        ? (track.replayGainAlbumPeak ?? track.replayGainTrackPeak)
         : track.replayGainTrackPeak;
     if (typeof peak === "number" && peak > 0 && factor * peak > 1) {
       factor = 1 / peak;

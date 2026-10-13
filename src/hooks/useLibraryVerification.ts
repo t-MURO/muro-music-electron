@@ -43,9 +43,7 @@ export const useLibraryVerification = () => {
   const [missingTracks, setMissingTracks] = useState<MissingTrack[]>([]);
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
-  const artistSeparatorExceptions = useSettingsStore(
-    (state) => state.artistSeparatorExceptions,
-  );
+  const artistSeparatorExceptions = useSettingsStore((state) => state.artistSeparatorExceptions);
 
   const reloadLibrary = useCallback(async () => {
     try {
@@ -79,7 +77,7 @@ export const useLibraryVerification = () => {
           t("verify.foundMissing", {
             missing: String(result.missing),
             checked: String(result.checked),
-          })
+          }),
         );
       }
     } catch {
@@ -90,27 +88,30 @@ export const useLibraryVerification = () => {
   }, [refreshMissing, reloadLibrary, verifying]);
 
   /** Point one track at a replacement file the user picks. */
-  const relinkTrack = useCallback(async (trackId: string) => {
-    const selected = await open({
-      multiple: false,
-      filters: [
-        {
-          name: "Audio",
-          extensions: ["mp3", "flac", "wav", "m4a", "aac", "ogg", "aiff", "aif", "alac"],
-        },
-      ],
-    });
-    if (typeof selected !== "string") return;
+  const relinkTrack = useCallback(
+    async (trackId: string) => {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: "Audio",
+            extensions: ["mp3", "flac", "wav", "m4a", "aac", "ogg", "aiff", "aif", "alac"],
+          },
+        ],
+      });
+      if (typeof selected !== "string") return;
 
-    try {
-      await invoke("relink_track", { trackId, newPath: selected });
-      await refreshMissing();
-      await reloadLibrary();
-      notify.success(t("verify.relinked"));
-    } catch (error) {
-      notify.error(error instanceof Error ? error.message : t("verify.relinkFailed"));
-    }
-  }, [refreshMissing, reloadLibrary]);
+      try {
+        await invoke("relink_track", { trackId, newPath: selected });
+        await refreshMissing();
+        await reloadLibrary();
+        notify.success(t("verify.relinked"));
+      } catch (error) {
+        notify.error(error instanceof Error ? error.message : t("verify.relinkFailed"));
+      }
+    },
+    [refreshMissing, reloadLibrary],
+  );
 
   /** Search a folder and reconnect everything that matches by name and length. */
   const autoRelink = useCallback(async () => {

@@ -118,10 +118,7 @@ export const TableHeader = ({
             center: (rect.left + rect.right) / 2,
           };
         })
-        .filter(
-          (item): item is { key: ColumnConfig["key"]; center: number } =>
-            item !== null
-        );
+        .filter((item): item is { key: ColumnConfig["key"]; center: number } => item !== null);
 
       const remaining = positions.filter((item) => item.key !== currentState.key);
       if (remaining.length === 0) {
@@ -182,101 +179,97 @@ export const TableHeader = ({
               type="button"
               aria-label={allSelected ? "Clear track selection" : "Select all tracks"}
             >
-              {allSelected
-                ? <SquareCheckBig className="h-3.5 w-3.5 text-[var(--color-accent)]" />
-                : <Square className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />}
+              {allSelected ? (
+                <SquareCheckBig className="h-3.5 w-3.5 text-[var(--color-accent)]" />
+              ) : (
+                <Square className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+              )}
             </button>
           </div>
           {columns.map((column) => {
             const isSorted = sortState?.key === column.key;
             const isDragging = dragState?.key === column.key && dragState.isDragging;
             return (
-            <div
-              key={column.key}
-              data-column-key={column.key}
-              ref={(node) => {
-                columnRefs.current[column.key] = node;
-              }}
-              className={`relative flex items-center border-l border-[var(--color-border-light)] bg-[var(--color-bg-secondary)] px-2 pr-4 ${
-                onColumnReorder ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""
-              } ${isDragging ? "z-40" : ""} ${
-                isDragging ? "shadow-[var(--shadow-lg)]" : ""
-              } ${isDragging ? "bg-[var(--color-bg-primary)]" : ""} ${
-                isDragging ? "" : "transition-transform duration-150"
-              }`}
-              style={
-                isDragging
-                  ? { transform: `translateX(${dragState?.offsetX ?? 0}px)` }
-                  : undefined
-              }
-              role="columnheader"
-              aria-sort={
-                isSorted
-                  ? sortState?.direction === "asc"
-                    ? "ascending"
-                    : "descending"
-                  : "none"
-              }
-            >
-              <button
-                className="flex h-full w-full items-center justify-between gap-2 truncate text-left hover:text-[var(--color-text-secondary)]"
-                onClick={() => {
-                  if (suppressClickRef.current) {
-                    return;
-                  }
-                  onSortChange?.(column.key);
+              <div
+                key={column.key}
+                data-column-key={column.key}
+                ref={(node) => {
+                  columnRefs.current[column.key] = node;
                 }}
-                onPointerDown={(event) => {
-                  if (!onColumnReorder || event.button !== 0) {
-                    return;
-                  }
-                  const target = event.target as HTMLElement | null;
-                  if (target?.closest("[data-resize-handle]")) {
-                    return;
-                  }
-                  event.preventDefault();
-                  const rect = columnRefs.current[column.key]?.getBoundingClientRect();
-                  dragBaseLeftRef.current = rect ? rect.left : null;
-                  lastTargetIndexRef.current = null;
-                  setDragState({
-                    key: column.key,
-                    startX: event.clientX,
-                    offsetX: 0,
-                    isDragging: false,
-                  });
-                }}
-                type="button"
+                className={`relative flex items-center border-l border-[var(--color-border-light)] bg-[var(--color-bg-secondary)] px-2 pr-4 ${
+                  onColumnReorder ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""
+                } ${isDragging ? "z-40" : ""} ${
+                  isDragging ? "shadow-[var(--shadow-lg)]" : ""
+                } ${isDragging ? "bg-[var(--color-bg-primary)]" : ""} ${
+                  isDragging ? "" : "transition-transform duration-150"
+                }`}
+                style={
+                  isDragging ? { transform: `translateX(${dragState?.offsetX ?? 0}px)` } : undefined
+                }
+                role="columnheader"
+                aria-sort={
+                  isSorted ? (sortState?.direction === "asc" ? "ascending" : "descending") : "none"
+                }
               >
-                <span className="truncate">{t(column.labelKey)}</span>
-                {isSorted && (
-                  <span className="text-[var(--color-text-muted)]">
-                    {sortState?.direction === "asc" ? (
-                      <ArrowUp className="h-3 w-3" />
-                    ) : (
-                      <ArrowDown className="h-3 w-3" />
-                    )}
-                  </span>
-                )}
-              </button>
-              <span
-                className="absolute right-0 top-0 h-full w-3 cursor-col-resize border-r border-transparent hover:border-[var(--color-accent)]"
-                data-resize-handle="true"
-                onDoubleClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onColumnAutoFit(column.key);
-                }}
-                onMouseDown={(event) => {
-                  startResize(
-                    event,
-                    column.width,
-                    (nextWidth) => onColumnResize(column.key, nextWidth),
-                    { minSize: 80, maxSize: 360, stopPropagation: true }
-                  );
-                }}
-                role="presentation"
-              />
-            </div>
+                <button
+                  className="flex h-full w-full items-center justify-between gap-2 truncate text-left hover:text-[var(--color-text-secondary)]"
+                  onClick={() => {
+                    if (suppressClickRef.current) {
+                      return;
+                    }
+                    onSortChange?.(column.key);
+                  }}
+                  onPointerDown={(event) => {
+                    if (!onColumnReorder || event.button !== 0) {
+                      return;
+                    }
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest("[data-resize-handle]")) {
+                      return;
+                    }
+                    event.preventDefault();
+                    const rect = columnRefs.current[column.key]?.getBoundingClientRect();
+                    dragBaseLeftRef.current = rect ? rect.left : null;
+                    lastTargetIndexRef.current = null;
+                    setDragState({
+                      key: column.key,
+                      startX: event.clientX,
+                      offsetX: 0,
+                      isDragging: false,
+                    });
+                  }}
+                  type="button"
+                >
+                  <span className="truncate">{t(column.labelKey)}</span>
+                  {isSorted && (
+                    <span className="text-[var(--color-text-muted)]">
+                      {sortState?.direction === "asc" ? (
+                        <ArrowUp className="h-3 w-3" />
+                      ) : (
+                        <ArrowDown className="h-3 w-3" />
+                      )}
+                    </span>
+                  )}
+                </button>
+                <span
+                  className="absolute right-0 top-0 h-full w-3 cursor-col-resize border-r border-transparent hover:border-[var(--color-accent)]"
+                  data-resize-handle="true"
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onColumnAutoFit(column.key);
+                  }}
+                  onMouseDown={(event) => {
+                    startResize(
+                      event,
+                      column.width,
+                      (nextWidth) => onColumnResize(column.key, nextWidth),
+                      { minSize: 80, maxSize: 360, stopPropagation: true },
+                    );
+                  }}
+                  role="presentation"
+                />
+              </div>
             );
           })}
         </div>

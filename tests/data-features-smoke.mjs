@@ -37,12 +37,14 @@ backend.pathAccess.grantDialogSelection({ paths: [root], directory: true });
 try {
   const db = openDatabase(dbPath);
   const now = Math.floor(Date.now() / 1000);
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO tracks(
       id, title, artist, album, filename, source_path, import_status,
       duration_seconds, added_at, updated_at, cover_art_path
     ) VALUES (?, ?, ?, ?, ?, ?, 'accepted', 240, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     "track-1",
     "Original title",
     "Test artist",
@@ -92,15 +94,18 @@ try {
   );
   assert.equal((await backend.invoke("list_playlist_snapshots", { dbPath })).length, 1);
 
-  assert.deepEqual(await backend.invoke("update_track_metadata", {
-    dbPath,
-    trackIds: ["track-1"],
-    updates: { title: "Edited title", rating: 4 },
-  }), {
-    updated: 1,
-    filesWritten: 1,
-    fileWriteErrors: [],
-  });
+  assert.deepEqual(
+    await backend.invoke("update_track_metadata", {
+      dbPath,
+      trackIds: ["track-1"],
+      updates: { title: "Edited title", rating: 4 },
+    }),
+    {
+      updated: 1,
+      filesWritten: 1,
+      fileWriteErrors: [],
+    },
+  );
   const metadataHistory = await backend.invoke("list_metadata_history", {
     dbPath,
     trackId: "track-1",
@@ -112,21 +117,25 @@ try {
     field: "title",
   });
   assert.equal(
-    openDatabase(dbPath).prepare("SELECT title, rating FROM tracks WHERE id = ?").get("track-1").title,
+    openDatabase(dbPath).prepare("SELECT title, rating FROM tracks WHERE id = ?").get("track-1")
+      .title,
     "Original title",
   );
 
-  const structuredArtistCredits = [{
-    name: "Artist One",
-    creditedName: "Artist One",
-    joinPhrase: " feat. ",
-    musicBrainzId: "11111111-1111-4111-8111-111111111111",
-  }, {
-    name: "Guest Artist",
-    creditedName: "Guest Alias",
-    joinPhrase: "",
-    musicBrainzId: "22222222-2222-4222-8222-222222222222",
-  }];
+  const structuredArtistCredits = [
+    {
+      name: "Artist One",
+      creditedName: "Artist One",
+      joinPhrase: " feat. ",
+      musicBrainzId: "11111111-1111-4111-8111-111111111111",
+    },
+    {
+      name: "Guest Artist",
+      creditedName: "Guest Alias",
+      joinPhrase: "",
+      musicBrainzId: "22222222-2222-4222-8222-222222222222",
+    },
+  ];
   await backend.invoke("update_track_metadata", {
     dbPath,
     trackIds: ["track-1"],
@@ -144,10 +153,12 @@ try {
     persistedArtistCredits.map((credit) => credit.name),
     ["Artist One", "Guest Artist"],
   );
-  const artistHistory = (await backend.invoke("list_metadata_history", {
-    dbPath,
-    trackId: "track-1",
-  })).find((entry) => Object.hasOwn(entry.changes, "artist"));
+  const artistHistory = (
+    await backend.invoke("list_metadata_history", {
+      dbPath,
+      trackId: "track-1",
+    })
+  ).find((entry) => Object.hasOwn(entry.changes, "artist"));
   assert.ok(artistHistory);
   assert.equal(artistHistory.changes.artist.before, "Test artist");
   assert.equal(artistHistory.changes.artist.beforeCredits.length, 1);
@@ -189,12 +200,14 @@ try {
     }),
     smartCratesJson: JSON.stringify({
       state: {
-        smartCrates: [{
-          id: "crate-1",
-          name: "Backup crate",
-          match: "all",
-          rules: [{ id: "rule-1", field: "bpm", operator: "gte", value: 120 }],
-        }],
+        smartCrates: [
+          {
+            id: "crate-1",
+            name: "Backup crate",
+            match: "all",
+            rules: [{ id: "rule-1", field: "bpm", operator: "gte", value: 120 }],
+          },
+        ],
       },
       version: 0,
     }),
@@ -214,9 +227,7 @@ try {
   const archivedDb = new Database(archivedDbPath, { readonly: true });
   try {
     assert.equal(
-      archivedDb.prepare(
-        "SELECT value FROM app_metadata WHERE key = 'library_root'",
-      ).get(),
+      archivedDb.prepare("SELECT value FROM app_metadata WHERE key = 'library_root'").get(),
       undefined,
       "a portable backup does not contain the source computer's root prefix",
     );
@@ -230,17 +241,18 @@ try {
     1,
     "portable paths remain unavailable until the destination chooses its root",
   );
-  assert.match(
-    strFromU8(archiveEntries["settings/muro-smart-crates.json"]),
-    /Backup crate/,
-  );
+  assert.match(strFromU8(archiveEntries["settings/muro-smart-crates.json"]), /Backup crate/);
 
   openDatabase(dbPath).prepare("DELETE FROM playlists").run();
   openDatabase(dbPath).prepare("UPDATE tracks SET title = 'After backup'").run();
   const destinationRoot = path.join(root, "restored-library-root");
-  openDatabase(dbPath).prepare(`
+  openDatabase(dbPath)
+    .prepare(
+      `
     UPDATE app_metadata SET value = ? WHERE key = 'library_root'
-  `).run(destinationRoot);
+  `,
+    )
+    .run(destinationRoot);
   const restored = await backend.invoke("restore_library_backup", {
     dbPath,
     archivePath: backupPath,
@@ -253,15 +265,13 @@ try {
     "Original title",
   );
   assert.equal(
-    restoredDb.prepare(
-      "SELECT value FROM app_metadata WHERE key = 'library_root'",
-    ).get().value,
+    restoredDb.prepare("SELECT value FROM app_metadata WHERE key = 'library_root'").get().value,
     destinationRoot,
     "restore keeps the destination computer's root prefix",
   );
-  const restoredArtwork = restoredDb.prepare(
-    "SELECT cover_art_path FROM tracks WHERE id = ?",
-  ).get("track-1").cover_art_path;
+  const restoredArtwork = restoredDb
+    .prepare("SELECT cover_art_path FROM tracks WHERE id = ?")
+    .get("track-1").cover_art_path;
   assert.ok(fs.existsSync(restoredArtwork));
   assert.match(restored.settingsJson, /"theme":"dark"/);
   assert.doesNotMatch(restored.settingsJson, /braveSearchApiKey/);

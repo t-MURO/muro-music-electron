@@ -1,4 +1,14 @@
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, nativeImage, protocol, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  nativeImage,
+  protocol,
+  shell,
+} from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,9 +61,9 @@ const isTrustedRendererUrl = createTrustedRendererUrlCheck({
 
 const assertTrustedRenderer = (event) => {
   if (
-    !event.senderFrame
-    || event.senderFrame !== event.sender.mainFrame
-    || !isTrustedRendererUrl(event.senderFrame.url)
+    !event.senderFrame ||
+    event.senderFrame !== event.sender.mainFrame ||
+    !isTrustedRendererUrl(event.senderFrame.url)
   ) {
     throw new Error("IPC request was not sent by the trusted application renderer");
   }
@@ -153,9 +163,11 @@ const createWindow = async () => {
     if (!isTrustedRendererUrl(targetUrl)) event.preventDefault();
   });
   mainWindow.webContents.session.setPermissionCheckHandler(() => false);
-  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
-  });
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => {
+      callback(false);
+    },
+  );
 
   if (developmentRendererUrl) {
     await mainWindow.loadURL(developmentRendererUrl);
@@ -171,9 +183,12 @@ const startApplication = async () => {
   }
 
   databaseLocation = createDatabaseLocationStore({ userDataDir: app.getPath("userData") });
-  protocol.handle("muro-file", createMediaProtocolHandler({
-    isPathAllowed: (filePath) => backend?.canReadPath(filePath) ?? false,
-  }));
+  protocol.handle(
+    "muro-file",
+    createMediaProtocolHandler({
+      isPathAllowed: (filePath) => backend?.canReadPath(filePath) ?? false,
+    }),
+  );
 
   const keyFinder = createKeyFinderService({
     binaryDirectories: app.isPackaged
@@ -200,15 +215,17 @@ const startApplication = async () => {
     try {
       assertTrustedRenderer(event);
       if (databaseLocation.needsMigration()) {
-        const legacyDbPath = legacy?.useAutoDbPath === false && typeof legacy?.dbPath === "string"
-          && legacy.dbPath.trim()
-          ? legacy.dbPath.trim()
-          : path.join(
-            app.getPath("userData"),
-            typeof legacy?.dbFileName === "string" && legacy.dbFileName.trim()
-              ? legacy.dbFileName.trim()
-              : "muro.db",
-          );
+        const legacyDbPath =
+          legacy?.useAutoDbPath === false &&
+          typeof legacy?.dbPath === "string" &&
+          legacy.dbPath.trim()
+            ? legacy.dbPath.trim()
+            : path.join(
+                app.getPath("userData"),
+                typeof legacy?.dbFileName === "string" && legacy.dbFileName.trim()
+                  ? legacy.dbFileName.trim()
+                  : "muro.db",
+              );
         const result = databaseLocation.migrateLegacyLocation(legacyDbPath);
         if (result.rejectedLegacyPath) {
           console.warn(
@@ -222,7 +239,7 @@ const startApplication = async () => {
     }
   });
   registerTrustedHandler("muro:invoke", (event, command, args) =>
-    backend.invoke(command, args ?? {}, event.sender)
+    backend.invoke(command, args ?? {}, event.sender),
   );
   registerTrustedHandler("muro:app-data-dir", () => app.getPath("userData"));
   registerTrustedHandler("muro:database-location", () => databaseLocation.describe());
@@ -232,16 +249,16 @@ const startApplication = async () => {
     const filters = [{ name: "Muro library database", extensions: ["db", "sqlite", "sqlite3"] }];
     const result = createNew
       ? await dialog.showSaveDialog(mainWindow, {
-        title: "Create a new library database",
-        defaultPath: path.join(path.dirname(current), "muro.db"),
-        filters,
-      })
+          title: "Create a new library database",
+          defaultPath: path.join(path.dirname(current), "muro.db"),
+          filters,
+        })
       : await dialog.showOpenDialog(mainWindow, {
-        title: "Open a library database",
-        defaultPath: path.dirname(current),
-        properties: ["openFile"],
-        filters,
-      });
+          title: "Open a library database",
+          defaultPath: path.dirname(current),
+          properties: ["openFile"],
+          filters,
+        });
     const selected = createNew ? result.filePath : result.filePaths?.[0];
     if (result.canceled || !selected) return null;
     const exists = fs.existsSync(selected);
@@ -337,29 +354,26 @@ const startApplication = async () => {
   });
   registerTrustedHandler("muro:open-external", async (_event, value) => {
     const url = new URL(String(value));
-    const allowedHost = url.hostname === "musicbrainz.org"
-      || url.hostname.endsWith(".wikipedia.org")
-      || url.hostname === "commons.wikimedia.org"
-      || url.hostname === "www.last.fm"
-      || url.hostname === "www.theaudiodb.com"
-      || url.hostname === "fanart.tv"
-      || url.hostname === "www.deezer.com"
-      || url.hostname === "search.brave.com"
-      || url.hostname === "api.search.brave.com"
-      || url.hostname === "api-dashboard.search.brave.com"
-      || url.hostname === "acoustid.org"
-      || url.hostname.endsWith(".acoustid.org")
-      || url.hostname.endsWith(".fanart.tv");
+    const allowedHost =
+      url.hostname === "musicbrainz.org" ||
+      url.hostname.endsWith(".wikipedia.org") ||
+      url.hostname === "commons.wikimedia.org" ||
+      url.hostname === "www.last.fm" ||
+      url.hostname === "www.theaudiodb.com" ||
+      url.hostname === "fanart.tv" ||
+      url.hostname === "www.deezer.com" ||
+      url.hostname === "search.brave.com" ||
+      url.hostname === "api.search.brave.com" ||
+      url.hostname === "api-dashboard.search.brave.com" ||
+      url.hostname === "acoustid.org" ||
+      url.hostname.endsWith(".acoustid.org") ||
+      url.hostname.endsWith(".fanart.tv");
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
     await shell.openExternal(url.toString());
   });
   registerTrustedHandler("muro:show-item-in-folder", (_event, value) => {
     const filePath = String(value || "");
-    if (
-      !path.isAbsolute(filePath)
-      || !backend.canReadPath(filePath)
-      || !fs.existsSync(filePath)
-    ) {
+    if (!path.isAbsolute(filePath) || !backend.canReadPath(filePath) || !fs.existsSync(filePath)) {
       throw new Error("Track source file does not exist");
     }
     shell.showItemInFolder(path.normalize(filePath));
@@ -367,20 +381,22 @@ const startApplication = async () => {
   ipcMain.on("muro:start-file-drag", (event, values) => {
     try {
       assertTrustedRenderer(event);
-      const filePaths = [...new Set(
-        (Array.isArray(values) ? values : [])
-          .slice(0, 1000)
-          .filter((value) => typeof value === "string" && path.isAbsolute(value))
-          .filter((value) => backend.canReadPath(value))
-          .map((value) => path.normalize(value))
-          .filter((value) => {
-            try {
-              return fs.statSync(value).isFile();
-            } catch {
-              return false;
-            }
-          }),
-      )];
+      const filePaths = [
+        ...new Set(
+          (Array.isArray(values) ? values : [])
+            .slice(0, 1000)
+            .filter((value) => typeof value === "string" && path.isAbsolute(value))
+            .filter((value) => backend.canReadPath(value))
+            .map((value) => path.normalize(value))
+            .filter((value) => {
+              try {
+                return fs.statSync(value).isFile();
+              } catch {
+                return false;
+              }
+            }),
+        ),
+      ];
       if (filePaths.length === 0) return;
 
       event.sender.startDrag({
@@ -439,10 +455,13 @@ const startApplication = async () => {
   });
 };
 
-app.whenReady().then(startApplication).catch((error) => {
-  console.error("Failed to start Muro Music:", error);
-  app.quit();
-});
+app
+  .whenReady()
+  .then(startApplication)
+  .catch((error) => {
+    console.error("Failed to start Muro Music:", error);
+    app.quit();
+  });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

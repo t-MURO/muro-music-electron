@@ -33,8 +33,7 @@ const MIME_TYPES = new Map([
 ]);
 
 export const isSupportedLocalMediaPath = (filePath) =>
-  path.isAbsolute(filePath)
-  && MIME_TYPES.has(path.extname(filePath).toLowerCase());
+  path.isAbsolute(filePath) && MIME_TYPES.has(path.extname(filePath).toLowerCase());
 
 const readAt = async (fileHandle, position, length) => {
   const buffer = Buffer.alloc(length);
@@ -47,9 +46,7 @@ const flacHeaderCrc8 = (buffer, start, end) => {
   for (let position = start; position < end; position += 1) {
     crc ^= buffer[position];
     for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc & 0x80) !== 0
-        ? ((crc << 1) ^ 0x07) & 0xff
-        : (crc << 1) & 0xff;
+      crc = (crc & 0x80) !== 0 ? ((crc << 1) ^ 0x07) & 0xff : (crc << 1) & 0xff;
     }
   }
   return crc;
@@ -95,11 +92,8 @@ const isValidFlacFrameHeader = (buffer, start) => {
   }
 
   const blockSizeBytes = blockSizeCode === 6 ? 1 : blockSizeCode === 7 ? 2 : 0;
-  const sampleRateBytes = sampleRateCode === 12
-    ? 1
-    : sampleRateCode === 13 || sampleRateCode === 14
-      ? 2
-      : 0;
+  const sampleRateBytes =
+    sampleRateCode === 12 ? 1 : sampleRateCode === 13 || sampleRateCode === 14 ? 2 : 0;
   const crcPosition = start + 4 + numberLength + blockSizeBytes + sampleRateBytes;
   if (crcPosition >= buffer.length) return false;
 
@@ -138,7 +132,7 @@ const readFlacMetadataEnd = async (fileHandle, fileSize) => {
 };
 
 export const detectFlacPrefixRecovery = async (filePath, providedStats) => {
-  const fileStats = providedStats ?? await fs.promises.stat(filePath);
+  const fileStats = providedStats ?? (await fs.promises.stat(filePath));
   if (!fileStats.isFile()) return null;
 
   const fileHandle = await fs.promises.open(filePath, "r");
@@ -161,10 +155,7 @@ export const detectFlacPrefixRecovery = async (filePath, providedStats) => {
       MAX_FLAC_RECOVERY_SCAN_BYTES + MAX_FLAC_FRAME_HEADER_BYTES,
     );
     const scanBuffer = await readAt(fileHandle, metadataEnd, scanLength);
-    const finalCandidate = Math.min(
-      MAX_FLAC_RECOVERY_SCAN_BYTES,
-      scanBuffer.length - 6,
-    );
+    const finalCandidate = Math.min(MAX_FLAC_RECOVERY_SCAN_BYTES, scanBuffer.length - 6);
 
     for (let relativeOffset = 0; relativeOffset <= finalCandidate; relativeOffset += 1) {
       if (!isValidFlacFrameHeader(scanBuffer, relativeOffset)) continue;
@@ -248,7 +239,8 @@ const responseHeaders = (filePath, contentLength, recovered) => {
     "Accept-Ranges": "bytes",
     "Cache-Control": "no-store",
     "Content-Length": String(contentLength),
-    "Content-Type": MIME_TYPES.get(path.extname(filePath).toLowerCase()) ?? "application/octet-stream",
+    "Content-Type":
+      MIME_TYPES.get(path.extname(filePath).toLowerCase()) ?? "application/octet-stream",
     "X-Content-Type-Options": "nosniff",
   });
   if (recovered) headers.set("X-Muro-Recovered-Media", "flac-frame-resync");
@@ -279,16 +271,19 @@ const originalSegmentsForVirtualRange = (start, end, recovery) => {
   return segments.filter((segment) => segment.start <= segment.end);
 };
 
-const createSegmentedReadStream = (filePath, segments) => Readable.from((async function* read() {
-  for (const segment of segments) {
-    const stream = fs.createReadStream(filePath, segment);
-    try {
-      for await (const chunk of stream) yield chunk;
-    } finally {
-      stream.destroy();
-    }
-  }
-})());
+const createSegmentedReadStream = (filePath, segments) =>
+  Readable.from(
+    (async function* read() {
+      for (const segment of segments) {
+        const stream = fs.createReadStream(filePath, segment);
+        try {
+          for await (const chunk of stream) yield chunk;
+        } finally {
+          stream.destroy();
+        }
+      }
+    })(),
+  );
 
 export const createLocalFileResponse = async (request, filePath) => {
   if (!isSupportedLocalMediaPath(filePath)) {
@@ -353,28 +348,30 @@ export const createLocalFileResponse = async (request, filePath) => {
  * database references, dialog grants) are served; everything else is refused
  * before the file is even stat'ed, so the scheme is no existence oracle.
  */
-export const createMediaProtocolHandler = ({ isPathAllowed }) => async (request) => {
-  let filePath;
-  try {
-    const url = new URL(request.url);
-    if (url.hostname !== "local") throw new Error("Unexpected host");
-    filePath = decodeURIComponent(url.pathname.slice(1));
-  } catch {
-    return new Response("Invalid file URL", { status: 400, headers: errorHeaders });
-  }
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return new Response("Method not allowed", { status: 405, headers: errorHeaders });
-  }
-  if (!isSupportedLocalMediaPath(filePath)) {
-    return new Response("Unsupported local media type", { status: 415, headers: errorHeaders });
-  }
+export const createMediaProtocolHandler =
+  ({ isPathAllowed }) =>
+  async (request) => {
+    let filePath;
+    try {
+      const url = new URL(request.url);
+      if (url.hostname !== "local") throw new Error("Unexpected host");
+      filePath = decodeURIComponent(url.pathname.slice(1));
+    } catch {
+      return new Response("Invalid file URL", { status: 400, headers: errorHeaders });
+    }
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return new Response("Method not allowed", { status: 405, headers: errorHeaders });
+    }
+    if (!isSupportedLocalMediaPath(filePath)) {
+      return new Response("Unsupported local media type", { status: 415, headers: errorHeaders });
+    }
 
-  let allowed = false;
-  try {
-    allowed = Boolean(await isPathAllowed(filePath));
-  } catch {
-    allowed = false;
-  }
-  if (!allowed) return new Response("Forbidden", { status: 403, headers: errorHeaders });
-  return createLocalFileResponse(request, path.resolve(filePath));
-};
+    let allowed = false;
+    try {
+      allowed = Boolean(await isPathAllowed(filePath));
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) return new Response("Forbidden", { status: 403, headers: errorHeaders });
+    return createLocalFileResponse(request, path.resolve(filePath));
+  };

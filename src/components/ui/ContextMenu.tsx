@@ -71,27 +71,37 @@ export const ContextMenu = ({
     <Popover isOpen={isOpen} position={position} className="w-60 py-1" onClose={onClose}>
       {showPlaylistChoices ? (
         <>
-          <PopoverHeader>Add {selectionCount > 1 ? `${selectionCount} tracks` : "track"} to playlist</PopoverHeader>
+          <PopoverHeader>
+            Add {selectionCount > 1 ? `${selectionCount} tracks` : "track"} to playlist
+          </PopoverHeader>
           <div className="max-h-64 overflow-y-auto py-1" data-playlist-choices>
-            {playlistOptions.length > 0 ? playlistOptions.map((playlist) => (
-              <button
-                key={playlist.id}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[var(--color-text-primary)] transition-colors duration-100 hover:bg-[var(--color-bg-hover)]"
-                onClick={() => onAddToPlaylist?.(playlist.id)}
-                data-playlist-choice={playlist.id}
-                type="button"
-              >
-                <ListMusic className="h-4 w-4 shrink-0 opacity-60" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">{playlist.name}</span>
-                  {playlist.folderName && (
-                    <span className="block truncate text-[10px] text-[var(--color-text-muted)]">{playlist.folderName}</span>
-                  )}
-                </span>
-                <span className="shrink-0 text-[10px] tabular-nums text-[var(--color-text-muted)]">{playlist.trackCount}</span>
-              </button>
-            )) : (
-              <p className="px-3 py-4 text-center text-xs text-[var(--color-text-muted)]">Create a playlist first</p>
+            {playlistOptions.length > 0 ? (
+              playlistOptions.map((playlist) => (
+                <button
+                  key={playlist.id}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[var(--color-text-primary)] transition-colors duration-100 hover:bg-[var(--color-bg-hover)]"
+                  onClick={() => onAddToPlaylist?.(playlist.id)}
+                  data-playlist-choice={playlist.id}
+                  type="button"
+                >
+                  <ListMusic className="h-4 w-4 shrink-0 opacity-60" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px]">{playlist.name}</span>
+                    {playlist.folderName && (
+                      <span className="block truncate text-[10px] text-[var(--color-text-muted)]">
+                        {playlist.folderName}
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                    {playlist.trackCount}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="px-3 py-4 text-center text-xs text-[var(--color-text-muted)]">
+                Create a playlist first
+              </p>
             )}
           </div>
           <PopoverDivider />
@@ -102,9 +112,7 @@ export const ContextMenu = ({
         </>
       ) : (
         <>
-          {selectionCount > 1 && (
-            <PopoverHeader>{selectionCount} selected</PopoverHeader>
-          )}
+          {selectionCount > 1 && <PopoverHeader>{selectionCount} selected</PopoverHeader>}
           <PopoverItem onClick={onPlay}>
             <Play className="h-4 w-4 opacity-60" />
             {t("menu.play")}
@@ -117,7 +125,10 @@ export const ContextMenu = ({
             <ListChecks className="h-4 w-4 opacity-60" />
             {t("menu.addQueue")}
           </PopoverItem>
-          <PopoverItem onClick={() => setShowPlaylistChoices(true)} dataTestId="add-to-playlist-menu-item">
+          <PopoverItem
+            onClick={() => setShowPlaylistChoices(true)}
+            dataTestId="add-to-playlist-menu-item"
+          >
             <ListPlus className="h-4 w-4 opacity-60" />
             {t("menu.addPlaylist")}
           </PopoverItem>
@@ -145,7 +156,10 @@ export const ContextMenu = ({
             </PopoverItem>
           )}
           {onSearchAlbumMetadata && (
-            <PopoverItem onClick={onSearchAlbumMetadata} dataTestId="search-album-metadata-menu-item">
+            <PopoverItem
+              onClick={onSearchAlbumMetadata}
+              dataTestId="search-album-metadata-menu-item"
+            >
               <DatabaseZap className="h-4 w-4 opacity-60" />
               Search for album metadata
             </PopoverItem>

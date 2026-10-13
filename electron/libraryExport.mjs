@@ -61,14 +61,15 @@ const createExportRoot = (destinationPath) =>
   createNamedExportRoot(destinationPath, "Muro Library");
 
 const albumArtistOrArtist = (track) =>
-  String(track.album_artist ?? "").trim()
-  || String(track.artist ?? "").trim()
-  || "Unknown Artist";
+  String(track.album_artist ?? "").trim() || String(track.artist ?? "").trim() || "Unknown Artist";
 
-const albumGroupKey = (track) => [
-  albumArtistOrArtist(track).toLocaleLowerCase(),
-  String(track.album || "Unknown Album").trim().toLocaleLowerCase(),
-].join("\u0000");
+const albumGroupKey = (track) =>
+  [
+    albumArtistOrArtist(track).toLocaleLowerCase(),
+    String(track.album || "Unknown Album")
+      .trim()
+      .toLocaleLowerCase(),
+  ].join("\u0000");
 
 const findMultiDiscAlbums = (tracks) => {
   const discsByAlbum = new Map();
@@ -86,9 +87,7 @@ const findMultiDiscAlbums = (tracks) => {
   }
   return new Set([
     ...explicitlyMultiDisc,
-    ...[...discsByAlbum]
-      .filter(([, discs]) => discs.size > 1)
-      .map(([key]) => key),
+    ...[...discsByAlbum].filter(([, discs]) => discs.size > 1).map(([key]) => key),
   ]);
 };
 
@@ -112,9 +111,8 @@ const buildPlaylistFolderPaths = (folders) => {
     const nextAncestors = new Set(ancestors);
     nextAncestors.add(folderId);
     const parentId = folder.parent_id == null ? null : String(folder.parent_id);
-    const parentPath = parentId && !nextAncestors.has(parentId)
-      ? resolveFolder(parentId, nextAncestors)
-      : "";
+    const parentPath =
+      parentId && !nextAncestors.has(parentId) ? resolveFolder(parentId, nextAncestors) : "";
     const segment = uniqueName(
       parentPath,
       sanitizeExportSegment(folder.name, "Playlist Folder"),
@@ -130,16 +128,19 @@ const buildPlaylistFolderPaths = (folders) => {
 };
 
 const cleanPlaylistText = (value, fallback) =>
-  String(value || fallback).replace(/[\r\n]+/g, " ").trim() || fallback;
+  String(value || fallback)
+    .replace(/[\r\n]+/g, " ")
+    .trim() || fallback;
 
-const cleanXmlText = (value) => String(value ?? "")
-  // eslint-disable-next-line no-control-regex -- XML 1.0 forbids these control chars
-  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
-  .replace(/&/g, "&amp;")
-  .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;")
-  .replace(/"/g, "&quot;")
-  .replace(/'/g, "&apos;");
+const cleanXmlText = (value) =>
+  String(value ?? "")
+    // eslint-disable-next-line no-control-regex -- XML 1.0 forbids these control chars
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 
 const appendPlistKey = (lines, level, key) => {
   lines.push(`${"  ".repeat(level)}<key>${cleanXmlText(key)}</key>`);
@@ -166,9 +167,10 @@ const appendPlistBoolean = (lines, level, key, value) => {
 const plistDate = (value, epochSeconds = false) => {
   if (value == null || value === "") return null;
   const numeric = Number(value);
-  const date = epochSeconds && Number.isFinite(numeric)
-    ? new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000)
-    : new Date(value);
+  const date =
+    epochSeconds && Number.isFinite(numeric)
+      ? new Date(numeric > 10_000_000_000 ? numeric : numeric * 1000)
+      : new Date(value);
   if (Number.isNaN(date.valueOf())) return null;
   return date.toISOString().replace(/\.\d{3}Z$/, "Z");
 };
@@ -190,33 +192,47 @@ const readJsonText = (value) => {
   }
 };
 
-const persistentId = (kind, value) => crypto
-  .createHash("sha256")
-  .update(`${kind}:${String(value)}`)
-  .digest("hex")
-  .slice(0, 16)
-  .toUpperCase();
+const persistentId = (kind, value) =>
+  crypto
+    .createHash("sha256")
+    .update(`${kind}:${String(value)}`)
+    .digest("hex")
+    .slice(0, 16)
+    .toUpperCase();
 
 const itunesFileUrl = (filePath, directory = false) => {
-  const href = pathToFileURL(path.resolve(String(filePath))).href
-    .replace(/^file:\/\/\//, "file://localhost/");
+  const href = pathToFileURL(path.resolve(String(filePath))).href.replace(
+    /^file:\/\/\//,
+    "file://localhost/",
+  );
   return directory && !href.endsWith("/") ? `${href}/` : href;
 };
 
 const itunesKind = (filePath) => {
   switch (path.extname(String(filePath)).toLowerCase()) {
-    case ".mp3": return "MPEG audio file";
-    case ".m4a": return "Apple MPEG-4 audio file";
-    case ".m4b": return "Protected MPEG-4 audio file";
-    case ".aac": return "AAC audio file";
+    case ".mp3":
+      return "MPEG audio file";
+    case ".m4a":
+      return "Apple MPEG-4 audio file";
+    case ".m4b":
+      return "Protected MPEG-4 audio file";
+    case ".aac":
+      return "AAC audio file";
     case ".aif":
-    case ".aiff": return "AIFF audio file";
-    case ".wav": return "WAV audio file";
-    case ".flac": return "FLAC audio file";
-    case ".ogg": return "Ogg Vorbis audio file";
-    case ".opus": return "Opus audio file";
-    case ".wma": return "Windows Media audio file";
-    default: return "Audio file";
+    case ".aiff":
+      return "AIFF audio file";
+    case ".wav":
+      return "WAV audio file";
+    case ".flac":
+      return "FLAC audio file";
+    case ".ogg":
+      return "Ogg Vorbis audio file";
+    case ".opus":
+      return "Opus audio file";
+    case ".wma":
+      return "Windows Media audio file";
+    default:
+      return "Audio file";
   }
 };
 
@@ -227,12 +243,10 @@ const commonMusicDirectory = (tracks) => {
   if (directories.length === 0) return null;
 
   let common = directories[0];
-  const pathKey = (value) => process.platform === "win32"
-    ? value.toLocaleLowerCase()
-    : value;
+  const pathKey = (value) => (process.platform === "win32" ? value.toLocaleLowerCase() : value);
   while (
-    common
-    && !directories.every((directory) => {
+    common &&
+    !directories.every((directory) => {
       const relative = path.relative(common, directory);
       return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
     })
@@ -251,7 +265,9 @@ const commonMusicDirectory = (tracks) => {
  */
 export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
   const db = openDatabase(dbPath);
-  const tracks = db.prepare(`
+  const tracks = db
+    .prepare(
+      `
     SELECT id, title, artist, album_artist, album, genre_json, comment_json,
       year, track_number, track_total, disc_number, disc_total, bpm, rating,
       source_path, duration_seconds, bitrate_kbps, sample_rate_hz,
@@ -261,25 +277,40 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
     WHERE import_status != 'staged'
     ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE,
       COALESCE(disc_number, 1), COALESCE(track_number, 0), title COLLATE NOCASE
-  `).all().map((track) => ({
-    ...track,
-    source_path: resolveTrackPath(dbPath, track.source_path),
-  }));
-  const folders = db.prepare(`
+  `,
+    )
+    .all()
+    .map((track) => ({
+      ...track,
+      source_path: resolveTrackPath(dbPath, track.source_path),
+    }));
+  const folders = db
+    .prepare(
+      `
     SELECT id, name, parent_id, sort_order
     FROM playlist_folders
     ORDER BY parent_id, sort_order, name COLLATE NOCASE
-  `).all();
-  const playlists = db.prepare(`
+  `,
+    )
+    .all();
+  const playlists = db
+    .prepare(
+      `
     SELECT id, name, folder_id, sort_order
     FROM playlists
     ORDER BY folder_id, sort_order, name COLLATE NOCASE
-  `).all();
-  const playlistEntries = db.prepare(`
+  `,
+    )
+    .all();
+  const playlistEntries = db
+    .prepare(
+      `
     SELECT playlist_id, track_id
     FROM playlist_tracks
     ORDER BY playlist_id, position
-  `).all();
+  `,
+    )
+    .all();
 
   const destination = path.resolve(String(destinationPath ?? ""));
   if (!destination.toLowerCase().endsWith(".xml")) {
@@ -310,9 +341,9 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
     folders.map((folder) => [String(folder.id), persistentId("playlist-folder", folder.id)]),
   );
   const lines = [
-    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-    "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">",
-    "<plist version=\"1.0\">",
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    '<plist version="1.0">',
     "<dict>",
   ];
   appendPlistInteger(lines, 1, "Major Version", 1);
@@ -342,7 +373,9 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
     appendPlistString(lines, 3, "Comments", readJsonText(track.comment_json));
     appendPlistString(lines, 3, "Kind", itunesKind(track.source_path));
     appendPlistInteger(lines, 3, "Size", track.file_size_bytes, { minimum: 1 });
-    appendPlistInteger(lines, 3, "Total Time", Number(track.duration_seconds) * 1000, { minimum: 1 });
+    appendPlistInteger(lines, 3, "Total Time", Number(track.duration_seconds) * 1000, {
+      minimum: 1,
+    });
     appendPlistInteger(lines, 3, "Disc Number", track.disc_number, { minimum: 1 });
     appendPlistInteger(lines, 3, "Disc Count", track.disc_total, { minimum: 1 });
     appendPlistInteger(lines, 3, "Track Number", track.track_number, { minimum: 1 });
@@ -351,13 +384,9 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
     appendPlistInteger(lines, 3, "BPM", track.bpm, { minimum: 1 });
     appendPlistInteger(lines, 3, "Bit Rate", track.bitrate_kbps, { minimum: 1 });
     appendPlistInteger(lines, 3, "Sample Rate", track.sample_rate_hz, { minimum: 1 });
-    appendPlistInteger(
-      lines,
-      3,
-      "Rating",
-      Math.min(100, Math.max(0, Number(track.rating) * 20)),
-      { minimum: 1 },
-    );
+    appendPlistInteger(lines, 3, "Rating", Math.min(100, Math.max(0, Number(track.rating) * 20)), {
+      minimum: 1,
+    });
     appendPlistInteger(lines, 3, "Play Count", track.play_count, { minimum: 1 });
     appendPlistDate(lines, 3, "Date Modified", plistDate(track.updated_at, true));
     appendPlistDate(lines, 3, "Date Added", plistDate(track.added_at, true));
@@ -374,7 +403,12 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
   appendPlistString(lines, 3, "Name", "Library");
   appendPlistBoolean(lines, 3, "Master", true);
   appendPlistInteger(lines, 3, "Playlist ID", 1);
-  appendPlistString(lines, 3, "Playlist Persistent ID", persistentId("master", libraryPersistentId));
+  appendPlistString(
+    lines,
+    3,
+    "Playlist Persistent ID",
+    persistentId("master", libraryPersistentId),
+  );
   appendPlistBoolean(lines, 3, "Visible", false);
   appendPlistBoolean(lines, 3, "All Items", true);
   appendPlistKey(lines, 3, "Playlist Items");
@@ -414,12 +448,7 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
     lines.push("    <dict>");
     appendPlistString(lines, 3, "Name", playlist.name || "Playlist");
     appendPlistInteger(lines, 3, "Playlist ID", nextPlaylistId++);
-    appendPlistString(
-      lines,
-      3,
-      "Playlist Persistent ID",
-      persistentId("playlist", playlist.id),
-    );
+    appendPlistString(lines, 3, "Playlist Persistent ID", persistentId("playlist", playlist.id));
     if (playlist.folder_id != null) {
       appendPlistString(
         lines,
@@ -456,22 +485,34 @@ export const exportItunesLibrary = async ({ dbPath, destinationPath }) => {
 
 export const exportAllPlaylists = async ({ dbPath, destinationPath }) => {
   const db = openDatabase(dbPath);
-  const folders = db.prepare(`
+  const folders = db
+    .prepare(
+      `
     SELECT id, name, parent_id, sort_order
     FROM playlist_folders
     ORDER BY parent_id, sort_order, name COLLATE NOCASE
-  `).all();
-  const playlists = db.prepare(`
+  `,
+    )
+    .all();
+  const playlists = db
+    .prepare(
+      `
     SELECT id, name, folder_id, sort_order
     FROM playlists
     ORDER BY folder_id, sort_order, name COLLATE NOCASE
-  `).all();
-  const playlistEntries = db.prepare(`
+  `,
+    )
+    .all();
+  const playlistEntries = db
+    .prepare(
+      `
     SELECT pt.playlist_id, t.source_path, t.duration_seconds, t.artist, t.title
     FROM playlist_tracks pt
     JOIN tracks t ON t.id = pt.track_id
     ORDER BY pt.playlist_id, pt.position
-  `).all();
+  `,
+    )
+    .all();
 
   const exportRoot = await createNamedExportRoot(destinationPath, "Muro Playlists");
   const folderPathById = buildPlaylistFolderPaths(folders);
@@ -481,8 +522,8 @@ export const exportAllPlaylists = async ({ dbPath, destinationPath }) => {
 
   await Promise.all(
     [...folderPathById.values()].map((relativePath) =>
-      fs.promises.mkdir(path.join(exportRoot, relativePath), { recursive: true })
-    )
+      fs.promises.mkdir(path.join(exportRoot, relativePath), { recursive: true }),
+    ),
   );
 
   for (const entry of playlistEntries) {
@@ -494,7 +535,7 @@ export const exportAllPlaylists = async ({ dbPath, destinationPath }) => {
 
   for (const playlist of playlists) {
     const folderId = playlist.folder_id == null ? null : String(playlist.folder_id);
-    const relativeDirectory = folderId ? folderPathById.get(folderId) ?? "" : "";
+    const relativeDirectory = folderId ? (folderPathById.get(folderId) ?? "") : "";
     const playlistName = `${sanitizeExportSegment(playlist.name, "Playlist")}.m3u8`;
     const fileName = uniqueName(relativeDirectory, playlistName, usedPlaylistPaths);
     const playlistPath = path.join(exportRoot, relativeDirectory, fileName);
@@ -527,28 +568,44 @@ export const exportOrganizedLibrary = async ({
   onProgress = () => {},
 }) => {
   const db = openDatabase(dbPath);
-  const tracks = db.prepare(`
+  const tracks = db
+    .prepare(
+      `
     SELECT id, title, artist, album_artist, album, track_number,
       disc_number, disc_total, duration_seconds, source_path
     FROM tracks
     ORDER BY COALESCE(NULLIF(album_artist, ''), artist) COLLATE NOCASE,
       album COLLATE NOCASE, COALESCE(disc_number, 1), COALESCE(track_number, 0), title COLLATE NOCASE
-  `).all();
-  const folders = db.prepare(`
+  `,
+    )
+    .all();
+  const folders = db
+    .prepare(
+      `
     SELECT id, name, parent_id, sort_order
     FROM playlist_folders
     ORDER BY parent_id, sort_order, name COLLATE NOCASE
-  `).all();
-  const playlists = db.prepare(`
+  `,
+    )
+    .all();
+  const playlists = db
+    .prepare(
+      `
     SELECT id, name, folder_id, sort_order
     FROM playlists
     ORDER BY folder_id, sort_order, name COLLATE NOCASE
-  `).all();
-  const playlistEntries = db.prepare(`
+  `,
+    )
+    .all();
+  const playlistEntries = db
+    .prepare(
+      `
     SELECT playlist_id, track_id
     FROM playlist_tracks
     ORDER BY playlist_id, position
-  `).all();
+  `,
+    )
+    .all();
 
   const exportRoot = await createExportRoot(destinationPath);
   const multiDiscAlbums = findMultiDiscAlbums(tracks);
@@ -563,18 +620,13 @@ export const exportOrganizedLibrary = async ({
     const track = tracks[index];
     const trackId = String(track.id);
     const sourcePath = resolveTrackPath(dbPath, track.source_path);
-    const sourceKey = process.platform === "win32"
-      ? sourcePath.toLocaleLowerCase()
-      : sourcePath;
+    const sourceKey = process.platform === "win32" ? sourcePath.toLocaleLowerCase() : sourcePath;
     const existingRelativePath = exportedPathBySource.get(sourceKey);
 
     if (existingRelativePath) {
       exportedPathByTrackId.set(trackId, existingRelativePath);
     } else {
-      const artistFolder = sanitizeExportSegment(
-        albumArtistOrArtist(track),
-        "Unknown Artist",
-      );
+      const artistFolder = sanitizeExportSegment(albumArtistOrArtist(track), "Unknown Artist");
       const albumFolder = sanitizeExportSegment(track.album, "Unknown Album");
       const directorySegments = [artistFolder, albumFolder];
       if (multiDiscAlbums.has(albumGroupKey(track))) {
@@ -582,11 +634,7 @@ export const exportOrganizedLibrary = async ({
         directorySegments.push(`Disc ${discNumber}`);
       }
       const relativeDirectory = path.join(...directorySegments);
-      const fileName = uniqueName(
-        relativeDirectory,
-        sourceFileName(track),
-        usedAudioPaths,
-      );
+      const fileName = uniqueName(relativeDirectory, sourceFileName(track), usedAudioPaths);
       const relativePath = path.join(relativeDirectory, fileName);
       const outputPath = path.join(exportRoot, relativePath);
 
@@ -633,7 +681,7 @@ export const exportOrganizedLibrary = async ({
   for (let index = 0; index < playlists.length; index += 1) {
     const playlist = playlists[index];
     const folderId = playlist.folder_id == null ? null : String(playlist.folder_id);
-    const relativeDirectory = folderId ? folderPathById.get(folderId) ?? "" : "";
+    const relativeDirectory = folderId ? (folderPathById.get(folderId) ?? "") : "";
     const playlistName = `${sanitizeExportSegment(playlist.name, "Playlist")}.m3u8`;
     const fileName = uniqueName(relativeDirectory, playlistName, usedPlaylistPaths);
     const playlistPath = path.join(playlistsRoot, relativeDirectory, fileName);
@@ -650,7 +698,8 @@ export const exportOrganizedLibrary = async ({
       const artist = cleanPlaylistText(track.artist, "Unknown Artist");
       const title = cleanPlaylistText(track.title, "Unknown Title");
       const exportedTrackPath = path.join(exportRoot, relativeTrackPath);
-      const playlistEntry = path.relative(path.dirname(playlistPath), exportedTrackPath)
+      const playlistEntry = path
+        .relative(path.dirname(playlistPath), exportedTrackPath)
         .split(path.sep)
         .join("/");
       lines.push(`#EXTINF:${duration},${artist} - ${title}`);

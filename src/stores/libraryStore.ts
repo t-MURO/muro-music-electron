@@ -27,7 +27,7 @@ type LibraryActions = {
   // Playlists
   setPlaylists: (playlists: Playlist[] | ((prev: Playlist[]) => Playlist[])) => void;
   setPlaylistFolders: (
-    folders: PlaylistFolder[] | ((prev: PlaylistFolder[]) => PlaylistFolder[])
+    folders: PlaylistFolder[] | ((prev: PlaylistFolder[]) => PlaylistFolder[]),
   ) => void;
   addPlaylist: (playlist: Playlist) => void;
   updatePlaylist: (id: string, updates: Partial<Playlist>) => void;
@@ -57,18 +57,15 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       return {
         tracks: newTracks,
         allTracks: [...newTracks, ...state.inboxTracks],
-        searchRevision: newTracks === state.tracks
-          ? state.searchRevision
-          : state.searchRevision + 1,
+        searchRevision:
+          newTracks === state.tracks ? state.searchRevision : state.searchRevision + 1,
       };
     }),
 
   updateTrack: (id, updates) =>
     set((state) => {
       const newTracks = state.tracks.map((t) => (t.id === id ? { ...t, ...updates } : t));
-      const newInboxTracks = state.inboxTracks.map((t) =>
-        t.id === id ? { ...t, ...updates } : t
-      );
+      const newInboxTracks = state.inboxTracks.map((t) => (t.id === id ? { ...t, ...updates } : t));
       return {
         tracks: newTracks,
         inboxTracks: newInboxTracks,
@@ -91,7 +88,7 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
           const patch = byId.get(track.id);
           if (!patch) return track;
           const differs = (Object.keys(patch) as Array<keyof Track>).some(
-            (key) => track[key] !== patch[key]
+            (key) => track[key] !== patch[key],
           );
           if (!differs) return track;
           changed = true;
@@ -121,9 +118,8 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       return {
         inboxTracks: newInboxTracks,
         allTracks: [...state.tracks, ...newInboxTracks],
-        searchRevision: newInboxTracks === state.inboxTracks
-          ? state.searchRevision
-          : state.searchRevision + 1,
+        searchRevision:
+          newInboxTracks === state.inboxTracks ? state.searchRevision : state.searchRevision + 1,
       };
     }),
 
@@ -158,24 +154,19 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   // Playlist Actions
   setPlaylists: (playlists) =>
     set((state) => ({
-      playlists:
-        typeof playlists === "function" ? playlists(state.playlists) : playlists,
+      playlists: typeof playlists === "function" ? playlists(state.playlists) : playlists,
     })),
 
   setPlaylistFolders: (folders) =>
     set((state) => ({
-      playlistFolders:
-        typeof folders === "function" ? folders(state.playlistFolders) : folders,
+      playlistFolders: typeof folders === "function" ? folders(state.playlistFolders) : folders,
     })),
 
-  addPlaylist: (playlist) =>
-    set((state) => ({ playlists: [...state.playlists, playlist] })),
+  addPlaylist: (playlist) => set((state) => ({ playlists: [...state.playlists, playlist] })),
 
   updatePlaylist: (id, updates) =>
     set((state) => ({
-      playlists: state.playlists.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
-      ),
+      playlists: state.playlists.map((p) => (p.id === id ? { ...p, ...updates } : p)),
     })),
 
   deletePlaylist: (id) =>
@@ -186,18 +177,14 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   addTracksToPlaylist: (playlistId, trackIds) =>
     set((state) => ({
       playlists: state.playlists.map((p) =>
-        p.id === playlistId
-          ? { ...p, trackIds: [...p.trackIds, ...trackIds] }
-          : p
+        p.id === playlistId ? { ...p, trackIds: [...p.trackIds, ...trackIds] } : p,
       ),
     })),
 
   removeTracksFromPlaylist: (playlistId, count) =>
     set((state) => ({
       playlists: state.playlists.map((p) =>
-        p.id === playlistId
-          ? { ...p, trackIds: p.trackIds.slice(0, -count) }
-          : p
+        p.id === playlistId ? { ...p, trackIds: p.trackIds.slice(0, -count) } : p,
       ),
     })),
 
@@ -207,7 +194,7 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
   updatePlaylistFolder: (id, updates) =>
     set((state) => ({
       playlistFolders: state.playlistFolders.map((folder) =>
-        folder.id === id ? { ...folder, ...updates } : folder
+        folder.id === id ? { ...folder, ...updates } : folder,
       ),
     })),
 
@@ -217,9 +204,9 @@ export const useLibraryStore = create<LibraryStore>((set) => ({
       return {
         playlistFolders: state.playlistFolders
           .filter((folder) => folder.id !== id)
-          .map((folder) => folder.parentId === id ? { ...folder, parentId } : folder),
+          .map((folder) => (folder.parentId === id ? { ...folder, parentId } : folder)),
         playlists: state.playlists.map((playlist) =>
-          playlist.folderId === id ? { ...playlist, folderId: parentId } : playlist
+          playlist.folderId === id ? { ...playlist, folderId: parentId } : playlist,
         ),
       };
     }),

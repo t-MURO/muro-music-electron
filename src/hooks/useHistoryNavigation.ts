@@ -43,7 +43,7 @@ export const useHistoryNavigation = () => {
       indexRef.current -= 1;
       setCanGoBack(indexRef.current > 0);
       setCanGoForward(true);
-      navigate(-1);
+      void navigate(-1);
     }
   }, [navigate]);
 
@@ -53,7 +53,7 @@ export const useHistoryNavigation = () => {
       indexRef.current += 1;
       setCanGoBack(true);
       setCanGoForward(indexRef.current < historyRef.current.length - 1);
-      navigate(1);
+      void navigate(1);
     }
   }, [navigate]);
 

@@ -10,12 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { t } from "../../i18n";
-import {
-  CAMELOT_CODES,
-  planDjSet,
-  type SetBpmFlow,
-  type SetPlan,
-} from "../../lib/mix/setPlanner";
+import { CAMELOT_CODES, planDjSet, type SetBpmFlow, type SetPlan } from "../../lib/mix/setPlanner";
 import { notify } from "../../stores";
 import type { Playlist, Track } from "../../types";
 import { toCamelotCode } from "../../utils/camelot";
@@ -50,10 +45,7 @@ export const SetPlanner = ({
   onAddToQueue,
   onCreatePlaylist,
 }: SetPlannerProps) => {
-  const trackById = useMemo(
-    () => new Map(tracks.map((track) => [track.id, track])),
-    [tracks],
-  );
+  const trackById = useMemo(() => new Map(tracks.map((track) => [track.id, track])), [tracks]);
   const selectablePlaylists = useMemo(
     () => playlists.filter((playlist) => playlist.trackIds.length > 0),
     [playlists],
@@ -72,15 +64,17 @@ export const SetPlanner = ({
 
   const selectedPlaylist = playlists.find((playlist) => playlist.id === playlistId) ?? null;
   const playlistTracks = useMemo(
-    () => selectedPlaylist?.trackIds
-      .map((trackId) => trackById.get(trackId))
-      .filter((track): track is Track => Boolean(track)) ?? [],
+    () =>
+      selectedPlaylist?.trackIds
+        .map((trackId) => trackById.get(trackId))
+        .filter((track): track is Track => Boolean(track)) ?? [],
     [selectedPlaylist, trackById],
   );
   const eligibleStartingTracks = useMemo(
-    () => playlistTracks.filter((track) =>
-      typeof track.bpm === "number" && Number.isFinite(track.bpm) && track.bpm > 0
-    ),
+    () =>
+      playlistTracks.filter(
+        (track) => typeof track.bpm === "number" && Number.isFinite(track.bpm) && track.bpm > 0,
+      ),
     [playlistTracks],
   );
 
@@ -137,28 +131,34 @@ export const SetPlanner = ({
 
   if (selectablePlaylists.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-7 text-center text-[var(--color-text-muted)]" data-set-planner-empty>
+      <div
+        className="flex min-h-0 flex-1 flex-col items-center justify-center px-7 text-center text-[var(--color-text-muted)]"
+        data-set-planner-empty
+      >
         <Sparkles className="mb-3 h-7 w-7" />
-        <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">{t("setPlanner.empty.title")}</p>
-        <p className="mt-1 max-w-64 text-[11px] leading-relaxed">{t("setPlanner.empty.description")}</p>
+        <p className="text-[13px] font-medium text-[var(--color-text-secondary)]">
+          {t("setPlanner.empty.title")}
+        </p>
+        <p className="mt-1 max-w-64 text-[11px] leading-relaxed">
+          {t("setPlanner.empty.description")}
+        </p>
       </div>
     );
   }
 
-  const plannedDuration = plan?.tracks.reduce(
-    (total, track) => total + (track.durationSeconds || 0),
-    0,
-  ) ?? 0;
-  const compatibleTransitions = plan?.transitions.filter(
-    (transition) => transition.harmonicallyCompatible,
-  ).length ?? 0;
+  const plannedDuration =
+    plan?.tracks.reduce((total, track) => total + (track.durationSeconds || 0), 0) ?? 0;
+  const compatibleTransitions =
+    plan?.transitions.filter((transition) => transition.harmonicallyCompatible).length ?? 0;
   const plannedIds = plan?.tracks.map((track) => track.id) ?? [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-set-planner>
       <div className="shrink-0 space-y-3 border-b border-[var(--color-border)] px-4 py-4">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">{t("setPlanner.source")}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
+            {t("setPlanner.source")}
+          </div>
           <select
             className="mt-1.5 h-9 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2.5 text-[12px] text-[var(--color-text-primary)]"
             value={playlistId}
@@ -174,7 +174,9 @@ export const SetPlanner = ({
         </div>
 
         <label className="block min-w-0">
-          <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.startTrack")}</span>
+          <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+            {t("setPlanner.startTrack")}
+          </span>
           <select
             className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] text-[var(--color-text-primary)]"
             value={startTrackId}
@@ -187,7 +189,8 @@ export const SetPlanner = ({
             <option value="">{t("setPlanner.auto")}</option>
             {eligibleStartingTracks.map((track) => (
               <option key={track.id} value={track.id}>
-                {track.title} — {track.artist} · {track.bpm?.toFixed(1)} BPM · {toCamelotCode(track.key) || "—"}
+                {track.title} — {track.artist} · {track.bpm?.toFixed(1)} BPM ·{" "}
+                {toCamelotCode(track.key) || "—"}
               </option>
             ))}
           </select>
@@ -195,7 +198,9 @@ export const SetPlanner = ({
 
         <div className="grid grid-cols-2 gap-2">
           <label className="min-w-0">
-            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.bpmFlow")}</span>
+            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+              {t("setPlanner.bpmFlow")}
+            </span>
             <select
               className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] text-[var(--color-text-primary)]"
               value={bpmFlow}
@@ -209,7 +214,9 @@ export const SetPlanner = ({
             </select>
           </label>
           <label className="min-w-0">
-            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.trackCount")}</span>
+            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+              {t("setPlanner.trackCount")}
+            </span>
             <input
               className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] tabular-nums text-[var(--color-text-primary)]"
               min={1}
@@ -221,7 +228,9 @@ export const SetPlanner = ({
             />
           </label>
           <label className="min-w-0">
-            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.startKey")}</span>
+            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+              {t("setPlanner.startKey")}
+            </span>
             <select
               className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] text-[var(--color-text-primary)]"
               value={startKey}
@@ -230,11 +239,17 @@ export const SetPlanner = ({
               data-set-planner-start-key
             >
               <option value="">{t("setPlanner.auto")}</option>
-              {CAMELOT_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+              {CAMELOT_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
             </select>
           </label>
           <label className="min-w-0">
-            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">{t("setPlanner.endKey")}</span>
+            <span className="mb-1 block text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+              {t("setPlanner.endKey")}
+            </span>
             <select
               className="h-8 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[11px] text-[var(--color-text-primary)]"
               value={endKey}
@@ -242,7 +257,11 @@ export const SetPlanner = ({
               data-set-planner-end-key
             >
               <option value="">{t("setPlanner.auto")}</option>
-              {CAMELOT_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
+              {CAMELOT_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {code}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -262,28 +281,46 @@ export const SetPlanner = ({
       {!plan ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-7 text-center text-[var(--color-text-muted)]">
           <Music2 className="mb-3 h-6 w-6" />
-          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">{t("setPlanner.ready.title")}</p>
-          <p className="mt-1 max-w-64 text-[10px] leading-relaxed">{t("setPlanner.ready.description")}</p>
+          <p className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+            {t("setPlanner.ready.title")}
+          </p>
+          <p className="mt-1 max-w-64 text-[10px] leading-relaxed">
+            {t("setPlanner.ready.description")}
+          </p>
         </div>
       ) : (
         <>
-          <div className="shrink-0 border-b border-[var(--color-border)] px-4 py-3" data-set-planner-summary>
+          <div
+            className="shrink-0 border-b border-[var(--color-border)] px-4 py-3"
+            data-set-planner-summary
+          >
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-[var(--color-text-primary)]">
                 {flowIcon(bpmFlow)} {plan.tracks.length} {t("setPlanner.tracks")}
               </span>
-              <span className="ml-auto text-[10px] tabular-nums text-[var(--color-text-muted)]">{formatDuration(plannedDuration)}</span>
+              <span className="ml-auto text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                {formatDuration(plannedDuration)}
+              </span>
             </div>
             {plan.tracks.length > 0 && (
               <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
-                {plan.tracks[0].bpm?.toFixed(1)} → {plan.tracks[plan.tracks.length - 1]?.bpm?.toFixed(1)} BPM · {compatibleTransitions}/{plan.transitions.length} {t("setPlanner.harmonicTransitions")}
+                {plan.tracks[0].bpm?.toFixed(1)} →{" "}
+                {plan.tracks[plan.tracks.length - 1]?.bpm?.toFixed(1)} BPM · {compatibleTransitions}
+                /{plan.transitions.length} {t("setPlanner.harmonicTransitions")}
               </p>
             )}
-            {(plan.missingBpmCount > 0 || plan.missingKeyCount > 0 || plan.tracks.length < plan.requestedCount) && (
-              <p className="mt-1.5 text-[9px] leading-relaxed text-[var(--color-warning)]" data-set-planner-warning>
-                {plan.missingBpmCount > 0 && t("setPlanner.missingBpm", { count: String(plan.missingBpmCount) })}
+            {(plan.missingBpmCount > 0 ||
+              plan.missingKeyCount > 0 ||
+              plan.tracks.length < plan.requestedCount) && (
+              <p
+                className="mt-1.5 text-[9px] leading-relaxed text-[var(--color-warning)]"
+                data-set-planner-warning
+              >
+                {plan.missingBpmCount > 0 &&
+                  t("setPlanner.missingBpm", { count: String(plan.missingBpmCount) })}
                 {plan.missingBpmCount > 0 && plan.missingKeyCount > 0 ? " · " : ""}
-                {plan.missingKeyCount > 0 && t("setPlanner.missingKey", { count: String(plan.missingKeyCount) })}
+                {plan.missingKeyCount > 0 &&
+                  t("setPlanner.missingKey", { count: String(plan.missingKeyCount) })}
               </p>
             )}
           </div>
@@ -300,21 +337,36 @@ export const SetPlanner = ({
                   data-set-planner-bpm={track.bpm}
                   data-set-planner-key={toCamelotCode(track.key) || undefined}
                 >
-                  <span className="text-center text-[10px] tabular-nums text-[var(--color-text-muted)]">{index + 1}</span>
+                  <span className="text-center text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                    {index + 1}
+                  </span>
                   <div className="min-w-0">
-                    <div className="truncate text-[11px] font-medium text-[var(--color-text-primary)]">{track.title}</div>
+                    <div className="truncate text-[11px] font-medium text-[var(--color-text-primary)]">
+                      {track.title}
+                    </div>
                     <div className="mt-0.5 flex items-center gap-1.5 truncate text-[9px] text-[var(--color-text-muted)]">
                       <span className="truncate">{track.artist}</span>
                       {transition && (
-                        <span className={transition.harmonicallyCompatible ? "text-[var(--color-accent)]" : "text-[var(--color-text-muted)]"}>
-                          {transition.bpmChange >= 0 ? "+" : ""}{transition.bpmChange.toFixed(1)}
+                        <span
+                          className={
+                            transition.harmonicallyCompatible
+                              ? "text-[var(--color-accent)]"
+                              : "text-[var(--color-text-muted)]"
+                          }
+                        >
+                          {transition.bpmChange >= 0 ? "+" : ""}
+                          {transition.bpmChange.toFixed(1)}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="text-right tabular-nums">
-                    <div className="text-[10px] font-semibold text-[var(--color-accent)]">{toCamelotCode(track.key) || "—"}</div>
-                    <div className="mt-0.5 text-[9px] text-[var(--color-text-muted)]">{track.bpm?.toFixed(1) ?? "—"}</div>
+                    <div className="text-[10px] font-semibold text-[var(--color-accent)]">
+                      {toCamelotCode(track.key) || "—"}
+                    </div>
+                    <div className="mt-0.5 text-[9px] text-[var(--color-text-muted)]">
+                      {track.bpm?.toFixed(1) ?? "—"}
+                    </div>
                   </div>
                 </div>
               );
@@ -333,16 +385,34 @@ export const SetPlanner = ({
               <button
                 className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] bg-[var(--color-accent)] px-3 text-[10px] font-semibold text-white disabled:opacity-50"
                 disabled={!playlistName.trim() || plannedIds.length === 0 || saving}
-                onClick={() => { void savePlaylist(); }}
+                onClick={() => {
+                  void savePlaylist();
+                }}
                 type="button"
                 data-set-planner-save
               >
-                <Save className="h-3 w-3" /> {saving ? t("setPlanner.saving") : t("setPlanner.save")}
+                <Save className="h-3 w-3" />{" "}
+                {saving ? t("setPlanner.saving") : t("setPlanner.save")}
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button className="h-8 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[10px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]" onClick={() => onReplaceQueue(plannedIds)} type="button" data-set-planner-replace-queue>{t("setPlanner.replaceQueue")}</button>
-              <button className="inline-flex h-8 items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[10px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]" onClick={() => onAddToQueue(plannedIds)} type="button" data-set-planner-add-queue><ListPlus className="h-3 w-3" />{t("setPlanner.addQueue")}</button>
+              <button
+                className="h-8 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[10px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+                onClick={() => onReplaceQueue(plannedIds)}
+                type="button"
+                data-set-planner-replace-queue
+              >
+                {t("setPlanner.replaceQueue")}
+              </button>
+              <button
+                className="inline-flex h-8 items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] text-[10px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)]"
+                onClick={() => onAddToQueue(plannedIds)}
+                type="button"
+                data-set-planner-add-queue
+              >
+                <ListPlus className="h-3 w-3" />
+                {t("setPlanner.addQueue")}
+              </button>
             </div>
           </div>
         </>

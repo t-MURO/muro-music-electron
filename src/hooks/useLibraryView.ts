@@ -7,7 +7,8 @@ import { useLocaleVersion } from "./useLocaleVersion";
 import type { Playlist, SmartCrate, Track } from "../types";
 import { useSettingsStore } from "../stores";
 
-export type CollectionFacet = "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
+export type CollectionFacet =
+  "genres" | "artists" | "albums" | "labels" | "keys" | "bpm" | "formats";
 export type LibraryView =
   | "library"
   | "inbox"
@@ -19,7 +20,16 @@ export type LibraryView =
   | `smartCrate:${string}`
   | `collection:${CollectionFacet}`;
 
-export type ViewType = "library" | "inbox" | "settings" | "playlist" | "smartCrate" | "recentlyPlayed" | "recentlyAdded" | "statistics" | "collection";
+export type ViewType =
+  | "library"
+  | "inbox"
+  | "settings"
+  | "playlist"
+  | "smartCrate"
+  | "recentlyPlayed"
+  | "recentlyAdded"
+  | "statistics"
+  | "collection";
 
 export type EmptyStateConfig = {
   title: string;
@@ -55,7 +65,7 @@ const parsePlaylistId = (view: LibraryView): string | null => {
 };
 
 const parseCollectionFacet = (view: LibraryView): CollectionFacet | null =>
-  view.startsWith("collection:") ? view.slice("collection:".length) as CollectionFacet : null;
+  view.startsWith("collection:") ? (view.slice("collection:".length) as CollectionFacet) : null;
 
 const parseSmartCrateId = (view: LibraryView): string | null =>
   view.startsWith("smartCrate:") ? view.slice("smartCrate:".length) : null;
@@ -84,17 +94,13 @@ export const useViewConfig = ({
   // Titles and empty states are translated inside the memo, so the language
   // has to invalidate it.
   const localeVersion = useLocaleVersion();
-  const recentlyAddedPeriodDays = useSettingsStore(
-    (state) => state.recentlyAddedPeriodDays,
-  );
+  const recentlyAddedPeriodDays = useSettingsStore((state) => state.recentlyAddedPeriodDays);
 
   return useMemo(() => {
     const playlistId = parsePlaylistId(view);
     const smartCrateId = parseSmartCrateId(view);
     const collectionFacet = parseCollectionFacet(view);
-    const playlist = playlistId
-      ? playlists.find((p) => p.id === playlistId) ?? null
-      : null;
+    const playlist = playlistId ? (playlists.find((p) => p.id === playlistId) ?? null) : null;
 
     // Settings view
     if (view === "settings") {
@@ -180,16 +186,18 @@ export const useViewConfig = ({
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       start.setDate(start.getDate() - (recentlyAddedPeriodDays - 1));
-      const recentlyAddedTracks = libraryTracks.filter((track) => {
-        const added = track.dateAdded ? Date.parse(track.dateAdded) : NaN;
-        return Number.isFinite(added) && added >= start.getTime();
-      }).sort((left, right) => {
-        const parsedLeft = left.dateAdded ? Date.parse(left.dateAdded) : 0;
-        const parsedRight = right.dateAdded ? Date.parse(right.dateAdded) : 0;
-        const leftAdded = Number.isFinite(parsedLeft) ? parsedLeft : 0;
-        const rightAdded = Number.isFinite(parsedRight) ? parsedRight : 0;
-        return rightAdded - leftAdded;
-      });
+      const recentlyAddedTracks = libraryTracks
+        .filter((track) => {
+          const added = track.dateAdded ? Date.parse(track.dateAdded) : NaN;
+          return Number.isFinite(added) && added >= start.getTime();
+        })
+        .sort((left, right) => {
+          const parsedLeft = left.dateAdded ? Date.parse(left.dateAdded) : 0;
+          const parsedRight = right.dateAdded ? Date.parse(right.dateAdded) : 0;
+          const leftAdded = Number.isFinite(parsedLeft) ? parsedLeft : 0;
+          const rightAdded = Number.isFinite(parsedRight) ? parsedRight : 0;
+          return rightAdded - leftAdded;
+        });
       return {
         type: "recentlyAdded",
         title: t("header.recentlyAdded"),
@@ -275,7 +283,8 @@ export const useViewConfig = ({
         else if (collectionFacet === "albums") value = track.album;
         else if (collectionFacet === "labels") value = track.label ?? "";
         else if (collectionFacet === "keys") value = track.key ?? "";
-        else if (collectionFacet === "bpm") value = track.bpm == null ? "" : String(Math.round(track.bpm));
+        else if (collectionFacet === "bpm")
+          value = track.bpm == null ? "" : String(Math.round(track.bpm));
         else value = track.sourcePath.split(".").pop()?.toUpperCase() ?? "";
 
         if (!value.trim()) return false;
@@ -315,7 +324,7 @@ export const useViewConfig = ({
     // Playlist view
     if (playlist) {
       const trackMap = new Map(
-        [...libraryTracks, ...inboxTracks].map((track) => [track.id, track])
+        [...libraryTracks, ...inboxTracks].map((track) => [track.id, track]),
       );
       const playlistTracks = playlist.trackIds
         .map((id) => trackMap.get(id))

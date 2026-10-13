@@ -5,10 +5,10 @@ type StickyStateOptions<T> = {
   serialize?: (value: T) => string;
 };
 
-export const useStickyState = <T,>(
+export const useStickyState = <T>(
   key: string,
   defaultValue: T,
-  options: StickyStateOptions<T> = {}
+  options: StickyStateOptions<T> = {},
 ) => {
   const { parse, serialize } = options;
   const [state, setState] = useState<T>(() => {

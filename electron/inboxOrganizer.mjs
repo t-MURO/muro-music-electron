@@ -37,9 +37,7 @@ const configuredLibraryRoot = async (dbPath, requestedRoot) => {
 
 export const isPathInsideOrEqual = (candidatePath, folderPath) => {
   const relative = path.relative(path.resolve(folderPath), path.resolve(candidatePath));
-  return relative !== ".."
-    && !relative.startsWith(`..${path.sep}`)
-    && !path.isAbsolute(relative);
+  return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 };
 
 const sourceFileName = (track) => {
@@ -51,26 +49,18 @@ const sourceFileName = (track) => {
 
 export const acceptedTrackDestination = (track, watchedFolder) => {
   const artistFolder = sanitizeExportSegment(
-    String(track.album_artist ?? "").trim()
-      || String(track.artist ?? "").trim()
-      || "Unknown Artist",
+    String(track.album_artist ?? "").trim() ||
+      String(track.artist ?? "").trim() ||
+      "Unknown Artist",
     "Unknown Artist",
   );
   const albumFolder = sanitizeExportSegment(track.album, "Unknown Album");
-  return path.join(
-    path.resolve(watchedFolder),
-    artistFolder,
-    albumFolder,
-    sourceFileName(track),
-  );
+  return path.join(path.resolve(watchedFolder), artistFolder, albumFolder, sourceFileName(track));
 };
 
 export const acceptedTrackRootDestination = (track, watchedFolder) => {
   const sourceName = path.basename(String(track.source_path ?? ""));
-  return path.join(
-    path.resolve(watchedFolder),
-    sourceName || sourceFileName(track),
-  );
+  return path.join(path.resolve(watchedFolder), sourceName || sourceFileName(track));
 };
 
 const suffixedPath = (filePath, suffix) => {
@@ -109,11 +99,7 @@ const moveWithoutOverwrite = async (sourcePath, requestedDestination) => {
           throw error;
         }
         try {
-          await fs.promises.copyFile(
-            sourcePath,
-            destinationPath,
-            fs.constants.COPYFILE_EXCL,
-          );
+          await fs.promises.copyFile(sourcePath, destinationPath, fs.constants.COPYFILE_EXCL);
           createdByCopy = true;
           await preserveCopiedFileMetadata(destinationPath, stats);
         } catch (copyError) {
@@ -173,11 +159,15 @@ const structureTrackSelect = `
  */
 export const validateLibraryStructure = async ({ dbPath, libraryRoot }) => {
   const root = await configuredLibraryRoot(dbPath, libraryRoot);
-  const tracks = openDatabase(dbPath).prepare(`
+  const tracks = openDatabase(dbPath)
+    .prepare(
+      `
     ${structureTrackSelect}
     WHERE import_status != 'staged'
     ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, title COLLATE NOCASE
-  `).all();
+  `,
+    )
+    .all();
 
   const misplaced = [];
   let checked = 0;
@@ -223,21 +213,27 @@ export const validateLibraryStructure = async ({ dbPath, libraryRoot }) => {
  */
 export const repairLibraryStructure = async ({ dbPath, libraryRoot, trackIds }) => {
   const root = await configuredLibraryRoot(dbPath, libraryRoot);
-  const ids = [...new Set(
-    (Array.isArray(trackIds) ? trackIds : [])
-      .map((id) => String(id ?? "").trim())
-      .filter(Boolean),
-  )];
+  const ids = [
+    ...new Set(
+      (Array.isArray(trackIds) ? trackIds : [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
   if (ids.length === 0) {
     return { requested: 0, moved: [], skipped: 0, failures: [] };
   }
 
   const db = openDatabase(dbPath);
   const placeholders = ids.map(() => "?").join(", ");
-  const tracks = db.prepare(`
+  const tracks = db
+    .prepare(
+      `
     ${structureTrackSelect}
     WHERE id IN (${placeholders}) AND import_status != 'staged'
-  `).all(...ids);
+  `,
+    )
+    .all(...ids);
   const updatePath = db.prepare(`
     UPDATE tracks
     SET source_path = ?, filename = ?, is_missing = 0, updated_at = ?
@@ -312,17 +308,14 @@ export const repairLibraryStructure = async ({ dbPath, libraryRoot, trackIds }) 
   return { requested: ids.length, moved, skipped, failures };
 };
 
-export const acceptInboxTracks = async ({
-  dbPath,
-  trackIds,
-  organize = false,
-  libraryFolder,
-}) => {
-  const ids = [...new Set(
-    (Array.isArray(trackIds) ? trackIds : [])
-      .map((id) => String(id ?? "").trim())
-      .filter(Boolean),
-  )];
+export const acceptInboxTracks = async ({ dbPath, trackIds, organize = false, libraryFolder }) => {
+  const ids = [
+    ...new Set(
+      (Array.isArray(trackIds) ? trackIds : [])
+        .map((id) => String(id ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
   if (ids.length === 0) {
     return { accepted: 0, acceptedTrackIds: [], moved: [], failures: [] };
   }
@@ -334,11 +327,15 @@ export const acceptInboxTracks = async ({
 
   const db = openDatabase(dbPath);
   const placeholders = ids.map(() => "?").join(", ");
-  const tracks = db.prepare(`
+  const tracks = db
+    .prepare(
+      `
     SELECT id, title, artist, album_artist, album, filename, source_path
     FROM tracks
     WHERE id IN (${placeholders}) AND import_status = 'staged'
-  `).all(...ids);
+  `,
+    )
+    .all(...ids);
   const now = Math.floor(Date.now() / 1000);
   const acceptedTrackIds = [];
   const moved = [];

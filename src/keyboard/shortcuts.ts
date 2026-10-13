@@ -94,8 +94,14 @@ export const SHORTCUT_DEFINITIONS: Array<{
 ];
 
 const modifierCodes = new Set([
-  "ControlLeft", "ControlRight", "MetaLeft", "MetaRight",
-  "AltLeft", "AltRight", "ShiftLeft", "ShiftRight",
+  "ControlLeft",
+  "ControlRight",
+  "MetaLeft",
+  "MetaRight",
+  "AltLeft",
+  "AltRight",
+  "ShiftLeft",
+  "ShiftRight",
 ]);
 
 type KeyboardEventLike = Pick<
@@ -113,10 +119,7 @@ export const shortcutFromEvent = (event: KeyboardEventLike): string | null => {
   return parts.join("+");
 };
 
-export const matchesShortcut = (
-  event: KeyboardEventLike,
-  shortcut: string | undefined,
-) => {
+export const matchesShortcut = (event: KeyboardEventLike, shortcut: string | undefined) => {
   if (!shortcut) return false;
   return shortcutFromEvent(event) === shortcut;
 };
@@ -148,16 +151,16 @@ export const shortcutDisplayParts = (shortcut: string) =>
     return friendlyCode(part);
   });
 
-export const shortcutDisplay = (shortcut: string) =>
-  shortcutDisplayParts(shortcut).join("+");
+export const shortcutDisplay = (shortcut: string) => shortcutDisplayParts(shortcut).join("+");
 
 export const normalizeShortcutMap = (
   candidate: Partial<KeyboardShortcutMap> | undefined,
-): KeyboardShortcutMap => Object.fromEntries(
-  Object.entries(DEFAULT_KEYBOARD_SHORTCUTS).map(([action, fallback]) => [
-    action,
-    typeof candidate?.[action as ShortcutAction] === "string"
-      ? candidate[action as ShortcutAction]
-      : fallback,
-  ]),
-) as KeyboardShortcutMap;
+): KeyboardShortcutMap =>
+  Object.fromEntries(
+    Object.entries(DEFAULT_KEYBOARD_SHORTCUTS).map(([action, fallback]) => [
+      action,
+      typeof candidate?.[action as ShortcutAction] === "string"
+        ? candidate[action as ShortcutAction]
+        : fallback,
+    ]),
+  ) as KeyboardShortcutMap;

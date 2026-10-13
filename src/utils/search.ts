@@ -31,10 +31,13 @@ export function matchesSearchQuery(track: Track, query: string): boolean {
 
   const normalizedQuery = normalizeText(query);
   const queryTerms = normalizedQuery.split(" ").filter(Boolean);
-  const creditedArtistNames = trackArtistCredits(track)
-    .flatMap((credit) => [credit.name, credit.creditedName]);
-  const creditedAlbumArtistNames = albumArtistCredits(track, { fallbackToTrack: false })
-    .flatMap((credit) => [credit.name, credit.creditedName]);
+  const creditedArtistNames = trackArtistCredits(track).flatMap((credit) => [
+    credit.name,
+    credit.creditedName,
+  ]);
+  const creditedAlbumArtistNames = albumArtistCredits(track, { fallbackToTrack: false }).flatMap(
+    (credit) => [credit.name, credit.creditedName],
+  );
 
   // Build searchable text from track fields
   const searchableFields = [

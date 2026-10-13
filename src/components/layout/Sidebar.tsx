@@ -49,16 +49,12 @@ type SidebarProps = {
   onPlaylistDragOver: (id: string) => void;
   onCreatePlaylist: () => void;
   onCreatePlaylistFolder: () => void;
-  onImportPlaylist: () => void;
-  onImportPlaylistFolder: () => void;
-  onExportAllPlaylists: () => void;
+  onImportPlaylist: () => void | Promise<void>;
+  onImportPlaylistFolder: () => void | Promise<void>;
+  onExportAllPlaylists: () => void | Promise<void>;
   selectedPlaylistIds: ReadonlySet<string>;
   onPlaylistSelectionChange: (ids: string[]) => void;
-  onPlaylistReorder: (
-    sourceId: string,
-    targetId: string,
-    placement: "before" | "after",
-  ) => void;
+  onPlaylistReorder: (sourceId: string, targetId: string, placement: "before" | "after") => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onPlaylistFolderContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onCreateSmartCrate: () => void;
@@ -126,7 +122,10 @@ export const Sidebar = ({
   } | null>(null);
   const smartCrates = useSmartCrateStore((state) => state.smartCrates);
   const smartCrateCounts = useMemo(
-    () => new Map(smartCrates.map((crate) => [crate.id, filterTracksBySmartCrate(tracks, crate).length])),
+    () =>
+      new Map(
+        smartCrates.map((crate) => [crate.id, filterTracksBySmartCrate(tracks, crate).length]),
+      ),
     [smartCrates, tracks],
   );
 
@@ -157,7 +156,10 @@ export const Sidebar = ({
     [playlists],
   );
   const orderedFolders = useMemo(
-    () => [...playlistFolders].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)),
+    () =>
+      [...playlistFolders].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+      ),
     [playlistFolders],
   );
   const rootPlaylists = orderedPlaylists.filter(
@@ -214,9 +216,8 @@ export const Sidebar = ({
           Math.min(anchorIndex, targetIndex),
           Math.max(anchorIndex, targetIndex) + 1,
         );
-        nextSelection = event.metaKey || event.ctrlKey
-          ? [...new Set([...selectedPlaylistIds, ...range])]
-          : range;
+        nextSelection =
+          event.metaKey || event.ctrlKey ? [...new Set([...selectedPlaylistIds, ...range])] : range;
       } else {
         nextSelection = [playlistId];
       }
@@ -292,12 +293,11 @@ export const Sidebar = ({
         onDrop={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          const sourceId = reorderingPlaylistId
-            ?? event.dataTransfer.getData("application/x-muro-playlist-id");
+          const sourceId =
+            reorderingPlaylistId ?? event.dataTransfer.getData("application/x-muro-playlist-id");
           if (sourceId) {
-            const placement = reorderTarget?.id === playlist.id
-              ? reorderTarget.placement
-              : "before";
+            const placement =
+              reorderTarget?.id === playlist.id ? reorderTarget.placement : "before";
             onPlaylistReorder(sourceId, playlist.id, placement);
             setReorderingPlaylistId(null);
             setReorderTarget(null);
@@ -316,17 +316,23 @@ export const Sidebar = ({
         <span className="min-w-0 flex-1 truncate">{playlist.name}</span>
         {playlist.sourcePath && (
           <span
-            className={playlist.sourceSyncError
-              ? "shrink-0 text-[var(--color-danger)]"
-              : "shrink-0 text-[var(--color-text-muted)]"}
+            className={
+              playlist.sourceSyncError
+                ? "shrink-0 text-[var(--color-danger)]"
+                : "shrink-0 text-[var(--color-text-muted)]"
+            }
             data-playlist-source-linked={playlist.id}
-            title={playlist.sourceSyncError
-              ? `Could not fully sync ${playlist.sourcePath}: ${playlist.sourceSyncError}`
-              : `Automatically synced from ${playlist.sourcePath}`}
+            title={
+              playlist.sourceSyncError
+                ? `Could not fully sync ${playlist.sourcePath}: ${playlist.sourceSyncError}`
+                : `Automatically synced from ${playlist.sourcePath}`
+            }
           >
-            {playlist.sourceSyncError
-              ? <TriangleAlert className="h-3 w-3" aria-hidden="true" />
-              : <RefreshCw className="h-3 w-3" aria-hidden="true" />}
+            {playlist.sourceSyncError ? (
+              <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="h-3 w-3" aria-hidden="true" />
+            )}
           </span>
         )}
         <span className="sidebar-count">{playlist.trackIds.length}</span>
@@ -336,9 +342,13 @@ export const Sidebar = ({
   const countFolderPlaylists = (folderId: string, visited = new Set<string>()): number => {
     if (visited.has(folderId)) return 0;
     visited.add(folderId);
-    return (playlistsByFolder.get(folderId)?.length ?? 0)
-      + (childFoldersByParent.get(folderId) ?? [])
-        .reduce((total, child) => total + countFolderPlaylists(child.id, visited), 0);
+    return (
+      (playlistsByFolder.get(folderId)?.length ?? 0) +
+      (childFoldersByParent.get(folderId) ?? []).reduce(
+        (total, child) => total + countFolderPlaylists(child.id, visited),
+        0,
+      )
+    );
   };
   const renderFolder = (folder: (typeof playlistFolders)[number], depth = 0) => {
     const folderPlaylists = playlistsByFolder.get(folder.id) ?? [];
@@ -354,7 +364,11 @@ export const Sidebar = ({
           aria-expanded={!isCollapsed}
           type="button"
         >
-          {isCollapsed ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+          {isCollapsed ? (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+          )}
           <Folder className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
           <span className="sidebar-count">{countFolderPlaylists(folder.id)}</span>
@@ -371,7 +385,9 @@ export const Sidebar = ({
 
   return (
     <aside className="sidebar-shell flex h-full flex-col overflow-hidden border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div className={`sidebar-titlebar flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] ${collapsed ? "justify-center px-2" : "justify-end px-3"}`}>
+      <div
+        className={`sidebar-titlebar flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] ${collapsed ? "justify-center px-2" : "justify-end px-3"}`}
+      >
         <button
           className="toolbar-icon-button sidebar-collapse-button shrink-0"
           onClick={onToggleCollapsed}
@@ -379,11 +395,18 @@ export const Sidebar = ({
           aria-label={collapsed ? t("nav.aria.expand") : t("nav.aria.collapse")}
           type="button"
         >
-          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          {collapsed ? (
+            <PanelLeftOpen className="h-4 w-4" />
+          ) : (
+            <PanelLeftClose className="h-4 w-4" />
+          )}
         </button>
       </div>
 
-      <nav className={`shrink-0 ${collapsed ? "px-2 py-3" : "px-3 py-4"}`} aria-label={t("nav.aria.library")}>
+      <nav
+        className={`shrink-0 ${collapsed ? "px-2 py-3" : "px-3 py-4"}`}
+        aria-label={t("nav.aria.library")}
+      >
         {!collapsed && <div className="sidebar-section-label">{t("nav.library.section")}</div>}
         <div className="space-y-1">
           {navigation.map(({ view, label, icon: Icon, count }) => {
@@ -400,7 +423,14 @@ export const Sidebar = ({
                 type="button"
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {!collapsed && <><span className="min-w-0 flex-1 truncate">{label}</span>{count !== undefined && <span className="sidebar-count">{count.toLocaleString()}</span>}</>}
+                {!collapsed && (
+                  <>
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {count !== undefined && (
+                      <span className="sidebar-count">{count.toLocaleString()}</span>
+                    )}
+                  </>
+                )}
               </button>
             );
           })}
@@ -429,7 +459,10 @@ export const Sidebar = ({
               })}
             </div>
 
-            <div className="mt-4 border-t border-[var(--color-border-light)] pt-4" data-sidebar-section="playlists">
+            <div
+              className="mt-4 border-t border-[var(--color-border-light)] pt-4"
+              data-sidebar-section="playlists"
+            >
               <div className="sidebar-section-label">
                 <ListMusic className="h-3.5 w-3.5" />
                 <span className="flex-1">Playlists</span>
@@ -473,7 +506,7 @@ export const Sidebar = ({
                   <PopoverItem
                     onClick={() => {
                       setPlaylistActionsPosition(null);
-                      onImportPlaylist();
+                      void onImportPlaylist();
                     }}
                     data-playlist-import
                     role="menuitem"
@@ -484,7 +517,7 @@ export const Sidebar = ({
                   <PopoverItem
                     onClick={() => {
                       setPlaylistActionsPosition(null);
-                      onImportPlaylistFolder();
+                      void onImportPlaylistFolder();
                     }}
                     data-playlist-folder-import
                     role="menuitem"
@@ -496,7 +529,7 @@ export const Sidebar = ({
                     disabled={playlists.length === 0}
                     onClick={() => {
                       setPlaylistActionsPosition(null);
-                      onExportAllPlaylists();
+                      void onExportAllPlaylists();
                     }}
                     data-playlist-export-all
                     role="menuitem"
@@ -523,7 +556,10 @@ export const Sidebar = ({
               </div>
             </div>
           </div>
-          <div className="mt-4 border-t border-[var(--color-border-light)] pt-4" data-sidebar-section="smart-crates">
+          <div
+            className="mt-4 border-t border-[var(--color-border-light)] pt-4"
+            data-sidebar-section="smart-crates"
+          >
             <div className="sidebar-section-label">
               <Sparkles className="h-3.5 w-3.5" />
               <span className="flex-1">Smart Crates</span>
@@ -544,7 +580,10 @@ export const Sidebar = ({
                   const crateView = `smartCrate:${crate.id}` as LibraryView;
                   const active = currentView === crateView;
                   return (
-                    <div className="smart-crate-sidebar-row group flex min-w-0 items-center gap-1" key={crate.id}>
+                    <div
+                      className="smart-crate-sidebar-row group flex min-w-0 items-center gap-1"
+                      key={crate.id}
+                    >
                       <button
                         className={`${itemClass(active)} min-w-0 flex-1`}
                         onClick={() => onViewChange(crateView)}
@@ -554,11 +593,31 @@ export const Sidebar = ({
                       >
                         <Sparkles className="h-3.5 w-3.5 shrink-0" />
                         <span className="min-w-0 flex-1 truncate">{crate.name}</span>
-                        <span className="sidebar-count">{(smartCrateCounts.get(crate.id) ?? 0).toLocaleString()}</span>
+                        <span className="sidebar-count">
+                          {(smartCrateCounts.get(crate.id) ?? 0).toLocaleString()}
+                        </span>
                       </button>
                       <div className="smart-crate-sidebar-actions flex shrink-0 items-center">
-                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onEditSmartCrate(crate.id)} title={t("nav.aria.editNamed", { name: crate.name })} aria-label={t("nav.aria.editNamed", { name: crate.name })} data-smart-crate-edit={crate.id} type="button"><Pencil className="h-3 w-3" /></button>
-                        <button className="toolbar-icon-button h-7 w-7" onClick={() => onDeleteSmartCrate(crate.id)} title={t("nav.aria.deleteNamed", { name: crate.name })} aria-label={t("nav.aria.deleteNamed", { name: crate.name })} data-smart-crate-delete={crate.id} type="button"><Trash2 className="h-3 w-3" /></button>
+                        <button
+                          className="toolbar-icon-button h-7 w-7"
+                          onClick={() => onEditSmartCrate(crate.id)}
+                          title={t("nav.aria.editNamed", { name: crate.name })}
+                          aria-label={t("nav.aria.editNamed", { name: crate.name })}
+                          data-smart-crate-edit={crate.id}
+                          type="button"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          className="toolbar-icon-button h-7 w-7"
+                          onClick={() => onDeleteSmartCrate(crate.id)}
+                          title={t("nav.aria.deleteNamed", { name: crate.name })}
+                          aria-label={t("nav.aria.deleteNamed", { name: crate.name })}
+                          data-smart-crate-delete={crate.id}
+                          type="button"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
                       </div>
                     </div>
                   );

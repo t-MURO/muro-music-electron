@@ -14,14 +14,10 @@ export type ArtistCreditInput = {
 };
 
 export type ArtistCreditSegment =
-  | { kind: "artist"; text: string; credit: ArtistCredit }
-  | { kind: "text"; text: string };
+  { kind: "artist"; text: string; credit: ArtistCredit } | { kind: "text"; text: string };
 
-export const normalizeArtistName = (value: string) => value
-  .normalize("NFKC")
-  .trim()
-  .replace(/\s+/g, " ")
-  .toLocaleLowerCase();
+export const normalizeArtistName = (value: string) =>
+  value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
 const legacyArtistId = (name: string) => `legacy:${normalizeArtistName(name)}`;
 
@@ -47,7 +43,10 @@ export const legacyArtistCredits = (displayName: string): ArtistCredit[] => {
  * commas in unreviewed artist names are not safe split points.
  */
 export const reviewedCommaSeparatedArtistCredits = (displayName: string): ArtistCredit[] => {
-  const names = displayName.split(",").map((name) => name.trim()).filter(Boolean);
+  const names = displayName
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
   return names.map((name, index) => ({
     artistId: legacyArtistId(name),
     name,
@@ -63,9 +62,9 @@ const editedCredit = (
 ): ArtistCredit => {
   const canonicalName = creditedName.trim();
   if (
-    previous
-    && normalizeArtistName(previous.creditedName || previous.name)
-      === normalizeArtistName(canonicalName)
+    previous &&
+    normalizeArtistName(previous.creditedName || previous.name) ===
+      normalizeArtistName(canonicalName)
   ) {
     return {
       ...previous,
@@ -131,11 +130,7 @@ export const editedArtistCredits = (
   }
   const creditedName = displayName.slice(cursor);
   if (!creditedName.trim()) return legacyArtistCredits(displayName);
-  edited.push(editedCredit(
-    creditedName,
-    "",
-    previousCredits[previousCredits.length - 1],
-  ));
+  edited.push(editedCredit(creditedName, "", previousCredits[previousCredits.length - 1]));
   return edited;
 };
 
@@ -153,16 +148,22 @@ export const coerceArtistCredits = (
     const name = String(credit?.name ?? creditedName).trim() || creditedName;
     if (!name || !creditedName) return [];
     const musicBrainzId = credit.musicBrainzId?.trim();
-    return [{
-      artistId: credit.artistId?.trim()
-        || (musicBrainzId ? `mbid:${musicBrainzId.toLocaleLowerCase()}` : legacyArtistId(name)),
-      name,
-      creditedName,
-      joinPhrase: credit.joinPhrase == null
-        ? (index < source.length - 1 ? ", " : "")
-        : String(credit.joinPhrase),
-      ...(musicBrainzId ? { musicBrainzId } : {}),
-    }];
+    return [
+      {
+        artistId:
+          credit.artistId?.trim() ||
+          (musicBrainzId ? `mbid:${musicBrainzId.toLocaleLowerCase()}` : legacyArtistId(name)),
+        name,
+        creditedName,
+        joinPhrase:
+          credit.joinPhrase == null
+            ? index < source.length - 1
+              ? ", "
+              : ""
+            : String(credit.joinPhrase),
+        ...(musicBrainzId ? { musicBrainzId } : {}),
+      },
+    ];
   });
   if (coerced.length === 0) return legacyArtistCredits(displayName);
   return !displayName || formatArtistCredits(coerced) === displayName
@@ -170,13 +171,15 @@ export const coerceArtistCredits = (
     : legacyArtistCredits(displayName);
 };
 
-const usableCredits = (credits: ArtistCredit[] | undefined) => (credits ?? []).filter(
-  (credit) => Boolean(credit?.artistId && (credit.creditedName || credit.name)?.trim()),
-);
+const usableCredits = (credits: ArtistCredit[] | undefined) =>
+  (credits ?? []).filter((credit) =>
+    Boolean(credit?.artistId && (credit.creditedName || credit.name)?.trim()),
+  );
 
-export const formatArtistCredits = (credits: ArtistCredit[]) => credits
-  .map((credit) => `${credit.creditedName || credit.name}${credit.joinPhrase || ""}`)
-  .join("");
+export const formatArtistCredits = (credits: ArtistCredit[]) =>
+  credits
+    .map((credit) => `${credit.creditedName || credit.name}${credit.joinPhrase || ""}`)
+    .join("");
 
 export const trackArtistCredits = (track: Track): ArtistCredit[] => {
   const structured = usableCredits(track.artistCredits);
@@ -209,9 +212,9 @@ export const albumArtistDisplay = (
 ) => explicitAlbumArtistDisplay(track) || (fallbackToTrack ? track.artist : "");
 
 export const artistIdentityKey = (credit: ArtistTarget) =>
-  (credit.musicBrainzId ? `mbid:${credit.musicBrainzId.toLocaleLowerCase()}` : "")
-  || credit.artistId
-  || `name:${normalizeArtistName(credit.name)}`;
+  (credit.musicBrainzId ? `mbid:${credit.musicBrainzId.toLocaleLowerCase()}` : "") ||
+  credit.artistId ||
+  `name:${normalizeArtistName(credit.name)}`;
 
 export const isLegacyArtistId = (artistId: string) => artistId.startsWith("legacy:");
 
@@ -224,20 +227,19 @@ export const trackHasArtist = (
   const credits = trackArtistCredits(track);
   if (!wantedId && !wantedName) return credits.length > 0;
   if (
-    wantedName
-    && (!wantedId || isLegacyArtistId(wantedId))
-    && normalizeArtistName(track.artist) === wantedName
+    wantedName &&
+    (!wantedId || isLegacyArtistId(wantedId)) &&
+    normalizeArtistName(track.artist) === wantedName
   ) {
     return true;
   }
-  return credits.some((credit) => (
-    (wantedId && artistIdentityKey(credit) === wantedId)
-    || (
-      wantedName
-      && (!wantedId || isLegacyArtistId(wantedId))
-      && normalizeArtistName(credit.name) === wantedName
-    )
-  ));
+  return credits.some(
+    (credit) =>
+      (wantedId && artistIdentityKey(credit) === wantedId) ||
+      (wantedName &&
+        (!wantedId || isLegacyArtistId(wantedId)) &&
+        normalizeArtistName(credit.name) === wantedName),
+  );
 };
 
 /**
@@ -269,7 +271,11 @@ export const artistCreditSegments = (
       return legacy ? [{ kind: "artist", text: display, credit: legacy }] : [];
     }
     if (index > cursor) segments.push({ kind: "text", text: display.slice(cursor, index) });
-    segments.push({ kind: "artist", text: display.slice(index, index + creditedName.length), credit });
+    segments.push({
+      kind: "artist",
+      text: display.slice(index, index + creditedName.length),
+      credit,
+    });
     cursor = index + creditedName.length;
   }
   if (cursor < display.length) segments.push({ kind: "text", text: display.slice(cursor) });

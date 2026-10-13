@@ -24,7 +24,7 @@ type PlaybackState = {
 
 export type MediaControlPayload = {
   action: "play" | "pause" | "toggle" | "next" | "previous";
-  source: "media-session" | "global-shortcut" | string;
+  source: "media-session" | "global-shortcut" | (string & {});
 };
 
 let audio: HTMLAudioElement | null = null;
@@ -87,10 +87,7 @@ const applyElementVolume = (element: HTMLAudioElement, gainFactor: number) => {
   element.volume = clamp01(masterVolume * gainFactor);
 };
 
-const prepareElementVolume = async (
-  element: HTMLAudioElement,
-  gainFactor: number,
-) => {
+const prepareElementVolume = async (element: HTMLAudioElement, gainFactor: number) => {
   if (gainFactor > 1 && !mix.refreshElementLevel(element, gainFactor)) {
     try {
       await mix.setElementLevel(element, gainFactor);
@@ -141,9 +138,8 @@ const syncMediaSessionState = () => {
   if (!("mediaSession" in navigator)) return;
 
   try {
-    navigator.mediaSession.playbackState = audio && !audio.paused && !audio.ended
-      ? "playing"
-      : "paused";
+    navigator.mediaSession.playbackState =
+      audio && !audio.paused && !audio.ended ? "playing" : "paused";
   } catch {
     // Media-session state can be unavailable during device hand-off.
   }
@@ -170,7 +166,7 @@ const emitState = () => {
 const waitForMediaEvent = (
   player: HTMLAudioElement,
   successEvent: "loadedmetadata" | "seeked",
-  timeoutMs: number
+  timeoutMs: number,
 ) =>
   new Promise<void>((resolve, reject) => {
     const cleanup = () => {
@@ -205,7 +201,7 @@ const seekPlayer = async (player: HTMLAudioElement, requestedPosition: number) =
   const knownDuration = Number.isFinite(player.duration) ? player.duration : durationHint;
   const position = Math.max(
     0,
-    knownDuration > 0 ? Math.min(requestedPosition, knownDuration) : requestedPosition
+    knownDuration > 0 ? Math.min(requestedPosition, knownDuration) : requestedPosition,
   );
 
   if (Math.abs(player.currentTime - position) < 0.01) {
@@ -214,10 +210,10 @@ const seekPlayer = async (player: HTMLAudioElement, requestedPosition: number) =
   }
 
   const seekFinished = waitForMediaEvent(player, "seeked", 5_000);
-  const fastSeek = (player as HTMLAudioElement & { fastSeek?: (time: number) => void }).fastSeek;
+  const seekable = player as HTMLAudioElement & { fastSeek?: (time: number) => void };
   try {
-    if (seekMode === "fast" && typeof fastSeek === "function") {
-      fastSeek.call(player, position);
+    if (seekMode === "fast" && typeof seekable.fastSeek === "function") {
+      seekable.fastSeek(position);
     } else {
       player.currentTime = position;
     }
@@ -276,17 +272,17 @@ const setMediaSessionMetadata = (track: CurrentTrack | null) => {
 };
 
 const emitMediaSessionControl = (action: MediaControlPayload["action"]) => {
-  emitLocal("muro://media-control", { action, source: "media-session" } satisfies MediaControlPayload);
+  emitLocal("muro://media-control", {
+    action,
+    source: "media-session",
+  } satisfies MediaControlPayload);
 };
 
 const configureMediaSession = () => {
   if (!("mediaSession" in navigator) || mediaSessionConfigured) return;
   mediaSessionConfigured = true;
 
-  const setHandler = (
-    action: MediaSessionAction,
-    handler: MediaSessionActionHandler,
-  ) => {
+  const setHandler = (action: MediaSessionAction, handler: MediaSessionActionHandler) => {
     try {
       navigator.mediaSession.setActionHandler(action, handler);
     } catch {
@@ -546,10 +542,7 @@ const maybeStartCrossfade = (element: HTMLAudioElement) => {
   beginCrossfade(fade);
 };
 
-const resumeTransitionPlayers = async (
-  outgoing: HTMLAudioElement,
-  incoming: HTMLAudioElement,
-) => {
+const resumeTransitionPlayers = async (outgoing: HTMLAudioElement, incoming: HTMLAudioElement) => {
   await mix.resumeAudioOutput();
   try {
     await Promise.all([
@@ -566,10 +559,7 @@ const resumeTransitionPlayers = async (
   mix.notifyResume();
 };
 
-const playbackInvoke = async <T>(
-  command: string,
-  args: Record<string, unknown>
-): Promise<T> => {
+const playbackInvoke = async <T>(command: string, args: Record<string, unknown>): Promise<T> => {
   const player = ensureAudio();
   switch (command) {
     case "playback_play_file": {
@@ -681,7 +671,7 @@ const playbackInvoke = async <T>(
           (audio ?? player).pause();
         }
       }
-      return (!(audio ?? player).paused) as T;
+      return !(audio ?? player).paused as T;
     case "playback_play":
       if (mix.isTransitionActive() && idleEl && player.paused) {
         await resumeTransitionPlayers(player, idleEl);
@@ -729,10 +719,10 @@ const playbackInvoke = async <T>(
       emitState();
       return undefined as T;
     case "playback_set_seek_mode":
-      seekMode = String(args.mode || "accurate");
+      seekMode = typeof args.mode === "string" && args.mode ? args.mode : "accurate";
       return undefined as T;
     case "playback_set_output_device": {
-      outputDeviceId = String(args.deviceId ?? "");
+      outputDeviceId = typeof args.deviceId === "string" ? args.deviceId : "";
       const sinkId = outputDeviceId; // "" resets to the system default
       await Promise.allSettled(
         [...createdElements]
@@ -775,9 +765,7 @@ const playbackInvoke = async <T>(
         idleEl = createAudioElement("auto");
       }
       const incomingEl = idleEl;
-      const incomingGainFactor = Number(track.gainFactor) > 0
-        ? Number(track.gainFactor)
-        : 1;
+      const incomingGainFactor = Number(track.gainFactor) > 0 ? Number(track.gainFactor) : 1;
       await mix.setElementLevel(incomingEl, incomingGainFactor);
       applyElementVolume(incomingEl, incomingGainFactor);
       const fromId = currentTrack.id;
@@ -826,10 +814,7 @@ const playbackInvoke = async <T>(
   }
 };
 
-const queuePlaybackInvoke = <T>(
-  command: string,
-  args: Record<string, unknown>,
-): Promise<T> => {
+const queuePlaybackInvoke = <T>(command: string, args: Record<string, unknown>): Promise<T> => {
   const operation = playbackOperationChain.then(
     () => playbackInvoke<T>(command, args),
     () => playbackInvoke<T>(command, args),
@@ -843,15 +828,10 @@ const cleanRemoteError = (error: unknown) => {
   const message = error.message
     .replace(/^Error invoking remote method '[^']+':\s*/i, "")
     .replace(/^(?:Error|TypeError):\s*/i, "");
-  return message === error.message
-    ? error
-    : Object.assign(new Error(message), { cause: error });
+  return message === error.message ? error : Object.assign(new Error(message), { cause: error });
 };
 
-export const invoke = <T>(
-  command: string,
-  args: Record<string, unknown> = {}
-): Promise<T> => {
+export const invoke = <T>(command: string, args: Record<string, unknown> = {}): Promise<T> => {
   if (command.startsWith("playback_")) {
     if (
       command === "playback_play_file" ||
@@ -866,9 +846,11 @@ export const invoke = <T>(
     }
     return queuePlaybackInvoke<T>(command, args);
   }
-  return bridge().invoke<T>(command, args).catch((error) => {
-    throw cleanRemoteError(error);
-  });
+  return bridge()
+    .invoke<T>(command, args)
+    .catch((error) => {
+      throw cleanRemoteError(error);
+    });
 };
 
 export const convertFileSrc = (filePath: string): string =>

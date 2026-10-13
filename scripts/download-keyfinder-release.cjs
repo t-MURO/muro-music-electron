@@ -19,11 +19,7 @@ const platformTriple = () => {
 const extension = process.platform === "win32" ? ".exe" : "";
 const fileName = `keyfinder-native-${platformTriple()}${extension}`;
 const releaseRoot = `https://github.com/${repository}/releases/download/${encodeURIComponent(version)}`;
-const checksumManifestPath = path.join(
-  __dirname,
-  "keyfinder-checksums",
-  `${version}.sha256`,
-);
+const checksumManifestPath = path.join(__dirname, "keyfinder-checksums", `${version}.sha256`);
 const destinationDir = path.join(projectRoot, "build", "keyfinder");
 const destination = path.join(destinationDir, fileName);
 
@@ -39,15 +35,12 @@ const download = async (name) => {
     redirect: "follow",
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not download Neo KeyFinder ${version}/${name}: HTTP ${response.status}`,
-    );
+    throw new Error(`Could not download Neo KeyFinder ${version}/${name}: HTTP ${response.status}`);
   }
   return Buffer.from(await response.arrayBuffer());
 };
 
-const sha256 = (contents) =>
-  crypto.createHash("sha256").update(contents).digest("hex");
+const sha256 = (contents) => crypto.createHash("sha256").update(contents).digest("hex");
 
 const main = async () => {
   if (!fs.existsSync(checksumManifestPath)) {

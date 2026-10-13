@@ -1,35 +1,79 @@
 import type { Track } from "../types";
 
 const STANDARD_TO_CAMELOT: Record<string, string> = {
-  A: "11B", Am: "8A", Bb: "6B", Bbm: "3A", B: "1B", Bm: "10A",
-  C: "8B", Cm: "5A", Db: "3B", Dbm: "12A", D: "10B", Dm: "7A",
-  Eb: "5B", Ebm: "2A", E: "12B", Em: "9A", F: "7B", Fm: "4A",
-  Gb: "2B", Gbm: "11A", G: "9B", Gm: "6A", Ab: "4B", Abm: "1A",
-  "A#": "6B", "A#m": "3A", "C#": "3B", "C#m": "12A",
-  "D#": "5B", "D#m": "2A", "F#": "2B", "F#m": "11A",
-  "G#": "4B", "G#m": "1A",
+  A: "11B",
+  Am: "8A",
+  Bb: "6B",
+  Bbm: "3A",
+  B: "1B",
+  Bm: "10A",
+  C: "8B",
+  Cm: "5A",
+  Db: "3B",
+  Dbm: "12A",
+  D: "10B",
+  Dm: "7A",
+  Eb: "5B",
+  Ebm: "2A",
+  E: "12B",
+  Em: "9A",
+  F: "7B",
+  Fm: "4A",
+  Gb: "2B",
+  Gbm: "11A",
+  G: "9B",
+  Gm: "6A",
+  Ab: "4B",
+  Abm: "1A",
+  "A#": "6B",
+  "A#m": "3A",
+  "C#": "3B",
+  "C#m": "12A",
+  "D#": "5B",
+  "D#m": "2A",
+  "F#": "2B",
+  "F#m": "11A",
+  "G#": "4B",
+  "G#m": "1A",
 };
 
 // Colors sampled from Mixed In Key's official Camelot Wheel artwork.
 export const CAMELOT_COLORS: Record<string, string> = {
-  "1A": "#B3FFED", "1B": "#90FFC7",
-  "2A": "#C0FFC8", "2B": "#99FFAC",
-  "3A": "#CEFBAB", "3B": "#AFFA7C",
-  "4A": "#DFE8A7", "4B": "#D9C873",
-  "5A": "#F0CEA7", "5B": "#E8B173",
-  "6A": "#FEB1B4", "6B": "#FE8688",
-  "7A": "#F1AED5", "7B": "#F87EA3",
-  "8A": "#E9AEE1", "8B": "#DA7ED2",
-  "9A": "#D4AEFB", "9B": "#B97EFA",
-  "10A": "#BFCDFF", "10B": "#9AADFF",
-  "11A": "#B3F0FE", "11B": "#87E5FE",
-  "12A": "#B0FFF6", "12B": "#81FFF3",
+  "1A": "#B3FFED",
+  "1B": "#90FFC7",
+  "2A": "#C0FFC8",
+  "2B": "#99FFAC",
+  "3A": "#CEFBAB",
+  "3B": "#AFFA7C",
+  "4A": "#DFE8A7",
+  "4B": "#D9C873",
+  "5A": "#F0CEA7",
+  "5B": "#E8B173",
+  "6A": "#FEB1B4",
+  "6B": "#FE8688",
+  "7A": "#F1AED5",
+  "7B": "#F87EA3",
+  "8A": "#E9AEE1",
+  "8B": "#DA7ED2",
+  "9A": "#D4AEFB",
+  "9B": "#B97EFA",
+  "10A": "#BFCDFF",
+  "10B": "#9AADFF",
+  "11A": "#B3F0FE",
+  "11B": "#87E5FE",
+  "12A": "#B0FFF6",
+  "12B": "#81FFF3",
 };
 
 export type CamelotMatch = {
   track: Track;
   code: string;
-  reason: "Same key" | "Relative key" | "One step clockwise" | "One step counter-clockwise" | "Selected key";
+  reason:
+    | "Same key"
+    | "Relative key"
+    | "One step clockwise"
+    | "One step counter-clockwise"
+    | "Selected key";
   rank: number;
   bpmDifference: number;
   genreMatch: boolean;
@@ -47,13 +91,15 @@ export const calculateMixScore = (
   const genreMatch = Boolean(
     currentTrack.genre?.trim() &&
     candidate.genre?.trim() &&
-    currentTrack.genre.trim().toLocaleLowerCase() === candidate.genre.trim().toLocaleLowerCase()
+    currentTrack.genre.trim().toLocaleLowerCase() === candidate.genre.trim().toLocaleLowerCase(),
   );
   const genreBonus = genreMatch ? 3 : 0;
   const ratingBonus = Math.min(3, Math.max(0, candidate.rating) * 0.6);
   return {
     genreMatch,
-    score: Math.round(Math.max(55, Math.min(100, harmonicBase - bpmPenalty + genreBonus + ratingBonus))),
+    score: Math.round(
+      Math.max(55, Math.min(100, harmonicBase - bpmPenalty + genreBonus + ratingBonus)),
+    ),
   };
 };
 
@@ -83,12 +129,12 @@ export const toCamelotCode = (value?: string): string | null => {
 
 export const getCamelotColor = (value?: string): string | null => {
   const code = toCamelotCode(value);
-  return code ? CAMELOT_COLORS[code] ?? null : null;
+  return code ? (CAMELOT_COLORS[code] ?? null) : null;
 };
 
 const wheelDistance = (from: number, to: number) => {
-  const clockwise = ((to - from) + 12) % 12;
-  const counterClockwise = ((from - to) + 12) % 12;
+  const clockwise = (to - from + 12) % 12;
+  const counterClockwise = (from - to + 12) % 12;
   return { clockwise, counterClockwise };
 };
 
@@ -135,9 +181,10 @@ export const getCamelotSuggestions = (
         return null;
       }
 
-      const bpmDifference = currentBpm > 0 && (track.bpm ?? 0) > 0
-        ? Math.abs((track.bpm ?? 0) - currentBpm)
-        : Number.POSITIVE_INFINITY;
+      const bpmDifference =
+        currentBpm > 0 && (track.bpm ?? 0) > 0
+          ? Math.abs((track.bpm ?? 0) - currentBpm)
+          : Number.POSITIVE_INFINITY;
       const scoring = calculateMixScore(currentTrack, track, rank, bpmDifference);
       return {
         track,
@@ -149,11 +196,12 @@ export const getCamelotSuggestions = (
       };
     })
     .filter((suggestion): suggestion is CamelotMatch => suggestion !== null)
-    .sort((left, right) =>
-      left.rank - right.rank ||
-      right.score - left.score ||
-      left.bpmDifference - right.bpmDifference ||
-      left.track.title.localeCompare(right.track.title)
+    .sort(
+      (left, right) =>
+        left.rank - right.rank ||
+        right.score - left.score ||
+        left.bpmDifference - right.bpmDifference ||
+        left.track.title.localeCompare(right.track.title),
     );
 };
 
@@ -165,18 +213,21 @@ export const getTracksForCamelotCode = (
 ): Track[] => {
   const currentBpm = currentTrack.bpm ?? 0;
   return tracks
-    .filter((track) =>
-      track.id !== currentTrack.id &&
-      !excludedTrackIds.has(track.id) &&
-      toCamelotCode(track.key) === code
+    .filter(
+      (track) =>
+        track.id !== currentTrack.id &&
+        !excludedTrackIds.has(track.id) &&
+        toCamelotCode(track.key) === code,
     )
     .sort((left, right) => {
-      const leftDifference = currentBpm > 0 && (left.bpm ?? 0) > 0
-        ? Math.abs((left.bpm ?? 0) - currentBpm)
-        : Number.POSITIVE_INFINITY;
-      const rightDifference = currentBpm > 0 && (right.bpm ?? 0) > 0
-        ? Math.abs((right.bpm ?? 0) - currentBpm)
-        : Number.POSITIVE_INFINITY;
+      const leftDifference =
+        currentBpm > 0 && (left.bpm ?? 0) > 0
+          ? Math.abs((left.bpm ?? 0) - currentBpm)
+          : Number.POSITIVE_INFINITY;
+      const rightDifference =
+        currentBpm > 0 && (right.bpm ?? 0) > 0
+          ? Math.abs((right.bpm ?? 0) - currentBpm)
+          : Number.POSITIVE_INFINITY;
       return leftDifference - rightDifference || left.title.localeCompare(right.title);
     });
 };

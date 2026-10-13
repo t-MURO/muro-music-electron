@@ -14,12 +14,15 @@ export type DeckHandle = {
 
 export type TransitionRequest = {
   plan: TransitionPlan;
-  incoming: { el: HTMLAudioElement; srcUrl: string };  // el NOT yet loaded; engine sets src, seeks, rates
+  incoming: { el: HTMLAudioElement; srcUrl: string }; // el NOT yet loaded; engine sets src, seeks, rates
   outgoing: { el: HTMLAudioElement };
   preservePitch: boolean;
   callbacks: {
-    onStateChange: (status: "armed" | "active" | "completed" | "cancelled", progress: number) => void;
-    onHandoff: () => void;   // runtime swaps active element/current track here, synchronously
+    onStateChange: (
+      status: "armed" | "active" | "completed" | "cancelled",
+      progress: number,
+    ) => void;
+    onHandoff: () => void; // runtime swaps active element/current track here, synchronously
   };
 };
 
@@ -44,9 +47,9 @@ type ActiveTransition = {
   incomingEl: HTMLAudioElement;
   outgoingEl: HTMLAudioElement;
   callbacks: TransitionRequest["callbacks"];
-  started: boolean;   // audio from both decks flowing
-  starting: boolean;  // incoming.play() in flight
-  frozen: boolean;    // user paused mid-transition
+  started: boolean; // audio from both decks flowing
+  starting: boolean; // incoming.play() in flight
+  frozen: boolean; // user paused mid-transition
   watcherId: number | null;
   lastProgressEmitMs: number;
   activationId: number;
@@ -128,8 +131,7 @@ export function routeElement(el: HTMLAudioElement): void {
   elementChains.set(el, { source, lowShelf, transitionGain: gain, levelGain });
 }
 
-const getChain = (el: HTMLAudioElement): ElementChain | null =>
-  elementChains.get(el) ?? null;
+const getChain = (el: HTMLAudioElement): ElementChain | null => elementChains.get(el) ?? null;
 
 const holdParam = (param: AudioParam): void => {
   if (!audioContext) return;
@@ -164,10 +166,7 @@ const updateElementLevel = (el: HTMLAudioElement, level: number): boolean => {
   return true;
 };
 
-export const setElementLevel = async (
-  el: HTMLAudioElement,
-  level: number,
-): Promise<void> => {
+export const setElementLevel = async (el: HTMLAudioElement, level: number): Promise<void> => {
   await ensureAudioContextRunning();
   routeElement(el);
   updateElementLevel(el, level);
@@ -199,10 +198,7 @@ const waitForLoadedMetadata = (player: HTMLAudioElement, timeoutMs: number) =>
     player.addEventListener("error", handleError, { once: true });
   });
 
-const loadIncomingMetadata = async (
-  player: HTMLAudioElement,
-  srcUrl: string,
-): Promise<void> => {
+const loadIncomingMetadata = async (player: HTMLAudioElement, srcUrl: string): Promise<void> => {
   const load = async () => {
     const metadataLoaded = waitForLoadedMetadata(player, METADATA_TIMEOUT_MS);
     player.src = srcUrl;
@@ -221,11 +217,7 @@ const loadIncomingMetadata = async (
   });
 };
 
-const scheduleParam = (
-  param: AudioParam,
-  points: AutomationPoint[],
-  offsetSec: number
-): void => {
+const scheduleParam = (param: AudioParam, points: AutomationPoint[], offsetSec: number): void => {
   if (!audioContext) return;
   const now = audioContext.currentTime;
   param.cancelScheduledValues(now);
@@ -362,9 +354,10 @@ const completeTransition = (t: ActiveTransition): void => {
 const synchronizeIncomingClock = (t: ActiveTransition, outCur: number): void => {
   const expected = t.plan.cueInSec + (outCur - t.plan.startAtSec) * t.plan.rate;
   const duration = t.incomingEl.duration;
-  const boundedExpected = Number.isFinite(duration) && duration > 0
-    ? Math.min(expected, Math.max(0, duration - 0.05))
-    : Math.max(0, expected);
+  const boundedExpected =
+    Number.isFinite(duration) && duration > 0
+      ? Math.min(expected, Math.max(0, duration - 0.05))
+      : Math.max(0, expected);
   if (Math.abs(t.incomingEl.currentTime - boundedExpected) > 0.008) {
     try {
       // This runs while the incoming deck is still at zero gain. A single
@@ -399,16 +392,13 @@ const startTransition = (t: ActiveTransition, outCur: number): void => {
       const offset = Math.max(0, outgoingNow - t.plan.startAtSec);
       scheduleAutomation(t, offset);
       t.lastProgressEmitMs = Date.now();
-      t.callbacks.onStateChange(
-        "active",
-        clampNumber(offset / t.plan.durationSec, 0, 1)
-      );
+      t.callbacks.onStateChange("active", clampNumber(offset / t.plan.durationSec, 0, 1));
     },
     () => {
       if (transition !== t || activationId !== t.activationId) return;
       t.starting = false;
       cancelTransition();
-    }
+    },
   );
 };
 
@@ -421,11 +411,7 @@ const handleWatchTick = (): void => {
       if (!t.starting && outCur >= t.plan.startAtSec) startTransition(t, outCur);
       return;
     }
-    const progress = clampNumber(
-      (outCur - t.plan.startAtSec) / t.plan.durationSec,
-      0,
-      1
-    );
+    const progress = clampNumber((outCur - t.plan.startAtSec) / t.plan.durationSec, 0, 1);
     const nowMs = Date.now();
     if (nowMs - t.lastProgressEmitMs >= PROGRESS_EMIT_MS) {
       t.lastProgressEmitMs = nowMs;
@@ -471,10 +457,7 @@ export async function armTransition(req: TransitionRequest): Promise<void> {
     inChain.transitionGain.gain.cancelScheduledValues(now);
     inChain.transitionGain.gain.setValueAtTime(0, now);
     inChain.lowShelf.gain.cancelScheduledValues(now);
-    inChain.lowShelf.gain.setValueAtTime(
-      req.plan.mode === "beatmatch" ? BASS_KILL_DB : 0,
-      now
-    );
+    inChain.lowShelf.gain.setValueAtTime(req.plan.mode === "beatmatch" ? BASS_KILL_DB : 0, now);
   }
   const outChain = getChain(req.outgoing.el);
   if (outChain) setChainNeutral(outChain);
@@ -546,11 +529,14 @@ export function cancelTransition(): void {
   }
   flushPendingCancelPark();
   pendingCancelPark = parkIncoming;
-  cancelCleanupTimerId = window.setTimeout(() => {
-    cancelCleanupTimerId = null;
-    pendingCancelPark = null;
-    parkIncoming();
-  }, CANCEL_RAMP_SEC * 1000 + 50);
+  cancelCleanupTimerId = window.setTimeout(
+    () => {
+      cancelCleanupTimerId = null;
+      pendingCancelPark = null;
+      parkIncoming();
+    },
+    CANCEL_RAMP_SEC * 1000 + 50,
+  );
   t.callbacks.onStateChange("cancelled", 0);
 }
 
@@ -606,10 +592,7 @@ export function notifySeek(): void {
 
   if (t.frozen) setAutomationAt(t, offset);
   else scheduleAutomation(t, offset);
-  t.callbacks.onStateChange(
-    "active",
-    clampNumber(offset / t.plan.durationSec, 0, 1),
-  );
+  t.callbacks.onStateChange("active", clampNumber(offset / t.plan.durationSec, 0, 1));
 }
 
 export function notifyOutgoingEnded(): void {

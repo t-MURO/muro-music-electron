@@ -59,7 +59,7 @@ const startRenderer = () => {
       cwd: projectRoot,
       env: process.env,
       stdio: "inherit",
-    }
+    },
   );
   rendererProcess.on("error", (error) => {
     console.error("Failed to start the renderer:", error);

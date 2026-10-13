@@ -18,7 +18,7 @@ export const ColumnsMenu = ({
   onClose,
 }: ColumnsMenuProps) => {
   const sortedColumns = [...columns].sort((a, b) =>
-    t(a.labelKey).localeCompare(t(b.labelKey), undefined, { sensitivity: "base" })
+    t(a.labelKey).localeCompare(t(b.labelKey), undefined, { sensitivity: "base" }),
   );
 
   return (

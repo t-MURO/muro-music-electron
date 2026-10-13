@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  configureLibraryRoot,
-  openDatabase,
-  resolveTrackPath,
-} from "./database.mjs";
+import { configureLibraryRoot, openDatabase, resolveTrackPath } from "./database.mjs";
 import { AUDIO_EXTENSIONS, collectAudioPaths, importAudioFile } from "./metadata.mjs";
 
 /**
@@ -17,8 +13,7 @@ const SETTLE_DELAY_MS = 1_500;
 const MAX_SETTLE_MS = 120_000;
 const SETTLE_POLL_MS = 500;
 
-const isAudioPath = (candidate) =>
-  AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase());
+const isAudioPath = (candidate) => AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase());
 
 const comparablePath = (candidate) => {
   const resolved = path.resolve(String(candidate));
@@ -66,12 +61,7 @@ const waitForStableFile = async (filePath, { signal } = {}) => {
  * Imports land in the Inbox rather than the library proper: a watcher firing on
  * a half-organized download folder should not silently reshape the collection.
  */
-export const createLibraryWatcher = ({
-  cacheDir,
-  emit,
-  getSender,
-  watch = fs.watch,
-}) => {
+export const createLibraryWatcher = ({ cacheDir, emit, getSender, watch = fs.watch }) => {
   /** The map contains at most the one configured library folder. */
   const watchers = new Map();
   /** Paths seen but not yet imported, so a burst of events imports once. */
@@ -121,7 +111,9 @@ export const createLibraryWatcher = ({
       const paths = await collectAudioPaths([directory]);
       if (!enabled || currentDbPath !== dbPath || !watchers.has(directory)) return;
       const knownPaths = new Set(
-        openDatabase(dbPath).prepare("SELECT source_path FROM tracks").all()
+        openDatabase(dbPath)
+          .prepare("SELECT source_path FROM tracks")
+          .all()
           .flatMap((row) => {
             try {
               return [comparablePath(resolveTrackPath(dbPath, row.source_path))];
@@ -130,9 +122,7 @@ export const createLibraryWatcher = ({
             }
           }),
       );
-      paths
-        .filter((filePath) => !knownPaths.has(comparablePath(filePath)))
-        .forEach(queuePath);
+      paths.filter((filePath) => !knownPaths.has(comparablePath(filePath))).forEach(queuePath);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`Could not rescan watched folder ${directory}:`, message);
@@ -235,9 +225,7 @@ export const createLibraryWatcher = ({
       if (!target) return { imported: 0, scanned: 0 };
 
       const requestedFolder = String(folder ?? "").trim();
-      const directory = requestedFolder
-        ? path.resolve(requestedFolder)
-        : [...watchers.keys()][0];
+      const directory = requestedFolder ? path.resolve(requestedFolder) : [...watchers.keys()][0];
       if (!directory) return { imported: 0, scanned: 0 };
       configureLibraryRoot(target, directory);
 

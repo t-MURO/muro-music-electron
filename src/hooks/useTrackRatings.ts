@@ -11,21 +11,16 @@ export const useTrackRatings = () => {
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
 
-  const clampRating = (value: number) =>
-    Math.max(0, Math.min(5, Math.round(value * 2) / 2));
+  const clampRating = (value: number) => Math.max(0, Math.min(5, Math.round(value * 2) / 2));
 
   const handleRatingChange = useCallback(
     (id: string, rating: number) => {
       const nextRating = clampRating(rating);
       setTracks((current) =>
-        current.map((track) =>
-          track.id === id ? { ...track, rating: nextRating } : track
-        )
+        current.map((track) => (track.id === id ? { ...track, rating: nextRating } : track)),
       );
       setInboxTracks((current) =>
-        current.map((track) =>
-          track.id === id ? { ...track, rating: nextRating } : track
-        )
+        current.map((track) => (track.id === id ? { ...track, rating: nextRating } : track)),
       );
 
       const updates = { rating: nextRating };
@@ -39,7 +34,7 @@ export const useTrackRatings = () => {
         })
         .catch((err) => console.error("Failed to persist rating:", err));
     },
-    [setInboxTracks, setTracks]
+    [setInboxTracks, setTracks],
   );
 
   return { handleRatingChange };

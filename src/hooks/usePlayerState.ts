@@ -15,9 +15,7 @@ export const usePlayerState = () => {
   }, []);
 
   const toggleRepeat = useCallback(() => {
-    setRepeatMode((current) =>
-      current === "off" ? "all" : current === "all" ? "one" : "off"
-    );
+    setRepeatMode((current) => (current === "off" ? "all" : current === "all" ? "one" : "off"));
   }, []);
 
   return {

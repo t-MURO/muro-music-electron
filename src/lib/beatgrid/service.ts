@@ -2,9 +2,7 @@ import { convertFileSrc, invoke } from "@muro/desktop/runtime";
 import type { Track } from "../../types";
 import { BEAT_GRID_VERSION, type BeatGrid } from "./types";
 
-type WorkerReply =
-  | { ok: true; grid: BeatGrid }
-  | { ok: false; error: string };
+type WorkerReply = { ok: true; grid: BeatGrid } | { ok: false; error: string };
 
 const ANALYSIS_SAMPLE_RATE = 11025;
 
@@ -51,13 +49,12 @@ const runWorkerAnalysis = (
     worker.postMessage({ samples, sampleRate, bpmHint }, [samples.buffer]);
   });
 
-const decodeAndAnalyze = async (
-  sourcePath: string,
-  bpmHint: number | null,
-): Promise<BeatGrid> => {
+const decodeAndAnalyze = async (sourcePath: string, bpmHint: number | null): Promise<BeatGrid> => {
   const response = await fetch(convertFileSrc(sourcePath));
   if (!response.ok) {
-    throw new Error(`Could not read audio file for beat analysis (HTTP ${response.status}): ${sourcePath}`);
+    throw new Error(
+      `Could not read audio file for beat analysis (HTTP ${response.status}): ${sourcePath}`,
+    );
   }
   const encoded = await response.arrayBuffer();
   // OfflineAudioContext decodes AND resamples to the analysis rate in one go.
@@ -95,9 +92,7 @@ export function analyzeSourceBeatGrid(
   return task;
 }
 
-export async function getOrComputeBeatGrid(
-  track: Track,
-): Promise<BeatGrid> {
+export async function getOrComputeBeatGrid(track: Track): Promise<BeatGrid> {
   if (track.beatGrid?.version === BEAT_GRID_VERSION) return track.beatGrid;
   const grid = await analyzeSourceBeatGrid(track.sourcePath, track.bpm ?? null);
   // Persist fire-and-forget: a failed write must not block the transition.

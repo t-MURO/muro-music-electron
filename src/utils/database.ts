@@ -1,10 +1,6 @@
 import { invoke } from "@muro/desktop/runtime";
 import type { ImportedTrack, LibrarySnapshot, PlaylistSnapshot } from "./importApi";
-import type {
-  AlbumCoverCandidate,
-  ArtistImageCandidate,
-  ArtistProfile,
-} from "../types";
+import type { AlbumCoverCandidate, ArtistImageCandidate, ArtistProfile } from "../types";
 import type { ArtistCreditInput } from "./artistCredits";
 import type { MetadataWriteResult } from "./tagWriteFailures";
 
@@ -12,10 +8,7 @@ import type { MetadataWriteResult } from "./tagWriteFailures";
 // Library Operations
 // ============================================================================
 
-export const loadTracks = (
-  libraryRoot?: string,
-  artistSeparatorExceptions?: string[],
-) => {
+export const loadTracks = (libraryRoot?: string, artistSeparatorExceptions?: string[]) => {
   return invoke<LibrarySnapshot>("load_tracks", {
     libraryRoot,
     artistSeparatorExceptions,
@@ -70,19 +63,16 @@ export type LibraryStructureRepairResult = {
   failures: Array<{ trackId: string; sourcePath: string; message: string }>;
 };
 
-export const validateLibraryStructure = (
-  libraryRoot: string,
-) => invoke<LibraryStructureValidationResult>("validate_library_structure", {
-  libraryRoot,
-});
+export const validateLibraryStructure = (libraryRoot: string) =>
+  invoke<LibraryStructureValidationResult>("validate_library_structure", {
+    libraryRoot,
+  });
 
-export const repairLibraryStructure = (
-  libraryRoot: string,
-  trackIds: string[],
-) => invoke<LibraryStructureRepairResult>("repair_library_structure", {
-  libraryRoot,
-  trackIds,
-});
+export const repairLibraryStructure = (libraryRoot: string, trackIds: string[]) =>
+  invoke<LibraryStructureRepairResult>("repair_library_structure", {
+    libraryRoot,
+    trackIds,
+  });
 
 export const unacceptTracks = (trackIds: string[]) => {
   return invoke<void>("unaccept_tracks", { trackIds });
@@ -97,10 +87,7 @@ export type DeleteTracksResult = {
   failures: Array<{ trackId: string; path: string; message: string }>;
 };
 
-export const deleteTracks = (
-  trackIds: string[],
-  deleteFromDisk: boolean
-) => {
+export const deleteTracks = (trackIds: string[], deleteFromDisk: boolean) => {
   return invoke<DeleteTracksResult>("delete_tracks", {
     trackIds,
     deleteFromDisk,
@@ -123,32 +110,35 @@ export const getArtistProfile = (
   force = false,
   providerKeys: ArtistProfileProviderKeys = {},
   identity: ArtistProfileIdentity = {},
-) => invoke<ArtistProfile>("get_artist_profile", {
-  artistName,
-  ...identity,
-  force,
-  ...providerKeys,
-});
+) =>
+  invoke<ArtistProfile>("get_artist_profile", {
+    artistName,
+    ...identity,
+    force,
+    ...providerKeys,
+  });
 
 export const searchArtistImages = (
   artistName: string,
   providerKeys: ArtistProfileProviderKeys = {},
   identity: ArtistProfileIdentity = {},
-) => invoke<ArtistImageCandidate[]>("search_artist_images", {
-  artistName,
-  ...identity,
-  ...providerKeys,
-});
+) =>
+  invoke<ArtistImageCandidate[]>("search_artist_images", {
+    artistName,
+    ...identity,
+    ...providerKeys,
+  });
 
 export const setArtistImage = (
   artistName: string,
   candidate: ArtistImageCandidate,
   identity: ArtistProfileIdentity = {},
-) => invoke<ArtistProfile>("set_artist_image", {
-  artistName,
-  candidate,
-  ...identity,
-});
+) =>
+  invoke<ArtistProfile>("set_artist_image", {
+    artistName,
+    candidate,
+    ...identity,
+  });
 
 export type ArtistProfileProviderKeys = {
   braveSearchApiKey?: string;
@@ -166,10 +156,8 @@ export type ArtistProfileScanResult = {
   totalArtists: number;
 };
 
-export const scanArtistProfiles = (
-  providerKeys: ArtistProfileProviderKeys = {},
-  limit = 25,
-) => invoke<ArtistProfileScanResult>("scan_artist_profiles", { ...providerKeys, limit });
+export const scanArtistProfiles = (providerKeys: ArtistProfileProviderKeys = {}, limit = 25) =>
+  invoke<ArtistProfileScanResult>("scan_artist_profiles", { ...providerKeys, limit });
 
 export type FetchedCoverArt = {
   fullPath: string;
@@ -181,22 +169,23 @@ export type FetchedCoverArt = {
 export const fetchTrackCoverArt = (
   trackId: string,
   metadata: { album?: string; artist?: string } = {},
-) => invoke<FetchedCoverArt | null>("fetch_track_cover_art", {
-  trackId,
-  ...metadata,
-});
+) =>
+  invoke<FetchedCoverArt | null>("fetch_track_cover_art", {
+    trackId,
+    ...metadata,
+  });
 
 export const searchAlbumCoverImages = (
   metadata: { album: string; artist: string },
   braveSearchApiKey: string,
-) => invoke<AlbumCoverCandidate[]>("search_album_cover_images", {
-  ...metadata,
-  braveSearchApiKey,
-});
+) =>
+  invoke<AlbumCoverCandidate[]>("search_album_cover_images", {
+    ...metadata,
+    braveSearchApiKey,
+  });
 
-export const cacheAlbumCoverCandidate = (
-  candidate: AlbumCoverCandidate,
-) => invoke<FetchedCoverArt>("cache_album_cover_candidate", { candidate });
+export const cacheAlbumCoverCandidate = (candidate: AlbumCoverCandidate) =>
+  invoke<FetchedCoverArt>("cache_album_cover_candidate", { candidate });
 
 export type MetadataSearchCandidate = {
   id: string;
@@ -217,9 +206,8 @@ export type MetadataSearchCandidate = {
   albumMatch: boolean;
 };
 
-export const searchTrackMetadata = (
-  metadata: { title: string; artist: string; album?: string },
-) => invoke<MetadataSearchCandidate[]>("search_track_metadata", metadata);
+export const searchTrackMetadata = (metadata: { title: string; artist: string; album?: string }) =>
+  invoke<MetadataSearchCandidate[]>("search_track_metadata", metadata);
 
 export type AcoustIdCandidate = MetadataSearchCandidate & {
   acoustidId: string;
@@ -232,15 +220,12 @@ export type AcoustIdIdentificationResult = {
   candidates: AcoustIdCandidate[];
 };
 
-export const identifyTrackWithAcoustId = (
-  trackId: string,
-  clientKey: string,
-  force = false,
-) => invoke<AcoustIdIdentificationResult>("identify_track_acoustid", {
-  trackId,
-  clientKey,
-  force,
-});
+export const identifyTrackWithAcoustId = (trackId: string, clientKey: string, force = false) =>
+  invoke<AcoustIdIdentificationResult>("identify_track_acoustid", {
+    trackId,
+    clientKey,
+    force,
+  });
 
 export type AlbumMetadataCandidate = {
   id: string;
@@ -297,9 +282,7 @@ export type TechnicalMetadataScanResult = {
   failed: number;
   remaining: number;
   /** The stored technical fields for every track checked in this batch. */
-  tracks: Array<
-    Pick<ImportedTrack, "id" | "sample_rate_hz" | "bit_depth" | "file_size_bytes">
-  >;
+  tracks: Array<Pick<ImportedTrack, "id" | "sample_rate_hz" | "bit_depth" | "file_size_bytes">>;
 };
 
 export const scanTechnicalMetadata = (limit = 25) =>
@@ -362,30 +345,21 @@ export const restorePlaylists = (
   }>,
 ) => invoke<{ restored: number }>("restore_playlists", { playlists });
 
-export const addTracksToPlaylist = (
-  playlistId: string,
-  trackIds: string[]
-) => {
+export const addTracksToPlaylist = (playlistId: string, trackIds: string[]) => {
   return invoke<void>("add_tracks_to_playlist", {
     playlistId,
     trackIds,
   });
 };
 
-export const setPlaylistTracks = (
-  playlistId: string,
-  trackIds: string[]
-) => {
+export const setPlaylistTracks = (playlistId: string, trackIds: string[]) => {
   return invoke<void>("set_playlist_tracks", {
     playlistId,
     trackIds,
   });
 };
 
-export const removeLastTracksFromPlaylist = (
-  playlistId: string,
-  count: number
-) => {
+export const removeLastTracksFromPlaylist = (playlistId: string, count: number) => {
   return invoke<void>("remove_last_tracks_from_playlist", {
     playlistId,
     count,
@@ -445,22 +419,18 @@ export type PlaylistSourceSyncResult = {
 };
 
 export const configurePlaylistSync = () =>
-  invoke<{ linked: number; synced: number; changed: number }>(
-    "configure_playlist_sync",
-  );
+  invoke<{ linked: number; synced: number; changed: number }>("configure_playlist_sync");
 
 export const syncPlaylistSource = (playlistId: string) =>
   invoke<PlaylistSourceSyncResult | null>("sync_playlist_source", {
     playlistId,
   });
 
-export const exportPlaylistFile = (
-  playlistId: string,
-  filePath: string,
-) => invoke<{ exported: number; filePath: string }>("export_playlist_file", {
-  playlistId,
-  filePath,
-});
+export const exportPlaylistFile = (playlistId: string, filePath: string) =>
+  invoke<{ exported: number; filePath: string }>("export_playlist_file", {
+    playlistId,
+    filePath,
+  });
 
 export type PlaylistCollectionExportResult = {
   exportRoot: string;
@@ -468,11 +438,10 @@ export type PlaylistCollectionExportResult = {
   playlistEntriesExported: number;
 };
 
-export const exportAllPlaylists = (
-  destinationPath: string,
-) => invoke<PlaylistCollectionExportResult>("export_all_playlists", {
-  destinationPath,
-});
+export const exportAllPlaylists = (destinationPath: string) =>
+  invoke<PlaylistCollectionExportResult>("export_all_playlists", {
+    destinationPath,
+  });
 
 export type ItunesLibraryExportResult = {
   destinationPath: string;
@@ -484,11 +453,10 @@ export type ItunesLibraryExportResult = {
   playlistEntriesSkipped: number;
 };
 
-export const exportItunesLibrary = (
-  destinationPath: string,
-) => invoke<ItunesLibraryExportResult>("export_itunes_library", {
-  destinationPath,
-});
+export const exportItunesLibrary = (destinationPath: string) =>
+  invoke<ItunesLibraryExportResult>("export_itunes_library", {
+    destinationPath,
+  });
 
 export type LibraryBackupResult = {
   destinationPath: string;
@@ -512,11 +480,12 @@ export const createLibraryBackup = (
   destinationPath: string,
   settingsJson: string,
   smartCratesJson: string,
-) => invoke<LibraryBackupResult>("create_library_backup", {
-  destinationPath,
-  settingsJson,
-  smartCratesJson,
-});
+) =>
+  invoke<LibraryBackupResult>("create_library_backup", {
+    destinationPath,
+    settingsJson,
+    smartCratesJson,
+  });
 
 export type LibraryRestoreResult = {
   archivePath: string;
@@ -540,18 +509,14 @@ export type MetadataHistoryEntry = {
   changes: Record<string, { before: unknown; after: unknown }>;
 };
 
-export const listMetadataHistory = (
-  trackId?: string,
-  limit = 100,
-) => invoke<MetadataHistoryEntry[]>("list_metadata_history", { trackId, limit });
+export const listMetadataHistory = (trackId?: string, limit = 100) =>
+  invoke<MetadataHistoryEntry[]>("list_metadata_history", { trackId, limit });
 
-export const rollbackMetadataChange = (
-  historyId: number,
-  field: string,
-) => invoke<MetadataWriteResult & { trackId: string; updates: Record<string, unknown> }>(
-  "rollback_metadata_change",
-  { historyId, field },
-);
+export const rollbackMetadataChange = (historyId: number, field: string) =>
+  invoke<MetadataWriteResult & { trackId: string; updates: Record<string, unknown> }>(
+    "rollback_metadata_change",
+    { historyId, field },
+  );
 
 export type PlaylistHistoryState = {
   entries: Array<{ id: number; action: string; createdAt: string; undone: boolean }>;
@@ -567,10 +532,8 @@ export type PlaylistSnapshotEntry = {
 
 export const listPlaylistHistory = (limit = 50) =>
   invoke<PlaylistHistoryState>("list_playlist_history", { limit });
-export const undoPlaylistHistory = () =>
-  invoke("undo_playlist_history");
-export const redoPlaylistHistory = () =>
-  invoke("redo_playlist_history");
+export const undoPlaylistHistory = () => invoke("undo_playlist_history");
+export const redoPlaylistHistory = () => invoke("redo_playlist_history");
 export const createPlaylistSnapshot = (name: string) =>
   invoke<PlaylistSnapshotEntry>("create_playlist_snapshot", { name });
 export const listPlaylistSnapshots = () =>
@@ -615,13 +578,11 @@ export type OrganizedLibraryExportResult = {
   failures: Array<{ trackId: string; sourcePath: string; message: string }>;
 };
 
-export const exportOrganizedLibrary = (
-  destinationPath: string,
-  useAsCurrentLibrary: boolean,
-) => invoke<OrganizedLibraryExportResult>("export_organized_library", {
-  destinationPath,
-  useAsCurrentLibrary,
-});
+export const exportOrganizedLibrary = (destinationPath: string, useAsCurrentLibrary: boolean) =>
+  invoke<OrganizedLibraryExportResult>("export_organized_library", {
+    destinationPath,
+    useAsCurrentLibrary,
+  });
 
 // ============================================================================
 // Backfill Operations
@@ -643,11 +604,10 @@ export type ArtistCreditMigrationResult = {
   creditsCreated: number;
 };
 
-export const migrateArtistCredits = (
-  artistSeparatorExceptions: string[] = [],
-) => invoke<ArtistCreditMigrationResult>("migrate_artist_credits", {
-  artistSeparatorExceptions,
-});
+export const migrateArtistCredits = (artistSeparatorExceptions: string[] = []) =>
+  invoke<ArtistCreditMigrationResult>("migrate_artist_credits", {
+    artistSeparatorExceptions,
+  });
 
 export type ArtistMergeIdentity = {
   artistId: string;
@@ -663,15 +623,13 @@ export type ArtistMergeResult = {
   tracksAffected: number;
 };
 
-export const mergeArtists = (
-  source: ArtistMergeIdentity,
-  target: ArtistMergeIdentity,
-) => invoke<ArtistMergeResult>("merge_artists", {
-  sourceArtistId: source.artistId,
-  sourceMusicBrainzId: source.musicBrainzId,
-  targetArtistId: target.artistId,
-  targetMusicBrainzId: target.musicBrainzId,
-});
+export const mergeArtists = (source: ArtistMergeIdentity, target: ArtistMergeIdentity) =>
+  invoke<ArtistMergeResult>("merge_artists", {
+    sourceArtistId: source.artistId,
+    sourceMusicBrainzId: source.musicBrainzId,
+    targetArtistId: target.artistId,
+    targetMusicBrainzId: target.musicBrainzId,
+  });
 
 // ============================================================================
 // Recently Played Operations
@@ -695,10 +653,8 @@ export const recordTrackPlay = (trackId: string) => {
   });
 };
 
-export const updatePlayHistory = (
-  historyId: number,
-  listenedSeconds: number,
-) => invoke<{ updated: boolean }>("update_play_history", {
-  historyId,
-  listenedSeconds,
-});
+export const updatePlayHistory = (historyId: number, listenedSeconds: number) =>
+  invoke<{ updated: boolean }>("update_play_history", {
+    historyId,
+    listenedSeconds,
+  });

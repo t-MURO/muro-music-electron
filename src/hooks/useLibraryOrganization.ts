@@ -17,16 +17,13 @@ export type LibraryStructureRepairOutcome = {
 
 export const useLibraryOrganization = () => {
   const libraryRoot = useSettingsStore((state) => state.watchedFolder);
-  const artistSeparatorExceptions = useSettingsStore(
-    (state) => state.artistSeparatorExceptions,
-  );
+  const artistSeparatorExceptions = useSettingsStore((state) => state.artistSeparatorExceptions);
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const busyRef = useRef(false);
   const [validating, setValidating] = useState(false);
   const [repairing, setRepairing] = useState(false);
-  const [lastResult, setLastResult] =
-    useState<LibraryStructureValidationResult | null>(null);
+  const [lastResult, setLastResult] = useState<LibraryStructureValidationResult | null>(null);
 
   useEffect(() => {
     setLastResult(null);
@@ -34,10 +31,7 @@ export const useLibraryOrganization = () => {
 
   const reloadLibrary = useCallback(async () => {
     try {
-      const snapshot = await loadTracks(
-        libraryRoot,
-        artistSeparatorExceptions,
-      );
+      const snapshot = await loadTracks(libraryRoot, artistSeparatorExceptions);
       setTracks(snapshot.library.map(importedTrackToTrack));
       setInboxTracks(snapshot.inbox.map(importedTrackToTrack));
     } catch {
@@ -60,10 +54,12 @@ export const useLibraryOrganization = () => {
       if (result.misplaced.length === 0) {
         notify.success(t("structure.allCorrect", { checked: String(result.checked) }));
       } else {
-        notify.info(t("structure.found", {
-          misplaced: String(result.misplaced.length),
-          checked: String(result.checked),
-        }));
+        notify.info(
+          t("structure.found", {
+            misplaced: String(result.misplaced.length),
+            checked: String(result.checked),
+          }),
+        );
       }
       return result;
     } catch {
@@ -88,14 +84,18 @@ export const useLibraryOrganization = () => {
       setLastResult(validation);
 
       if (repairResult.failures.length > 0) {
-        notify.error(t("structure.repairPartial", {
-          moved: String(repairResult.moved.length),
-          failed: String(repairResult.failures.length),
-        }));
+        notify.error(
+          t("structure.repairPartial", {
+            moved: String(repairResult.moved.length),
+            failed: String(repairResult.failures.length),
+          }),
+        );
       } else {
-        notify.success(t("structure.repairDone", {
-          moved: String(repairResult.moved.length),
-        }));
+        notify.success(
+          t("structure.repairDone", {
+            moved: String(repairResult.moved.length),
+          }),
+        );
       }
       return { repair: repairResult, validation } satisfies LibraryStructureRepairOutcome;
     } catch {

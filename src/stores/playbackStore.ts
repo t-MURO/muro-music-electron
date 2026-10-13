@@ -97,12 +97,7 @@ export const usePlaybackStore = create<PlaybackStore>()(
     toggleShuffle: () => set((state) => ({ shuffleEnabled: !state.shuffleEnabled })),
     toggleRepeat: () =>
       set((state) => ({
-        repeatMode:
-          state.repeatMode === "off"
-            ? "all"
-            : state.repeatMode === "all"
-              ? "one"
-              : "off",
+        repeatMode: state.repeatMode === "off" ? "all" : state.repeatMode === "all" ? "one" : "off",
       })),
     setShuffleEnabled: (shuffleEnabled) => set({ shuffleEnabled }),
     setRepeatMode: (repeatMode) => set({ repeatMode }),
@@ -113,11 +108,9 @@ export const usePlaybackStore = create<PlaybackStore>()(
         queue: typeof queue === "function" ? queue(state.queue) : queue,
       })),
 
-    addToQueue: (trackIds) =>
-      set((state) => ({ queue: [...state.queue, ...trackIds] })),
+    addToQueue: (trackIds) => set((state) => ({ queue: [...state.queue, ...trackIds] })),
 
-    playNext: (trackIds) =>
-      set((state) => ({ queue: [...trackIds, ...state.queue] })),
+    playNext: (trackIds) => set((state) => ({ queue: [...trackIds, ...state.queue] })),
 
     removeFromQueue: (index) =>
       set((state) => ({ queue: state.queue.filter((_, i) => i !== index) })),
@@ -158,7 +151,7 @@ export const usePlaybackStore = create<PlaybackStore>()(
 
     // Reset
     reset: () => set(initialState),
-  }))
+  })),
 );
 
 // Helper to convert Track to CurrentTrack
@@ -174,10 +167,7 @@ export const trackToCurrentTrack = (track: Track): CurrentTrack => ({
 });
 
 // Selectors
-export const selectQueueTracks = (
-  state: PlaybackStore,
-  allTracks: Track[]
-): Track[] => {
+export const selectQueueTracks = (state: PlaybackStore, allTracks: Track[]): Track[] => {
   return state.queue
     .map((id) => allTracks.find((t) => t.id === id))
     .filter((t): t is Track => t !== undefined);

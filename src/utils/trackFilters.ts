@@ -2,15 +2,7 @@ import type { Track } from "../types";
 import { explicitAlbumArtistDisplay } from "./artistCredits";
 
 export type MissingMetadataField =
-  | "albumArtist"
-  | "album"
-  | "genre"
-  | "year"
-  | "key"
-  | "bpm"
-  | "artwork"
-  | "label"
-  | "comment";
+  "albumArtist" | "album" | "genre" | "year" | "key" | "bpm" | "artwork" | "label" | "comment";
 
 export type TrackAnalysisFilter = "any" | "complete" | "incomplete";
 
@@ -56,15 +48,24 @@ export const trackFormat = (track: Pick<Track, "sourcePath">) => {
 
 const isMetadataMissing = (track: Track, field: MissingMetadataField) => {
   switch (field) {
-    case "albumArtist": return !hasText(explicitAlbumArtistDisplay(track));
-    case "album": return !hasText(track.album);
-    case "genre": return !hasText(track.genre);
-    case "year": return !hasPositiveNumber(track.year);
-    case "key": return !hasText(track.key);
-    case "bpm": return !hasPositiveNumber(track.bpm);
-    case "artwork": return !hasText(track.coverArtPath) && !hasText(track.coverArtThumbPath);
-    case "label": return !hasText(track.label);
-    case "comment": return !hasText(track.comment);
+    case "albumArtist":
+      return !hasText(explicitAlbumArtistDisplay(track));
+    case "album":
+      return !hasText(track.album);
+    case "genre":
+      return !hasText(track.genre);
+    case "year":
+      return !hasPositiveNumber(track.year);
+    case "key":
+      return !hasText(track.key);
+    case "bpm":
+      return !hasPositiveNumber(track.bpm);
+    case "artwork":
+      return !hasText(track.coverArtPath) && !hasText(track.coverArtThumbPath);
+    case "label":
+      return !hasText(track.label);
+    case "comment":
+      return !hasText(track.comment);
   }
 };
 
@@ -78,12 +79,24 @@ export const matchesAdvancedTrackFilters = (track: Track, filters: AdvancedTrack
   if (filters.analysis === "complete" && !analysisComplete) return false;
   if (filters.analysis === "incomplete" && analysisComplete) return false;
 
-  if (filters.bpmMin !== null && (!hasPositiveNumber(track.bpm) || track.bpm! < filters.bpmMin)) return false;
-  if (filters.bpmMax !== null && (!hasPositiveNumber(track.bpm) || track.bpm! > filters.bpmMax)) return false;
-  if (filters.yearMin !== null && (!hasPositiveNumber(track.year) || track.year! < filters.yearMin)) return false;
-  if (filters.yearMax !== null && (!hasPositiveNumber(track.year) || track.year! > filters.yearMax)) return false;
-  if (filters.durationMinMinutes !== null && track.durationSeconds < filters.durationMinMinutes * 60) return false;
-  if (filters.durationMaxMinutes !== null && track.durationSeconds > filters.durationMaxMinutes * 60) return false;
+  if (filters.bpmMin !== null && (!hasPositiveNumber(track.bpm) || track.bpm! < filters.bpmMin))
+    return false;
+  if (filters.bpmMax !== null && (!hasPositiveNumber(track.bpm) || track.bpm! > filters.bpmMax))
+    return false;
+  if (filters.yearMin !== null && (!hasPositiveNumber(track.year) || track.year! < filters.yearMin))
+    return false;
+  if (filters.yearMax !== null && (!hasPositiveNumber(track.year) || track.year! > filters.yearMax))
+    return false;
+  if (
+    filters.durationMinMinutes !== null &&
+    track.durationSeconds < filters.durationMinMinutes * 60
+  )
+    return false;
+  if (
+    filters.durationMaxMinutes !== null &&
+    track.durationSeconds > filters.durationMaxMinutes * 60
+  )
+    return false;
   if (filters.ratingMin !== null && track.rating < filters.ratingMin) return false;
   if (filters.format && trackFormat(track) !== filters.format.toLocaleLowerCase()) return false;
   if (!containsText(track.genre, filters.genre)) return false;
@@ -96,9 +109,9 @@ export const filterTracksAdvanced = (tracks: Track[], filters: AdvancedTrackFilt
   tracks.filter((track) => matchesAdvancedTrackFilters(track, filters));
 
 export const countAdvancedTrackFilters = (filters: AdvancedTrackFilters) =>
-  filters.missingMetadata.length
-  + (filters.analysis === "any" ? 0 : 1)
-  + [
+  filters.missingMetadata.length +
+  (filters.analysis === "any" ? 0 : 1) +
+  [
     filters.bpmMin,
     filters.bpmMax,
     filters.yearMin,
@@ -106,8 +119,10 @@ export const countAdvancedTrackFilters = (filters: AdvancedTrackFilters) =>
     filters.durationMinMinutes,
     filters.durationMaxMinutes,
     filters.ratingMin,
-  ].filter((value) => value !== null).length
-  + [filters.format, filters.genre, filters.label].filter((value) => value.trim()).length;
+  ].filter((value) => value !== null).length +
+  [filters.format, filters.genre, filters.label].filter((value) => value.trim()).length;
 
 export const listTrackFormats = (tracks: Track[]) =>
-  [...new Set(tracks.map(trackFormat).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+  [...new Set(tracks.map(trackFormat).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right),
+  );

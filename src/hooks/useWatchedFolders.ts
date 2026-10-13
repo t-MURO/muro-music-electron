@@ -45,7 +45,7 @@ export const useWatchedFolders = () => {
       if (!imported) return;
       const track = importedTrackToTrack(imported);
       setInboxTracks((current) =>
-        current.some((entry) => entry.id === track.id) ? current : [track, ...current]
+        current.some((entry) => entry.id === track.id) ? current : [track, ...current],
       );
     }).then((remove) => {
       if (cancelled) remove();
@@ -73,10 +73,9 @@ export const useWatchedFolders = () => {
     if (scanning || !watchedFolder) return;
     setScanning(true);
     try {
-      const result = await invoke<{ imported: number; scanned: number }>(
-        "scan_watched_folder",
-        { folder: watchedFolder }
-      );
+      const result = await invoke<{ imported: number; scanned: number }>("scan_watched_folder", {
+        folder: watchedFolder,
+      });
       if (result.imported > 0) {
         notify.success(t("watch.scan.imported", { count: String(result.imported) }));
       } else {

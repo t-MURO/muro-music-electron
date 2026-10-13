@@ -109,6 +109,6 @@ export const PlaylistCreateModal = ({
         </form>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

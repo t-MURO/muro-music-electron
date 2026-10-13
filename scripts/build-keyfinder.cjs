@@ -16,20 +16,25 @@ const keyfinderCandidates = [
   process.env.NEO_KEYFINDER_ROOT,
   path.resolve(projectRoot, "../neo-keyfinder"),
   path.resolve(projectRoot, "../neo-key-finder/neo-keyfinder"),
-].filter(Boolean).map((candidate) => path.resolve(candidate));
-const keyfinderRoot = keyfinderCandidates.find((candidate) =>
-  existsSync(path.join(candidate, "package.json")) &&
-  existsSync(path.join(candidate, "scripts", "build-native.mjs"))
+]
+  .filter(Boolean)
+  .map((candidate) => path.resolve(candidate));
+const keyfinderRoot = keyfinderCandidates.find(
+  (candidate) =>
+    existsSync(path.join(candidate, "package.json")) &&
+    existsSync(path.join(candidate, "scripts", "build-native.mjs")),
 );
 const release = process.argv.includes("--release");
 const commandShell = process.env.ComSpec || "C:\\Windows\\System32\\cmd.exe";
 
 if (!keyfinderRoot) {
-  console.error([
-    "Neo KeyFinder was not found.",
-    "Set NEO_KEYFINDER_ROOT to its checkout, or place it in one of:",
-    ...keyfinderCandidates.map((candidate) => `  - ${candidate}`),
-  ].join("\n"));
+  console.error(
+    [
+      "Neo KeyFinder was not found.",
+      "Set NEO_KEYFINDER_ROOT to its checkout, or place it in one of:",
+      ...keyfinderCandidates.map((candidate) => `  - ${candidate}`),
+    ].join("\n"),
+  );
   process.exit(1);
 }
 
@@ -70,24 +75,25 @@ const findVcpkgRoot = () => {
     path.join(keyfinderRoot, "native", ".dependencies", "vcpkg"),
   ].filter(Boolean);
   return candidates.find((candidate) =>
-    existsSync(path.join(candidate, "scripts", "buildsystems", "vcpkg.cmake"))
+    existsSync(path.join(candidate, "scripts", "buildsystems", "vcpkg.cmake")),
   );
 };
 
 const runNativeBuild = (env = process.env) => {
   const command = `npm run native:build${release ? " -- --release" : ""}`;
-  const result = process.platform === "win32"
-    ? spawnSync(commandShell, ["/d", "/c", command], {
-        cwd: keyfinderRoot,
-        env,
-        stdio: "inherit",
-        windowsVerbatimArguments: true,
-      })
-    : spawnSync("npm", ["run", "native:build", ...(release ? ["--", "--release"] : [])], {
-        cwd: keyfinderRoot,
-        env,
-        stdio: "inherit",
-      });
+  const result =
+    process.platform === "win32"
+      ? spawnSync(commandShell, ["/d", "/c", command], {
+          cwd: keyfinderRoot,
+          env,
+          stdio: "inherit",
+          windowsVerbatimArguments: true,
+        })
+      : spawnSync("npm", ["run", "native:build", ...(release ? ["--", "--release"] : [])], {
+          cwd: keyfinderRoot,
+          env,
+          stdio: "inherit",
+        });
   if (result.error) console.error(`Could not start KeyFinder build: ${result.error.message}`);
   if (result.status !== 0) process.exit(result.status ?? 1);
   stageNativeBinary();
@@ -105,16 +111,18 @@ if (process.platform !== "win32") {
 
 const programFiles = process.env.ProgramFiles || "C:\\Program Files";
 const vcvars = ["Community", "BuildTools", "Professional", "Enterprise"]
-  .map((edition) => path.join(
-    programFiles,
-    "Microsoft Visual Studio",
-    "2022",
-    edition,
-    "VC",
-    "Auxiliary",
-    "Build",
-    "vcvars64.bat",
-  ))
+  .map((edition) =>
+    path.join(
+      programFiles,
+      "Microsoft Visual Studio",
+      "2022",
+      edition,
+      "VC",
+      "Auxiliary",
+      "Build",
+      "vcvars64.bat",
+    ),
+  )
   .find(existsSync);
 
 if (!vcvars) {
@@ -122,11 +130,11 @@ if (!vcvars) {
   process.exit(1);
 }
 
-const initialized = spawnSync(
-  commandShell,
-  ["/d", "/c", `call "${vcvars}" >nul && set`],
-  { cwd: keyfinderRoot, encoding: "utf8", windowsVerbatimArguments: true },
-);
+const initialized = spawnSync(commandShell, ["/d", "/c", `call "${vcvars}" >nul && set`], {
+  cwd: keyfinderRoot,
+  encoding: "utf8",
+  windowsVerbatimArguments: true,
+});
 if (initialized.status !== 0) {
   process.stderr.write(initialized.stderr || "Could not initialize Visual Studio.\n");
   process.exit(initialized.status || 1);
@@ -167,9 +175,7 @@ if (sdkVersion) {
   const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path");
   const currentPath = pathKey ? env[pathKey] : process.env.PATH;
   if (pathKey) delete env[pathKey];
-  env.PATH = [sdkBin, path.join(sdkBin, "ucrt"), currentPath]
-    .filter(Boolean)
-    .join(";");
+  env.PATH = [sdkBin, path.join(sdkBin, "ucrt"), currentPath].filter(Boolean).join(";");
   env.INCLUDE = ["ucrt", "shared", "um", "winrt", "cppwinrt"]
     .map((folder) => path.join(portableSdkRoot, "Include", sdkVersion, folder))
     .concat(env.INCLUDE || "")
@@ -179,7 +185,9 @@ if (sdkVersion) {
     path.join(portableSdkLibRoot, "ucrt", "x64"),
     path.join(portableSdkLibRoot, "um", "x64"),
     env.LIB || "",
-  ].filter(Boolean).join(";");
+  ]
+    .filter(Boolean)
+    .join(";");
   env.WindowsSdkDir = `${portableSdkRoot}\\`;
   env.WindowsSDKVersion = `${sdkVersion}\\`;
   env.UniversalCRTSdkDir = `${portableSdkRoot}\\`;
@@ -195,8 +203,9 @@ const ninjaToolsRoot = path.join(
   "tools",
 );
 const ninjaDirectory = existsSync(ninjaToolsRoot)
-  ? readdirSync(ninjaToolsRoot, { withFileTypes: true })
-      .find((entry) => entry.isDirectory() && entry.name.startsWith("ninja-"))
+  ? readdirSync(ninjaToolsRoot, { withFileTypes: true }).find(
+      (entry) => entry.isDirectory() && entry.name.startsWith("ninja-"),
+    )
   : undefined;
 const ninjaPath = ninjaDirectory
   ? path.join(ninjaToolsRoot, ninjaDirectory.name, "ninja.exe")
@@ -211,7 +220,10 @@ if (ninjaPath && existsSync(ninjaPath)) {
   if (!release) {
     const debugBuildRoot = path.join(keyfinderRoot, "native", "build");
     const cachePath = path.join(debugBuildRoot, "CMakeCache.txt");
-    if (existsSync(cachePath) && !readFileSync(cachePath, "utf8").includes("CMAKE_GENERATOR:INTERNAL=Ninja")) {
+    if (
+      existsSync(cachePath) &&
+      !readFileSync(cachePath, "utf8").includes("CMAKE_GENERATOR:INTERNAL=Ninja")
+    ) {
       rmSync(cachePath, { force: true });
       rmSync(path.join(debugBuildRoot, "CMakeFiles"), { recursive: true, force: true });
     }
@@ -238,8 +250,8 @@ if (existsSync(path.join(vcpkgRoot, "vcpkg.exe"))) {
   env._CL_ = "/DNOMINMAX";
   env.PYTHONUTF8 = "1";
 } else if (release) {
-    console.error("A bootstrapped vcpkg clone is required for release builds.");
-    process.exit(1);
+  console.error("A bootstrapped vcpkg clone is required for release builds.");
+  process.exit(1);
 }
 
 runNativeBuild(env);

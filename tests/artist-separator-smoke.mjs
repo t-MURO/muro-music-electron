@@ -72,16 +72,15 @@ const exceptionTracks = [
   track("seven", "SHDW & Obscure feat. Guest"),
 ];
 assert.equal(findArtistSeparatorCandidates(exceptionTracks).length, 3);
-assert.deepEqual(
-  findArtistSeparatorCandidates(exceptionTracks, [" SHDW & OBSCURE "]),
-  [{
+assert.deepEqual(findArtistSeparatorCandidates(exceptionTracks, [" SHDW & OBSCURE "]), [
+  {
     trackId: "seven",
     title: "Track seven",
     album: "Test Album",
     field: "artist",
     originalValue: "SHDW & Obscure feat. Guest",
     proposedValue: "SHDW, Obscure, Guest",
-  }],
-);
+  },
+]);
 
 console.log("Artist separator smoke test passed.");

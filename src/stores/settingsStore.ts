@@ -25,8 +25,31 @@ export type AnalysisOutputs = {
 };
 
 const DEFAULT_CUSTOM_CODES = [
-  "11B", "8A", "6B", "3A", "1B", "10A", "8B", "5A", "3B", "12A", "10B", "7A",
-  "5B", "2A", "12B", "9A", "7B", "4A", "2B", "11A", "9B", "6A", "4B", "1A", "",
+  "11B",
+  "8A",
+  "6B",
+  "3A",
+  "1B",
+  "10A",
+  "8B",
+  "5A",
+  "3B",
+  "12A",
+  "10B",
+  "7A",
+  "5B",
+  "2A",
+  "12B",
+  "9A",
+  "7B",
+  "4A",
+  "2B",
+  "11A",
+  "9B",
+  "6A",
+  "4B",
+  "1A",
+  "",
 ];
 
 const DEFAULT_ANALYSIS_OUTPUTS: AnalysisOutputs = {
@@ -44,12 +67,13 @@ const normalizeThemeMode = (theme: unknown): ThemeMode => {
 export const applyThemeMode = (theme: ThemeMode) => {
   if (typeof document === "undefined") return;
 
-  const resolvedTheme = theme === "system"
-    && typeof window !== "undefined"
-    && typeof window.matchMedia === "function"
-    && window.matchMedia("(prefers-color-scheme: light)").matches
-    ? "light"
-    : "dark";
+  const resolvedTheme =
+    theme === "system" &&
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: light)").matches
+      ? "light"
+      : "dark";
 
   document.documentElement.dataset.theme = theme === "system" ? resolvedTheme : theme;
   document.documentElement.style.colorScheme = resolvedTheme;
@@ -182,21 +206,24 @@ export const useSettingsStore = create<SettingsStore>()(
       },
       setSeekMode: (seekMode) => set({ seekMode }),
       setAnalysisNotation: (analysisNotation) => set({ analysisNotation }),
-      setAnalysisCustomCode: (index, value) => set((state) => {
-        const analysisCustomCodes = [...state.analysisCustomCodes];
-        analysisCustomCodes[index] = value;
-        return { analysisCustomCodes };
-      }),
+      setAnalysisCustomCode: (index, value) =>
+        set((state) => {
+          const analysisCustomCodes = [...state.analysisCustomCodes];
+          analysisCustomCodes[index] = value;
+          return { analysisCustomCodes };
+        }),
       setAnalysisDelimiter: (analysisDelimiter) => set({ analysisDelimiter }),
-      setAnalysisOutput: (field, mode) => set((state) => ({
-        analysisOutputs: { ...state.analysisOutputs, [field]: mode },
-      })),
+      setAnalysisOutput: (field, mode) =>
+        set((state) => ({
+          analysisOutputs: { ...state.analysisOutputs, [field]: mode },
+        })),
       setAnalysisPerformance: (analysisPerformance) => set({ analysisPerformance }),
       setLastDeleteMode: (lastDeleteMode) => set({ lastDeleteMode }),
-      setDjMixEnabled: (djMixEnabled) => set((state) => ({
-        djMixEnabled,
-        autoMix: djMixEnabled ? state.autoMix : false,
-      })),
+      setDjMixEnabled: (djMixEnabled) =>
+        set((state) => ({
+          djMixEnabled,
+          autoMix: djMixEnabled ? state.autoMix : false,
+        })),
       setAutoMix: (autoMix) => set({ autoMix }),
       setMixBars: (mixBars) => set({ mixBars }),
       setMixPreservePitch: (mixPreservePitch) => set({ mixPreservePitch }),
@@ -218,37 +245,40 @@ export const useSettingsStore = create<SettingsStore>()(
       setReplayGainReferenceLufs: (referenceLufs) =>
         set({ replayGainReferenceLufs: Math.max(-30, Math.min(-5, referenceLufs)) }),
       setWatchFolderEnabled: (watchFolderEnabled) => set({ watchFolderEnabled }),
-      setOrganizeAcceptedTracks: (organizeAcceptedTracks) =>
-        set({ organizeAcceptedTracks }),
+      setOrganizeAcceptedTracks: (organizeAcceptedTracks) => set({ organizeAcceptedTracks }),
       setWatchedFolder: (watchedFolder) => set({ watchedFolder }),
-      setRecentlyAddedPeriodDays: (recentlyAddedPeriodDays) =>
-        set({ recentlyAddedPeriodDays }),
-      addArtistSeparatorException: (artist) => set((state) => {
-        const value = artist.normalize("NFKC").replace(/\s+/g, " ").trim();
-        const key = artistSeparatorExceptionKey(value);
-        if (!key || state.artistSeparatorExceptions.some(
-          (entry) => artistSeparatorExceptionKey(entry) === key
-        )) {
-          return {};
-        }
-        return {
-          artistSeparatorExceptions: [...state.artistSeparatorExceptions, value].slice(-1000),
-        };
-      }),
-      removeArtistSeparatorException: (artist) => set((state) => {
-        const key = artistSeparatorExceptionKey(artist);
-        return {
-          artistSeparatorExceptions: state.artistSeparatorExceptions.filter(
-            (entry) => artistSeparatorExceptionKey(entry) !== key
-          ),
-        };
-      }),
+      setRecentlyAddedPeriodDays: (recentlyAddedPeriodDays) => set({ recentlyAddedPeriodDays }),
+      addArtistSeparatorException: (artist) =>
+        set((state) => {
+          const value = artist.normalize("NFKC").replace(/\s+/g, " ").trim();
+          const key = artistSeparatorExceptionKey(value);
+          if (
+            !key ||
+            state.artistSeparatorExceptions.some(
+              (entry) => artistSeparatorExceptionKey(entry) === key,
+            )
+          ) {
+            return {};
+          }
+          return {
+            artistSeparatorExceptions: [...state.artistSeparatorExceptions, value].slice(-1000),
+          };
+        }),
+      removeArtistSeparatorException: (artist) =>
+        set((state) => {
+          const key = artistSeparatorExceptionKey(artist);
+          return {
+            artistSeparatorExceptions: state.artistSeparatorExceptions.filter(
+              (entry) => artistSeparatorExceptionKey(entry) !== key,
+            ),
+          };
+        }),
       clearArtistSeparatorExceptions: () => set({ artistSeparatorExceptions: [] }),
-      setKeyboardShortcut: (action, shortcut) => set((state) => ({
-        keyboardShortcuts: { ...state.keyboardShortcuts, [action]: shortcut },
-      })),
-      resetKeyboardShortcuts: () =>
-        set({ keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS } }),
+      setKeyboardShortcut: (action, shortcut) =>
+        set((state) => ({
+          keyboardShortcuts: { ...state.keyboardShortcuts, [action]: shortcut },
+        })),
+      resetKeyboardShortcuts: () => set({ keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS } }),
     }),
     {
       name: "muro-settings",
@@ -296,15 +326,16 @@ export const useSettingsStore = create<SettingsStore>()(
         return { ...persisted, theme: normalizeThemeMode(persisted.theme) };
       },
       merge: (persistedState, currentState) => {
-        const persisted = persistedState && typeof persistedState === "object"
-          ? persistedState as Partial<SettingsState> & {
-              watchFoldersEnabled?: unknown;
-              watchedFolders?: unknown;
-              dbPath?: unknown;
-              dbFileName?: unknown;
-              useAutoDbPath?: unknown;
-            }
-          : {};
+        const persisted =
+          persistedState && typeof persistedState === "object"
+            ? (persistedState as Partial<SettingsState> & {
+                watchFoldersEnabled?: unknown;
+                watchedFolders?: unknown;
+                dbPath?: unknown;
+                dbFileName?: unknown;
+                useAutoDbPath?: unknown;
+              })
+            : {};
         // The database location moved to the main process (see
         // electron/databaseLocation.mjs); the preload hands these legacy keys
         // over once and the renderer no longer keeps them.
@@ -319,24 +350,31 @@ export const useSettingsStore = create<SettingsStore>()(
         const savedCustomCodes = Array.isArray(persisted.analysisCustomCodes)
           ? persisted.analysisCustomCodes
           : [];
-        const watchedFolder = typeof persisted.watchedFolder === "string"
-          ? persisted.watchedFolder.trim()
-          : Array.isArray(legacyWatchedFolders)
-            ? legacyWatchedFolders.find(
-                (folder): folder is string => typeof folder === "string" && folder.trim().length > 0,
-              )?.trim() ?? ""
-            : "";
-        const watchFolderEnabled = typeof persisted.watchFolderEnabled === "boolean"
-          ? persisted.watchFolderEnabled
-          : legacyWatchFoldersEnabled === true;
+        const watchedFolder =
+          typeof persisted.watchedFolder === "string"
+            ? persisted.watchedFolder.trim()
+            : Array.isArray(legacyWatchedFolders)
+              ? (legacyWatchedFolders
+                  .find(
+                    (folder): folder is string =>
+                      typeof folder === "string" && folder.trim().length > 0,
+                  )
+                  ?.trim() ?? "")
+              : "";
+        const watchFolderEnabled =
+          typeof persisted.watchFolderEnabled === "boolean"
+            ? persisted.watchFolderEnabled
+            : legacyWatchFoldersEnabled === true;
         const artistSeparatorExceptions = Array.isArray(persisted.artistSeparatorExceptions)
-          ? [...new Map(
-              persisted.artistSeparatorExceptions
-                .filter((value): value is string => typeof value === "string")
-                .map((value) => value.normalize("NFKC").replace(/\s+/g, " ").trim())
-                .filter(Boolean)
-                .map((value) => [artistSeparatorExceptionKey(value), value]),
-            ).values()].slice(0, 1000)
+          ? [
+              ...new Map(
+                persisted.artistSeparatorExceptions
+                  .filter((value): value is string => typeof value === "string")
+                  .map((value) => value.normalize("NFKC").replace(/\s+/g, " ").trim())
+                  .filter(Boolean)
+                  .map((value) => [artistSeparatorExceptionKey(value), value]),
+              ).values(),
+            ].slice(0, 1000)
           : [];
 
         return {
@@ -349,18 +387,16 @@ export const useSettingsStore = create<SettingsStore>()(
           // Analysis settings are a nested group. Merge them with their defaults so
           // settings written by older versions cannot discard newer Key/BPM fields.
           analysisCustomCodes: DEFAULT_CUSTOM_CODES.map((fallback, index) =>
-            typeof savedCustomCodes[index] === "string"
-              ? savedCustomCodes[index]
-              : fallback
+            typeof savedCustomCodes[index] === "string" ? savedCustomCodes[index] : fallback,
           ),
           analysisOutputs: {
             ...DEFAULT_ANALYSIS_OUTPUTS,
             ...(persisted.analysisOutputs ?? {}),
           },
           recentlyAddedPeriodDays:
-            persisted.recentlyAddedPeriodDays === 1
-            || persisted.recentlyAddedPeriodDays === 7
-            || persisted.recentlyAddedPeriodDays === 30
+            persisted.recentlyAddedPeriodDays === 1 ||
+            persisted.recentlyAddedPeriodDays === 7 ||
+            persisted.recentlyAddedPeriodDays === 30
               ? persisted.recentlyAddedPeriodDays
               : 30,
           keyboardShortcuts: normalizeShortcutMap(persisted.keyboardShortcuts),
@@ -378,6 +414,6 @@ export const useSettingsStore = create<SettingsStore>()(
           }
         }
       },
-    }
-  )
+    },
+  ),
 );

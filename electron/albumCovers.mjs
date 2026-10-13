@@ -14,27 +14,32 @@ const COVER_CACHE_VERSION = "v3";
 
 const musicBrainzId = (value) => String(value ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null;
 
-const normalizedName = (value) => String(value ?? "")
-  .normalize("NFKC")
-  .trim()
-  .replace(/\s+/g, " ")
-  .toLocaleLowerCase();
+const normalizedName = (value) =>
+  String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
 
-const quotedSearchTerm = (value) => `"${String(value ?? "")
-  .trim()
-  .replace(/([\\"])/g, "\\$1")}"`;
+const quotedSearchTerm = (value) =>
+  `"${String(value ?? "")
+    .trim()
+    .replace(/([\\"])/g, "\\$1")}"`;
 
 const normalizedArtistCredits = (value) => {
   const normalized = normalizedName(value);
   if (!normalized) return [];
   if (normalized === "va" || normalized === "v.a.") return ["various artists"];
-  return [...new Set(normalized
-    .replace(/\s+(?:feat\.?|featuring|ft\.?)\s+/g, ",")
-    .split(/\s*(?:,|;|&)\s*/)
-    .map((name) => name.trim())
-    .filter(Boolean)
-    .map((name) => name === "va" || name === "v.a." ? "various artists" : name))]
-    .sort();
+  return [
+    ...new Set(
+      normalized
+        .replace(/\s+(?:feat\.?|featuring|ft\.?)\s+/g, ",")
+        .split(/\s*(?:,|;|&)\s*/)
+        .map((name) => name.trim())
+        .filter(Boolean)
+        .map((name) => (name === "va" || name === "v.a." ? "various artists" : name)),
+    ),
+  ].sort();
 };
 
 const artistCreditsMatch = (left, right) => {
@@ -81,10 +86,11 @@ const secureCoverUrl = (value) => {
   try {
     const url = new URL(String(value ?? ""));
     if (url.protocol === "http:") url.protocol = "https:";
-    const allowedHost = url.hostname === "coverartarchive.org"
-      || url.hostname.endsWith(".coverartarchive.org")
-      || url.hostname === "archive.org"
-      || url.hostname.endsWith(".archive.org");
+    const allowedHost =
+      url.hostname === "coverartarchive.org" ||
+      url.hostname.endsWith(".coverartarchive.org") ||
+      url.hostname === "archive.org" ||
+      url.hostname.endsWith(".archive.org");
     return url.protocol === "https:" && allowedHost ? url.toString() : null;
   } catch {
     return null;
@@ -93,17 +99,22 @@ const secureCoverUrl = (value) => {
 
 const pickCoverUrl = (payload) => {
   const images = Array.isArray(payload?.images) ? payload.images : [];
-  const selected = [...images].sort((left, right) => (
-    Number(Boolean(right?.front)) - Number(Boolean(left?.front))
-    || Number(Boolean(right?.approved)) - Number(Boolean(left?.approved))
-  ))[0];
-  return [
-    selected?.thumbnails?.["1200"],
-    selected?.thumbnails?.large,
-    selected?.thumbnails?.["500"],
-    selected?.image,
-    selected?.thumbnails?.["250"],
-  ].map(secureCoverUrl).find(Boolean) ?? null;
+  const selected = [...images].sort(
+    (left, right) =>
+      Number(Boolean(right?.front)) - Number(Boolean(left?.front)) ||
+      Number(Boolean(right?.approved)) - Number(Boolean(left?.approved)),
+  )[0];
+  return (
+    [
+      selected?.thumbnails?.["1200"],
+      selected?.thumbnails?.large,
+      selected?.thumbnails?.["500"],
+      selected?.image,
+      selected?.thumbnails?.["250"],
+    ]
+      .map(secureCoverUrl)
+      .find(Boolean) ?? null
+  );
 };
 
 const secureDeezerImageUrl = (value) => {
@@ -132,9 +143,9 @@ const secureBraveImageUrl = (value) => {
 const secureBraveSearchUrl = (value) => {
   try {
     const url = new URL(String(value ?? ""));
-    return url.protocol === "https:"
-      && url.hostname === "search.brave.com"
-      && url.pathname === "/images"
+    return url.protocol === "https:" &&
+      url.hostname === "search.brave.com" &&
+      url.pathname === "/images"
       ? url.toString()
       : null;
   } catch {
@@ -142,37 +153,47 @@ const secureBraveSearchUrl = (value) => {
   }
 };
 
-const cleanCandidateText = (value, maxLength = 500) => String(value ?? "")
-  .replace(/<br\s*\/?\s*>/gi, " ")
-  .replace(/<[^>]+>/g, " ")
-  .replace(/&amp;/gi, "&")
-  .replace(/&quot;/gi, '"')
-  .replace(/&#39;|&apos;/gi, "'")
-  .replace(/\s+/g, " ")
-  .trim()
-  .slice(0, maxLength) || null;
+const cleanCandidateText = (value, maxLength = 500) =>
+  String(value ?? "")
+    .replace(/<br\s*\/?\s*>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength) || null;
 
 const pickDeezerAlbum = (payload, { album, artist }) => {
   const candidates = Array.isArray(payload?.data) ? payload.data : [];
-  return candidates.find((candidate) => (
-    Number.isSafeInteger(Number(candidate?.id))
-    && Number(candidate.id) > 0
-    && normalizedName(candidate?.title) === normalizedName(album)
-    && artistCreditsMatch(candidate?.artist?.name, artist)
-    && secureDeezerImageUrl(
-      candidate?.cover_xl || candidate?.cover_big || candidate?.cover_medium,
-    )
-  )) ?? null;
+  return (
+    candidates.find(
+      (candidate) =>
+        Number.isSafeInteger(Number(candidate?.id)) &&
+        Number(candidate.id) > 0 &&
+        normalizedName(candidate?.title) === normalizedName(album) &&
+        artistCreditsMatch(candidate?.artist?.name, artist) &&
+        secureDeezerImageUrl(
+          candidate?.cover_xl || candidate?.cover_big || candidate?.cover_medium,
+        ),
+    ) ?? null
+  );
 };
 
-const readCachedCover = (db, coverKey) => db.prepare(`
+const readCachedCover = (db, coverKey) =>
+  db
+    .prepare(
+      `
   SELECT status, full_path, thumb_path, source_url, fetched_at
   FROM album_cover_cache
   WHERE cover_key = ?
-`).get(coverKey) ?? null;
+`,
+    )
+    .get(coverKey) ?? null;
 
 const writeCachedCover = (db, identity, result, nowMs) => {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO album_cover_cache(
       cover_key, kind, musicbrainz_id, status, full_path, thumb_path, source_url, fetched_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -184,7 +205,8 @@ const writeCachedCover = (db, identity, result, nowMs) => {
       thumb_path = excluded.thumb_path,
       source_url = excluded.source_url,
       fetched_at = excluded.fetched_at
-  `).run(
+  `,
+  ).run(
     identity.key,
     identity.kind,
     identity.musicBrainzId,
@@ -196,13 +218,14 @@ const writeCachedCover = (db, identity, result, nowMs) => {
   );
 };
 
-const cachedFilesExist = (cached) => Boolean(
-  cached?.status === "ready"
-  && cached.full_path
-  && cached.thumb_path
-  && fs.existsSync(cached.full_path)
-  && fs.existsSync(cached.thumb_path)
-);
+const cachedFilesExist = (cached) =>
+  Boolean(
+    cached?.status === "ready" &&
+    cached.full_path &&
+    cached.thumb_path &&
+    fs.existsSync(cached.full_path) &&
+    fs.existsSync(cached.thumb_path),
+  );
 
 const coverProvider = (sourceUrl) => {
   try {
@@ -254,9 +277,10 @@ export const createAlbumCoverService = ({
     searchUrl.searchParams.set("limit", "15");
     const response = await fetchImpl(searchUrl, {
       headers: { Accept: "application/json", "User-Agent": userAgent },
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(15_000)
-        : undefined,
+      signal:
+        typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(15_000)
+          : undefined,
     });
     if (!response.ok) throw new Error(`Deezer cover lookup failed (${response.status})`);
     const payload = await response.json();
@@ -275,8 +299,12 @@ export const createAlbumCoverService = ({
   };
 
   const searchBraveCovers = async ({ album, artist, apiKey }) => {
-    const normalizedAlbum = String(album ?? "").replaceAll('"', " ").trim();
-    const normalizedArtist = String(artist ?? "").replaceAll('"', " ").trim();
+    const normalizedAlbum = String(album ?? "")
+      .replaceAll('"', " ")
+      .trim();
+    const normalizedArtist = String(artist ?? "")
+      .replaceAll('"', " ")
+      .trim();
     const normalizedApiKey = String(apiKey ?? "").trim();
     if (!normalizedAlbum || !normalizedArtist || !normalizedApiKey) return [];
 
@@ -295,9 +323,10 @@ export const createAlbumCoverService = ({
         "User-Agent": userAgent,
         "X-Subscription-Token": normalizedApiKey,
       },
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(15_000)
-        : undefined,
+      signal:
+        typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(15_000)
+          : undefined,
     });
     if (response.status === 401 || response.status === 403) {
       throw new Error("The Brave Search API key was rejected");
@@ -318,29 +347,27 @@ export const createAlbumCoverService = ({
         seen.add(imageUrl);
         const width = Number(result?.properties?.width ?? 0) || null;
         const height = Number(result?.properties?.height ?? 0) || null;
-        const confidence = {
-          high: 3,
-          medium: 2,
-          low: 1,
-        }[String(result?.confidence ?? "").toLocaleLowerCase()] ?? 0;
-        const squareScore = width && height
-          ? Math.max(0, 1 - Math.abs(width / height - 1))
-          : 0;
-        const sourceName = cleanCandidateText(
-          result?.source ?? result?.meta_url?.hostname,
-          200,
-        );
-        return [{
-          id: crypto.createHash("sha256").update(`brave-cover:${imageUrl}`).digest("hex"),
-          provider: "brave-search",
-          imageUrl,
-          sourceUrl: searchUrl.toString(),
-          sourceName,
-          title: cleanCandidateText(result?.title),
-          width,
-          height,
-          score: confidence * 10_000 + Math.round(squareScore * 1_000) - index,
-        }];
+        const confidence =
+          {
+            high: 3,
+            medium: 2,
+            low: 1,
+          }[String(result?.confidence ?? "").toLocaleLowerCase()] ?? 0;
+        const squareScore = width && height ? Math.max(0, 1 - Math.abs(width / height - 1)) : 0;
+        const sourceName = cleanCandidateText(result?.source ?? result?.meta_url?.hostname, 200);
+        return [
+          {
+            id: crypto.createHash("sha256").update(`brave-cover:${imageUrl}`).digest("hex"),
+            provider: "brave-search",
+            imageUrl,
+            sourceUrl: searchUrl.toString(),
+            sourceName,
+            title: cleanCandidateText(result?.title),
+            width,
+            height,
+            score: confidence * 10_000 + Math.round(squareScore * 1_000) - index,
+          },
+        ];
       })
       .sort((left, right) => right.score - left.score);
   };
@@ -371,28 +398,33 @@ export const createAlbumCoverService = ({
     });
     if (!response.ok) throw new Error(`MusicBrainz cover lookup failed (${response.status})`);
     const payload = await response.json();
-    const candidates = Array.isArray(payload?.["release-groups"])
-      ? payload["release-groups"]
-      : [];
-    const exact = candidates.find((candidate) => (
-      normalizedName(candidate?.title) === normalizedName(album)
-      && Number(candidate?.score ?? 0) >= 80
-    ));
+    const candidates = Array.isArray(payload?.["release-groups"]) ? payload["release-groups"] : [];
+    const exact = candidates.find(
+      (candidate) =>
+        normalizedName(candidate?.title) === normalizedName(album) &&
+        Number(candidate?.score ?? 0) >= 80,
+    );
     const selected = exact ?? candidates.find((candidate) => Number(candidate?.score ?? 0) >= 90);
     const releaseGroupId = musicBrainzId(selected?.id);
-    return releaseGroupId ? {
-      key: `${COVER_CACHE_VERSION}:release-group:${releaseGroupId.toLocaleLowerCase()}`,
-      kind: "release-group",
-      musicBrainzId: releaseGroupId,
-    } : null;
+    return releaseGroupId
+      ? {
+          key: `${COVER_CACHE_VERSION}:release-group:${releaseGroupId.toLocaleLowerCase()}`,
+          kind: "release-group",
+          musicBrainzId: releaseGroupId,
+        }
+      : null;
   };
 
   const fetchCoverForTrack = async (db, { trackId, album, artist } = {}) => {
-    const row = db.prepare(`
+    const row = db
+      .prepare(
+        `
       SELECT id, artist, album_artist, album, musicbrainz_albumid, musicbrainz_releasegroupid
       FROM tracks
       WHERE id = ?
-    `).get(String(trackId ?? ""));
+    `,
+      )
+      .get(String(trackId ?? ""));
     if (!row) throw new Error("Track was not found in the library");
 
     const metadata = {
@@ -403,9 +435,7 @@ export const createAlbumCoverService = ({
     let archiveIdentity = coverIdentity(row);
     let releaseSearchError = null;
     if (!archiveIdentity) {
-      const metadataCached = metadataIdentity
-        ? readCachedCover(db, metadataIdentity.key)
-        : null;
+      const metadataCached = metadataIdentity ? readCachedCover(db, metadataIdentity.key) : null;
       if (cachedFilesExist(metadataCached)) {
         return {
           fullPath: metadataCached.full_path,
@@ -414,8 +444,9 @@ export const createAlbumCoverService = ({
           provider: coverProvider(metadataCached.source_url),
         };
       }
-      const metadataCacheIsFresh = metadataCached?.status === "not-found"
-        && now() - Number(metadataCached.fetched_at) * 1_000 < NOT_FOUND_CACHE_TTL_MS;
+      const metadataCacheIsFresh =
+        metadataCached?.status === "not-found" &&
+        now() - Number(metadataCached.fetched_at) * 1_000 < NOT_FOUND_CACHE_TTL_MS;
       if (metadataCacheIsFresh) return null;
       try {
         archiveIdentity = await searchReleaseGroup(metadata);
@@ -436,8 +467,9 @@ export const createAlbumCoverService = ({
         provider: coverProvider(cached.source_url),
       };
     }
-    const cacheIsFresh = cached?.status === "not-found"
-      && now() - Number(cached.fetched_at) * 1_000 < NOT_FOUND_CACHE_TTL_MS;
+    const cacheIsFresh =
+      cached?.status === "not-found" &&
+      now() - Number(cached.fetched_at) * 1_000 < NOT_FOUND_CACHE_TTL_MS;
     if (cacheIsFresh) return null;
 
     let result = null;

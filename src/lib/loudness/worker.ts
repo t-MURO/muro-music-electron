@@ -7,9 +7,7 @@ type MeasureRequest = {
   sampleRate: number;
 };
 
-type MeasureResponse =
-  | { ok: true; result: LoudnessResult }
-  | { ok: false; error: string };
+type MeasureResponse = { ok: true; result: LoudnessResult } | { ok: false; error: string };
 
 type WorkerScope = {
   onmessage: ((event: MessageEvent<MeasureRequest>) => void) | null;

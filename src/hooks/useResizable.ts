@@ -13,7 +13,7 @@ export const useResizable = () => {
       event: React.MouseEvent,
       initialSize: number,
       onResize: (newSize: number) => void,
-      options: ResizeOptions = {}
+      options: ResizeOptions = {},
     ) => {
       event.preventDefault();
       if (options.stopPropagation) {
@@ -28,10 +28,7 @@ export const useResizable = () => {
 
       const handleMouseMove = (moveEvent: MouseEvent) => {
         const delta = (moveEvent.clientX - startX) * direction;
-        const nextSize = Math.max(
-          minSize,
-          Math.min(maxSize, initialSize + delta)
-        );
+        const nextSize = Math.max(minSize, Math.min(maxSize, initialSize + delta));
         onResize(nextSize);
       };
 
@@ -46,7 +43,7 @@ export const useResizable = () => {
       window.addEventListener("mouseup", handleMouseUp);
       window.addEventListener("blur", handleMouseUp);
     },
-    []
+    [],
   );
 
   return { startResize };

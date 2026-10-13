@@ -31,9 +31,7 @@ const SEARCHABLE_TRACK_FIELDS: ReadonlySet<keyof Track> = new Set<keyof Track>([
 
 /** Whether a partial track update can change what a search matches. */
 export const touchesSearchableFields = (updates: Partial<Track>): boolean =>
-  (Object.keys(updates) as Array<keyof Track>).some((key) =>
-    SEARCHABLE_TRACK_FIELDS.has(key)
-  );
+  (Object.keys(updates) as Array<keyof Track>).some((key) => SEARCHABLE_TRACK_FIELDS.has(key));
 
 export type IndexedSearchResult = {
   /** The normalized query this answer belongs to. */
@@ -50,15 +48,10 @@ export const normalizeIndexedQuery = (query: string): string => query.trim();
  * A query without an answer yet is debounced like typing; re-asking a query
  * that is already answered, because the library changed, waits longer.
  */
-export const indexedSearchDelayMs = (
-  answeredQuery: string | null,
-  query: string,
-): number => (answeredQuery === query ? REVISION_DEBOUNCE_MS : QUERY_DEBOUNCE_MS);
+export const indexedSearchDelayMs = (answeredQuery: string | null, query: string): number =>
+  answeredQuery === query ? REVISION_DEBOUNCE_MS : QUERY_DEBOUNCE_MS;
 
-const sameIds = (
-  left: ReadonlySet<string> | null,
-  right: ReadonlySet<string> | null,
-): boolean => {
+const sameIds = (left: ReadonlySet<string> | null, right: ReadonlySet<string> | null): boolean => {
   if (left === right) return true;
   if (!left || !right || left.size !== right.size) return false;
   for (const id of left) {
@@ -96,5 +89,4 @@ export const acceptIndexedSearchResult = (
 export const indexedSearchMatches = (
   result: IndexedSearchResult | null,
   activeQuery: string,
-): ReadonlySet<string> | null =>
-  activeQuery && result?.query === activeQuery ? result.ids : null;
+): ReadonlySet<string> | null => (activeQuery && result?.query === activeQuery ? result.ids : null);

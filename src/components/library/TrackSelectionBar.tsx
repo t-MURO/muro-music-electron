@@ -50,25 +50,80 @@ export const TrackSelectionBar = ({
     >
       <div className="mr-2 flex h-8 shrink-0 items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-accent-light)] px-3 text-[12px] font-semibold text-[var(--color-accent)]">
         <span className="tabular-nums">{selectedCount.toLocaleString()}</span>
-        <span>{t(
-          selectedCount === 1 ? "selection.count.one" : "selection.count.many",
-          { count: String(selectedCount) },
-        )}</span>
+        <span>
+          {t(selectedCount === 1 ? "selection.count.one" : "selection.count.many", {
+            count: String(selectedCount),
+          })}
+        </span>
       </div>
-      <button className={`${actionClass} bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] hover:text-white`} onClick={onPlay} data-selection-play type="button"><Play className="h-3.5 w-3.5" fill="currentColor" />{t("selection.play")}</button>
+      <button
+        className={`${actionClass} bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] hover:text-white`}
+        onClick={onPlay}
+        data-selection-play
+        type="button"
+      >
+        <Play className="h-3.5 w-3.5" fill="currentColor" />
+        {t("selection.play")}
+      </button>
       {selectedCount === 2 && onMix && (
-        <button className={actionClass} onClick={onMix} title={t("selection.mixHint")} data-selection-mix type="button"><Blend className="h-3.5 w-3.5" />{t("selection.mix")}</button>
+        <button
+          className={actionClass}
+          onClick={onMix}
+          title={t("selection.mixHint")}
+          data-selection-mix
+          type="button"
+        >
+          <Blend className="h-3.5 w-3.5" />
+          {t("selection.mix")}
+        </button>
       )}
-      <button className={actionClass} onClick={onPlayNext} data-selection-play-next type="button"><SkipForward className="h-3.5 w-3.5" />{t("selection.playNext")}</button>
-      <button className={actionClass} onClick={onAddToQueue} data-selection-queue type="button"><ListPlus className="h-3.5 w-3.5" />{t("selection.queue")}</button>
+      <button className={actionClass} onClick={onPlayNext} data-selection-play-next type="button">
+        <SkipForward className="h-3.5 w-3.5" />
+        {t("selection.playNext")}
+      </button>
+      <button className={actionClass} onClick={onAddToQueue} data-selection-queue type="button">
+        <ListPlus className="h-3.5 w-3.5" />
+        {t("selection.queue")}
+      </button>
       <span className="mx-1 h-5 w-px shrink-0 bg-[var(--color-border)]" aria-hidden="true" />
-      <button className={actionClass} onClick={onAnalyze} data-selection-analyze type="button"><AudioWaveform className="h-3.5 w-3.5" />{t("selection.analyze")}</button>
-      <button className={actionClass} onClick={onEdit} data-selection-edit type="button"><Pencil className="h-3.5 w-3.5" />{t("selection.edit")}</button>
+      <button className={actionClass} onClick={onAnalyze} data-selection-analyze type="button">
+        <AudioWaveform className="h-3.5 w-3.5" />
+        {t("selection.analyze")}
+      </button>
+      <button className={actionClass} onClick={onEdit} data-selection-edit type="button">
+        <Pencil className="h-3.5 w-3.5" />
+        {t("selection.edit")}
+      </button>
       {onRemoveFromPlaylist && (
-        <button className={actionClass} onClick={onRemoveFromPlaylist} data-remove-from-playlist type="button"><ListMinus className="h-3.5 w-3.5" />{t("selection.remove")}</button>
+        <button
+          className={actionClass}
+          onClick={onRemoveFromPlaylist}
+          data-remove-from-playlist
+          type="button"
+        >
+          <ListMinus className="h-3.5 w-3.5" />
+          {t("selection.remove")}
+        </button>
       )}
-      <button className={`${actionClass} text-[var(--color-danger)] hover:text-[var(--color-danger)]`} onClick={onDelete} data-selection-delete type="button"><Trash2 className="h-3.5 w-3.5" />{t("selection.delete")}</button>
-      <button className="toolbar-icon-button ml-auto h-9 w-9 shrink-0" onClick={onClear} title={t("selection.clear")} aria-label={t("selection.clear")} data-selection-clear type="button"><X className="h-4 w-4" /></button>
+      <button
+        className={`${actionClass} text-[var(--color-danger)] hover:text-[var(--color-danger)]`}
+        onClick={onDelete}
+        data-selection-delete
+        type="button"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        {t("selection.delete")}
+      </button>
+      <button
+        className="toolbar-icon-button ml-auto h-9 w-9 shrink-0"
+        onClick={onClear}
+        title={t("selection.clear")}
+        aria-label={t("selection.clear")}
+        data-selection-clear
+        type="button"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   );
 };

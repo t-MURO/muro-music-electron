@@ -68,7 +68,10 @@ export const DeleteTracksModal = ({
               <Trash2 className="h-4 w-4" />
             </span>
             <div>
-              <h2 id="delete-tracks-title" className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)]">
+              <h2
+                id="delete-tracks-title"
+                className="text-[var(--font-size-md)] font-semibold text-[var(--color-text-primary)]"
+              >
                 {t("delete.title")}
               </h2>
               <p className="mt-0.5 text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
@@ -145,6 +148,6 @@ export const DeleteTracksModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

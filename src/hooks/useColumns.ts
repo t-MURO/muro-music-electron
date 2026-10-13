@@ -4,7 +4,10 @@ import { t } from "../i18n";
 import type { ColumnConfig, Track } from "../types";
 import { useStickyState } from "./useStickyState";
 import { parseColumns } from "../utils";
-import { formatPlaylistMembership, type TrackPlaylistMembership } from "../utils/playlistMembership";
+import {
+  formatPlaylistMembership,
+  type TrackPlaylistMembership,
+} from "../utils/playlistMembership";
 
 type UseColumnsArgs = {
   tracks: Track[];
@@ -21,13 +24,11 @@ export const useColumns = ({ tracks, playlistMembershipByTrackId }: UseColumnsAr
     (key: ColumnConfig["key"]) => {
       setColumns((current) =>
         current.map((column) =>
-          column.key === key
-            ? { ...column, visible: !column.visible }
-            : column
-        )
+          column.key === key ? { ...column, visible: !column.visible } : column,
+        ),
       );
     },
-    [setColumns]
+    [setColumns],
   );
 
   const autoFitColumn = useCallback(
@@ -38,58 +39,51 @@ export const useColumns = ({ tracks, playlistMembershipByTrackId }: UseColumnsAr
       }
 
       const maxLength = Math.max(
-        t(column.labelKey as typeof column.labelKey).length,
+        t(column.labelKey).length,
         ...tracks.map((track) => {
           if (key === "format") {
             const pathParts = track.sourcePath.split(/[\\/]/);
             const filename = pathParts[pathParts.length - 1] ?? "";
             const extensionParts = filename.split(".");
-            return filename.includes(".") ? (extensionParts[extensionParts.length - 1]?.length ?? 0) : 0;
+            return filename.includes(".")
+              ? (extensionParts[extensionParts.length - 1]?.length ?? 0)
+              : 0;
           }
           if (key === "playlists") {
             return formatPlaylistMembership(playlistMembershipByTrackId.get(track.id)).length;
           }
           const value = track[key as keyof Track];
           return value === undefined || value === null ? 0 : String(value).length;
-        })
+        }),
       );
       const nextWidth = Math.min(360, Math.max(120, maxLength * 8 + 48));
 
       setColumns((current) =>
-        current.map((item) =>
-          item.key === key ? { ...item, width: nextWidth } : item
-        )
+        current.map((item) => (item.key === key ? { ...item, width: nextWidth } : item)),
       );
     },
-    [columns, playlistMembershipByTrackId, setColumns, tracks]
+    [columns, playlistMembershipByTrackId, setColumns, tracks],
   );
 
   const handleColumnResize = useCallback(
     (key: ColumnConfig["key"], width: number) => {
       setColumns((current) =>
-        current.map((column) =>
-          column.key === key ? { ...column, width } : column
-        )
+        current.map((column) => (column.key === key ? { ...column, width } : column)),
       );
     },
-    [setColumns]
+    [setColumns],
   );
 
   const reorderColumns = useCallback(
     (dragKey: ColumnConfig["key"], targetIndex: number) => {
       setColumns((current) => {
-        const visibleKeys = current
-          .filter((column) => column.visible)
-          .map((column) => column.key);
+        const visibleKeys = current.filter((column) => column.visible).map((column) => column.key);
         if (!visibleKeys.includes(dragKey)) {
           return current;
         }
 
         const nextVisible = visibleKeys.filter((key) => key !== dragKey);
-        const clampedIndex = Math.max(
-          0,
-          Math.min(nextVisible.length, targetIndex)
-        );
+        const clampedIndex = Math.max(0, Math.min(nextVisible.length, targetIndex));
         nextVisible.splice(clampedIndex, 0, dragKey);
 
         const byKey = new Map(current.map((column) => [column.key, column]));
@@ -104,7 +98,7 @@ export const useColumns = ({ tracks, playlistMembershipByTrackId }: UseColumnsAr
         });
       });
     },
-    [setColumns]
+    [setColumns],
   );
 
   return { autoFitColumn, columns, handleColumnResize, reorderColumns, toggleColumn };

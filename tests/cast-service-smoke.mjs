@@ -26,12 +26,20 @@ assert.equal(playing.playerState, "playing");
 assert.equal(playing.position, 12.5);
 assert.equal(playing.duration, 200);
 
-const finished = normalizeMediaStatus({ mediaSessionId: 7, playerState: "IDLE", idleReason: "FINISHED" });
+const finished = normalizeMediaStatus({
+  mediaSessionId: 7,
+  playerState: "IDLE",
+  idleReason: "FINISHED",
+});
 assert.equal(isFinishedTransition(playing, finished), true);
 // Re-delivered FINISHED status must not advance again.
 assert.equal(isFinishedTransition(finished, finished), false);
 // User stop / errors do not advance.
-const cancelled = normalizeMediaStatus({ mediaSessionId: 7, playerState: "IDLE", idleReason: "CANCELLED" });
+const cancelled = normalizeMediaStatus({
+  mediaSessionId: 7,
+  playerState: "IDLE",
+  idleReason: "CANCELLED",
+});
 assert.equal(isFinishedTransition(playing, cancelled), false);
 
 // --- castService flows with mocked dependencies -----------------------------
@@ -50,14 +58,29 @@ const makeMocks = () => {
     loadMedia: async (payload) => {
       calls.push(["loadMedia", payload]);
       if (adapter.loadGate) await adapter.loadGate;
-      return { mediaSessionId: 1, playerState: "PLAYING", currentTime: payload.currentTime, media: { duration: 180 } };
+      return {
+        mediaSessionId: 1,
+        playerState: "PLAYING",
+        currentTime: payload.currentTime,
+        media: { duration: 180 },
+      };
     },
-    play: async () => ({ mediaSessionId: 1, playerState: "PLAYING", currentTime: 5, media: { duration: 180 } }),
+    play: async () => ({
+      mediaSessionId: 1,
+      playerState: "PLAYING",
+      currentTime: 5,
+      media: { duration: 180 },
+    }),
     pause: async () => {
       calls.push(["pause"]);
       return { mediaSessionId: 1, playerState: "PAUSED", currentTime: 5, media: { duration: 180 } };
     },
-    seek: async (position) => ({ mediaSessionId: 1, playerState: "PLAYING", currentTime: position, media: { duration: 180 } }),
+    seek: async (position) => ({
+      mediaSessionId: 1,
+      playerState: "PLAYING",
+      currentTime: position,
+      media: { duration: 180 },
+    }),
     getMediaStatus: async () => null,
     setVolume: async (level) => calls.push(["setVolume", level]),
     stopReceiverApp: async () => calls.push(["stopReceiverApp"]),
@@ -78,7 +101,9 @@ const makeMocks = () => {
       this.started = false;
     },
     getDevices: () => ({
-      devices: [{ id: "device-1", name: "Küche", model: "Nest Audio", host: "192.168.1.30", port: 8009 }],
+      devices: [
+        { id: "device-1", name: "Küche", model: "Nest Audio", host: "192.168.1.30", port: 8009 },
+      ],
       scanning: true,
       error: null,
     }),
@@ -96,7 +121,10 @@ const makeMocks = () => {
       this.sessionActive = false;
     },
     revokeAuthorizations: () => calls.push(["revoke"]),
-    authorizeFile: (filePath, kind) => ({ token: "tok", path: `/${kind}/session-token/tok-${path.basename(filePath)}` }),
+    authorizeFile: (filePath, kind) => ({
+      token: "tok",
+      path: `/${kind}/session-token/tok-${path.basename(filePath)}`,
+    }),
     urlFor: (pathname) => `http://192.168.1.20:45000${pathname}`,
     getLanAddress: () => "192.168.1.20",
     isRunning: () => true,
@@ -135,18 +163,26 @@ try {
     port: 8009,
   });
   assert.ok(mocks.mediaServer.sessionActive);
-  const stateNames = events.filter(([name]) => name === "muro://cast-state").map(([, payload]) => payload.state);
+  const stateNames = events
+    .filter(([name]) => name === "muro://cast-state")
+    .map(([, payload]) => payload.state);
   assert.deepEqual(stateNames.slice(-2), ["connecting", "connected"]);
 
   // Unsupported format is rejected before touching the receiver.
   await assert.rejects(
-    () => service.commands.cast_load_track({ trackId: "t1", sourcePath: "/x/track.aiff", title: "A" }),
+    () =>
+      service.commands.cast_load_track({ trackId: "t1", sourcePath: "/x/track.aiff", title: "A" }),
     /CAST_UNSUPPORTED_FORMAT/,
   );
 
   // Missing file is rejected with a load error.
   await assert.rejects(
-    () => service.commands.cast_load_track({ trackId: "t1", sourcePath: path.join(tempDir, "gone.mp3"), title: "A" }),
+    () =>
+      service.commands.cast_load_track({
+        trackId: "t1",
+        sourcePath: path.join(tempDir, "gone.mp3"),
+        title: "A",
+      }),
     /CAST_LOAD_FAILED/,
   );
 
@@ -200,11 +236,28 @@ try {
   assert.equal(paused.state, "paused");
 
   // Receiver-driven finished status advances exactly once.
-  const finishedEventsBefore = events.filter(([name, payload]) => name === "muro://cast-media-status" && payload.finished).length;
-  mocks.adapterHandlers.get("mediaStatus")({ mediaSessionId: 1, playerState: "PLAYING", currentTime: 179, media: { duration: 180 } });
-  mocks.adapterHandlers.get("mediaStatus")({ mediaSessionId: 1, playerState: "IDLE", idleReason: "FINISHED" });
-  mocks.adapterHandlers.get("mediaStatus")({ mediaSessionId: 1, playerState: "IDLE", idleReason: "FINISHED" });
-  const finishedEvents = events.filter(([name, payload]) => name === "muro://cast-media-status" && payload.finished).length;
+  const finishedEventsBefore = events.filter(
+    ([name, payload]) => name === "muro://cast-media-status" && payload.finished,
+  ).length;
+  mocks.adapterHandlers.get("mediaStatus")({
+    mediaSessionId: 1,
+    playerState: "PLAYING",
+    currentTime: 179,
+    media: { duration: 180 },
+  });
+  mocks.adapterHandlers.get("mediaStatus")({
+    mediaSessionId: 1,
+    playerState: "IDLE",
+    idleReason: "FINISHED",
+  });
+  mocks.adapterHandlers.get("mediaStatus")({
+    mediaSessionId: 1,
+    playerState: "IDLE",
+    idleReason: "FINISHED",
+  });
+  const finishedEvents = events.filter(
+    ([name, payload]) => name === "muro://cast-media-status" && payload.finished,
+  ).length;
   assert.equal(finishedEvents - finishedEventsBefore, 1);
 
   // Disconnect returns the last remote position and resets to idle.

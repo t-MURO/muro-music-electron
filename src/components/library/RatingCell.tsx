@@ -16,9 +16,11 @@ export const RatingCell = memo(
 
     return (
       <div
-        className={compact
-          ? "flex min-w-0 items-center"
-          : "flex h-[var(--table-row-height)] min-w-0 items-center overflow-hidden border-l border-[var(--color-border-light)] px-1"}
+        className={
+          compact
+            ? "flex min-w-0 items-center"
+            : "flex h-[var(--table-row-height)] min-w-0 items-center overflow-hidden border-l border-[var(--color-border-light)] px-1"
+        }
         title={`Rating: ${rating} / 5`}
         onMouseLeave={() => setHoverValue(null)}
         data-rating-cell={compact ? undefined : true}
@@ -91,7 +93,11 @@ export const RatingCell = memo(
                 type="button"
               >
                 <Star className="absolute inset-0 h-3.5 w-3.5" strokeWidth={1.5} />
-                <span className="absolute inset-0 overflow-hidden text-[var(--color-rating-star)]" data-rating-fill style={{ width: `${fill * 100}%` }}>
+                <span
+                  className="absolute inset-0 overflow-hidden text-[var(--color-rating-star)]"
+                  data-rating-fill
+                  style={{ width: `${fill * 100}%` }}
+                >
                   <Star className="h-3.5 w-3.5 max-w-none" fill="currentColor" strokeWidth={1.5} />
                 </span>
               </button>
@@ -100,5 +106,5 @@ export const RatingCell = memo(
         </div>
       </div>
     );
-  }
+  },
 );

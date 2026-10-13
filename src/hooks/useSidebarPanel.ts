@@ -4,22 +4,14 @@ import { useStickyState } from "./useStickyState";
 import { parseNumber } from "../utils";
 
 export const useSidebarPanel = () => {
-  const [sidebarWidth, setSidebarWidth] = useStickyState(
-    "muro-sidebar-width",
-    228,
-    {
-      parse: parseNumber(228),
-      serialize: (value) => String(value),
-    }
-  );
-  const [sidebarCollapsed, setSidebarCollapsed] = useStickyState(
-    "muro-sidebar-collapsed",
-    false,
-    {
-      parse: (raw) => raw === "true",
-      serialize: (value) => String(value),
-    }
-  );
+  const [sidebarWidth, setSidebarWidth] = useStickyState("muro-sidebar-width", 228, {
+    parse: parseNumber(228),
+    serialize: (value) => String(value),
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useStickyState("muro-sidebar-collapsed", false, {
+    parse: (raw) => raw === "true",
+    serialize: (value) => String(value),
+  });
   const widthRef = useRef(sidebarWidth);
   const { startResize } = useResizable();
 
@@ -47,10 +39,10 @@ export const useSidebarPanel = () => {
         (nextWidth) => {
           setSidebarWidth(Math.min(360, nextWidth));
         },
-        { minSize: 200, maxSize: 360 }
+        { minSize: 200, maxSize: 360 },
       );
     },
-    [sidebarCollapsed, sidebarWidth, setSidebarWidth, startResize]
+    [sidebarCollapsed, sidebarWidth, setSidebarWidth, startResize],
   );
 
   return {

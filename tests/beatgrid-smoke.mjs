@@ -154,7 +154,9 @@ const circularErrorSec = (a, b, period) => {
   );
   assert.ok(grid.confidence > 0.3, `128 BPM: confidence ${grid.confidence}, expected > 0.3`);
   assert.ok(Number.isFinite(grid.analyzedAt) && grid.analyzedAt > 0);
-  console.log(`test 1 ok: bpm=${grid.bpm.toFixed(3)} beatErr=${(beatError * 1000).toFixed(1)}ms barErr=${(barError * 1000).toFixed(1)}ms conf=${grid.confidence.toFixed(3)}`);
+  console.log(
+    `test 1 ok: bpm=${grid.bpm.toFixed(3)} beatErr=${(beatError * 1000).toFixed(1)}ms barErr=${(barError * 1000).toFixed(1)}ms conf=${grid.confidence.toFixed(3)}`,
+  );
 }
 
 // Test 2: 174 BPM with bpmHint 174.
@@ -251,7 +253,10 @@ const circularErrorSec = (a, b, period) => {
   // the resulting jitter is itself bar-periodic.
   const flat = analyzeBeatGrid(
     synthesizeSectionedTrack({
-      bpm: 128, firstBeatSec: 0.31, durationSec: 120, sectionBars: 0,
+      bpm: 128,
+      firstBeatSec: 0.31,
+      durationSec: 120,
+      sectionBars: 0,
     }),
     SAMPLE_RATE,
   );
@@ -299,7 +304,11 @@ const circularErrorSec = (a, b, period) => {
   // planner would mix out early and cut the ending off.
   const steady = analyzeBeatGrid(
     synthesizeArrangedTrack({
-      bpm: 128, firstBeatSec: 0.31, durationSec: 200, introBars: 0, outroBars: 0,
+      bpm: 128,
+      firstBeatSec: 0.31,
+      durationSec: 200,
+      introBars: 0,
+      outroBars: 0,
     }),
     SAMPLE_RATE,
   );
@@ -313,7 +322,11 @@ const circularErrorSec = (a, b, period) => {
   // the body and cut the track off.
   const longTail = analyzeBeatGrid(
     synthesizeArrangedTrack({
-      bpm: 128, firstBeatSec: 0.31, durationSec: 200, introBars: 0, outroBars: 60,
+      bpm: 128,
+      firstBeatSec: 0.31,
+      durationSec: 200,
+      introBars: 0,
+      outroBars: 60,
     }),
     SAMPLE_RATE,
   );

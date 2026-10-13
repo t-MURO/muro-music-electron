@@ -35,8 +35,7 @@ for (const [key, value] of Object.entries(de)) {
 // --- Placeholder parity ------------------------------------------------------
 // A translation that drops {count} renders a sentence with a hole in it, which
 // no type check can catch.
-const placeholders = (value) =>
-  [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+const placeholders = (value) => [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
 
 for (const key of enKeys) {
   assert.deepEqual(
@@ -99,9 +98,7 @@ const ALLOWED_IDENTICAL = new Set([
   "player.pause",
 ]);
 
-const untranslated = enKeys.filter(
-  (key) => en[key] === de[key] && !ALLOWED_IDENTICAL.has(key),
-);
+const untranslated = enKeys.filter((key) => en[key] === de[key] && !ALLOWED_IDENTICAL.has(key));
 assert.deepEqual(
   untranslated,
   [],

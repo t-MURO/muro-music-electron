@@ -225,7 +225,11 @@ export const createCastConnection = ({
     }
     if (message.namespace === NAMESPACES.connection && payload.type === "CLOSE") {
       connectedTransports.delete(message.sourceId);
-      emitter.emit("message", { namespace: message.namespace, sourceId: message.sourceId, payload });
+      emitter.emit("message", {
+        namespace: message.namespace,
+        sourceId: message.sourceId,
+        payload,
+      });
       return;
     }
     const requestId = payload.requestId;

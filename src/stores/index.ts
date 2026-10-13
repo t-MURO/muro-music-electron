@@ -48,14 +48,8 @@ export {
   type Notification,
   type NotificationStore,
 } from "./notificationStore";
-export {
-  useRecentlyPlayedStore,
-  type RecentlyPlayedStore,
-} from "./recentlyPlayedStore";
-export {
-  useSmartCrateStore,
-  type SmartCrateStore,
-} from "./smartCrateStore";
+export { useRecentlyPlayedStore, type RecentlyPlayedStore } from "./recentlyPlayedStore";
+export { useSmartCrateStore, type SmartCrateStore } from "./smartCrateStore";
 export {
   useRemoteOutputStore,
   selectRemoteOutputActive,

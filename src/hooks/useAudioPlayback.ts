@@ -61,10 +61,12 @@ type UseAudioPlaybackOptions = {
   seekMode?: "fast" | "accurate";
 };
 
-type MediaControlEvent = string | {
-  action?: string;
-  source?: string;
-};
+type MediaControlEvent =
+  | string
+  | {
+      action?: string;
+      source?: string;
+    };
 
 export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   const { onTrackEnd, onMediaControl, seekMode } = options;
@@ -90,11 +92,13 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   const onTrackEndRef = useRef(onTrackEnd);
   const onMediaControlRef = useRef(onMediaControl);
   const latestGlobalMediaControlRef = useRef<Map<string, number>>(new Map());
-  const pendingMediaSessionControlsRef = useRef<Set<{
-    group: string;
-    receivedAt: number;
-    timeoutId: number;
-  }>>(new Set());
+  const pendingMediaSessionControlsRef = useRef<
+    Set<{
+      group: string;
+      receivedAt: number;
+      timeoutId: number;
+    }>
+  >(new Set());
 
   useEffect(() => {
     onTrackEndRef.current = onTrackEnd;
@@ -127,7 +131,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         setCurrentTrack(null);
       }
     },
-    [setIsPlaying, setCurrentPosition, setDuration, setVolume, setCurrentTrack]
+    [setIsPlaying, setCurrentPosition, setDuration, setVolume, setCurrentTrack],
   );
 
   // Listen for playback state updates from the desktop runtime.
@@ -191,17 +195,13 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
           handleRemoteMediaStatus("dlna", event.payload);
         }),
         listen<MediaControlEvent>("muro://media-control", (event) => {
-          const action = typeof event.payload === "string"
-            ? event.payload
-            : event.payload?.action;
+          const action = typeof event.payload === "string" ? event.payload : event.payload?.action;
           if (!action) return;
 
-          const source = typeof event.payload === "string"
-            ? "legacy"
-            : event.payload.source ?? "unknown";
-          const group = action === "play" || action === "pause" || action === "toggle"
-            ? "playback"
-            : action;
+          const source =
+            typeof event.payload === "string" ? "legacy" : (event.payload.source ?? "unknown");
+          const group =
+            action === "play" || action === "pause" || action === "toggle" ? "playback" : action;
           const receivedAt = performance.now();
 
           if (source === "global-shortcut") {
@@ -314,20 +314,18 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
   useEffect(() => {
     if (!currentTrack || isRemoteOutputActive()) return;
     const library = useLibraryStore.getState();
-    const track = [...library.tracks, ...library.inboxTracks]
-      .find((candidate) => candidate.id === currentTrack.id);
+    const track = [...library.tracks, ...library.inboxTracks].find(
+      (candidate) => candidate.id === currentTrack.id,
+    );
     if (!track) return;
-    void playbackSetTrackGain(resolveGainFactor(track, {
-      mode: replayGainMode,
-      preampDb: replayGainPreampDb,
-      preventClipping: replayGainPreventClipping,
-    })).catch(() => undefined);
-  }, [
-    currentTrack?.id,
-    replayGainMode,
-    replayGainPreampDb,
-    replayGainPreventClipping,
-  ]);
+    void playbackSetTrackGain(
+      resolveGainFactor(track, {
+        mode: replayGainMode,
+        preampDb: replayGainPreampDb,
+        preventClipping: replayGainPreventClipping,
+      }),
+    ).catch(() => undefined);
+  }, [currentTrack?.id, replayGainMode, replayGainPreampDb, replayGainPreventClipping]);
 
   // Restore the persisted local output device once at startup.
   useEffect(() => {
@@ -371,11 +369,8 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         return;
       }
       try {
-        const {
-          replayGainMode,
-          replayGainPreampDb,
-          replayGainPreventClipping,
-        } = useSettingsStore.getState();
+        const { replayGainMode, replayGainPreampDb, replayGainPreventClipping } =
+          useSettingsStore.getState();
         await playbackPlayFile(
           track.id,
           track.title,
@@ -391,7 +386,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
             mode: replayGainMode,
             preampDb: replayGainPreampDb,
             preventClipping: replayGainPreventClipping,
-          })
+          }),
         );
         setIsPlaying(true);
         setCurrentPosition(0);
@@ -401,7 +396,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         notify.error(t("toast.playback.playTrackFailed"));
       }
     },
-    [setIsPlaying, setCurrentPosition, setDuration, setCurrentTrack]
+    [setIsPlaying, setCurrentPosition, setDuration, setCurrentTrack],
   );
 
   const togglePlay = useCallback(async () => {
@@ -486,7 +481,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         notify.error(t("toast.playback.seekFailed"));
       }
     },
-    [setCurrentPosition]
+    [setCurrentPosition],
   );
 
   const handleSetVolume = useCallback(
@@ -509,7 +504,7 @@ export const useAudioPlayback = (options: UseAudioPlaybackOptions = {}) => {
         notify.error(t("toast.playback.volumeFailed"));
       }
     },
-    [setVolume]
+    [setVolume],
   );
 
   return {

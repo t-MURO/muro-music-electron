@@ -25,13 +25,7 @@ type ResolvedPosition = {
   vertical: "up" | "down";
 };
 
-export const Popover = ({
-  isOpen,
-  position,
-  children,
-  className = "",
-  onClose,
-}: PopoverProps) => {
+export const Popover = ({ isOpen, position, children, className = "", onClose }: PopoverProps) => {
   const [shouldRender, setShouldRender] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [resolvedPosition, setResolvedPosition] = useState<ResolvedPosition>({
@@ -86,7 +80,8 @@ export const Popover = ({
       const height = panel.offsetHeight;
       const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - VIEWPORT_MARGIN - width);
       const maxTop = Math.max(VIEWPORT_MARGIN, window.innerHeight - VIEWPORT_MARGIN - height);
-      const horizontal = position.x + width > window.innerWidth - VIEWPORT_MARGIN ? "left" : "right";
+      const horizontal =
+        position.x + width > window.innerWidth - VIEWPORT_MARGIN ? "left" : "right";
       const vertical = position.y + height > window.innerHeight - VIEWPORT_MARGIN ? "up" : "down";
       const left = Math.min(
         Math.max(VIEWPORT_MARGIN, horizontal === "left" ? position.x - width : position.x),
@@ -96,14 +91,14 @@ export const Popover = ({
         Math.max(VIEWPORT_MARGIN, vertical === "up" ? position.y - height : position.y),
         maxTop,
       );
-      setResolvedPosition((current) => (
-        current.left === left
-        && current.top === top
-        && current.horizontal === horizontal
-        && current.vertical === vertical
+      setResolvedPosition((current) =>
+        current.left === left &&
+        current.top === top &&
+        current.horizontal === horizontal &&
+        current.vertical === vertical
           ? current
-          : { left, top, horizontal, vertical }
-      ));
+          : { left, top, horizontal, vertical },
+      );
     };
 
     updatePosition();
@@ -144,7 +139,7 @@ export const Popover = ({
     >
       {children}
     </div>,
-    document.body
+    document.body,
   );
 };
 
@@ -180,9 +175,7 @@ export const PopoverItem = ({
   );
 };
 
-export const PopoverDivider = () => (
-  <div className="mx-2 my-1 h-px bg-[var(--panel-border)]" />
-);
+export const PopoverDivider = () => <div className="mx-2 my-1 h-px bg-[var(--panel-border)]" />;
 
 export const PopoverHeader = ({ children }: { children: ReactNode }) => (
   <div className="mx-2 mb-1 rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-2 py-1 text-xs font-medium text-[var(--accent)]">

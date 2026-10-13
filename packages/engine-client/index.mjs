@@ -42,7 +42,10 @@ export class KeyFinderClient extends EventEmitter {
 
   constructor({ executablePath, args = [] }) {
     super();
-    this.#child = spawn(executablePath, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    this.#child = spawn(executablePath, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
     const lines = readline.createInterface({ input: this.#child.stdout });
     lines.on("line", (line) => this.#route(line));
     this.#child.stderr.setEncoding("utf8");
@@ -51,9 +54,11 @@ export class KeyFinderClient extends EventEmitter {
     // stream errors would crash the main process, so they shut the client
     // down instead and the owner recreates it on "exit".
     for (const stream of [this.#child.stdin, this.#child.stdout, this.#child.stderr]) {
-      stream.on("error", (error) => this.#shutDown(
-        new Error(`KeyFinder engine pipe failed: ${error.message}`, { cause: error }),
-      ));
+      stream.on("error", (error) =>
+        this.#shutDown(
+          new Error(`KeyFinder engine pipe failed: ${error.message}`, { cause: error }),
+        ),
+      );
     }
     this.#child.on("error", (error) => {
       this.#shutDown(error);
@@ -127,7 +132,11 @@ export class KeyFinderClient extends EventEmitter {
     if (message.version !== protocolVersion) {
       pending.reject(new Error("KeyFinder returned an unsupported protocol version"));
     } else if (message.error) {
-      pending.reject(new Error(`${message.error.code ?? "NATIVE_ERROR"}: ${message.error.message ?? "Native engine error"}`));
+      pending.reject(
+        new Error(
+          `${message.error.code ?? "NATIVE_ERROR"}: ${message.error.message ?? "Native engine error"}`,
+        ),
+      );
     } else if (Object.hasOwn(message, "result")) {
       pending.resolve(message.result);
     } else {
@@ -148,7 +157,11 @@ export class KeyFinderClient extends EventEmitter {
     // On Windows a graceful default kill can leave the native analyzer alive
     // after its Electron owner recycles it. SIGKILL maps to TerminateProcess and
     // guarantees that decoded-audio memory is released between batches.
-    if (this.#child.exitCode === null && this.#child.signalCode === null && this.#child.pid !== undefined) {
+    if (
+      this.#child.exitCode === null &&
+      this.#child.signalCode === null &&
+      this.#child.pid !== undefined
+    ) {
       this.#child.kill("SIGKILL");
     }
   }

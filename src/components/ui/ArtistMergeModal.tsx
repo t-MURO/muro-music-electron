@@ -12,21 +12,14 @@ type ArtistMergeModalProps = {
   onMerge: (source: ArtistIndexItem, target: ArtistIndexItem) => Promise<void>;
 };
 
-const hasConflictingMusicBrainzIds = (
-  source: ArtistIndexItem,
-  target: ArtistIndexItem,
-) => Boolean(
-  source.musicBrainzId
-  && target.musicBrainzId
-  && source.musicBrainzId.toLocaleLowerCase() !== target.musicBrainzId.toLocaleLowerCase(),
-);
+const hasConflictingMusicBrainzIds = (source: ArtistIndexItem, target: ArtistIndexItem) =>
+  Boolean(
+    source.musicBrainzId &&
+    target.musicBrainzId &&
+    source.musicBrainzId.toLocaleLowerCase() !== target.musicBrainzId.toLocaleLowerCase(),
+  );
 
-export const ArtistMergeModal = ({
-  source,
-  artists,
-  onClose,
-  onMerge,
-}: ArtistMergeModalProps) => {
+export const ArtistMergeModal = ({ source, artists, onClose, onMerge }: ArtistMergeModalProps) => {
   const [query, setQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [isMerging, setIsMerging] = useState(false);
@@ -46,7 +39,9 @@ export const ArtistMergeModal = ({
     const sourceName = normalizeArtistName(source.name);
     const exactMatch = candidates
       .filter((candidate) => !hasConflictingMusicBrainzIds(source, candidate))
-      .sort((left, right) => Number(Boolean(right.musicBrainzId)) - Number(Boolean(left.musicBrainzId)))
+      .sort(
+        (left, right) => Number(Boolean(right.musicBrainzId)) - Number(Boolean(left.musicBrainzId)),
+      )
       .find((candidate) => normalizeArtistName(candidate.name) === sourceName);
     setSelectedKey(exactMatch ? artistIdentityKey(exactMatch) : null);
   }, [candidates, source]);
@@ -63,13 +58,12 @@ export const ArtistMergeModal = ({
   const visibleCandidates = useMemo(() => {
     const normalizedQuery = normalizeArtistName(query);
     if (!normalizedQuery) return candidates;
-    return candidates.filter((candidate) => (
-      normalizeArtistName(candidate.name).includes(normalizedQuery)
-    ));
+    return candidates.filter((candidate) =>
+      normalizeArtistName(candidate.name).includes(normalizedQuery),
+    );
   }, [candidates, query]);
-  const selected = candidates.find(
-    (candidate) => artistIdentityKey(candidate) === selectedKey,
-  ) ?? null;
+  const selected =
+    candidates.find((candidate) => artistIdentityKey(candidate) === selectedKey) ?? null;
 
   if (!source || typeof document === "undefined") return null;
 
@@ -91,7 +85,9 @@ export const ArtistMergeModal = ({
     <div
       className="modal-overlay-animate fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-[var(--spacing-lg)] backdrop-blur-sm"
       data-artist-merge-modal
-      onClick={() => { if (!isMerging) onClose(); }}
+      onClick={() => {
+        if (!isMerging) onClose();
+      }}
     >
       <div
         className="modal-panel-animate flex max-h-[82vh] w-full max-w-[620px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] shadow-[var(--shadow-lg)]"
@@ -123,55 +119,78 @@ export const ArtistMergeModal = ({
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-3" role="radiogroup" aria-label={t("artist.merge.destination")}>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto p-3"
+          role="radiogroup"
+          aria-label={t("artist.merge.destination")}
+        >
           {visibleCandidates.length === 0 ? (
             <div className="flex min-h-40 flex-col items-center justify-center gap-2 text-center text-[var(--color-text-muted)]">
               <UserRound className="h-6 w-6" />
               <span className="text-[12px]">{t("artist.merge.empty")}</span>
             </div>
-          ) : visibleCandidates.map((candidate) => {
-            const identity = artistIdentityKey(candidate);
-            const isSelected = identity === selectedKey;
-            const isConflicting = hasConflictingMusicBrainzIds(source, candidate);
-            return (
-              <button
-                aria-checked={isSelected}
-                className={`mb-2 flex w-full items-center gap-3 rounded-[var(--radius-md)] border px-3 py-3 text-left transition-colors ${isSelected ? "border-[var(--color-accent)] bg-[var(--color-accent-light)]" : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]"} ${isConflicting ? "cursor-not-allowed opacity-50" : ""}`}
-                data-artist-merge-candidate={candidate.name}
-                disabled={isMerging || isConflicting}
-                key={identity}
-                onClick={() => {
-                  setSelectedKey(identity);
-                  setError(null);
-                }}
-                role="radio"
-                type="button"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg-tertiary)] text-[11px] font-semibold text-[var(--color-text-secondary)]">
-                  {candidate.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("")}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <strong className="block truncate text-[12px] text-[var(--color-text-primary)]">{candidate.name}</strong>
-                  <span className="mt-0.5 block truncate text-[10px] text-[var(--color-text-muted)]">
-                    {candidate.trackCount.toLocaleString()} {candidate.trackCount === 1 ? t("artist.merge.track") : t("artist.merge.tracks")}
-                    {" · "}
-                    {candidate.albumCount.toLocaleString()} {candidate.albumCount === 1 ? t("artist.merge.album") : t("artist.merge.albums")}
-                    {" · "}
-                    {candidate.musicBrainzId ? t("artist.merge.identified") : t("artist.merge.local")}
+          ) : (
+            visibleCandidates.map((candidate) => {
+              const identity = artistIdentityKey(candidate);
+              const isSelected = identity === selectedKey;
+              const isConflicting = hasConflictingMusicBrainzIds(source, candidate);
+              return (
+                <button
+                  aria-checked={isSelected}
+                  className={`mb-2 flex w-full items-center gap-3 rounded-[var(--radius-md)] border px-3 py-3 text-left transition-colors ${isSelected ? "border-[var(--color-accent)] bg-[var(--color-accent-light)]" : "border-[var(--color-border)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]"} ${isConflicting ? "cursor-not-allowed opacity-50" : ""}`}
+                  data-artist-merge-candidate={candidate.name}
+                  disabled={isMerging || isConflicting}
+                  key={identity}
+                  onClick={() => {
+                    setSelectedKey(identity);
+                    setError(null);
+                  }}
+                  role="radio"
+                  type="button"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg-tertiary)] text-[11px] font-semibold text-[var(--color-text-secondary)]">
+                    {candidate.name
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((part) => part[0]?.toLocaleUpperCase())
+                      .join("")}
                   </span>
-                  {isConflicting && (
-                    <span className="mt-1 block text-[10px] text-amber-600 dark:text-amber-300">
-                      {t("artist.merge.conflictingIds")}
+                  <span className="min-w-0 flex-1">
+                    <strong className="block truncate text-[12px] text-[var(--color-text-primary)]">
+                      {candidate.name}
+                    </strong>
+                    <span className="mt-0.5 block truncate text-[10px] text-[var(--color-text-muted)]">
+                      {candidate.trackCount.toLocaleString()}{" "}
+                      {candidate.trackCount === 1
+                        ? t("artist.merge.track")
+                        : t("artist.merge.tracks")}
+                      {" · "}
+                      {candidate.albumCount.toLocaleString()}{" "}
+                      {candidate.albumCount === 1
+                        ? t("artist.merge.album")
+                        : t("artist.merge.albums")}
+                      {" · "}
+                      {candidate.musicBrainzId
+                        ? t("artist.merge.identified")
+                        : t("artist.merge.local")}
                     </span>
-                  )}
-                </span>
-              </button>
-            );
-          })}
+                    {isConflicting && (
+                      <span className="mt-1 block text-[10px] text-amber-600 dark:text-amber-300">
+                        {t("artist.merge.conflictingIds")}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
 
         {error && (
-          <p className="border-t border-[var(--color-border)] bg-red-500/10 px-5 py-2 text-[11px] text-red-600 dark:text-red-300" role="alert">
+          <p
+            className="border-t border-[var(--color-border)] bg-red-500/10 px-5 py-2 text-[11px] text-red-600 dark:text-red-300"
+            role="alert"
+          >
             {error}
           </p>
         )}
@@ -192,7 +211,9 @@ export const ArtistMergeModal = ({
               className="flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--color-accent)] px-3 py-2 text-[12px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               data-merge-artists-confirm
               disabled={!selected || isMerging}
-              onClick={() => { void mergeSelected(); }}
+              onClick={() => {
+                void mergeSelected();
+              }}
               type="button"
             >
               {isMerging && <LoaderCircle className="h-4 w-4 animate-spin" />}

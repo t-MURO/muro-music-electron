@@ -14,15 +14,19 @@ const platformTriple = () => {
   return process.arch === "arm64" ? "aarch64-unknown-linux-gnu" : "x86_64-unknown-linux-gnu";
 };
 
-const keyFinderRoots = () => [
-  process.env.NEO_KEYFINDER_ROOT,
-  path.resolve(projectRoot, "../neo-keyfinder"),
-  path.resolve(projectRoot, "../neo-key-finder/neo-keyfinder"),
-].filter(Boolean).map((candidate) => path.resolve(candidate));
+const keyFinderRoots = () =>
+  [
+    process.env.NEO_KEYFINDER_ROOT,
+    path.resolve(projectRoot, "../neo-keyfinder"),
+    path.resolve(projectRoot, "../neo-key-finder/neo-keyfinder"),
+  ]
+    .filter(Boolean)
+    .map((candidate) => path.resolve(candidate));
 
-const findKeyFinderRoot = () => keyFinderRoots().find((candidate) =>
-  fs.existsSync(path.join(candidate, "src-tauri", "binaries"))
-);
+const findKeyFinderRoot = () =>
+  keyFinderRoots().find((candidate) =>
+    fs.existsSync(path.join(candidate, "src-tauri", "binaries")),
+  );
 
 const stagePackagedResources = () => {
   const extension = process.platform === "win32" ? ".exe" : "";
@@ -45,11 +49,13 @@ const stagePackagedResources = () => {
     fs.copyFileSync(sourcePath, destinationPath);
     console.log(`Restaged Neo KeyFinder for packaging: ${destinationPath}`);
   } else if (!fs.existsSync(destinationPath) || !fs.statSync(destinationPath).isFile()) {
-    throw new Error([
-      "Neo KeyFinder binaries were not found.",
-      "Run npm run keyfinder:download, set NEO_KEYFINDER_ROOT, or place its checkout in a supported adjacent directory.",
-      ...keyFinderRoots().map((candidate) => `  - ${candidate}`),
-    ].join(os.EOL));
+    throw new Error(
+      [
+        "Neo KeyFinder binaries were not found.",
+        "Run npm run keyfinder:download, set NEO_KEYFINDER_ROOT, or place its checkout in a supported adjacent directory.",
+        ...keyFinderRoots().map((candidate) => `  - ${candidate}`),
+      ].join(os.EOL),
+    );
   } else {
     console.log(`Using staged Neo KeyFinder for packaging: ${destinationPath}`);
   }

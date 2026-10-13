@@ -27,7 +27,9 @@ assert.equal(isPlayRestart(1.5, 0), false);
         throw new Error(`record failed ${attempts}`);
       },
       RECORD_PLAY_RETRY_DELAYS_MS,
-      async (delayMs) => { waits.push(delayMs); },
+      async (delayMs) => {
+        waits.push(delayMs);
+      },
     ),
     new RegExp(`record failed ${RECORD_PLAY_RETRY_DELAYS_MS.length + 1}`),
   );
@@ -98,13 +100,19 @@ const play = {
     [track({ playCount: 1, lastPlayedAt: play.playedAt }), ...others],
     firstPlay,
   );
-  assert.deepEqual(afterFirst.map((item) => item.id), ["track-2", "track-3"]);
+  assert.deepEqual(
+    afterFirst.map((item) => item.id),
+    ["track-2", "track-3"],
+  );
 
   const afterReplay = revertRecentlyPlayed(
     [track({ playCount: 5, lastPlayedAt: play.playedAt }), ...others],
     play,
   );
-  assert.deepEqual(afterReplay.map((item) => item.id), ["track-1", "track-2", "track-3"]);
+  assert.deepEqual(
+    afterReplay.map((item) => item.id),
+    ["track-1", "track-2", "track-3"],
+  );
   assert.equal(afterReplay[0].playCount, 4);
   assert.equal(afterReplay[0].lastPlayedAt, "2026-10-01T10:00:00.000Z");
 }

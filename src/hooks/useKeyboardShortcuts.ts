@@ -28,12 +28,13 @@ export type KeyboardShortcutHandlers = {
 
 const isTextEntry = (target: EventTarget | null) => {
   const element = target as HTMLElement | null;
-  return Boolean(element && (
-    element.tagName === "INPUT"
-    || element.tagName === "TEXTAREA"
-    || element.tagName === "SELECT"
-    || element.isContentEditable
-  ));
+  return Boolean(
+    element &&
+    (element.tagName === "INPUT" ||
+      element.tagName === "TEXTAREA" ||
+      element.tagName === "SELECT" ||
+      element.isContentEditable),
+  );
 };
 
 const isTrackTableFocused = (target: EventTarget | null) => {
@@ -41,8 +42,7 @@ const isTrackTableFocused = (target: EventTarget | null) => {
   return Boolean(element?.closest?.("[data-track-table-scroll]"));
 };
 
-const isBlockingModalOpen = () =>
-  document.querySelector(".modal-overlay-animate") !== null;
+const isBlockingModalOpen = () => document.querySelector(".modal-overlay-animate") !== null;
 
 export const useKeyboardShortcuts = (handlers: KeyboardShortcutHandlers) => {
   const shortcuts = useSettingsStore((state) => state.keyboardShortcuts);
@@ -91,14 +91,26 @@ export const useKeyboardShortcuts = (handlers: KeyboardShortcutHandlers) => {
       if (run("togglePlay", current.onTogglePlay, true)) return;
       if (run("previous", current.onSkipPrevious)) return;
       if (run("next", current.onSkipNext)) return;
-      if (run("seekBackward", () =>
-        current.onSeek(Math.max(0, current.currentPosition - SEEK_STEP_SECONDS)))) return;
-      if (run("seekForward", () =>
-        current.onSeek(current.currentPosition + SEEK_STEP_SECONDS))) return;
-      if (run("volumeUp", () =>
-        current.onSetVolume(Math.min(1, current.volume + VOLUME_STEP)), true)) return;
-      if (run("volumeDown", () =>
-        current.onSetVolume(Math.max(0, current.volume - VOLUME_STEP)), true)) return;
+      if (
+        run("seekBackward", () =>
+          current.onSeek(Math.max(0, current.currentPosition - SEEK_STEP_SECONDS)),
+        )
+      )
+        return;
+      if (run("seekForward", () => current.onSeek(current.currentPosition + SEEK_STEP_SECONDS)))
+        return;
+      if (
+        run("volumeUp", () => current.onSetVolume(Math.min(1, current.volume + VOLUME_STEP)), true)
+      )
+        return;
+      if (
+        run(
+          "volumeDown",
+          () => current.onSetVolume(Math.max(0, current.volume - VOLUME_STEP)),
+          true,
+        )
+      )
+        return;
       if (run("remove", current.onDeleteSelection)) return;
       if (run("mute", current.onToggleMute)) return;
       if (run("shuffle", current.onToggleShuffle)) return;
@@ -107,12 +119,8 @@ export const useKeyboardShortcuts = (handlers: KeyboardShortcutHandlers) => {
       if (run("playNext", current.onPlaySelectionNext)) return;
       if (run("help", current.onToggleShortcutHelp)) return;
       for (let rating = 0; rating <= 5; rating += 1) {
-        if (
-          run(
-            `rate${rating}` as keyof typeof shortcuts,
-            () => current.onRateSelection(rating),
-          )
-        ) return;
+        if (run(`rate${rating}` as keyof typeof shortcuts, () => current.onRateSelection(rating)))
+          return;
       }
     };
 

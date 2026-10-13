@@ -31,7 +31,7 @@ type TableRowProps = {
   onRowSelect: (
     index: number,
     id: string,
-    options?: { isMetaKey?: boolean; isShiftKey?: boolean }
+    options?: { isMetaKey?: boolean; isShiftKey?: boolean },
   ) => void;
   onRowDragStart: (event: React.DragEvent<HTMLDivElement>, id: string) => void;
   onRowDrag: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -40,7 +40,7 @@ type TableRowProps = {
     event: React.MouseEvent,
     id: string,
     index: number,
-    isSelected: boolean
+    isSelected: boolean,
   ) => void;
   onRowDoubleClick?: (trackId: string) => void;
   onOpenArtist?: (artist: ArtistTarget) => void;
@@ -54,7 +54,7 @@ const formatFileSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB", "TB"];
   const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)) - 1, units.length - 1);
-  const value = bytes / (1024 ** (unitIndex + 1));
+  const value = bytes / 1024 ** (unitIndex + 1);
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 };
 
@@ -83,9 +83,7 @@ const getColumnDisplayValue = (
     case "key":
       return track.key ?? "";
     case "bpm":
-      return track.bpm === undefined || track.bpm === null
-        ? ""
-        : track.bpm.toFixed(1);
+      return track.bpm === undefined || track.bpm === null ? "" : track.bpm.toFixed(1);
     case "sampleRate":
       return track.sampleRate && track.sampleRate > 0
         ? `${Number((track.sampleRate / 1000).toFixed(1))} kHz`
@@ -104,9 +102,7 @@ const getColumnDisplayValue = (
       return extension?.toUpperCase() ?? "";
     }
     case "year":
-      return track.year === undefined || track.year === null
-        ? ""
-        : String(track.year);
+      return track.year === undefined || track.year === null ? "" : String(track.year);
     case "date":
       return track.date ?? "";
     case "dateAdded":
@@ -191,7 +187,7 @@ export const TableRow = memo(
         onMouseDownCapture={(event) => {
           const target = event.target as HTMLElement | null;
           dragStartedOnInteractiveControlRef.current = Boolean(
-            target?.closest("button, input, select, textarea, [contenteditable='true']")
+            target?.closest("button, input, select, textarea, [contenteditable='true']"),
           );
         }}
         onDragStart={(event) => {
@@ -206,13 +202,13 @@ export const TableRow = memo(
           dragStartedOnInteractiveControlRef.current = false;
           onRowDragEnd();
         }}
-        onContextMenu={(event) =>
-          onRowContextMenu(event, track.id, index, isSelected)
-        }
+        onContextMenu={(event) => onRowContextMenu(event, track.id, index, isSelected)}
         data-track-index={index}
         data-track-selected={isSelected ? "true" : "false"}
         data-track-playing={isPlayingTrack ? "true" : "false"}
-        data-native-file-draggable={!track.isMissing && Boolean(track.sourcePath) ? "true" : "false"}
+        data-native-file-draggable={
+          !track.isMissing && Boolean(track.sourcePath) ? "true" : "false"
+        }
         role="row"
       >
         <div
@@ -251,46 +247,68 @@ export const TableRow = memo(
             );
           }
           const isTitleColumn = column.key === "title";
-          const textColorClass = isTitleColumn && isPlayingTrack ? "text-[var(--color-accent)]" : "";
-          const numericClass = column.key === "bpm" || column.key === "duration" || column.key === "bitrate" || column.key === "discNumber" || column.key === "playCount" || column.key === "sampleRate" || column.key === "bitDepth" || column.key === "fileSize" ? "tabular-nums" : "";
+          const textColorClass =
+            isTitleColumn && isPlayingTrack ? "text-[var(--color-accent)]" : "";
+          const numericClass =
+            column.key === "bpm" ||
+            column.key === "duration" ||
+            column.key === "bitrate" ||
+            column.key === "discNumber" ||
+            column.key === "playCount" ||
+            column.key === "sampleRate" ||
+            column.key === "bitDepth" ||
+            column.key === "fileSize"
+              ? "tabular-nums"
+              : "";
           const camelotColor = column.key === "key" ? getCamelotColor(value) : null;
-          const keyClass = column.key === "key" && value && !camelotColor ? "font-semibold text-[var(--color-accent)]" : "";
-          const isArtistLink = (
-            column.key === "artist" || column.key === "artists"
-          ) && Boolean(value) && Boolean(onOpenArtist);
+          const keyClass =
+            column.key === "key" && value && !camelotColor
+              ? "font-semibold text-[var(--color-accent)]"
+              : "";
+          const isArtistLink =
+            (column.key === "artist" || column.key === "artists") &&
+            Boolean(value) &&
+            Boolean(onOpenArtist);
           const isAlbumLink = column.key === "album" && Boolean(value) && Boolean(onOpenAlbum);
-          const isPlaylistLink = column.key === "playlists"
-            && playlistMembership.length > 0
-            && Boolean(onOpenPlaylist);
+          const isPlaylistLink =
+            column.key === "playlists" && playlistMembership.length > 0 && Boolean(onOpenPlaylist);
           return (
             <div
               key={column.key}
               className={`flex h-[var(--table-row-height)] items-center border-l border-[var(--color-border-light)] px-3 ${isTitleColumn ? "font-medium text-[var(--color-text-primary)]" : ""} ${numericClass} ${keyClass} ${textColorClass}`}
               data-column-key={column.key}
               role="cell"
-              onContextMenu={column.key === "album" && onAlbumContextMenu
-                ? (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onAlbumContextMenu(event, track.id);
-                  }
-                : undefined}
+              onContextMenu={
+                column.key === "album" && onAlbumContextMenu
+                  ? (event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onAlbumContextMenu(event, track.id);
+                    }
+                  : undefined
+              }
             >
-              {isTitleColumn && (
-                track.isMissing
-                  ? (
-                    <FileWarning
-                      aria-label={t("track.missing")}
-                      className="mr-2 h-3 w-3 shrink-0 text-amber-500"
-                      data-track-missing
-                    >
-                      <title>{t("track.missing")}</title>
-                    </FileWarning>
-                  )
-                  : isPlayingTrack
-                    ? <Play className={`mr-2 h-3 w-3 shrink-0 text-[var(--color-accent)] ${isCurrentlyPlaying ? "opacity-100" : "opacity-70"}`} fill="currentColor" />
-                    : <Circle className="mr-2 h-2 w-2 shrink-0 text-[var(--color-text-muted)]" fill="currentColor" strokeWidth={0} />
-              )}
+              {isTitleColumn &&
+                (track.isMissing ? (
+                  <FileWarning
+                    aria-label={t("track.missing")}
+                    className="mr-2 h-3 w-3 shrink-0 text-amber-500"
+                    data-track-missing
+                  >
+                    <title>{t("track.missing")}</title>
+                  </FileWarning>
+                ) : isPlayingTrack ? (
+                  <Play
+                    className={`mr-2 h-3 w-3 shrink-0 text-[var(--color-accent)] ${isCurrentlyPlaying ? "opacity-100" : "opacity-70"}`}
+                    fill="currentColor"
+                  />
+                ) : (
+                  <Circle
+                    className="mr-2 h-2 w-2 shrink-0 text-[var(--color-text-muted)]"
+                    fill="currentColor"
+                    strokeWidth={0}
+                  />
+                ))}
               {camelotColor ? (
                 <span
                   className="block min-w-[34px] truncate rounded-[var(--radius-sm)] px-2 py-0.5 text-center text-[10px] font-bold text-[#172126] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]"
@@ -302,9 +320,11 @@ export const TableRow = memo(
               ) : isArtistLink ? (
                 <ArtistCreditLinks
                   display={value}
-                  credits={column.key === "artist"
-                    ? trackArtistCredits(track)
-                    : albumArtistCredits(track, { fallbackToTrack: false })}
+                  credits={
+                    column.key === "artist"
+                      ? trackArtistCredits(track)
+                      : albumArtistCredits(track, { fallbackToTrack: false })
+                  }
                   kind={column.key === "artists" ? "album" : "track"}
                   onOpenArtist={onOpenArtist!}
                 />
@@ -346,7 +366,9 @@ export const TableRow = memo(
               ) : (
                 <span
                   className="block truncate"
-                  title={column.key === "sourcePath" || column.key === "comment" ? value : undefined}
+                  title={
+                    column.key === "sourcePath" || column.key === "comment" ? value : undefined
+                  }
                 >
                   {value}
                 </span>
@@ -356,5 +378,5 @@ export const TableRow = memo(
         })}
       </div>
     );
-  }
+  },
 );

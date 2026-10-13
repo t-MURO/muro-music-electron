@@ -12,8 +12,7 @@ const WINDOWS_NAMESPACE_PATH = /^[\\/]{2}[?.][\\/]/;
 
 export const PATH_ACCESS_DENIED = "PATH_ACCESS_DENIED";
 
-const comparableKey = (value) =>
-  process.platform === "win32" ? value.toLocaleLowerCase() : value;
+const comparableKey = (value) => (process.platform === "win32" ? value.toLocaleLowerCase() : value);
 
 /**
  * An absolute, normalized path, or null for anything the policy refuses to
@@ -23,10 +22,10 @@ export const normalizeAccessPath = (value) => {
   if (typeof value !== "string") return null;
   const candidate = value.trim();
   if (
-    !candidate
-    || candidate.includes("\0")
-    || WINDOWS_NAMESPACE_PATH.test(candidate)
-    || !path.isAbsolute(candidate)
+    !candidate ||
+    candidate.includes("\0") ||
+    WINDOWS_NAMESPACE_PATH.test(candidate) ||
+    !path.isAbsolute(candidate)
   ) {
     return null;
   }
@@ -39,10 +38,7 @@ export const createPathAccessError = (description = "path") =>
     { code: PATH_ACCESS_DENIED },
   );
 
-export const createPathAccess = ({
-  trustedRoots = () => [],
-  isTrustedFile = () => false,
-} = {}) => {
+export const createPathAccess = ({ trustedRoots = () => [], isTrustedFile = () => false } = {}) => {
   const fileGrants = new Map();
   const directoryGrants = new Map();
 

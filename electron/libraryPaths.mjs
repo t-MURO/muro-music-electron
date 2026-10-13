@@ -13,17 +13,16 @@ export const isAbsoluteTrackPath = (value) => {
 };
 
 export const normalizePortableTrackPath = (value) => {
-  const candidate = String(value ?? "").trim().replace(/\\/g, "/");
+  const candidate = String(value ?? "")
+    .trim()
+    .replace(/\\/g, "/");
   if (!candidate || isAbsoluteTrackPath(candidate)) return null;
 
   const segments = candidate.split("/");
   if (
-    segments.some((segment) => (
-      !segment
-      || segment === "."
-      || segment === ".."
-      || segment.includes("\0")
-    ))
+    segments.some(
+      (segment) => !segment || segment === "." || segment === ".." || segment.includes("\0"),
+    )
   ) {
     return null;
   }
@@ -36,9 +35,7 @@ export const isPathInsideLibraryRoot = (candidatePath, libraryRoot) => {
   const candidate = path.resolve(String(candidatePath ?? ""));
   const relative = path.relative(root, candidate);
   return relative !== ""
-    ? relative !== ".."
-      && !relative.startsWith(`..${path.sep}`)
-      && !path.isAbsolute(relative)
+    ? relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
     : true;
 };
 

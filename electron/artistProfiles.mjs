@@ -16,20 +16,25 @@ const DEEZER_API_ROOT = "https://api.deezer.com";
 const BRAVE_IMAGE_SEARCH_ROOT = "https://api.search.brave.com/res/v1/images/search";
 const BRAVE_IMAGE_RESULT_COUNT = 15;
 
-export const normalizeArtistKey = (artistName) => String(artistName ?? "")
-  .normalize("NFKC")
-  .trim()
-  .replace(/\s+/g, " ")
-  .toLocaleLowerCase();
+export const normalizeArtistKey = (artistName) =>
+  String(artistName ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
 
 const sleep = (durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs));
 
 const readCachedProfile = (db, artistKey) => {
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT profile_json, fetched_at
     FROM artist_profiles
     WHERE artist_key = ?
-  `).get(artistKey);
+  `,
+    )
+    .get(artistKey);
   if (!row) return null;
   try {
     return {
@@ -42,14 +47,16 @@ const readCachedProfile = (db, artistKey) => {
 };
 
 const writeCachedProfile = (db, artistKey, requestedName, profile, fetchedAtMs) => {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO artist_profiles(artist_key, requested_name, profile_json, fetched_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(artist_key) DO UPDATE SET
       requested_name = excluded.requested_name,
       profile_json = excluded.profile_json,
       fetched_at = excluded.fetched_at
-  `).run(artistKey, requestedName, JSON.stringify(profile), Math.floor(fetchedAtMs / 1_000));
+  `,
+  ).run(artistKey, requestedName, JSON.stringify(profile), Math.floor(fetchedAtMs / 1_000));
 };
 
 const cachedProfileNeedsRefresh = (
@@ -58,36 +65,35 @@ const cachedProfileNeedsRefresh = (
   { fanartApiKey = "", lastFmApiKey = "", theAudioDbApiKey = "" } = {},
 ) => {
   if (!cached) return true;
-  const ttlMs = cached.profile?.status === "not-found"
-    ? NOT_FOUND_CACHE_TTL_MS
-    : DEFAULT_CACHE_TTL_MS;
+  const ttlMs =
+    cached.profile?.status === "not-found" ? NOT_FOUND_CACHE_TTL_MS : DEFAULT_CACHE_TTL_MS;
   const shouldTryConfiguredTheAudioDb = Boolean(
-    String(theAudioDbApiKey).trim()
-    && cached.profile?.status === "ready"
-    && !cached.profile.theAudioDbAttempted,
+    String(theAudioDbApiKey).trim() &&
+    cached.profile?.status === "ready" &&
+    !cached.profile.theAudioDbAttempted,
   );
   const shouldTryConfiguredLastFm = Boolean(
-    String(lastFmApiKey).trim()
-    && cached.profile?.status === "ready"
-    && !cached.profile.lastFmAttempted,
+    String(lastFmApiKey).trim() &&
+    cached.profile?.status === "ready" &&
+    !cached.profile.lastFmAttempted,
   );
   const shouldTryConfiguredFanart = Boolean(
-    String(fanartApiKey).trim()
-    && cached.profile?.status === "ready"
-    && cached.profile.imageSelection !== "manual"
-    && (
-      (!cached.profile.imagePath && !cached.profile.imageUrl)
-      || cached.profile.imageProvider === "theaudiodb"
-    )
-    && !cached.profile.fanartAttempted,
+    String(fanartApiKey).trim() &&
+    cached.profile?.status === "ready" &&
+    cached.profile.imageSelection !== "manual" &&
+    ((!cached.profile.imagePath && !cached.profile.imageUrl) ||
+      cached.profile.imageProvider === "theaudiodb") &&
+    !cached.profile.fanartAttempted,
   );
-  const needsProfileUpgrade = cached.profile?.status === "ready"
-    && cached.profile.profileVersion !== PROFILE_VERSION;
-  return needsProfileUpgrade
-    || shouldTryConfiguredLastFm
-    || shouldTryConfiguredTheAudioDb
-    || shouldTryConfiguredFanart
-    || nowMs - cached.fetchedAtMs >= ttlMs;
+  const needsProfileUpgrade =
+    cached.profile?.status === "ready" && cached.profile.profileVersion !== PROFILE_VERSION;
+  return (
+    needsProfileUpgrade ||
+    shouldTryConfiguredLastFm ||
+    shouldTryConfiguredTheAudioDb ||
+    shouldTryConfiguredFanart ||
+    nowMs - cached.fetchedAtMs >= ttlMs
+  );
 };
 
 const requestedMusicBrainzId = ({ artistId = "", musicBrainzId = "" } = {}) => {
@@ -95,7 +101,7 @@ const requestedMusicBrainzId = ({ artistId = "", musicBrainzId = "" } = {}) => {
   if (explicit) return explicit;
   const identity = String(artistId ?? "");
   return identity.startsWith("mbid:")
-    ? identity.slice("mbid:".length).match(MUSICBRAINZ_ID)?.[0] ?? null
+    ? (identity.slice("mbid:".length).match(MUSICBRAINZ_ID)?.[0] ?? null)
     : null;
 };
 
@@ -112,19 +118,25 @@ const findStoredMusicBrainzId = (db, artistName, identity = {}) => {
   if (explicit) return explicit;
   const localArtistId = String(identity?.artistId ?? "").trim();
   if (localArtistId && !localArtistId.includes(":")) {
-    const localEntity = db.prepare(`
+    const localEntity = db
+      .prepare(
+        `
       SELECT musicbrainz_id
       FROM artist_entities
       WHERE id = ?
         AND musicbrainz_id IS NOT NULL
         AND TRIM(musicbrainz_id) != ''
       LIMIT 1
-    `).get(localArtistId);
+    `,
+      )
+      .get(localArtistId);
     const localId = String(localEntity?.musicbrainz_id ?? "").match(MUSICBRAINZ_ID)?.[0];
     if (localId) return localId;
   }
   const artistKey = normalizeArtistKey(artistName);
-  const structured = db.prepare(`
+  const structured = db
+    .prepare(
+      `
     SELECT entities.musicbrainz_id
     FROM artist_entities AS entities
     JOIN track_artist_credits AS credits
@@ -134,18 +146,24 @@ const findStoredMusicBrainzId = (db, artistName, identity = {}) => {
       AND TRIM(entities.musicbrainz_id) != ''
     ORDER BY credits.scope = 'track' DESC, credits.position
     LIMIT 1
-  `).get(artistKey);
+  `,
+    )
+    .get(artistKey);
   const structuredId = String(structured?.musicbrainz_id ?? "").match(MUSICBRAINZ_ID)?.[0];
   if (structuredId) return structuredId;
 
-  const legacy = db.prepare(`
+  const legacy = db
+    .prepare(
+      `
     SELECT musicbrainz_artistid
     FROM tracks
     WHERE LOWER(TRIM(artist)) = LOWER(TRIM(?))
       AND musicbrainz_artistid IS NOT NULL
       AND musicbrainz_artistid != ''
     LIMIT 1
-  `).get(artistName);
+  `,
+    )
+    .get(artistName);
   return String(legacy?.musicbrainz_artistid ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null;
 };
 
@@ -155,8 +173,9 @@ const pickArtist = (artists, requestedName) => {
   const requestedKey = normalizeArtistKey(requestedName);
   const exact = artists.filter((artist) => {
     if (normalizeArtistKey(artist?.name) === requestedKey) return true;
-    return Array.isArray(artist?.aliases) && artist.aliases.some(
-      (alias) => normalizeArtistKey(alias?.name) === requestedKey,
+    return (
+      Array.isArray(artist?.aliases) &&
+      artist.aliases.some((alias) => normalizeArtistKey(alias?.name) === requestedKey)
     );
   });
   const candidates = exact.length > 0 ? exact : artists;
@@ -168,18 +187,22 @@ const wikipediaRelation = (relations) => {
     .filter((relation) => relation?.type === "wikipedia")
     .map((relation) => relation?.url?.resource)
     .filter(Boolean);
-  return resources.find((resource) => {
-    try {
-      return new URL(resource).hostname === "en.wikipedia.org";
-    } catch {
-      return false;
-    }
-  }) ?? resources[0] ?? null;
+  return (
+    resources.find((resource) => {
+      try {
+        return new URL(resource).hostname === "en.wikipedia.org";
+      } catch {
+        return false;
+      }
+    }) ??
+    resources[0] ??
+    null
+  );
 };
 
-const wikidataRelation = (relations) => (Array.isArray(relations) ? relations : [])
-  .find((relation) => relation?.type === "wikidata")
-  ?.url?.resource ?? null;
+const wikidataRelation = (relations) =>
+  (Array.isArray(relations) ? relations : []).find((relation) => relation?.type === "wikidata")?.url
+    ?.resource ?? null;
 
 const parseWikipediaTarget = (resource) => {
   try {
@@ -196,7 +219,10 @@ const parseWikipediaTarget = (resource) => {
 };
 
 const imageExtension = (contentType, imageUrl) => {
-  const normalizedType = String(contentType ?? "").split(";")[0].trim().toLocaleLowerCase();
+  const normalizedType = String(contentType ?? "")
+    .split(";")[0]
+    .trim()
+    .toLocaleLowerCase();
   const byType = {
     "image/gif": ".gif",
     "image/jpeg": ".jpg",
@@ -235,50 +261,51 @@ const secureWikimediaUrl = (value) => {
     : null;
 };
 
-const nonEmptyString = (...values) => values
-  .map((value) => String(value ?? "").trim())
-  .find(Boolean) ?? null;
+const nonEmptyString = (...values) =>
+  values.map((value) => String(value ?? "").trim()).find(Boolean) ?? null;
 
-const decodeHtmlEntities = (value) => String(value ?? "")
-  .replace(/&#(x?[0-9a-f]+);/gi, (match, code) => {
-    const numeric = String(code).toLocaleLowerCase().startsWith("x")
-      ? Number.parseInt(String(code).slice(1), 16)
-      : Number.parseInt(String(code), 10);
-    try {
-      return Number.isFinite(numeric) ? String.fromCodePoint(numeric) : match;
-    } catch {
-      return match;
-    }
-  })
-  .replace(/&amp;/gi, "&")
-  .replace(/&quot;/gi, '"')
-  .replace(/&#39;|&apos;/gi, "'")
-  .replace(/&lt;/gi, "<")
-  .replace(/&gt;/gi, ">");
-
-const cleanHtmlText = (value, maxLength = 1_000) => decodeHtmlEntities(
+const decodeHtmlEntities = (value) =>
   String(value ?? "")
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, " "),
-)
-  .replace(/\s+/g, " ")
-  .trim()
-  .slice(0, maxLength) || null;
+    .replace(/&#(x?[0-9a-f]+);/gi, (match, code) => {
+      const numeric = String(code).toLocaleLowerCase().startsWith("x")
+        ? Number.parseInt(String(code).slice(1), 16)
+        : Number.parseInt(String(code), 10);
+      try {
+        return Number.isFinite(numeric) ? String.fromCodePoint(numeric) : match;
+      } catch {
+        return match;
+      }
+    })
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
 
-const cleanLastFmText = (value) => cleanHtmlText(
-  String(value ?? "")
-    .replace(/<a\b[^>]*>\s*Read more(?: on Last\.fm)?\s*<\/a>/gi, " "),
-  8_000,
-);
+const cleanHtmlText = (value, maxLength = 1_000) =>
+  decodeHtmlEntities(
+    String(value ?? "")
+      .replace(/<br\s*\/?\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength) || null;
+
+const cleanLastFmText = (value) =>
+  cleanHtmlText(
+    String(value ?? "").replace(/<a\b[^>]*>\s*Read more(?: on Last\.fm)?\s*<\/a>/gi, " "),
+    8_000,
+  );
 
 const wikidataImageFile = (entity) => {
   const statements = Array.isArray(entity?.claims?.P18) ? entity.claims.P18 : [];
-  const selected = statements.find((statement) => (
-    statement?.rank === "preferred"
-    && typeof statement?.mainsnak?.datavalue?.value === "string"
-  )) ?? statements.find((statement) => (
-    typeof statement?.mainsnak?.datavalue?.value === "string"
-  ));
+  const selected =
+    statements.find(
+      (statement) =>
+        statement?.rank === "preferred" &&
+        typeof statement?.mainsnak?.datavalue?.value === "string",
+    ) ?? statements.find((statement) => typeof statement?.mainsnak?.datavalue?.value === "string");
   return nonEmptyString(selected?.mainsnak?.datavalue?.value);
 };
 
@@ -305,11 +332,13 @@ const lastFmSimilarArtists = (artist) => {
       const key = normalizeArtistKey(name);
       if (!name || !key || seen.has(key)) return [];
       seen.add(key);
-      return [{
-        name,
-        musicBrainzId: String(candidate?.mbid ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null,
-        url: secureUrl(candidate?.url),
-      }];
+      return [
+        {
+          name,
+          musicBrainzId: String(candidate?.mbid ?? "").match(MUSICBRAINZ_ID)?.[0] ?? null,
+          url: secureUrl(candidate?.url),
+        },
+      ];
     })
     .slice(0, 8);
 };
@@ -328,51 +357,50 @@ const theAudioDbGenres = (artist) => {
     .slice(0, 8);
 };
 
-const theAudioDbImage = (artist) => [
-  artist?.strArtistThumb,
-  artist?.strArtistFanart,
-  artist?.strArtistFanart2,
-  artist?.strArtistFanart3,
-]
-  .map(secureImageUrl)
-  .find(Boolean) ?? null;
+const theAudioDbImage = (artist) =>
+  [
+    artist?.strArtistThumb,
+    artist?.strArtistFanart,
+    artist?.strArtistFanart2,
+    artist?.strArtistFanart3,
+  ]
+    .map(secureImageUrl)
+    .find(Boolean) ?? null;
 
-const pickFanartArtistImage = (payload) => (Array.isArray(payload?.artistthumb)
-  ? payload.artistthumb
-  : [])
-  .map((image) => ({
-    url: secureImageUrl(image?.url),
-    likes: Number(image?.likes ?? 0),
-    pixels: Number(image?.width ?? 0) * Number(image?.height ?? 0),
-  }))
-  .filter((candidate) => Boolean(candidate.url))
-  .sort((left, right) => right.likes - left.likes || right.pixels - left.pixels)[0] ?? null;
+const pickFanartArtistImage = (payload) =>
+  (Array.isArray(payload?.artistthumb) ? payload.artistthumb : [])
+    .map((image) => ({
+      url: secureImageUrl(image?.url),
+      likes: Number(image?.likes ?? 0),
+      pixels: Number(image?.width ?? 0) * Number(image?.height ?? 0),
+    }))
+    .filter((candidate) => Boolean(candidate.url))
+    .sort((left, right) => right.likes - left.likes || right.pixels - left.pixels)[0] ?? null;
 
-const artistImageCandidateId = (provider, imageUrl) => crypto
-  .createHash("sha256")
-  .update(`${provider}:${imageUrl}`)
-  .digest("hex");
+const artistImageCandidateId = (provider, imageUrl) =>
+  crypto.createHash("sha256").update(`${provider}:${imageUrl}`).digest("hex");
 
-const fanartArtistImages = (payload, musicBrainzId) => (Array.isArray(payload?.artistthumb)
-  ? payload.artistthumb
-  : [])
-  .flatMap((image) => {
-    const imageUrl = secureImageUrl(image?.url);
-    if (!imageUrl) return [];
-    return [{
-      id: artistImageCandidateId("fanart.tv", imageUrl),
-      provider: "fanart.tv",
-      imageUrl,
-      sourceUrl: `https://fanart.tv/artist/${musicBrainzId}/`,
-      attribution: "Fanart.tv contributor",
-      license: null,
-      licenseUrl: null,
-      width: Number(image?.width ?? 0) || null,
-      height: Number(image?.height ?? 0) || null,
-      score: Number(image?.likes ?? 0),
-    }];
-  })
-  .sort((left, right) => right.score - left.score || (right.width ?? 0) - (left.width ?? 0));
+const fanartArtistImages = (payload, musicBrainzId) =>
+  (Array.isArray(payload?.artistthumb) ? payload.artistthumb : [])
+    .flatMap((image) => {
+      const imageUrl = secureImageUrl(image?.url);
+      if (!imageUrl) return [];
+      return [
+        {
+          id: artistImageCandidateId("fanart.tv", imageUrl),
+          provider: "fanart.tv",
+          imageUrl,
+          sourceUrl: `https://fanart.tv/artist/${musicBrainzId}/`,
+          attribution: "Fanart.tv contributor",
+          license: null,
+          licenseUrl: null,
+          width: Number(image?.width ?? 0) || null,
+          height: Number(image?.height ?? 0) || null,
+          score: Number(image?.likes ?? 0),
+        },
+      ];
+    })
+    .sort((left, right) => right.score - left.score || (right.width ?? 0) - (left.width ?? 0));
 
 const theAudioDbArtistImages = (artist) => {
   const sourceUrl = nonEmptyString(artist?.idArtist)
@@ -388,18 +416,20 @@ const theAudioDbArtistImages = (artist) => {
     const imageUrl = secureImageUrl(value);
     if (!imageUrl || seen.has(imageUrl)) return [];
     seen.add(imageUrl);
-    return [{
-      id: artistImageCandidateId("theaudiodb", imageUrl),
-      provider: "theaudiodb",
-      imageUrl,
-      sourceUrl,
-      attribution: "TheAudioDB contributor",
-      license: nonEmptyString(artist?.strCreativeCommons),
-      licenseUrl: null,
-      width: null,
-      height: null,
-      score,
-    }];
+    return [
+      {
+        id: artistImageCandidateId("theaudiodb", imageUrl),
+        provider: "theaudiodb",
+        imageUrl,
+        sourceUrl,
+        attribution: "TheAudioDB contributor",
+        license: nonEmptyString(artist?.strCreativeCommons),
+        licenseUrl: null,
+        width: null,
+        height: null,
+        score,
+      },
+    ];
   });
 };
 
@@ -407,13 +437,15 @@ const profileArtistImage = (profile) => {
   const imageUrl = secureImageUrl(profile?.imageUrl);
   const provider = profile?.imageProvider;
   if (!imageUrl || !provider) return null;
-  const sourceUrl = profile.imageSourceUrl || (provider === "wikimedia-commons"
-    ? profile.wikimediaCommonsUrl
-    : provider === "wikipedia"
-      ? profile.wikipediaUrl
-      : provider === "fanart.tv"
-        ? profile.fanartUrl
-        : profile.theAudioDbUrl);
+  const sourceUrl =
+    profile.imageSourceUrl ||
+    (provider === "wikimedia-commons"
+      ? profile.wikimediaCommonsUrl
+      : provider === "wikipedia"
+        ? profile.wikipediaUrl
+        : provider === "fanart.tv"
+          ? profile.fanartUrl
+          : profile.theAudioDbUrl);
   return {
     id: artistImageCandidateId(provider, imageUrl),
     provider,
@@ -463,10 +495,8 @@ const wikipediaArtistImage = (summary) => {
   };
 };
 
-const braveArtistImages = (payload, searchUrl) => (Array.isArray(payload?.results)
-  ? payload.results
-  : [])
-  .flatMap((result, index) => {
+const braveArtistImages = (payload, searchUrl) =>
+  (Array.isArray(payload?.results) ? payload.results : []).flatMap((result, index) => {
     const imageUrl = secureImageUrl(result?.thumbnail?.src);
     if (!imageUrl || new URL(imageUrl).hostname.toLocaleLowerCase() !== "imgs.search.brave.com") {
       return [];
@@ -475,63 +505,67 @@ const braveArtistImages = (payload, searchUrl) => (Array.isArray(payload?.result
       nonEmptyString(result?.source, result?.meta_url?.hostname),
       200,
     );
-    const confidenceScore = {
-      high: 3,
-      medium: 2,
-      low: 1,
-    }[String(result?.confidence ?? "").toLocaleLowerCase()] ?? 0;
-    return [{
-      id: artistImageCandidateId("brave-search", imageUrl),
-      provider: "brave-search",
-      imageUrl,
-      sourceUrl: searchUrl,
-      sourceName,
-      title: cleanHtmlText(result?.title, 500),
-      attribution: sourceName,
-      license: null,
-      licenseUrl: null,
-      width: Number(result?.properties?.width ?? 0) || null,
-      height: Number(result?.properties?.height ?? 0) || null,
-      score: confidenceScore * 1_000 - index,
-    }];
+    const confidenceScore =
+      {
+        high: 3,
+        medium: 2,
+        low: 1,
+      }[String(result?.confidence ?? "").toLocaleLowerCase()] ?? 0;
+    return [
+      {
+        id: artistImageCandidateId("brave-search", imageUrl),
+        provider: "brave-search",
+        imageUrl,
+        sourceUrl: searchUrl,
+        sourceName,
+        title: cleanHtmlText(result?.title, 500),
+        attribution: sourceName,
+        license: null,
+        licenseUrl: null,
+        width: Number(result?.properties?.width ?? 0) || null,
+        height: Number(result?.properties?.height ?? 0) || null,
+        score: confidenceScore * 1_000 - index,
+      },
+    ];
   });
 
-const deezerArtistImages = (payload, requestedName) => (Array.isArray(payload?.data)
-  ? payload.data
-  : [])
-  .flatMap((artist, index) => {
-    const artistId = Number(artist?.id);
-    const artistName = cleanHtmlText(artist?.name, 200);
-    const imageUrl = secureImageUrl(
-      artist?.picture_xl || artist?.picture_big || artist?.picture_medium,
-    );
-    if (
-      !Number.isSafeInteger(artistId)
-      || artistId <= 0
-      || !artistName
-      || !imageUrl
-      || new URL(imageUrl).hostname.toLocaleLowerCase() !== "cdn-images.dzcdn.net"
-      || new URL(imageUrl).pathname.includes("/images/artist//")
-    ) {
-      return [];
-    }
-    const exactMatch = normalizeArtistKey(artistName) === normalizeArtistKey(requestedName);
-    return [{
-      id: artistImageCandidateId("deezer", imageUrl),
-      provider: "deezer",
-      imageUrl,
-      sourceUrl: `https://www.deezer.com/artist/${artistId}`,
-      sourceName: artistName,
-      title: `${artistName} on Deezer`,
-      attribution: "Deezer",
-      license: null,
-      licenseUrl: null,
-      width: artist?.picture_xl ? 1_000 : null,
-      height: artist?.picture_xl ? 1_000 : null,
-      score: (exactMatch ? 10_000 : 1_000) - index,
-    }];
-  })
-  .sort((left, right) => right.score - left.score);
+const deezerArtistImages = (payload, requestedName) =>
+  (Array.isArray(payload?.data) ? payload.data : [])
+    .flatMap((artist, index) => {
+      const artistId = Number(artist?.id);
+      const artistName = cleanHtmlText(artist?.name, 200);
+      const imageUrl = secureImageUrl(
+        artist?.picture_xl || artist?.picture_big || artist?.picture_medium,
+      );
+      if (
+        !Number.isSafeInteger(artistId) ||
+        artistId <= 0 ||
+        !artistName ||
+        !imageUrl ||
+        new URL(imageUrl).hostname.toLocaleLowerCase() !== "cdn-images.dzcdn.net" ||
+        new URL(imageUrl).pathname.includes("/images/artist//")
+      ) {
+        return [];
+      }
+      const exactMatch = normalizeArtistKey(artistName) === normalizeArtistKey(requestedName);
+      return [
+        {
+          id: artistImageCandidateId("deezer", imageUrl),
+          provider: "deezer",
+          imageUrl,
+          sourceUrl: `https://www.deezer.com/artist/${artistId}`,
+          sourceName: artistName,
+          title: `${artistName} on Deezer`,
+          attribution: "Deezer",
+          license: null,
+          licenseUrl: null,
+          width: artist?.picture_xl ? 1_000 : null,
+          height: artist?.picture_xl ? 1_000 : null,
+          score: (exactMatch ? 10_000 : 1_000) - index,
+        },
+      ];
+    })
+    .sort((left, right) => right.score - left.score);
 
 const validateCandidateImageUrl = (provider, value) => {
   const imageUrl = secureImageUrl(value);
@@ -546,9 +580,7 @@ const validateCandidateImageUrl = (provider, value) => {
     return hostname === "fanart.tv" || hostname.endsWith(".fanart.tv") ? imageUrl : null;
   }
   if (provider === "theaudiodb") {
-    return hostname === "theaudiodb.com" || hostname.endsWith(".theaudiodb.com")
-      ? imageUrl
-      : null;
+    return hostname === "theaudiodb.com" || hostname.endsWith(".theaudiodb.com") ? imageUrl : null;
   }
   if (provider === "brave-search") {
     return hostname === "imgs.search.brave.com" ? imageUrl : null;
@@ -617,14 +649,20 @@ export const createArtistProfileService = ({
     if (!resource) return null;
     const entityId = String(resource).match(/Q\d+/i)?.[0]?.toUpperCase();
     if (!entityId) return null;
-    const data = await fetchJson(`https://www.wikidata.org/wiki/Special:EntityData/${entityId}.json`);
+    const data = await fetchJson(
+      `https://www.wikidata.org/wiki/Special:EntityData/${entityId}.json`,
+    );
     const entity = data?.entities?.[entityId];
-    const sitelink = entity?.sitelinks?.enwiki ?? Object.entries(entity?.sitelinks ?? {})
-      .find(([key]) => key.endsWith("wiki") && !key.includes("commons"))?.[1];
+    const sitelink =
+      entity?.sitelinks?.enwiki ??
+      Object.entries(entity?.sitelinks ?? {}).find(
+        ([key]) => key.endsWith("wiki") && !key.includes("commons"),
+      )?.[1];
     let wikipediaTarget = null;
     if (sitelink?.title) {
-      const languageKey = Object.entries(entity?.sitelinks ?? {})
-        .find(([, value]) => value === sitelink)?.[0] ?? "enwiki";
+      const languageKey =
+        Object.entries(entity?.sitelinks ?? {}).find(([, value]) => value === sitelink)?.[0] ??
+        "enwiki";
       const language = languageKey.slice(0, -"wiki".length) || "en";
       wikipediaTarget = {
         hostname: `${language}.wikipedia.org`,
@@ -649,7 +687,10 @@ export const createArtistProfileService = ({
       description: summary.description || null,
       imageUrl: summary.thumbnail?.source || summary.originalimage?.source || null,
       wikipediaUrl: summary.content_urls?.desktop?.page || target.url,
-      wikibaseItem: String(summary.wikibase_item ?? "").match(/Q\d+/i)?.[0]?.toUpperCase() ?? null,
+      wikibaseItem:
+        String(summary.wikibase_item ?? "")
+          .match(/Q\d+/i)?.[0]
+          ?.toUpperCase() ?? null,
     };
   };
 
@@ -675,14 +716,17 @@ export const createArtistProfileService = ({
     const metadata = imageInfo?.extmetadata ?? {};
     return {
       imageUrl,
-      commonsUrl: secureWikimediaUrl(imageInfo?.descriptionurl)
-        || `https://commons.wikimedia.org/wiki/${encodeURIComponent(`File:${fileName}`.replace(/ /g, "_"))}`,
-      attribution: cleanHtmlText(metadata?.Artist?.value)
-        || cleanHtmlText(metadata?.Credit?.value)
-        || "Wikimedia Commons contributor",
-      license: cleanHtmlText(metadata?.LicenseShortName?.value)
-        || cleanHtmlText(metadata?.UsageTerms?.value)
-        || "See file page for license",
+      commonsUrl:
+        secureWikimediaUrl(imageInfo?.descriptionurl) ||
+        `https://commons.wikimedia.org/wiki/${encodeURIComponent(`File:${fileName}`.replace(/ /g, "_"))}`,
+      attribution:
+        cleanHtmlText(metadata?.Artist?.value) ||
+        cleanHtmlText(metadata?.Credit?.value) ||
+        "Wikimedia Commons contributor",
+      license:
+        cleanHtmlText(metadata?.LicenseShortName?.value) ||
+        cleanHtmlText(metadata?.UsageTerms?.value) ||
+        "See file page for license",
       licenseUrl: secureUrl(metadata?.LicenseUrl?.value),
     };
   };
@@ -727,7 +771,7 @@ export const createArtistProfileService = ({
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`TheAudioDB request failed (${response.status})`);
     const payload = await response.json();
-    return Array.isArray(payload?.lookup) ? payload.lookup[0] ?? null : null;
+    return Array.isArray(payload?.lookup) ? (payload.lookup[0] ?? null) : null;
   };
 
   const fetchLastFmArtist = async (musicBrainzId, apiKey) => {
@@ -757,7 +801,9 @@ export const createArtistProfileService = ({
   };
 
   const fetchBraveArtistImages = async (artistName, apiKey) => {
-    const normalizedArtistName = String(artistName ?? "").replaceAll('"', " ").trim();
+    const normalizedArtistName = String(artistName ?? "")
+      .replaceAll('"', " ")
+      .trim();
     const query = `"${normalizedArtistName}" musician DJ artist portrait`;
     const requestUrl = new URL(BRAVE_IMAGE_SEARCH_ROOT);
     requestUrl.search = new URLSearchParams({
@@ -773,9 +819,10 @@ export const createArtistProfileService = ({
         "User-Agent": userAgent,
         "X-Subscription-Token": String(apiKey).trim(),
       },
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(15_000)
-        : undefined,
+      signal:
+        typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(15_000)
+          : undefined,
     });
     if (response.status === 401 || response.status === 403) {
       throw new Error("The Brave Search API key was rejected");
@@ -801,9 +848,10 @@ export const createArtistProfileService = ({
         Accept: "application/json",
         "User-Agent": userAgent,
       },
-      signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-        ? AbortSignal.timeout(15_000)
-        : undefined,
+      signal:
+        typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+          ? AbortSignal.timeout(15_000)
+          : undefined,
     });
     if (!response.ok) throw new Error(`Deezer artist search failed (${response.status})`);
     const payload = await response.json();
@@ -863,7 +911,10 @@ export const createArtistProfileService = ({
         limit: "5",
       }).toString();
       const search = await fetchMusicBrainzJson(searchUrl.toString());
-      const artist = pickArtist(Array.isArray(search?.artists) ? search.artists : [], requestedName);
+      const artist = pickArtist(
+        Array.isArray(search?.artists) ? search.artists : [],
+        requestedName,
+      );
       if (!artist?.id || artistScore(artist) < 70) {
         return {
           profileVersion: PROFILE_VERSION,
@@ -997,40 +1048,44 @@ export const createArtistProfileService = ({
       type: artist?.type || null,
       country: artist?.country || nonEmptyString(theAudioDb?.strCountry),
       area: artist?.area?.name || artist?.["begin-area"]?.name || null,
-      begin: artist?.["life-span"]?.begin
-        || nonEmptyString(theAudioDb?.intFormedYear, theAudioDb?.intBornYear),
+      begin:
+        artist?.["life-span"]?.begin ||
+        nonEmptyString(theAudioDb?.intFormedYear, theAudioDb?.intBornYear),
       end: artist?.["life-span"]?.end || null,
       ended: Boolean(artist?.["life-span"]?.ended),
-      genres: musicBrainzGenres.length > 0
-        ? musicBrainzGenres
-        : lastFmGenres.length > 0
-          ? lastFmGenres
-          : premiumGenres,
+      genres:
+        musicBrainzGenres.length > 0
+          ? musicBrainzGenres
+          : lastFmGenres.length > 0
+            ? lastFmGenres
+            : premiumGenres,
       description: wikipedia?.description || null,
-      biography: wikipedia?.biography
-        || cleanLastFmText(lastFm?.bio?.content)
-        || cleanLastFmText(lastFm?.bio?.summary)
-        || nonEmptyString(theAudioDb?.strBiography, theAudioDb?.strBiographyEN),
+      biography:
+        wikipedia?.biography ||
+        cleanLastFmText(lastFm?.bio?.content) ||
+        cleanLastFmText(lastFm?.bio?.summary) ||
+        nonEmptyString(theAudioDb?.strBiography, theAudioDb?.strBiographyEN),
       imagePath,
       imageUrl,
       imageProvider,
-      imageAttribution: imageProvider === "wikimedia-commons"
-        ? wikimediaCommons?.attribution ?? null
-        : imageProvider === "fanart.tv"
-          ? "Fanart.tv contributor"
+      imageAttribution:
+        imageProvider === "wikimedia-commons"
+          ? (wikimediaCommons?.attribution ?? null)
+          : imageProvider === "fanart.tv"
+            ? "Fanart.tv contributor"
+            : imageProvider === "theaudiodb"
+              ? "TheAudioDB contributor"
+              : imageProvider === "wikipedia"
+                ? "Wikipedia contributor"
+                : null,
+      imageLicense:
+        imageProvider === "wikimedia-commons"
+          ? (wikimediaCommons?.license ?? null)
           : imageProvider === "theaudiodb"
-            ? "TheAudioDB contributor"
-            : imageProvider === "wikipedia"
-              ? "Wikipedia contributor"
-              : null,
-      imageLicense: imageProvider === "wikimedia-commons"
-        ? wikimediaCommons?.license ?? null
-        : imageProvider === "theaudiodb"
-          ? nonEmptyString(theAudioDb?.strCreativeCommons)
-          : null,
-      imageLicenseUrl: imageProvider === "wikimedia-commons"
-        ? wikimediaCommons?.licenseUrl ?? null
-        : null,
+            ? nonEmptyString(theAudioDb?.strCreativeCommons)
+            : null,
+      imageLicenseUrl:
+        imageProvider === "wikimedia-commons" ? (wikimediaCommons?.licenseUrl ?? null) : null,
       lastFmAttempted,
       lastFmUrl: secureUrl(lastFm?.url),
       similarArtists,
@@ -1047,16 +1102,17 @@ export const createArtistProfileService = ({
     };
   };
 
-  const loadCachedProfiles = (db) => db
-    .prepare("SELECT profile_json FROM artist_profiles ORDER BY requested_name COLLATE NOCASE")
-    .all()
-    .flatMap((row) => {
-      try {
-        return [JSON.parse(row.profile_json)];
-      } catch {
-        return [];
-      }
-    });
+  const loadCachedProfiles = (db) =>
+    db
+      .prepare("SELECT profile_json FROM artist_profiles ORDER BY requested_name COLLATE NOCASE")
+      .all()
+      .flatMap((row) => {
+        try {
+          return [JSON.parse(row.profile_json)];
+        } catch {
+          return [];
+        }
+      });
 
   const getProfile = async (
     db,
@@ -1075,11 +1131,14 @@ export const createArtistProfileService = ({
     if (!artistKey) throw new Error("Artist name is required");
 
     const cached = readCachedProfile(db, artistKey);
-    if (!force && !cachedProfileNeedsRefresh(cached, now(), {
-      fanartApiKey,
-      lastFmApiKey,
-      theAudioDbApiKey,
-    })) {
+    if (
+      !force &&
+      !cachedProfileNeedsRefresh(cached, now(), {
+        fanartApiKey,
+        lastFmApiKey,
+        theAudioDbApiKey,
+      })
+    ) {
       return { ...cached.profile, cacheState: "fresh" };
     }
 
@@ -1192,7 +1251,7 @@ export const createArtistProfileService = ({
     }
 
     try {
-      candidates.push(...await fetchDeezerArtistImages(requestedName));
+      candidates.push(...(await fetchDeezerArtistImages(requestedName)));
     } catch (error) {
       console.warn(`Could not search Deezer images for ${requestedName}:`, error);
     }
@@ -1200,7 +1259,7 @@ export const createArtistProfileService = ({
     let braveError = null;
     if (String(braveSearchApiKey).trim()) {
       try {
-        candidates.push(...await fetchBraveArtistImages(requestedName, braveSearchApiKey));
+        candidates.push(...(await fetchBraveArtistImages(requestedName, braveSearchApiKey)));
       } catch (error) {
         braveError = error;
         console.warn(`Could not search Brave images for ${requestedName}:`, error);
@@ -1225,11 +1284,12 @@ export const createArtistProfileService = ({
         seen.add(candidate.imageUrl);
         return true;
       })
-      .sort((left, right) => (
-        Number(Boolean(right.current)) - Number(Boolean(left.current))
-        || (providerRank[left.provider] ?? 99) - (providerRank[right.provider] ?? 99)
-        || right.score - left.score
-      ));
+      .sort(
+        (left, right) =>
+          Number(Boolean(right.current)) - Number(Boolean(left.current)) ||
+          (providerRank[left.provider] ?? 99) - (providerRank[right.provider] ?? 99) ||
+          right.score - left.score,
+      );
   };
 
   const setImage = async (db, artistName, candidate, identity = {}) => {
@@ -1258,9 +1318,8 @@ export const createArtistProfileService = ({
       imageLicenseUrl: secureUrl(candidate?.licenseUrl),
       imageSourceUrl: sourceUrl,
       imageSelection: "manual",
-      wikimediaCommonsUrl: provider === "wikimedia-commons"
-        ? sourceUrl
-        : cached.profile.wikimediaCommonsUrl,
+      wikimediaCommonsUrl:
+        provider === "wikimedia-commons" ? sourceUrl : cached.profile.wikimediaCommonsUrl,
       wikipediaUrl: provider === "wikipedia" ? sourceUrl : cached.profile.wikipediaUrl,
       fanartUrl: provider === "fanart.tv" ? sourceUrl : cached.profile.fanartUrl,
       theAudioDbUrl: provider === "theaudiodb" ? sourceUrl : cached.profile.theAudioDbUrl,
@@ -1271,9 +1330,9 @@ export const createArtistProfileService = ({
     const previousImagePath = cached.profile.imagePath;
     const resolvedCacheDir = path.resolve(cacheDir);
     if (
-      previousImagePath
-      && previousImagePath !== imagePath
-      && path.resolve(previousImagePath).startsWith(`${resolvedCacheDir}${path.sep}`)
+      previousImagePath &&
+      previousImagePath !== imagePath &&
+      path.resolve(previousImagePath).startsWith(`${resolvedCacheDir}${path.sep}`)
     ) {
       await fs.promises.rm(previousImagePath, { force: true }).catch(() => undefined);
     }
@@ -1287,7 +1346,9 @@ export const createArtistProfileService = ({
     if (scanInFlight.has(db)) return scanInFlight.get(db);
     const pending = (async () => {
       const artistRows = [
-        ...db.prepare(`
+        ...db
+          .prepare(
+            `
           SELECT
             entities.canonical_name AS artist,
             entities.normalized_name AS artist_key,
@@ -1299,8 +1360,12 @@ export const createArtistProfileService = ({
           JOIN tracks
             ON tracks.id = credits.track_id
           GROUP BY entities.id
-        `).all(),
-        ...db.prepare(`
+        `,
+          )
+          .all(),
+        ...db
+          .prepare(
+            `
           SELECT
             tracks.artist,
             LOWER(TRIM(tracks.artist)) AS artist_key,
@@ -1316,11 +1381,14 @@ export const createArtistProfileService = ({
                 AND credit_sets.display_text = tracks.artist
             )
           GROUP BY LOWER(TRIM(tracks.artist))
-        `).all(),
-      ].sort((left, right) => (
-        Number(right.newest_track ?? 0) - Number(left.newest_track ?? 0)
-        || String(left.artist ?? "").localeCompare(String(right.artist ?? ""))
-      ));
+        `,
+          )
+          .all(),
+      ].sort(
+        (left, right) =>
+          Number(right.newest_track ?? 0) - Number(left.newest_track ?? 0) ||
+          String(left.artist ?? "").localeCompare(String(right.artist ?? "")),
+      );
       const seen = new Set();
       const artists = artistRows.flatMap((row) => {
         const name = String(row.artist ?? "").trim();
@@ -1329,24 +1397,33 @@ export const createArtistProfileService = ({
         seen.add(artistKey);
         return [{ name, artistKey }];
       });
-      const cachedRows = db.prepare("SELECT artist_key, profile_json, fetched_at FROM artist_profiles").all();
-      const cachedByArtist = new Map(cachedRows.flatMap((row) => {
-        try {
-          return [[row.artist_key, {
-            profile: JSON.parse(row.profile_json),
-            fetchedAtMs: Number(row.fetched_at) * 1_000,
-          }]];
-        } catch {
-          return [];
-        }
-      }));
+      const cachedRows = db
+        .prepare("SELECT artist_key, profile_json, fetched_at FROM artist_profiles")
+        .all();
+      const cachedByArtist = new Map(
+        cachedRows.flatMap((row) => {
+          try {
+            return [
+              [
+                row.artist_key,
+                {
+                  profile: JSON.parse(row.profile_json),
+                  fetchedAtMs: Number(row.fetched_at) * 1_000,
+                },
+              ],
+            ];
+          } catch {
+            return [];
+          }
+        }),
+      );
       // Background scans only discover artists that have never been cached.
       // Existing profiles are refreshed on demand when their artist page opens.
       const due = artists.filter(({ artistKey }) => !cachedByArtist.has(artistKey));
       const scanStartedAt = now();
-      const eligible = due.filter(({ artistKey }) => (
-        scanRetryAfter.get(artistKey) ?? 0
-      ) <= scanStartedAt);
+      const eligible = due.filter(
+        ({ artistKey }) => (scanRetryAfter.get(artistKey) ?? 0) <= scanStartedAt,
+      );
       const batchLimit = Math.max(1, Math.min(50, Math.floor(Number(limit) || 25)));
       const batch = eligible.slice(0, batchLimit);
       let updated = 0;

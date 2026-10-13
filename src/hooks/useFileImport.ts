@@ -51,10 +51,8 @@ export const useFileImport = ({
   const pendingPlaylistDropRef = useRef<PlaylistDropOperation | null>(null);
   pendingPlaylistDropRef.current = pendingPlaylistDrop;
 
-
   const executePlaylistDrop = useCallback(
     async (playlistId: string, payload: string[]) => {
-
       // Capture the current state before executing
       const playlist = playlists.find((p: Playlist) => p.id === playlistId);
       if (!playlist) {
@@ -78,23 +76,17 @@ export const useFileImport = ({
         do: async () => {
           await setPlaylistTracks(playlistId, nextIds);
           setPlaylists((current) =>
-            current.map((p) =>
-              p.id === playlistId ? { ...p, trackIds: nextIds } : p
-            )
+            current.map((p) => (p.id === playlistId ? { ...p, trackIds: nextIds } : p)),
           );
           return t(
-            novelIds.length === 1
-              ? "history.playlist.added.one"
-              : "history.playlist.added.many",
+            novelIds.length === 1 ? "history.playlist.added.one" : "history.playlist.added.many",
             { count: String(novelIds.length), name: playlist.name },
           );
         },
         undo: async () => {
           await setPlaylistTracks(playlistId, previousIds);
           setPlaylists((current) =>
-            current.map((p) =>
-              p.id === playlistId ? { ...p, trackIds: previousIds } : p
-            )
+            current.map((p) => (p.id === playlistId ? { ...p, trackIds: previousIds } : p)),
           );
           return t(
             previousIds.length === 1
@@ -111,7 +103,7 @@ export const useFileImport = ({
         notify.error(t("toast.playlist.addFailed"));
       }
     },
-    [setPlaylists, playlists]
+    [setPlaylists, playlists],
   );
 
   const handlePlaylistDrop = useCallback(
@@ -137,9 +129,9 @@ export const useFileImport = ({
         return;
       }
 
-      executePlaylistDrop(playlistId, payload);
+      void executePlaylistDrop(playlistId, payload);
     },
-    [playlists, executePlaylistDrop, setPendingPlaylistDrop]
+    [playlists, executePlaylistDrop, setPendingPlaylistDrop],
   );
 
   const confirmPlaylistDropOperation = useCallback(() => {
@@ -147,7 +139,7 @@ export const useFileImport = ({
     if (!pending) {
       return;
     }
-    executePlaylistDrop(pending.playlistId, pending.trackIds);
+    void executePlaylistDrop(pending.playlistId, pending.trackIds);
     setPendingPlaylistDrop(null);
   }, [executePlaylistDrop, setPendingPlaylistDrop]);
 
@@ -194,7 +186,7 @@ export const useFileImport = ({
             notify.error(
               result.failures.length === 1
                 ? `Could not import ${result.failures[0].path.split(/[\\/]/).slice(-1)[0] || "audio file"}`
-                : `${result.failures.length} audio files could not be imported`
+                : `${result.failures.length} audio files could not be imported`,
             );
           } else {
             notify.success(t("toast.import.allKnown"));
@@ -220,8 +212,8 @@ export const useFileImport = ({
               libraryFolder: watchedFolder,
             });
             if (
-              redoResult.failures.length > 0
-              || redoResult.imported.length !== importedSourcePaths.length
+              redoResult.failures.length > 0 ||
+              redoResult.imported.length !== importedSourcePaths.length
             ) {
               throw new Error(t("history.import.restoreFailed"));
             }
@@ -242,13 +234,9 @@ export const useFileImport = ({
               throw new Error(t("history.import.removeFailed"));
             }
             const deletedIds = new Set(result.deletedTrackIds);
-            setInboxTracks((current) =>
-              current.filter((track) => !deletedIds.has(track.id))
-            );
+            setInboxTracks((current) => current.filter((track) => !deletedIds.has(track.id)));
             return t(
-              deletedIds.size === 1
-                ? "history.import.undone.one"
-                : "history.import.undone.many",
+              deletedIds.size === 1 ? "history.import.undone.one" : "history.import.undone.many",
               { count: String(deletedIds.size) },
             );
           },
@@ -274,13 +262,7 @@ export const useFileImport = ({
         setImportProgress(null);
       }
     },
-    [
-      setImportProgress,
-      setInboxTracks,
-      onImportComplete,
-      onPlaylistFolderDetected,
-      watchedFolder,
-    ]
+    [setImportProgress, setInboxTracks, onImportComplete, onPlaylistFolderDetected, watchedFolder],
   );
 
   const handleCreatePlaylist = useCallback(
@@ -295,20 +277,16 @@ export const useFileImport = ({
         id: `playlist-${Date.now()}-${playlistSequenceRef.current}`,
         name: trimmed,
         trackIds: [...new Set(initialTrackIds)],
-        sortOrder: playlists
-          .filter((item) => !item.folderId)
-          .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1,
+        sortOrder:
+          playlists
+            .filter((item) => !item.folderId)
+            .reduce((highest, item) => Math.max(highest, item.sortOrder), -1) + 1,
       };
 
       const command: Command = {
         label: `Create playlist ${trimmed}`,
         do: async () => {
-          await createPlaylist(
-            playlist.id,
-            playlist.name,
-            playlist.folderId,
-            playlist.sortOrder,
-          );
+          await createPlaylist(playlist.id, playlist.name, playlist.folderId, playlist.sortOrder);
           try {
             if (playlist.trackIds.length > 0) {
               await setPlaylistTracks(playlist.id, playlist.trackIds);
@@ -322,9 +300,7 @@ export const useFileImport = ({
         },
         undo: async () => {
           await deletePlaylist(playlist.id);
-          setPlaylists((current) =>
-            current.filter((item) => item.id !== playlist.id)
-          );
+          setPlaylists((current) => current.filter((item) => item.id !== playlist.id));
           return t("history.playlist.undidCreate", { name: playlist.name });
         },
       };
@@ -337,7 +313,7 @@ export const useFileImport = ({
         return null;
       }
     },
-    [playlists, setPlaylists]
+    [playlists, setPlaylists],
   );
 
   // Undo/redo is bound globally in useKeyboardShortcuts, which also guards
@@ -380,7 +356,7 @@ export const useFileImport = ({
                 setImportProgress(null);
               }
             }
-          }
+          },
         );
       } catch (error) {
         notify.error(t("toast.import.listenerFailed"));

@@ -1,12 +1,7 @@
 import { Plus, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type {
-  SmartCrate,
-  SmartCrateField,
-  SmartCrateOperator,
-  SmartCrateRule,
-} from "../../types";
+import type { SmartCrate, SmartCrateField, SmartCrateOperator, SmartCrateRule } from "../../types";
 
 type SmartCrateInput = Omit<SmartCrate, "id">;
 
@@ -28,12 +23,20 @@ const FIELD_DEFINITIONS: Record<SmartCrateField, FieldDefinition> = {
   bpm: { label: "BPM", input: "number", operators: ["between", "atLeast", "atMost", "equals"] },
   key: { label: "Key", input: "text", operators: ["equals", "contains"], placeholder: "8A or Am" },
   genre: { label: "Genre", input: "text", operators: ["contains", "equals"], placeholder: "House" },
-  rating: { label: "Rating", input: "number", operators: ["atLeast", "atMost", "equals", "between"] },
+  rating: {
+    label: "Rating",
+    input: "number",
+    operators: ["atLeast", "atMost", "equals", "between"],
+  },
   artist: { label: "Artist", input: "text", operators: ["contains", "equals"] },
   album: { label: "Album", input: "text", operators: ["contains", "equals"] },
   year: { label: "Year", input: "number", operators: ["between", "atLeast", "atMost", "equals"] },
   dateAdded: { label: "Date added", input: "number", operators: ["withinDays"], placeholder: "30" },
-  playCount: { label: "Play count", input: "number", operators: ["atLeast", "atMost", "equals", "between"] },
+  playCount: {
+    label: "Play count",
+    input: "number",
+    operators: ["atLeast", "atMost", "equals", "between"],
+  },
   comment: { label: "Comment", input: "text", operators: ["contains", "equals"] },
 };
 
@@ -59,12 +62,7 @@ const createRule = (field: SmartCrateField = "bpm"): SmartCrateRule => ({
   secondaryValue: field === "bpm" ? "124" : undefined,
 });
 
-export const SmartCrateModal = ({
-  isOpen,
-  crate,
-  onClose,
-  onSave,
-}: SmartCrateModalProps) => {
+export const SmartCrateModal = ({ isOpen, crate, onClose, onSave }: SmartCrateModalProps) => {
   const [name, setName] = useState("");
   const [match, setMatch] = useState<"all" | "any">("all");
   const [rules, setRules] = useState<SmartCrateRule[]>([createRule()]);
@@ -92,12 +90,15 @@ export const SmartCrateModal = ({
   }, [isOpen, onClose]);
 
   const canSave = useMemo(
-    () => name.trim().length > 0 && rules.length > 0 && rules.every((rule) => rule.value.trim().length > 0),
+    () =>
+      name.trim().length > 0 &&
+      rules.length > 0 &&
+      rules.every((rule) => rule.value.trim().length > 0),
     [name, rules],
   );
 
   const updateRule = (id: string, updates: Partial<SmartCrateRule>) => {
-    setRules((current) => current.map((rule) => rule.id === id ? { ...rule, ...updates } : rule));
+    setRules((current) => current.map((rule) => (rule.id === id ? { ...rule, ...updates } : rule)));
   };
 
   if (!isOpen || typeof document === "undefined") return null;
@@ -120,7 +121,10 @@ export const SmartCrateModal = ({
             <Sparkles className="h-[18px] w-[18px]" />
           </div>
           <div>
-            <h2 id="smart-crate-title" className="text-[16px] font-semibold text-[var(--color-text-primary)]">
+            <h2
+              id="smart-crate-title"
+              className="text-[16px] font-semibold text-[var(--color-text-primary)]"
+            >
               {crate ? "Edit Smart Crate" : "New Smart Crate"}
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-[var(--color-text-muted)]">
@@ -138,7 +142,9 @@ export const SmartCrateModal = ({
           }}
         >
           <label className="block">
-            <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">Name</span>
+            <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-secondary)]">
+              Name
+            </span>
             <input
               ref={nameRef}
               className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] px-3 text-[13px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-light)]"
@@ -150,7 +156,9 @@ export const SmartCrateModal = ({
           </label>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">Match</span>
+            <span className="text-[12px] font-medium text-[var(--color-text-secondary)]">
+              Match
+            </span>
             <div className="inline-flex rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-0.5">
               {(["all", "any"] as const).map((mode) => (
                 <button
@@ -175,7 +183,9 @@ export const SmartCrateModal = ({
                   className="grid grid-cols-[24px_minmax(120px,0.9fr)_minmax(140px,1fr)_minmax(110px,1fr)_32px] items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-bg-secondary)] p-3"
                   data-smart-crate-rule
                 >
-                  <span className="text-center text-[10px] tabular-nums text-[var(--color-text-muted)]">{index + 1}</span>
+                  <span className="text-center text-[10px] tabular-nums text-[var(--color-text-muted)]">
+                    {index + 1}
+                  </span>
                   <select
                     className="h-9 min-w-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
                     value={rule.field}
@@ -192,23 +202,34 @@ export const SmartCrateModal = ({
                     aria-label={`Rule ${index + 1} field`}
                   >
                     {(Object.keys(FIELD_DEFINITIONS) as SmartCrateField[]).map((field) => (
-                      <option key={field} value={field}>{FIELD_DEFINITIONS[field].label}</option>
+                      <option key={field} value={field}>
+                        {FIELD_DEFINITIONS[field].label}
+                      </option>
                     ))}
                   </select>
                   <select
                     className="h-9 min-w-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
                     value={rule.operator}
-                    onChange={(event) => updateRule(rule.id, {
-                      operator: event.target.value as SmartCrateOperator,
-                      secondaryValue: event.target.value === "between" ? rule.secondaryValue ?? "" : undefined,
-                    })}
+                    onChange={(event) =>
+                      updateRule(rule.id, {
+                        operator: event.target.value as SmartCrateOperator,
+                        secondaryValue:
+                          event.target.value === "between"
+                            ? (rule.secondaryValue ?? "")
+                            : undefined,
+                      })
+                    }
                     aria-label={`Rule ${index + 1} operator`}
                   >
                     {definition.operators.map((operator) => (
-                      <option key={operator} value={operator}>{OPERATOR_LABELS[operator]}</option>
+                      <option key={operator} value={operator}>
+                        {OPERATOR_LABELS[operator]}
+                      </option>
                     ))}
                   </select>
-                  <div className={`grid min-w-0 ${rule.operator === "between" ? "grid-cols-[1fr_auto_1fr] items-center gap-1.5" : "grid-cols-1"}`}>
+                  <div
+                    className={`grid min-w-0 ${rule.operator === "between" ? "grid-cols-[1fr_auto_1fr] items-center gap-1.5" : "grid-cols-1"}`}
+                  >
                     <input
                       className="h-9 min-w-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[12px] text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-accent)]"
                       type={definition.input}
@@ -224,7 +245,9 @@ export const SmartCrateModal = ({
                           className="h-9 min-w-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-2 text-[12px] text-[var(--color-text-primary)] outline-none focus:border-[var(--color-accent)]"
                           type="number"
                           value={rule.secondaryValue ?? ""}
-                          onChange={(event) => updateRule(rule.id, { secondaryValue: event.target.value })}
+                          onChange={(event) =>
+                            updateRule(rule.id, { secondaryValue: event.target.value })
+                          }
                           aria-label={`Rule ${index + 1} maximum value`}
                         />
                       </>
@@ -232,7 +255,9 @@ export const SmartCrateModal = ({
                   </div>
                   <button
                     className="toolbar-icon-button h-8 w-8"
-                    onClick={() => setRules((current) => current.filter((item) => item.id !== rule.id))}
+                    onClick={() =>
+                      setRules((current) => current.filter((item) => item.id !== rule.id))
+                    }
                     title="Remove rule"
                     aria-label={`Remove rule ${index + 1}`}
                     type="button"
@@ -255,7 +280,11 @@ export const SmartCrateModal = ({
           </button>
 
           <div className="mt-6 flex items-center justify-end gap-2 border-t border-[var(--color-border-light)] pt-4">
-            <button className="h-9 rounded-[var(--radius-md)] px-4 text-[12px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]" onClick={onClose} type="button">
+            <button
+              className="h-9 rounded-[var(--radius-md)] px-4 text-[12px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+              onClick={onClose}
+              type="button"
+            >
               Cancel
             </button>
             <button

@@ -32,18 +32,20 @@ export const useSmartCrateStore = create<SmartCrateStore>()(
         set((state) => ({ smartCrates: [...state.smartCrates, { ...crate, id }] }));
         return id;
       },
-      updateSmartCrate: (id, updates) => set((state) => ({
-        smartCrates: state.smartCrates.map((crate) =>
-          crate.id === id ? { ...updates, id } : crate
-        ),
-      })),
-      deleteSmartCrate: (id) => set((state) => ({
-        smartCrates: state.smartCrates.filter((crate) => crate.id !== id),
-      })),
+      updateSmartCrate: (id, updates) =>
+        set((state) => ({
+          smartCrates: state.smartCrates.map((crate) =>
+            crate.id === id ? { ...updates, id } : crate,
+          ),
+        })),
+      deleteSmartCrate: (id) =>
+        set((state) => ({
+          smartCrates: state.smartCrates.filter((crate) => crate.id !== id),
+        })),
     }),
     {
       name: "muro-smart-crates",
       partialize: (state) => ({ smartCrates: state.smartCrates }),
-    }
-  )
+    },
+  ),
 );

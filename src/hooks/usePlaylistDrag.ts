@@ -21,11 +21,7 @@ type UsePlaylistDragArgs = {
   onDropToPlaylist: (playlistId: string, payload?: string[]) => void;
 };
 
-export const usePlaylistDrag = ({
-  tracks,
-  selectedIds,
-  onDropToPlaylist,
-}: UsePlaylistDragArgs) => {
+export const usePlaylistDrag = ({ tracks, selectedIds, onDropToPlaylist }: UsePlaylistDragArgs) => {
   const { startInternalDrag, endInternalDrag, isInternalDrag, markAsInternalDrag } =
     useDragSession();
 
@@ -64,7 +60,7 @@ export const usePlaylistDrag = ({
         ? currentTracks.filter((track) => currentSelectedIds.has(track.id))
         : currentTracks.filter((track) => track.id === trackId);
       const availableTracks = draggedTracks.filter(
-        (track) => !track.isMissing && Boolean(track.sourcePath.trim())
+        (track) => !track.isMissing && Boolean(track.sourcePath.trim()),
       );
 
       if (availableTracks.length === 0) {
@@ -91,7 +87,7 @@ export const usePlaylistDrag = ({
 
       startFileDrag(availableTracks.map((track) => track.sourcePath));
     },
-    [markAsInternalDrag, startInternalDrag]
+    [markAsInternalDrag, startInternalDrag],
   );
 
   const onRowDrag = useCallback((event: React.DragEvent<HTMLDivElement>) => {
@@ -99,7 +95,7 @@ export const usePlaylistDrag = ({
     // position so the count badge does not jump to the corner.
     if (event.clientX === 0 && event.clientY === 0) return;
     setDragIndicator((current) =>
-      current ? { ...current, x: event.clientX, y: event.clientY } : current
+      current ? { ...current, x: event.clientX, y: event.clientY } : current,
     );
   }, []);
 
@@ -123,15 +119,16 @@ export const usePlaylistDrag = ({
     (event: React.DragEvent<HTMLButtonElement>, playlistId: string) => {
       const data = event.dataTransfer.getData("text/plain");
       const transferredPayload = data
-        ? data.split(",").map((item) => item.trim()).filter(Boolean)
+        ? data
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
         : [];
-      const payload = transferredPayload.length > 0
-        ? transferredPayload
-        : dragPayloadRef.current;
+      const payload = transferredPayload.length > 0 ? transferredPayload : dragPayloadRef.current;
       onDropToPlaylistRef.current(playlistId, payload);
       resetDragState();
     },
-    [resetDragState]
+    [resetDragState],
   );
 
   return {

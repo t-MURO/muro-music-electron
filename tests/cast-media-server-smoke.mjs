@@ -13,9 +13,11 @@ const server = createLanMediaServer({ bindHost: "127.0.0.1" });
 try {
   // LAN address selection prefers the interface on the receiver's subnet.
   const interfaces = {
-    "VPN": [{ address: "10.8.0.2", netmask: "255.255.255.0", family: "IPv4", internal: false }],
-    "Wi-Fi": [{ address: "192.168.1.20", netmask: "255.255.255.0", family: "IPv4", internal: false }],
-    "Loopback": [{ address: "127.0.0.1", netmask: "255.0.0.0", family: "IPv4", internal: true }],
+    VPN: [{ address: "10.8.0.2", netmask: "255.255.255.0", family: "IPv4", internal: false }],
+    "Wi-Fi": [
+      { address: "192.168.1.20", netmask: "255.255.255.0", family: "IPv4", internal: false },
+    ],
+    Loopback: [{ address: "127.0.0.1", netmask: "255.0.0.0", family: "IPv4", internal: true }],
   };
   assert.equal(selectLanAddress(interfaces, { preferHost: "192.168.1.55" }), "192.168.1.20");
   assert.equal(selectLanAddress(interfaces), "10.8.0.2");
@@ -63,7 +65,9 @@ try {
   const sessionToken = media.path.split("/")[2];
   const badToken = await fetch(`${base}/media/${sessionToken}/ffffffffffffffffffffffffffffffff`);
   assert.equal(badToken.status, 404);
-  const badSession = await fetch(`${base}/media/ffffffffffffffffffffffffffffffff/${media.path.split("/")[3]}`);
+  const badSession = await fetch(
+    `${base}/media/ffffffffffffffffffffffffffffffff/${media.path.split("/")[3]}`,
+  );
   assert.equal(badSession.status, 404);
   const traversal = await fetch(`${base}/media/${sessionToken}/..%2F..%2Fsample.mp3`);
   assert.equal(traversal.status, 404);

@@ -34,7 +34,7 @@ export const playbackPlayFile = (
   durationHint: number,
   coverArtPath?: string,
   coverArtThumbPath?: string,
-  gainFactor = 1
+  gainFactor = 1,
 ) => {
   return invoke<void>("playback_play_file", {
     id,
@@ -162,7 +162,7 @@ export const playbackTransitionTo = (
     gainFactor?: number;
   },
   plan: TransitionPlan,
-  preservePitch = true
+  preservePitch = true,
 ) => {
   return invoke<void>("playback_transition_to", { track, plan, preservePitch });
 };

@@ -43,7 +43,7 @@ try {
 
   const response = await createLocalFileResponse(
     new Request("https://local/sample.mp3", { headers: { Range: "bytes=2-5" } }),
-    audioPath
+    audioPath,
   );
   assert.equal(response.status, 206);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
@@ -56,7 +56,7 @@ try {
 
   const invalid = await createLocalFileResponse(
     new Request("https://local/sample.mp3", { headers: { Range: "bytes=20-30" } }),
-    audioPath
+    audioPath,
   );
   assert.equal(invalid.status, 416);
   assert.equal(invalid.headers.get("access-control-allow-origin"), null);
@@ -76,7 +76,10 @@ try {
   );
   assert.equal(recovered.status, 200);
   assert.equal(recovered.headers.get("content-type"), "audio/flac");
-  assert.equal(recovered.headers.get("content-length"), String(streamInfo.length + validFrame.length));
+  assert.equal(
+    recovered.headers.get("content-length"),
+    String(streamInfo.length + validFrame.length),
+  );
   assert.equal(recovered.headers.get("x-muro-recovered-media"), "flac-frame-resync");
   assert.deepEqual(
     Buffer.from(await recovered.arrayBuffer()),
@@ -152,15 +155,25 @@ try {
   assert.equal(await fetchStatus(urlFor(libraryTrack)), 200, "library files are served");
   assert.equal(await fetchStatus(urlFor(cachedCover)), 200, "cached artwork is served");
   assert.equal(await fetchStatus(urlFor(inboxTrack)), 200, "database-referenced files are served");
-  assert.equal(await fetchStatus(urlFor(outsideTrack)), 403, "files outside the library are refused");
-  assert.equal(await fetchStatus(urlFor(outsideImage)), 403, "images outside the caches are refused");
+  assert.equal(
+    await fetchStatus(urlFor(outsideTrack)),
+    403,
+    "files outside the library are refused",
+  );
+  assert.equal(
+    await fetchStatus(urlFor(outsideImage)),
+    403,
+    "images outside the caches are refused",
+  );
   assert.equal(
     await fetchStatus(urlFor(path.join(outsideRoot, "missing.mp3"))),
     403,
     "refusal happens before the file is stat'ed",
   );
   assert.equal(
-    await fetchStatus(urlFor(`${libraryRoot}${path.sep}..${path.sep}elsewhere${path.sep}secret.mp3`)),
+    await fetchStatus(
+      urlFor(`${libraryRoot}${path.sep}..${path.sep}elsewhere${path.sep}secret.mp3`),
+    ),
     403,
     "dot segments cannot escape the library root",
   );

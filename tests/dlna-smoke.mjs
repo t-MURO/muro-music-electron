@@ -37,8 +37,17 @@ assert.equal(hmsToSeconds(""), null);
 // --- XML helpers ------------------------------------------------------------
 
 assert.equal(escapeXml(`a<b>&"c"'d'`), "a&lt;b&gt;&amp;&quot;c&quot;&apos;d&apos;");
-assert.equal(extractXmlValue("<u:Res><CurrentTransportState>PLAYING</CurrentTransportState></u:Res>", "CurrentTransportState"), "PLAYING");
-assert.equal(extractXmlValue("<x:TrackDuration>0:06:08</x:TrackDuration>", "TrackDuration"), "0:06:08");
+assert.equal(
+  extractXmlValue(
+    "<u:Res><CurrentTransportState>PLAYING</CurrentTransportState></u:Res>",
+    "CurrentTransportState",
+  ),
+  "PLAYING",
+);
+assert.equal(
+  extractXmlValue("<x:TrackDuration>0:06:08</x:TrackDuration>", "TrackDuration"),
+  "0:06:08",
+);
 assert.equal(extractXmlValue("<a>1</a>", "b"), null);
 assert.equal(extractXmlValue("<RelTime></RelTime>", "RelTime"), "");
 
@@ -57,7 +66,9 @@ assert.ok(didl.includes("object.item.audioItem.musicTrack"));
 assert.ok(didl.includes("Träume &amp; &quot;Echos&quot; &lt;live&gt;"));
 assert.ok(didl.includes('duration="0:06:08"'));
 assert.ok(didl.includes("http-get:*:audio/flac:DLNA.ORG_OP=01"));
-assert.ok(didl.includes("<upnp:albumArtURI>http://192.168.1.2:1234/artwork/s/a</upnp:albumArtURI>"));
+assert.ok(
+  didl.includes("<upnp:albumArtURI>http://192.168.1.2:1234/artwork/s/a</upnp:albumArtURI>"),
+);
 
 // --- SOAP envelope and client parsing ---------------------------------------
 
@@ -81,7 +92,8 @@ const fakeFetch = async (url, options) => {
   return {
     ok: true,
     status: 200,
-    text: async () => `<s:Envelope><s:Body><u:${action}Response>${bodies[action] ?? ""}</u:${action}Response></s:Body></s:Envelope>`,
+    text: async () =>
+      `<s:Envelope><s:Body><u:${action}Response>${bodies[action] ?? ""}</u:${action}Response></s:Body></s:Envelope>`,
   };
 };
 const client = createDlnaClient({
@@ -102,7 +114,8 @@ const failingClient = createDlnaClient({
   fetchImpl: async () => ({
     ok: false,
     status: 500,
-    text: async () => "<errorCode>701</errorCode><errorDescription>Transition not available</errorDescription>",
+    text: async () =>
+      "<errorCode>701</errorCode><errorDescription>Transition not available</errorDescription>",
   }),
 });
 await assert.rejects(() => failingClient.play(), /UPnP 701.*Transition not available/);
@@ -136,14 +149,8 @@ assert.equal(
   isTrustedDescriptionLocation("http://192.168.1.9:60006/device.xml", "192.168.1.9"),
   true,
 );
-assert.equal(
-  isTrustedDescriptionLocation("http://127.0.0.1:8080/private", "192.168.1.9"),
-  false,
-);
-assert.equal(
-  isTrustedDescriptionLocation("file:///C:/Windows/win.ini", "192.168.1.9"),
-  false,
-);
+assert.equal(isTrustedDescriptionLocation("http://127.0.0.1:8080/private", "192.168.1.9"), false);
+assert.equal(isTrustedDescriptionLocation("file:///C:/Windows/win.ini", "192.168.1.9"), false);
 
 // --- device description with embedded renderer (HEOS-style) -----------------
 
@@ -172,11 +179,20 @@ const description = `<?xml version="1.0"?>
     </deviceList>
   </device>
 </root>`;
-const parsedDescription = parseDeviceDescription(description, "http://192.168.1.9:60006/upnp/desc/aios_device/aios_device.xml");
+const parsedDescription = parseDeviceDescription(
+  description,
+  "http://192.168.1.9:60006/upnp/desc/aios_device/aios_device.xml",
+);
 assert.equal(parsedDescription.friendlyName, "Denon");
 assert.equal(parsedDescription.modelName, "Denon AVR-S760H");
-assert.equal(parsedDescription.avTransportUrl, "http://192.168.1.9:60006/upnp/control/renderer_dvc/AVTransport");
-assert.equal(parsedDescription.renderingControlUrl, "http://192.168.1.9:60006/upnp/control/renderer_dvc/RenderingControl");
+assert.equal(
+  parsedDescription.avTransportUrl,
+  "http://192.168.1.9:60006/upnp/control/renderer_dvc/AVTransport",
+);
+assert.equal(
+  parsedDescription.renderingControlUrl,
+  "http://192.168.1.9:60006/upnp/control/renderer_dvc/RenderingControl",
+);
 
 const hostileDescription = description.replace(
   "/upnp/control/renderer_dvc/AVTransport",
@@ -193,9 +209,21 @@ assert.equal(dlnaContentTypeFor("x.m4a"), "audio/mp4");
 assert.equal(dlnaContentTypeFor("x.aiff"), "audio/aiff");
 assert.equal(dlnaContentTypeFor("x.xyz"), null);
 
-const nearEnd = normalizeTransportStatus({ transportState: "PLAYING", positionSecs: 365, durationSecs: 368 });
-const stopped = normalizeTransportStatus({ transportState: "STOPPED", positionSecs: 0, durationSecs: 368 });
-const midTrack = normalizeTransportStatus({ transportState: "PLAYING", positionSecs: 100, durationSecs: 368 });
+const nearEnd = normalizeTransportStatus({
+  transportState: "PLAYING",
+  positionSecs: 365,
+  durationSecs: 368,
+});
+const stopped = normalizeTransportStatus({
+  transportState: "STOPPED",
+  positionSecs: 0,
+  durationSecs: 368,
+});
+const midTrack = normalizeTransportStatus({
+  transportState: "PLAYING",
+  positionSecs: 100,
+  durationSecs: 368,
+});
 assert.equal(nearEnd.playerState, "playing");
 assert.equal(stopped.playerState, "idle");
 assert.equal(isDlnaFinishedTransition(nearEnd, stopped), true);

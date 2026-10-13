@@ -14,17 +14,25 @@ import {
 } from "./database.mjs";
 
 export const AUDIO_EXTENSIONS = new Set([
-  ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus", ".aiff", ".aif", ".alac",
+  ".mp3",
+  ".flac",
+  ".wav",
+  ".m4a",
+  ".aac",
+  ".ogg",
+  ".opus",
+  ".aiff",
+  ".aif",
+  ".alac",
 ]);
 
 let taglibPromise;
 const getTagLib = () => (taglibPromise ??= TagLib.initialize());
 
-const first = (value) => Array.isArray(value) ? value[0] : value;
+const first = (value) => (Array.isArray(value) ? value[0] : value);
 const values = (value) => (Array.isArray(value) ? value : value == null ? [] : [value]);
-const propertyValues = (properties, key) => (
-  Array.isArray(properties[key]) ? properties[key].map(String) : []
-);
+const propertyValues = (properties, key) =>
+  Array.isArray(properties[key]) ? properties[key].map(String) : [];
 
 const rawArtistValue = (value) => String(value ?? "");
 const cleanArtistValue = (value) => rawArtistValue(value).trim();
@@ -32,12 +40,8 @@ const nonBlankArtistValue = (value) => {
   const raw = rawArtistValue(value);
   return raw.trim() ? raw : "";
 };
-const artistValueList = (value) => values(value)
-  .map(nonBlankArtistValue)
-  .filter(Boolean);
-const cleanValueList = (value) => values(value)
-  .map(cleanArtistValue)
-  .filter(Boolean);
+const artistValueList = (value) => values(value).map(nonBlankArtistValue).filter(Boolean);
+const cleanValueList = (value) => values(value).map(cleanArtistValue).filter(Boolean);
 
 const creditValue = (credit, ...keys) => {
   for (const key of keys) {
@@ -80,32 +84,25 @@ export const normalizeArtistCredits = (
     const normalized = source.flatMap((raw) => {
       const credit = typeof raw === "string" ? { creditedName: raw } : raw;
       if (!credit || typeof credit !== "object") return [];
-      const canonicalName = cleanArtistValue(creditValue(
-        credit,
-        "canonicalName",
-        "canonical_name",
-        "name",
-      ));
-      const creditedName = nonBlankArtistValue(creditValue(
-        credit,
-        "creditedName",
-        "credited_name",
-      )) || canonicalName;
+      const canonicalName = cleanArtistValue(
+        creditValue(credit, "canonicalName", "canonical_name", "name"),
+      );
+      const creditedName =
+        nonBlankArtistValue(creditValue(credit, "creditedName", "credited_name")) || canonicalName;
       const name = canonicalName || cleanArtistValue(creditedName);
       if (!name) return [];
       const joinValue = creditValue(credit, "joinPhrase", "join_phrase");
-      const musicBrainzId = cleanArtistValue(creditValue(
-        credit,
-        "musicBrainzId",
-        "musicbrainzId",
-        "musicbrainz_id",
-      ));
-      return [{
-        name,
-        creditedName,
-        joinPhrase: joinValue == null ? null : String(joinValue),
-        ...(musicBrainzId ? { musicBrainzId } : {}),
-      }];
+      const musicBrainzId = cleanArtistValue(
+        creditValue(credit, "musicBrainzId", "musicbrainzId", "musicbrainz_id"),
+      );
+      return [
+        {
+          name,
+          creditedName,
+          joinPhrase: joinValue == null ? null : String(joinValue),
+          ...(musicBrainzId ? { musicBrainzId } : {}),
+        },
+      ];
     });
     return normalized.map((credit, index) => ({
       ...credit,
@@ -123,14 +120,16 @@ export const normalizeArtistCredits = (
   const joinPhrases = inferredJoinPhrases(exactDisplay, normalizedNames);
   if (exactDisplay && joinPhrases === null) {
     const name = cleanArtistValue(exactDisplay);
-    return name ? [{
-      name,
-      creditedName: exactDisplay,
-      joinPhrase: "",
-      ...(normalizedNames.length === 1 && ids.length === 1
-        ? { musicBrainzId: ids[0] }
-        : {}),
-    }] : [];
+    return name
+      ? [
+          {
+            name,
+            creditedName: exactDisplay,
+            joinPhrase: "",
+            ...(normalizedNames.length === 1 && ids.length === 1 ? { musicBrainzId: ids[0] } : {}),
+          },
+        ]
+      : [];
   }
   return normalizedNames.map((name, index) => ({
     name: cleanArtistValue(name),
@@ -142,35 +141,32 @@ export const normalizeArtistCredits = (
 
 export const displayArtistCredits = (credits) => {
   const normalized = normalizeArtistCredits(credits);
-  return normalized
-    .map((credit) => `${credit.creditedName}${credit.joinPhrase}`)
-    .join("");
+  return normalized.map((credit) => `${credit.creditedName}${credit.joinPhrase}`).join("");
 };
 
 export const artistMetadataFromCommon = (common = {}, propertyMetadata = {}) => {
   const propertyArtistNames = artistValueList(propertyMetadata.artistNames);
   const propertyArtistMusicbrainzIds = cleanValueList(propertyMetadata.artistMusicbrainzIds);
-  const artistNames = propertyArtistNames.length > 0
-    ? propertyArtistNames
-    : artistValueList(common.artists);
-  const artistMusicbrainzIds = propertyArtistMusicbrainzIds.length > 0
-    ? propertyArtistMusicbrainzIds
-    : cleanValueList(common.musicbrainz_artistid);
-  const artist = nonBlankArtistValue(common.artist)
-    || artistNames.join(", ")
-    || "Unknown Artist";
+  const artistNames =
+    propertyArtistNames.length > 0 ? propertyArtistNames : artistValueList(common.artists);
+  const artistMusicbrainzIds =
+    propertyArtistMusicbrainzIds.length > 0
+      ? propertyArtistMusicbrainzIds
+      : cleanValueList(common.musicbrainz_artistid);
+  const artist = nonBlankArtistValue(common.artist) || artistNames.join(", ") || "Unknown Artist";
   const propertyAlbumArtistNames = artistValueList(propertyMetadata.albumArtistNames);
   const propertyAlbumArtistMusicbrainzIds = cleanValueList(
     propertyMetadata.albumArtistMusicbrainzIds,
   );
-  const albumArtistNames = propertyAlbumArtistNames.length > 0
-    ? propertyAlbumArtistNames
-    : artistValueList(common.albumartists);
-  const albumArtistMusicbrainzIds = propertyAlbumArtistMusicbrainzIds.length > 0
-    ? propertyAlbumArtistMusicbrainzIds
-    : cleanValueList(common.musicbrainz_albumartistid);
-  const albumArtist = nonBlankArtistValue(common.albumartist)
-    || albumArtistNames.join(", ");
+  const albumArtistNames =
+    propertyAlbumArtistNames.length > 0
+      ? propertyAlbumArtistNames
+      : artistValueList(common.albumartists);
+  const albumArtistMusicbrainzIds =
+    propertyAlbumArtistMusicbrainzIds.length > 0
+      ? propertyAlbumArtistMusicbrainzIds
+      : cleanValueList(common.musicbrainz_albumartistid);
+  const albumArtist = nonBlankArtistValue(common.albumartist) || albumArtistNames.join(", ");
 
   return {
     artist,
@@ -183,9 +179,7 @@ export const artistMetadataFromCommon = (common = {}, propertyMetadata = {}) => 
     albumArtist: albumArtist || undefined,
     albumArtistCredits: normalizeArtistCredits([], {
       display: albumArtist,
-      names: albumArtistNames.length > 0
-        ? albumArtistNames
-        : albumArtist ? [albumArtist] : [],
+      names: albumArtistNames.length > 0 ? albumArtistNames : albumArtist ? [albumArtist] : [],
       musicbrainzIds: albumArtistMusicbrainzIds,
     }),
     albumArtistMusicbrainzIds,
@@ -202,10 +196,7 @@ export const readArtistPropertiesFromFile = async (sourcePath) => {
       artistNames: propertyValues(properties, "ARTISTS"),
       artistMusicbrainzIds: propertyValues(properties, "musicbrainzArtistId"),
       albumArtistNames: propertyValues(properties, "ALBUMARTISTS"),
-      albumArtistMusicbrainzIds: propertyValues(
-        properties,
-        "musicbrainzReleaseArtistId",
-      ),
+      albumArtistMusicbrainzIds: propertyValues(properties, "musicbrainzReleaseArtistId"),
     };
   } catch {
     return {};
@@ -214,22 +205,27 @@ export const readArtistPropertiesFromFile = async (sourcePath) => {
   }
 };
 
-const cleanComment = (comment) =>
-  typeof comment === "string" ? comment : comment?.text;
+const cleanComment = (comment) => (typeof comment === "string" ? comment : comment?.text);
 
-const cleanRawTags = (native) => JSON.stringify(native, (_key, value) => {
-  if (Buffer.isBuffer(value) || value instanceof Uint8Array) return `[binary:${value.length}]`;
-  if (typeof value === "bigint") return value.toString();
-  return value;
-});
+const cleanRawTags = (native) =>
+  JSON.stringify(native, (_key, value) => {
+    if (Buffer.isBuffer(value) || value instanceof Uint8Array) return `[binary:${value.length}]`;
+    if (typeof value === "bigint") return value.toString();
+    return value;
+  });
 
 export const collectAudioPaths = async (inputPaths) => {
   const found = [];
   const visit = async (candidate) => {
     let stat;
-    try { stat = await fs.promises.stat(candidate); } catch { return; }
+    try {
+      stat = await fs.promises.stat(candidate);
+    } catch {
+      return;
+    }
     if (stat.isFile()) {
-      if (AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase())) found.push(path.resolve(candidate));
+      if (AUDIO_EXTENSIONS.has(path.extname(candidate).toLowerCase()))
+        found.push(path.resolve(candidate));
       return;
     }
     if (!stat.isDirectory()) return;
@@ -251,14 +247,16 @@ export const cacheCoverBytes = async (bytes, cacheDir) => {
   await fs.promises.mkdir(cacheDir, { recursive: true });
   const image = sharp(bytes).rotate();
   if (!fs.existsSync(fullPath)) {
-    await image.clone()
+    await image
+      .clone()
       .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
       .flatten({ background: "#000000" })
       .jpeg({ quality: 92, chromaSubsampling: "4:4:4", progressive: true })
       .toFile(fullPath);
   }
   if (!fs.existsSync(thumbPath)) {
-    await image.clone()
+    await image
+      .clone()
       .resize(192, 192, { fit: "cover" })
       .flatten({ background: "#000000" })
       .jpeg({ quality: 86, progressive: true })
@@ -275,9 +273,8 @@ export const cacheEmbeddedCover = async (pictures, cacheDir, filePath) => {
     .filter((picture) => picture?.data)
     .map((picture, index) => ({ picture, index }))
     .sort((left, right) => {
-      const priority = ({ picture }) => /cover\s*\(front\)|front\s*cover/i.test(String(picture.type ?? ""))
-        ? 0
-        : 1;
+      const priority = ({ picture }) =>
+        /cover\s*\(front\)|front\s*cover/i.test(String(picture.type ?? "")) ? 0 : 1;
       return priority(left) - priority(right) || left.index - right.index;
     });
   let lastError;
@@ -440,11 +437,7 @@ export const replayGainFromTags = (common) => {
   };
 };
 
-export const importAudioFile = async (
-  dbPath,
-  filePath,
-  cacheDir,
-) => {
+export const importAudioFile = async (dbPath, filePath, cacheDir) => {
   const db = openDatabase(dbPath);
   const storedSourcePath = storeTrackPath(dbPath, filePath);
   if (db.prepare("SELECT 1 FROM tracks WHERE source_path = ?").get(storedSourcePath)) return null;
@@ -454,12 +447,10 @@ export const importAudioFile = async (
   const artistPropertyMetadata = await readArtistPropertiesFromFile(filePath);
   const genres = values(common.genre).filter(Boolean).map(String);
   const comments = values(common.comment).map(cleanComment).filter(Boolean).map(String);
-  const {
-    artist,
-    artistCredits,
-    albumArtist,
-    albumArtistCredits,
-  } = artistMetadataFromCommon(common, artistPropertyMetadata);
+  const { artist, artistCredits, albumArtist, albumArtistCredits } = artistMetadataFromCommon(
+    common,
+    artistPropertyMetadata,
+  );
   const title = common.title || fallbackTitle(filePath);
   const album = common.album || "Unknown Album";
   const label = first(common.label) || undefined;
@@ -471,11 +462,23 @@ export const importAudioFile = async (
   const trackTotal = common.track?.of ?? undefined;
   const discNumber = common.disk?.no ?? undefined;
   const discTotal = common.disk?.of ?? undefined;
-  const year = common.year ?? (common.date ? Number(String(common.date).slice(0, 4)) || undefined : undefined);
+  const year =
+    common.year ?? (common.date ? Number(String(common.date).slice(0, 4)) || undefined : undefined);
   const rating = await readRatingFromFile(filePath, common);
   const searchText = normalizeSearchText(
-    title, artist, album, albumArtist, genres, comments, label,
-    path.basename(filePath), year, trackNumber, discNumber, common.key, common.bpm
+    title,
+    artist,
+    album,
+    albumArtist,
+    genres,
+    comments,
+    label,
+    path.basename(filePath),
+    year,
+    trackNumber,
+    discNumber,
+    common.key,
+    common.bpm,
   );
 
   const record = {
@@ -568,31 +571,27 @@ export const importAudioFile = async (
       confidence: 100,
       needsReview: false,
     });
-    const albumCreditSet = albumArtist && albumArtistCredits.length > 0
-      ? replaceTrackArtistCredits(db, {
-        trackId: id,
-        scope: "album",
-        displayText: albumArtist,
-        credits: albumArtistCredits,
-        provenance: "file-tags",
-        confidence: 100,
-        needsReview: false,
-      })
-      : null;
+    const albumCreditSet =
+      albumArtist && albumArtistCredits.length > 0
+        ? replaceTrackArtistCredits(db, {
+            trackId: id,
+            scope: "album",
+            displayText: albumArtist,
+            credits: albumArtistCredits,
+            provenance: "file-tags",
+            confidence: 100,
+            needsReview: false,
+          })
+        : null;
     return {
       artistCredits: trackCreditSet.credits,
       albumArtistCredits: albumCreditSet?.credits ?? [],
     };
   };
-  const storedCredits = db.inTransaction
-    ? persistTrack()
-    : db.transaction(persistTrack)();
+  const storedCredits = db.inTransaction ? persistTrack() : db.transaction(persistTrack)();
 
   if (!storedCredits) return null;
-  const importedTrack = rowToTrack(
-    { ...record, last_played_at: null, play_count: 0 },
-    { dbPath },
-  );
+  const importedTrack = rowToTrack({ ...record, last_played_at: null, play_count: 0 }, { dbPath });
   return {
     ...importedTrack,
     artist_credits: storedCredits.artistCredits,
@@ -615,53 +614,58 @@ const propertyMap = {
 
 const RATING_UNSUPPORTED_EXTENSIONS = new Set([".wav", ".aif", ".aiff"]);
 const STRUCTURED_ARTIST_TAG_EXTENSIONS = new Set([
-  ".mp3", ".flac", ".m4a", ".alac", ".aac", ".ogg", ".opus",
+  ".mp3",
+  ".flac",
+  ".m4a",
+  ".alac",
+  ".aac",
+  ".ogg",
+  ".opus",
 ]);
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
-const sameStringValues = (left, right) => (
-  left.length === right.length
-  && left.every((value, index) => value === right[index])
-);
-const completeMusicBrainzIds = (credits) => (
+const sameStringValues = (left, right) =>
+  left.length === right.length && left.every((value, index) => value === right[index]);
+const completeMusicBrainzIds = (credits) =>
   credits.length > 0 && credits.every((credit) => Boolean(credit.musicBrainzId))
     ? credits.map((credit) => credit.musicBrainzId)
-    : []
-);
+    : [];
 
 export const writeMetadataToFile = async (sourcePath, updates) => {
-  const expectedRating = updates.rating === undefined
-    ? undefined
-    : normalizedRatingFromStars(updates.rating);
+  const expectedRating =
+    updates.rating === undefined ? undefined : normalizedRatingFromStars(updates.rating);
   const extension = path.extname(sourcePath).toLowerCase();
   if (expectedRating !== undefined && RATING_UNSUPPORTED_EXTENSIONS.has(extension)) {
-    throw new Error(`The ${extension.slice(1).toUpperCase()} format does not support embedded ratings`);
+    throw new Error(
+      `The ${extension.slice(1).toUpperCase()} format does not support embedded ratings`,
+    );
   }
   const taglib = await getTagLib();
-  const coverBytes = updates.coverArtPath
-    ? await fs.promises.readFile(updates.coverArtPath)
-    : null;
-  const vorbisRatingValue = expectedRating !== undefined
-    && expectedRating > 0
-    && VORBIS_RATING_EXTENSIONS.has(extension)
-    ? String(vorbisRatingFromStars(updates.rating))
-    : undefined;
+  const coverBytes = updates.coverArtPath ? await fs.promises.readFile(updates.coverArtPath) : null;
+  const vorbisRatingValue =
+    expectedRating !== undefined && expectedRating > 0 && VORBIS_RATING_EXTENSIONS.has(extension)
+      ? String(vorbisRatingFromStars(updates.rating))
+      : undefined;
   let replacedVorbisRating;
   const writesArtistCredits = hasOwn(updates, "artistCredits");
   const writesAlbumArtistCredits = hasOwn(updates, "albumArtistCredits");
-  const artistCredits = writesArtistCredits
-    ? normalizeArtistCredits(updates.artistCredits)
-    : [];
+  const artistCredits = writesArtistCredits ? normalizeArtistCredits(updates.artistCredits) : [];
   const albumArtistCredits = writesAlbumArtistCredits
     ? normalizeArtistCredits(updates.albumArtistCredits)
     : [];
-  const artistDisplay = updates.artist !== undefined
-    ? String(updates.artist)
-    : writesArtistCredits ? displayArtistCredits(artistCredits) : undefined;
-  const albumArtistDisplay = updates.albumArtist !== undefined
-    ? String(updates.albumArtist)
-    : updates.artists !== undefined
-      ? String(updates.artists)
-      : writesAlbumArtistCredits ? displayArtistCredits(albumArtistCredits) : undefined;
+  const artistDisplay =
+    updates.artist !== undefined
+      ? String(updates.artist)
+      : writesArtistCredits
+        ? displayArtistCredits(artistCredits)
+        : undefined;
+  const albumArtistDisplay =
+    updates.albumArtist !== undefined
+      ? String(updates.albumArtist)
+      : updates.artists !== undefined
+        ? String(updates.artists)
+        : writesAlbumArtistCredits
+          ? displayArtistCredits(albumArtistCredits)
+          : undefined;
 
   // taglib-wasm exposes Vorbis RATING through both its complex rating API and
   // generic property API. When the field already exists, setting the generic
@@ -694,10 +698,10 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
         if (updates[key] !== undefined) file.setProperty(property, String(updates[key] ?? ""));
       }
       if (
-        artistDisplay !== undefined
-        || albumArtistDisplay !== undefined
-        || writesArtistCredits
-        || writesAlbumArtistCredits
+        artistDisplay !== undefined ||
+        albumArtistDisplay !== undefined ||
+        writesArtistCredits ||
+        writesAlbumArtistCredits
       ) {
         const preservedRatings = expectedRating === undefined ? file.getRatings() : null;
         const properties = { ...file.properties() };
@@ -723,14 +727,15 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
         // generic string representation. Restore the richer rating objects so
         // an artist-only edit cannot silently change an existing star rating.
         if (preservedRatings) {
-          const safeRatings = extension === ".mp3"
-            ? preservedRatings.map((rating) => ({
-              ...rating,
-              // taglib-wasm 1.4.0 serializes an exact 1.0 as POPM byte 1;
-              // 0.999 is its documented/full-scale-safe representation.
-              rating: rating.rating === 1 ? 0.999 : rating.rating,
-            }))
-            : preservedRatings;
+          const safeRatings =
+            extension === ".mp3"
+              ? preservedRatings.map((rating) => ({
+                  ...rating,
+                  // taglib-wasm 1.4.0 serializes an exact 1.0 as POPM byte 1;
+                  // 0.999 is its documented/full-scale-safe representation.
+                  rating: rating.rating === 1 ? 0.999 : rating.rating,
+                }))
+              : preservedRatings;
           file.setRatings(safeRatings);
         }
       }
@@ -746,37 +751,43 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
             // MP3 POPM uses application-defined 0–255 bands rather than a linear
             // five-star scale. Use values compatible with Windows Explorer and
             // common half-star-aware players. Other tag types stay normalized.
-            const serializedRating = extension === ".mp3"
-              ? mp3PopmRatingFromStars(updates.rating)
-              : expectedRating === 1 ? 0.999 : expectedRating;
+            const serializedRating =
+              extension === ".mp3"
+                ? mp3PopmRatingFromStars(updates.rating)
+                : expectedRating === 1
+                  ? 0.999
+                  : expectedRating;
             file.setRating(serializedRating);
           }
         }
       }
       if (coverBytes) {
-        file.setPictures([{
-          mimeType: "image/jpeg",
-          data: coverBytes,
-          type: "FrontCover",
-          description: "Front Cover",
-        }]);
+        file.setPictures([
+          {
+            mimeType: "image/jpeg",
+            data: coverBytes,
+            type: "FrontCover",
+            description: "Front Cover",
+          },
+        ]);
       }
     });
 
     // Reopen the file after TagLib's save. This distinguishes a real embedded
     // metadata write from formats that silently ignore an unsupported field.
     if (
-      coverBytes
-      || expectedRating !== undefined
-      || artistDisplay !== undefined
-      || albumArtistDisplay !== undefined
-      || writesArtistCredits
-      || writesAlbumArtistCredits
+      coverBytes ||
+      expectedRating !== undefined ||
+      artistDisplay !== undefined ||
+      albumArtistDisplay !== undefined ||
+      writesArtistCredits ||
+      writesAlbumArtistCredits
     ) {
       const file = await taglib.open(sourcePath);
       try {
         if (coverBytes) {
-          const embeddedCover = file.getPictures()
+          const embeddedCover = file
+            .getPictures()
             .find((picture) => picture.type === "FrontCover" && picture.data.length > 0);
           if (!embeddedCover) {
             throw new Error("The audio format did not retain the embedded front cover");
@@ -787,7 +798,7 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
             ? starsFromVorbisRating(file.getProperty("RATING"))
             : file.getRating();
           const persistedStars = VORBIS_RATING_EXTENSIONS.has(extension)
-            ? persistedRating ?? 0
+            ? (persistedRating ?? 0)
             : typeof persistedRating === "number" && Number.isFinite(persistedRating)
               ? starsFromFileRating(sourcePath, persistedRating)
               : 0;
@@ -800,15 +811,15 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
         }
         const persistedProperties = file.properties();
         if (
-          artistDisplay !== undefined
-          && propertyValues(persistedProperties, "artist")[0] !== artistDisplay
+          artistDisplay !== undefined &&
+          propertyValues(persistedProperties, "artist")[0] !== artistDisplay
         ) {
           throw new Error("The audio format did not retain the artist display credit");
         }
         if (
-          albumArtistDisplay !== undefined
-          && STRUCTURED_ARTIST_TAG_EXTENSIONS.has(extension)
-          && propertyValues(persistedProperties, "albumArtist")[0] !== albumArtistDisplay
+          albumArtistDisplay !== undefined &&
+          STRUCTURED_ARTIST_TAG_EXTENSIONS.has(extension) &&
+          propertyValues(persistedProperties, "albumArtist")[0] !== albumArtistDisplay
         ) {
           throw new Error("The audio format did not retain the album artist display credit");
         }
@@ -830,16 +841,17 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
         if (writesAlbumArtistCredits && STRUCTURED_ARTIST_TAG_EXTENSIONS.has(extension)) {
           const expectedNames = albumArtistCredits.map((credit) => credit.creditedName);
           const expectedIds = completeMusicBrainzIds(albumArtistCredits);
-          if (!sameStringValues(
-            propertyValues(persistedProperties, "ALBUMARTISTS"),
-            expectedNames,
-          )) {
+          if (
+            !sameStringValues(propertyValues(persistedProperties, "ALBUMARTISTS"), expectedNames)
+          ) {
             throw new Error("The audio format did not retain the structured album artists");
           }
-          if (!sameStringValues(
-            propertyValues(persistedProperties, "musicbrainzReleaseArtistId"),
-            expectedIds,
-          )) {
+          if (
+            !sameStringValues(
+              propertyValues(persistedProperties, "musicbrainzReleaseArtistId"),
+              expectedIds,
+            )
+          ) {
             throw new Error("The audio format did not retain the album artist identifiers");
           }
         }
@@ -851,10 +863,7 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
     if (replacedVorbisRating !== undefined) {
       try {
         await taglib.edit(sourcePath, (file) => file.setRatings([]));
-        await taglib.edit(
-          sourcePath,
-          (file) => file.setProperty("RATING", replacedVorbisRating),
-        );
+        await taglib.edit(sourcePath, (file) => file.setProperty("RATING", replacedVorbisRating));
       } catch (restoreError) {
         console.warn(`Failed to restore the previous rating in ${sourcePath}:`, restoreError);
       }
@@ -866,7 +875,7 @@ export const writeMetadataToFile = async (sourcePath, updates) => {
 export const extractCoverMetadata = async (sourcePath, cacheDir) => {
   const metadata = await parseFile(sourcePath, { skipCovers: false });
   return {
-    cached: await cacheEmbeddedCover(metadata.common.picture, cacheDir, sourcePath) ?? null,
+    cached: (await cacheEmbeddedCover(metadata.common.picture, cacheDir, sourcePath)) ?? null,
     musicbrainz_albumid: first(metadata.common.musicbrainz_albumid) ?? null,
     musicbrainz_releasegroupid: first(metadata.common.musicbrainz_releasegroupid) ?? null,
   };
@@ -878,19 +887,14 @@ export const extractTechnicalMetadata = async (sourcePath) => {
     fs.promises.stat(sourcePath),
   ]);
   return {
-    sampleRateHz: metadata.format.sampleRate
-      ? Math.round(metadata.format.sampleRate)
-      : 0,
-    bitDepth: metadata.format.bitsPerSample
-      ? Math.round(metadata.format.bitsPerSample)
-      : 0,
+    sampleRateHz: metadata.format.sampleRate ? Math.round(metadata.format.sampleRate) : 0,
+    bitDepth: metadata.format.bitsPerSample ? Math.round(metadata.format.bitsPerSample) : 0,
     fileSizeBytes: stat.size,
   };
 };
 
-export const extractAndCacheCover = async (sourcePath, cacheDir) => (
-  await extractCoverMetadata(sourcePath, cacheDir)
-).cached;
+export const extractAndCacheCover = async (sourcePath, cacheDir) =>
+  (await extractCoverMetadata(sourcePath, cacheDir)).cached;
 
 /** Duration in seconds, or 0 when the file cannot be parsed. */
 export const readAudioDuration = async (sourcePath) => {

@@ -1,10 +1,6 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@muro/desktop/runtime";
-import {
-  useLibraryStore,
-  usePlaybackStore,
-  useRecentlyPlayedStore,
-} from "../stores";
+import { useLibraryStore, usePlaybackStore, useRecentlyPlayedStore } from "../stores";
 import type { Track } from "../types";
 import {
   RECORD_PLAY_RETRY_DELAYS_MS,
@@ -43,10 +39,7 @@ const createSession = (trackId: string | null, position: number): ActiveSession 
   counted: false,
 });
 
-export const usePlayTracking = ({
-  currentPosition,
-  allTracks,
-}: UsePlayTrackingArgs) => {
+export const usePlayTracking = ({ currentPosition, allTracks }: UsePlayTrackingArgs) => {
   const currentTrack = usePlaybackStore((s) => s.currentTrack);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const setTracks = useLibraryStore((s) => s.setTracks);
@@ -105,46 +98,48 @@ export const usePlayTracking = ({
         previousLastPlayedAt: track?.lastPlayedAt,
       };
       if (track) {
-        const applyRecordedPlay = (candidate: Track): Track => candidate.id === track.id
-          ? {
-              ...candidate,
-              lastPlayedAt: play.playedAt,
-              playCount: (candidate.playCount || 0) + 1,
-            }
-          : candidate;
+        const applyRecordedPlay = (candidate: Track): Track =>
+          candidate.id === track.id
+            ? {
+                ...candidate,
+                lastPlayedAt: play.playedAt,
+                playCount: (candidate.playCount || 0) + 1,
+              }
+            : candidate;
         addRecentlyPlayed(track, play.playedAt);
         setTracks((items) => items.map(applyRecordedPlay));
         setInboxTracks((items) => items.map(applyRecordedPlay));
       }
       retryWithBackoff(
-        () => invoke<{ historyId: number }>("record_track_play", {
-          trackId: play.trackId,
-        }),
+        () =>
+          invoke<{ historyId: number }>("record_track_play", {
+            trackId: play.trackId,
+          }),
         RECORD_PLAY_RETRY_DELAYS_MS,
-      ).then((result) => {
-        session.historyId = result.historyId;
-        session.lastSynced = PLAY_THRESHOLD_SECONDS;
-        flushSession(session);
-      }, (error) => {
-        // Retries are exhausted: undo the optimistic update so the library
-        // shows what the database actually stored.
-        console.error("Failed to record track play:", error);
-        if (!track) return;
-        const revert = (candidate: Track) => revertRecordedPlay(candidate, play);
-        setTracks((items) => items.map(revert));
-        setInboxTracks((items) => items.map(revert));
-        setRecentlyPlayedTracks(revertRecentlyPlayed(
-          useRecentlyPlayedStore.getState().recentlyPlayedTracks,
-          play,
-        ));
-      });
+      ).then(
+        (result) => {
+          session.historyId = result.historyId;
+          session.lastSynced = PLAY_THRESHOLD_SECONDS;
+          flushSession(session);
+        },
+        (error) => {
+          // Retries are exhausted: undo the optimistic update so the library
+          // shows what the database actually stored.
+          console.error("Failed to record track play:", error);
+          if (!track) return;
+          const revert = (candidate: Track) => revertRecordedPlay(candidate, play);
+          setTracks((items) => items.map(revert));
+          setInboxTracks((items) => items.map(revert));
+          setRecentlyPlayedTracks(
+            revertRecentlyPlayed(useRecentlyPlayedStore.getState().recentlyPlayedTracks, play),
+          );
+        },
+      );
       return;
     }
 
-    if (
-      session.historyId
-      && session.accumulated - session.lastSynced >= SYNC_INTERVAL_SECONDS
-    ) flushSession(session);
+    if (session.historyId && session.accumulated - session.lastSynced >= SYNC_INTERVAL_SECONDS)
+      flushSession(session);
   }, [
     addRecentlyPlayed,
     allTracks,

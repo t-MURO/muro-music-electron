@@ -91,7 +91,8 @@ export const createLanMediaServer = ({ bindHost = "0.0.0.0", onRequest } = {}) =
       // is available; Cast receivers ignore them.
       const headers = {
         ...Object.fromEntries(fileResponse.headers.entries()),
-        "contentFeatures.dlna.org": "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000",
+        "contentFeatures.dlna.org":
+          "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000",
         "transferMode.dlna.org": "Streaming",
       };
       response.writeHead(fileResponse.status, headers);
@@ -146,7 +147,8 @@ export const createLanMediaServer = ({ bindHost = "0.0.0.0", onRequest } = {}) =
     stop,
     isRunning: () => server !== null,
     getPort: () => port,
-    getLanAddress: ({ preferHost } = {}) => selectLanAddress(os.networkInterfaces(), { preferHost }),
+    getLanAddress: ({ preferHost } = {}) =>
+      selectLanAddress(os.networkInterfaces(), { preferHost }),
 
     // One session token per Cast connection; rotating it invalidates every
     // URL from the previous session.

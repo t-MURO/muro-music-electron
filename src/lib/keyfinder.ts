@@ -7,8 +7,30 @@ const DEFAULT_BPM_MIN = 100;
 const DEFAULT_BPM_MAX = 180;
 
 const standardKeys = [
-  "A", "Am", "Bb", "Bbm", "B", "Bm", "C", "Cm", "Db", "Dbm", "D", "Dm",
-  "Eb", "Ebm", "E", "Em", "F", "Fm", "Gb", "Gbm", "G", "Gm", "Ab", "Abm",
+  "A",
+  "Am",
+  "Bb",
+  "Bbm",
+  "B",
+  "Bm",
+  "C",
+  "Cm",
+  "Db",
+  "Dbm",
+  "D",
+  "Dm",
+  "Eb",
+  "Ebm",
+  "E",
+  "Em",
+  "F",
+  "Fm",
+  "Gb",
+  "Gbm",
+  "G",
+  "Gm",
+  "Ab",
+  "Abm",
 ];
 
 export interface AnalysisResult {
@@ -69,11 +91,7 @@ export const BPM_RANGES: BpmRange[] = [
   { min: 60, max: 200, label: "Wide (60-200)" },
 ];
 
-export const normalizeBpm = (
-  bpm: number,
-  min = DEFAULT_BPM_MIN,
-  max = DEFAULT_BPM_MAX,
-): number => {
+export const normalizeBpm = (bpm: number, min = DEFAULT_BPM_MIN, max = DEFAULT_BPM_MAX): number => {
   if (bpm <= 0) return 0;
   let result = bpm;
   while (result < min && result > 0) result *= 2;
@@ -96,21 +114,18 @@ export const startTrackAnalysis = (
   tracks: Track[],
   settings?: TrackAnalysisSettings,
 ): Promise<{ jobId: string }> => {
-  const writeAuthorization = Boolean(settings &&
-    Object.values(settings.outputs).some((mode) => mode !== "none"));
+  const writeAuthorization = Boolean(
+    settings && Object.values(settings.outputs).some((mode) => mode !== "none"),
+  );
   return invoke("start_track_analysis", { tracks, settings, writeAuthorization });
 };
 
 export const cancelTrackAnalysis = (jobId: string): Promise<{ cancelled: boolean }> =>
   invoke("cancel_track_analysis", { jobId });
 
-export const recycleKeyFinder = (): Promise<{ recycled: boolean }> =>
-  invoke("recycle_keyfinder");
+export const recycleKeyFinder = (): Promise<{ recycled: boolean }> => invoke("recycle_keyfinder");
 
-export const getAudioWaveform = (
-  sourcePath: string,
-  points = 512,
-): Promise<{ peaks: number[] }> =>
+export const getAudioWaveform = (sourcePath: string, points = 512): Promise<{ peaks: number[] }> =>
   invoke("generate_track_waveform", { sourcePath, points });
 
 export const listenKeyFinderEvents = (

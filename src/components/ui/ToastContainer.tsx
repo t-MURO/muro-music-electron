@@ -44,9 +44,7 @@ const Toast = ({ notification, onDismiss }: ToastProps) => {
     <div className="flex max-w-md items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3 shadow-lg">
       <Icon className={`h-5 w-5 shrink-0 ${iconColor}`} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-[var(--color-text-primary)]">
-          {notification.message}
-        </p>
+        <p className="text-sm text-[var(--color-text-primary)]">{notification.message}</p>
         {details.length > 0 && (
           <ul className="mt-1 space-y-0.5 break-words text-xs text-[var(--color-text-muted)]">
             {details.slice(0, MAX_DETAILS).map((line, index) => (
@@ -94,11 +92,7 @@ export const ToastContainer = () => {
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
       {notifications.map((notification) => (
-        <Toast
-          key={notification.id}
-          notification={notification}
-          onDismiss={removeNotification}
-        />
+        <Toast key={notification.id} notification={notification} onDismiss={removeNotification} />
       ))}
     </div>
   );

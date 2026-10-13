@@ -17,32 +17,31 @@ const ARTIST_CREDIT_MIGRATION_METADATA_KEY = "artist_credit_migration_v1";
 const ARTIST_CREDIT_SCOPES = new Set(["track", "album"]);
 const LEGACY_ARTIST_SEPARATOR_PATTERN = /\s*,\s*|\s+&\s+|\s+feat\.?\s+/giu;
 
-export const normalizeArtistName = (value) => String(value ?? "")
-  .normalize("NFKC")
-  .trim()
-  .replace(/\s+/g, " ")
-  .toLocaleLowerCase();
+export const normalizeArtistName = (value) =>
+  String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
 
-const canonicalArtistName = (value) => String(value ?? "")
-  .normalize("NFKC")
-  .trim()
-  .replace(/\s+/g, " ");
+const canonicalArtistName = (value) =>
+  String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ");
 
-const escapeRegularExpression = (value) =>
-  String(value).replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
+const escapeRegularExpression = (value) => String(value).replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
 
 const protectedArtistExceptionRanges = (displayText, exceptions) => {
   const ranges = [];
-  const unique = [...new Set(
-    Array.from(exceptions ?? [], (exception) => String(exception ?? "").trim())
-      .filter(Boolean),
-  )].sort((left, right) => right.length - left.length);
+  const unique = [
+    ...new Set(
+      Array.from(exceptions ?? [], (exception) => String(exception ?? "").trim()).filter(Boolean),
+    ),
+  ].sort((left, right) => right.length - left.length);
 
   for (const exception of unique) {
-    const flexiblePattern = exception
-      .split(/\s+/u)
-      .map(escapeRegularExpression)
-      .join("\\s+");
+    const flexiblePattern = exception.split(/\s+/u).map(escapeRegularExpression).join("\\s+");
     const matcher = new RegExp(flexiblePattern, "giu");
     let match;
     while ((match = matcher.exec(displayText)) !== null) {
@@ -63,15 +62,15 @@ export const parseLegacyArtistCredits = (displayText, exceptions = []) => {
   const display = String(displayText ?? "");
   if (!display.trim()) return [];
 
-  const exceptionKeys = new Set(
-    Array.from(exceptions ?? [], normalizeArtistName).filter(Boolean),
-  );
+  const exceptionKeys = new Set(Array.from(exceptions ?? [], normalizeArtistName).filter(Boolean));
   if (exceptionKeys.has(normalizeArtistName(display))) {
-    return [{
-      name: canonicalArtistName(display),
-      creditedName: display,
-      joinPhrase: "",
-    }];
+    return [
+      {
+        name: canonicalArtistName(display),
+        creditedName: display,
+        joinPhrase: "",
+      },
+    ];
   }
 
   const protectedRanges = protectedArtistExceptionRanges(display, exceptions);
@@ -87,11 +86,13 @@ export const parseLegacyArtistCredits = (displayText, exceptions = []) => {
   }
 
   if (separators.length === 0) {
-    return [{
-      name: canonicalArtistName(display),
-      creditedName: display,
-      joinPhrase: "",
-    }];
+    return [
+      {
+        name: canonicalArtistName(display),
+        creditedName: display,
+        joinPhrase: "",
+      },
+    ];
   }
 
   const credits = [];
@@ -99,11 +100,13 @@ export const parseLegacyArtistCredits = (displayText, exceptions = []) => {
   for (const separator of separators) {
     const creditedName = display.slice(cursor, separator.start);
     if (!creditedName.trim()) {
-      return [{
-        name: canonicalArtistName(display),
-        creditedName: display,
-        joinPhrase: "",
-      }];
+      return [
+        {
+          name: canonicalArtistName(display),
+          creditedName: display,
+          joinPhrase: "",
+        },
+      ];
     }
     credits.push({
       name: canonicalArtistName(creditedName),
@@ -115,11 +118,13 @@ export const parseLegacyArtistCredits = (displayText, exceptions = []) => {
 
   const creditedName = display.slice(cursor);
   if (!creditedName.trim()) {
-    return [{
-      name: canonicalArtistName(display),
-      creditedName: display,
-      joinPhrase: "",
-    }];
+    return [
+      {
+        name: canonicalArtistName(display),
+        creditedName: display,
+        joinPhrase: "",
+      },
+    ];
   }
   credits.push({
     name: canonicalArtistName(creditedName),
@@ -486,7 +491,10 @@ export const openDatabase = (dbPath) => {
   db.exec(TRACK_SCHEMA);
 
   const existing = new Set(
-    db.prepare("PRAGMA table_info(tracks)").all().map((column) => column.name)
+    db
+      .prepare("PRAGMA table_info(tracks)")
+      .all()
+      .map((column) => column.name),
   );
   for (const [name, type] of Object.entries(REQUIRED_TRACK_COLUMNS)) {
     if (!existing.has(name)) db.exec(`ALTER TABLE tracks ADD COLUMN ${name} ${type}`);
@@ -498,7 +506,10 @@ export const openDatabase = (dbPath) => {
   db.exec(HISTORY_SCHEMA);
   db.exec(ARTIST_CREDIT_SCHEMA);
   const playlistColumns = new Set(
-    db.prepare("PRAGMA table_info(playlists)").all().map((column) => column.name)
+    db
+      .prepare("PRAGMA table_info(playlists)")
+      .all()
+      .map((column) => column.name),
   );
   if (!playlistColumns.has("folder_id")) {
     db.exec("ALTER TABLE playlists ADD COLUMN folder_id TEXT");
@@ -527,21 +538,30 @@ export const openDatabase = (dbPath) => {
     db.exec("ALTER TABLE playlists ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
   }
   const playlistFolderColumns = new Set(
-    db.prepare("PRAGMA table_info(playlist_folders)").all().map((column) => column.name)
+    db
+      .prepare("PRAGMA table_info(playlist_folders)")
+      .all()
+      .map((column) => column.name),
   );
   if (!playlistFolderColumns.has("parent_id")) {
-    db.exec("ALTER TABLE playlist_folders ADD COLUMN parent_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL");
+    db.exec(
+      "ALTER TABLE playlist_folders ADD COLUMN parent_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL",
+    );
   }
   const addedFolderSortOrder = !playlistFolderColumns.has("sort_order");
   if (addedFolderSortOrder) {
     db.exec("ALTER TABLE playlist_folders ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
   }
   if (addedPlaylistSortOrder) {
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(
+        `
       SELECT id, folder_id
       FROM playlists
       ORDER BY folder_id, created_at DESC, id
-    `).all();
+    `,
+      )
+      .all();
     const nextByFolder = new Map();
     const update = db.prepare("UPDATE playlists SET sort_order = ? WHERE id = ?");
     db.transaction(() => {
@@ -554,11 +574,15 @@ export const openDatabase = (dbPath) => {
     })();
   }
   if (addedFolderSortOrder) {
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(
+        `
       SELECT id, parent_id
       FROM playlist_folders
       ORDER BY parent_id, created_at ASC, name COLLATE NOCASE ASC, id
-    `).all();
+    `,
+      )
+      .all();
     const nextByParent = new Map();
     const update = db.prepare("UPDATE playlist_folders SET sort_order = ? WHERE id = ?");
     db.transaction(() => {
@@ -582,18 +606,21 @@ export const openDatabase = (dbPath) => {
       value TEXT NOT NULL
     )
   `);
-  const storedSearchTextVersion = Number(
-    db.prepare("SELECT value FROM app_metadata WHERE key = 'search_text_version'").get()?.value,
-  ) || 0;
+  const storedSearchTextVersion =
+    Number(
+      db.prepare("SELECT value FROM app_metadata WHERE key = 'search_text_version'").get()?.value,
+    ) || 0;
   if (storedSearchTextVersion < SEARCH_TEXT_VERSION) {
     const refreshAllSearchText = db.transaction(() => {
       for (const row of db.prepare("SELECT id FROM tracks").all()) {
         refreshSearchText(db, row.id);
       }
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO app_metadata(key, value) VALUES ('search_text_version', ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `).run(String(SEARCH_TEXT_VERSION));
+      `,
+      ).run(String(SEARCH_TEXT_VERSION));
     });
     refreshAllSearchText();
     rebuildSearchIndex(db);
@@ -623,8 +650,8 @@ const normalizedCreditInput = (credit) => {
     throw new TypeError("Artist credits must be strings or objects");
   }
   const creditedName = String(
-    creditValue(raw, "creditedName", "credited_name", "name", "canonicalName", "canonical_name")
-      ?? "",
+    creditValue(raw, "creditedName", "credited_name", "name", "canonicalName", "canonical_name") ??
+      "",
   );
   const canonicalName = canonicalArtistName(
     creditValue(raw, "name", "canonicalName", "canonical_name") ?? creditedName,
@@ -634,9 +661,7 @@ const normalizedCreditInput = (credit) => {
   }
   const joinPhrase = String(creditValue(raw, "joinPhrase", "join_phrase") ?? "");
   const roleValue = creditValue(raw, "role");
-  const role = roleValue == null || !String(roleValue).trim()
-    ? null
-    : String(roleValue).trim();
+  const role = roleValue == null || !String(roleValue).trim() ? null : String(roleValue).trim();
   return {
     artistId: String(creditValue(raw, "artistId", "artist_id") ?? "").trim() || null,
     canonicalName,
@@ -654,33 +679,42 @@ const ensureArtistEntity = (db, credit, timestamp) => {
   let row;
   let matchedByMusicBrainzId = false;
   if (credit.musicBrainzId) {
-    row = db.prepare(`
+    row = db
+      .prepare(
+        `
       SELECT id, canonical_name, normalized_name, musicbrainz_id
       FROM artist_entities
       WHERE musicbrainz_id = ? COLLATE NOCASE
       LIMIT 1
-    `).get(credit.musicBrainzId);
+    `,
+      )
+      .get(credit.musicBrainzId);
     matchedByMusicBrainzId = Boolean(row);
   }
   if (!row && credit.artistId) {
-    row = db.prepare(`
+    row = db
+      .prepare(
+        `
       SELECT id, canonical_name, normalized_name, musicbrainz_id
       FROM artist_entities
       WHERE id = ?
-    `).get(credit.artistId);
+    `,
+      )
+      .get(credit.artistId);
     const storedMusicBrainzId = musicBrainzArtistId(row?.musicbrainz_id);
     if (
-      row
-      && credit.musicBrainzId
-      && storedMusicBrainzId
-      && storedMusicBrainzId.toLocaleLowerCase()
-        !== credit.musicBrainzId.toLocaleLowerCase()
+      row &&
+      credit.musicBrainzId &&
+      storedMusicBrainzId &&
+      storedMusicBrainzId.toLocaleLowerCase() !== credit.musicBrainzId.toLocaleLowerCase()
     ) {
       row = undefined;
     }
   }
   if (!row && !credit.musicBrainzId) {
-    row = db.prepare(`
+    row = db
+      .prepare(
+        `
       SELECT
         entities.id,
         entities.canonical_name,
@@ -690,69 +724,77 @@ const ensureArtistEntity = (db, credit, timestamp) => {
       JOIN artist_entities AS entities ON entities.id = bindings.artist_id
       WHERE bindings.normalized_name = ?
       LIMIT 1
-    `).get(credit.normalizedName);
+    `,
+      )
+      .get(credit.normalizedName);
   }
   if (!row) {
     row = credit.musicBrainzId
-      ? db.prepare(`
+      ? db
+          .prepare(
+            `
           SELECT id, canonical_name, normalized_name, musicbrainz_id
           FROM artist_entities
           WHERE normalized_name = ?
             AND (musicbrainz_id IS NULL OR trim(musicbrainz_id) = '')
           ORDER BY created_at, id
           LIMIT 1
-        `).get(credit.normalizedName)
-      : db.prepare(`
+        `,
+          )
+          .get(credit.normalizedName)
+      : db
+          .prepare(
+            `
           SELECT id, canonical_name, normalized_name, musicbrainz_id
           FROM artist_entities
           WHERE normalized_name = ?
             AND (musicbrainz_id IS NULL OR trim(musicbrainz_id) = '')
           ORDER BY created_at, id
           LIMIT 1
-        `).get(credit.normalizedName);
+        `,
+          )
+          .get(credit.normalizedName);
   }
 
   if (row) {
-    const hasDistinctCanonicalName = credit.canonicalName
-      !== canonicalArtistName(credit.creditedName);
+    const hasDistinctCanonicalName =
+      credit.canonicalName !== canonicalArtistName(credit.creditedName);
     if (
-      matchedByMusicBrainzId
-      && hasDistinctCanonicalName
-      && (
-        row.canonical_name !== credit.canonicalName
-        || row.normalized_name !== credit.normalizedName
-      )
+      matchedByMusicBrainzId &&
+      hasDistinctCanonicalName &&
+      (row.canonical_name !== credit.canonicalName || row.normalized_name !== credit.normalizedName)
     ) {
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE artist_entities
         SET canonical_name = ?, normalized_name = ?, updated_at = ?
         WHERE id = ?
-      `).run(
-        credit.canonicalName,
-        credit.normalizedName,
-        timestamp,
-        row.id,
-      );
+      `,
+      ).run(credit.canonicalName, credit.normalizedName, timestamp, row.id);
       row.canonical_name = credit.canonicalName;
       row.normalized_name = credit.normalizedName;
     }
     if (credit.musicBrainzId && !musicBrainzArtistId(row.musicbrainz_id)) {
-      db.prepare(`
+      db.prepare(
+        `
         UPDATE artist_entities
         SET musicbrainz_id = ?, updated_at = ?
         WHERE id = ?
-      `).run(credit.musicBrainzId, timestamp, row.id);
+      `,
+      ).run(credit.musicBrainzId, timestamp, row.id);
       row.musicbrainz_id = credit.musicBrainzId;
     }
     return row;
   }
 
   const id = randomUUID();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO artist_entities(
       id, canonical_name, normalized_name, musicbrainz_id, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     id,
     credit.canonicalName,
     credit.normalizedName,
@@ -776,19 +818,27 @@ const resolveArtistEntity = (db, { artistId, musicBrainzId }, label) => {
     : null;
   const resolvedMusicBrainzId = explicitMusicBrainzId ?? prefixedMusicBrainzId;
   let row = resolvedMusicBrainzId
-    ? db.prepare(`
+    ? db
+        .prepare(
+          `
         SELECT id, canonical_name, normalized_name, musicbrainz_id
         FROM artist_entities
         WHERE musicbrainz_id = ? COLLATE NOCASE
         LIMIT 1
-      `).get(resolvedMusicBrainzId)
+      `,
+        )
+        .get(resolvedMusicBrainzId)
     : undefined;
   if (!row && rawArtistId && !prefixedMusicBrainzId) {
-    row = db.prepare(`
+    row = db
+      .prepare(
+        `
       SELECT id, canonical_name, normalized_name, musicbrainz_id
       FROM artist_entities
       WHERE id = ?
-    `).get(rawArtistId);
+    `,
+      )
+      .get(rawArtistId);
   }
   if (!row) throw new Error(`${label} artist was not found`);
   return row;
@@ -801,23 +851,26 @@ const resolveArtistEntity = (db, { artistId, musicBrainzId }, label) => {
  */
 export const mergeArtistEntities = (
   dbPath,
-  {
-    sourceArtistId,
-    sourceMusicBrainzId,
-    targetArtistId,
-    targetMusicBrainzId,
-  },
+  { sourceArtistId, sourceMusicBrainzId, targetArtistId, targetMusicBrainzId },
 ) => {
   const db = openDatabase(dbPath);
   const merge = () => {
-    const source = resolveArtistEntity(db, {
-      artistId: sourceArtistId,
-      musicBrainzId: sourceMusicBrainzId,
-    }, "Source");
-    const target = resolveArtistEntity(db, {
-      artistId: targetArtistId,
-      musicBrainzId: targetMusicBrainzId,
-    }, "Destination");
+    const source = resolveArtistEntity(
+      db,
+      {
+        artistId: sourceArtistId,
+        musicBrainzId: sourceMusicBrainzId,
+      },
+      "Source",
+    );
+    const target = resolveArtistEntity(
+      db,
+      {
+        artistId: targetArtistId,
+        musicBrainzId: targetMusicBrainzId,
+      },
+      "Destination",
+    );
     if (source.id === target.id) {
       throw new Error("Choose a different artist to merge");
     }
@@ -825,38 +878,51 @@ export const mergeArtistEntities = (
     const sourceMusicBrainz = musicBrainzArtistId(source.musicbrainz_id);
     const targetMusicBrainz = musicBrainzArtistId(target.musicbrainz_id);
     if (
-      sourceMusicBrainz
-      && targetMusicBrainz
-      && sourceMusicBrainz.toLocaleLowerCase() !== targetMusicBrainz.toLocaleLowerCase()
+      sourceMusicBrainz &&
+      targetMusicBrainz &&
+      sourceMusicBrainz.toLocaleLowerCase() !== targetMusicBrainz.toLocaleLowerCase()
     ) {
       throw new Error("Artists with different MusicBrainz IDs cannot be merged");
     }
 
-    const creditSummary = db.prepare(`
+    const creditSummary = db
+      .prepare(
+        `
       SELECT COUNT(*) AS credit_count, COUNT(DISTINCT track_id) AS track_count
       FROM track_artist_credits
       WHERE artist_id = ?
-    `).get(source.id);
+    `,
+      )
+      .get(source.id);
     const timestamp = Math.floor(Date.now() / 1000);
-    const affectedTrackIds = db.prepare(`
+    const affectedTrackIds = db
+      .prepare(
+        `
       SELECT DISTINCT track_id FROM track_artist_credits WHERE artist_id = ?
-    `).all(source.id).map((row) => String(row.track_id));
-    db.prepare(`
+    `,
+      )
+      .all(source.id)
+      .map((row) => String(row.track_id));
+    db.prepare(
+      `
       UPDATE track_artist_credits
       SET artist_id = ?
       WHERE artist_id = ?
-    `).run(target.id, source.id);
+    `,
+    ).run(target.id, source.id);
     db.prepare("DELETE FROM artist_entities WHERE id = ?").run(source.id);
     // Search text carries each credit's canonical artist name, which is now
     // the destination's.
     for (const trackId of affectedTrackIds) refreshSearchText(db, trackId);
 
     const mergedMusicBrainzId = targetMusicBrainz ?? sourceMusicBrainz;
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE artist_entities
       SET musicbrainz_id = ?, updated_at = ?
       WHERE id = ?
-    `).run(mergedMusicBrainzId, timestamp, target.id);
+    `,
+    ).run(mergedMusicBrainzId, timestamp, target.id);
 
     const bindName = db.prepare(`
       INSERT INTO artist_identity_bindings(
@@ -914,8 +980,7 @@ export const replaceTrackArtistCredits = (
   }
   if (!display.trim()) throw new Error("Artist credits require display text");
 
-  const normalizedCredits = (Array.isArray(credits) ? credits : [])
-    .map(normalizedCreditInput);
+  const normalizedCredits = (Array.isArray(credits) ? credits : []).map(normalizedCreditInput);
   if (normalizedCredits.length === 0) {
     throw new Error("Artist credit sets require at least one credit");
   }
@@ -941,11 +1006,14 @@ export const replaceTrackArtistCredits = (
       credit,
       entity: ensureArtistEntity(db, credit, timestamp),
     }));
-    db.prepare(`
+    db.prepare(
+      `
       DELETE FROM track_artist_credits
       WHERE track_id = ? AND scope = ?
-    `).run(normalizedTrackId, normalizedScope);
-    db.prepare(`
+    `,
+    ).run(normalizedTrackId, normalizedScope);
+    db.prepare(
+      `
       INSERT INTO track_artist_credit_sets(
         track_id, scope, display_text, provenance, confidence, needs_review,
         created_at, updated_at
@@ -956,7 +1024,8 @@ export const replaceTrackArtistCredits = (
         confidence = excluded.confidence,
         needs_review = excluded.needs_review,
         updated_at = excluded.updated_at
-    `).run(
+    `,
+    ).run(
       normalizedTrackId,
       normalizedScope,
       display,
@@ -995,9 +1064,7 @@ export const replaceTrackArtistCredits = (
         name: String(entity.canonical_name),
         creditedName: credit.creditedName,
         joinPhrase: credit.joinPhrase,
-        ...(entity.musicbrainz_id
-          ? { musicBrainzId: String(entity.musicbrainz_id) }
-          : {}),
+        ...(entity.musicbrainz_id ? { musicBrainzId: String(entity.musicbrainz_id) } : {}),
         ...(credit.role ? { role: credit.role } : {}),
       })),
     };
@@ -1031,26 +1098,39 @@ const artistCreditRows = (db, trackIds) => {
     END
   `;
   if (trackIds === undefined) {
-    return db.prepare(baseQuery + `
+    return db
+      .prepare(
+        baseQuery +
+          `
       ORDER BY credit_sets.track_id, credit_sets.scope, credits.position
-    `).all();
+    `,
+      )
+      .all();
   }
 
-  const ids = [...new Set(
-    (Array.isArray(trackIds) ? trackIds : [trackIds])
-      .map((trackId) => String(trackId ?? "").trim())
-      .filter(Boolean),
-  )];
+  const ids = [
+    ...new Set(
+      (Array.isArray(trackIds) ? trackIds : [trackIds])
+        .map((trackId) => String(trackId ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
   if (ids.length === 0) return [];
   const rows = [];
   for (let offset = 0; offset < ids.length; offset += 500) {
     const chunk = ids.slice(offset, offset + 500);
     const placeholders = chunk.map(() => "?").join(", ");
-    rows.push(...db.prepare(
-      baseQuery
-      + " AND credit_sets.track_id IN (" + placeholders + ")"
-      + " ORDER BY credit_sets.track_id, credit_sets.scope, credits.position",
-    ).all(...chunk));
+    rows.push(
+      ...db
+        .prepare(
+          baseQuery +
+            " AND credit_sets.track_id IN (" +
+            placeholders +
+            ")" +
+            " ORDER BY credit_sets.track_id, credit_sets.scope, credits.position",
+        )
+        .all(...chunk),
+    );
   }
   return rows;
 };
@@ -1071,9 +1151,7 @@ export const loadArtistCredits = (db, trackIds) => {
       name: String(row.canonical_name),
       creditedName: String(row.credited_name),
       joinPhrase: String(row.join_phrase ?? ""),
-      ...(row.musicbrainz_id
-        ? { musicBrainzId: String(row.musicbrainz_id) }
-        : {}),
+      ...(row.musicbrainz_id ? { musicBrainzId: String(row.musicbrainz_id) } : {}),
       ...(row.role ? { role: String(row.role) } : {}),
     };
     if (row.scope === "album") payload.album_artist_credits.push(credit);
@@ -1093,10 +1171,13 @@ export const ensureStructuredArtistCredits = (
   { overrideExactExceptions = false } = {},
 ) => {
   const db = openDatabase(dbPath);
-  const exceptionList = Array.from(exceptions ?? [], (value) => String(value ?? ""))
-    .filter((value) => value.trim());
+  const exceptionList = Array.from(exceptions ?? [], (value) => String(value ?? "")).filter(
+    (value) => value.trim(),
+  );
   const existingSets = new Map();
-  for (const row of db.prepare(`
+  for (const row of db
+    .prepare(
+      `
     SELECT
       credit_sets.track_id,
       credit_sets.scope,
@@ -1110,7 +1191,9 @@ export const ensureStructuredArtistCredits = (
       ON credits.track_id = credit_sets.track_id
       AND credits.scope = credit_sets.scope
     ORDER BY credit_sets.track_id, credit_sets.scope, credits.position
-  `).all()) {
+  `,
+    )
+    .all()) {
     const key = String(row.track_id) + "\0" + String(row.scope);
     const set = existingSets.get(key) ?? {
       displayText: String(row.display_text),
@@ -1125,7 +1208,9 @@ export const ensureStructuredArtistCredits = (
     }
     existingSets.set(key, set);
   }
-  const tracks = db.prepare(`
+  const tracks = db
+    .prepare(
+      `
     SELECT
       id,
       artist,
@@ -1133,7 +1218,9 @@ export const ensureStructuredArtistCredits = (
       musicbrainz_artistid,
       musicbrainz_albumartistid
     FROM tracks
-  `).all();
+  `,
+    )
+    .all();
   const result = {
     tracksChecked: tracks.length,
     setsCreated: 0,
@@ -1156,22 +1243,18 @@ export const ensureStructuredArtistCredits = (
           (exception) => normalizeArtistName(exception) === normalizeArtistName(displayText),
         );
         const existingSet = existingSets.get(key);
-        const sameParsedCredits = existingSet
-          && existingSet.credits.length === credits.length
-          && existingSet.credits.every((credit, index) => (
-            credit.creditedName === credits[index].creditedName
-            && credit.joinPhrase === credits[index].joinPhrase
-          ));
+        const sameParsedCredits =
+          existingSet &&
+          existingSet.credits.length === credits.length &&
+          existingSet.credits.every(
+            (credit, index) =>
+              credit.creditedName === credits[index].creditedName &&
+              credit.joinPhrase === credits[index].joinPhrase,
+          );
         if (
-          existingSet
-          && (
-            (existingSet.provenance !== "legacy"
-              && !(overrideExactExceptions && exactException))
-            || (
-              existingSet.displayText === displayText
-              && sameParsedCredits
-            )
-          )
+          existingSet &&
+          ((existingSet.provenance !== "legacy" && !(overrideExactExceptions && exactException)) ||
+            (existingSet.displayText === displayText && sameParsedCredits))
         ) {
           continue;
         }
@@ -1216,13 +1299,13 @@ export const migrateStructuredArtistCredits = (dbPath, exceptions = []) => {
   const db = openDatabase(dbPath);
   const migrationState = JSON.stringify({
     version: 1,
-    exceptions: [...new Set(
-      Array.from(exceptions ?? [], normalizeArtistName).filter(Boolean),
-    )].sort(),
+    exceptions: [
+      ...new Set(Array.from(exceptions ?? [], normalizeArtistName).filter(Boolean)),
+    ].sort(),
   });
-  const storedState = db.prepare(
-    "SELECT value FROM app_metadata WHERE key = ?",
-  ).get(ARTIST_CREDIT_MIGRATION_METADATA_KEY)?.value;
+  const storedState = db
+    .prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .get(ARTIST_CREDIT_MIGRATION_METADATA_KEY)?.value;
   if (storedState === migrationState) {
     return {
       skipped: true,
@@ -1236,10 +1319,12 @@ export const migrateStructuredArtistCredits = (dbPath, exceptions = []) => {
   const result = ensureStructuredArtistCredits(dbPath, exceptions, {
     overrideExactExceptions: true,
   });
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO app_metadata(key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(ARTIST_CREDIT_MIGRATION_METADATA_KEY, migrationState);
+  `,
+  ).run(ARTIST_CREDIT_MIGRATION_METADATA_KEY, migrationState);
   return { skipped: false, ...result };
 };
 
@@ -1278,9 +1363,7 @@ export const configureLibraryRoot = (dbPath, requestedRoot, { force = false } = 
   `);
 
   const rows = db.prepare("SELECT id, source_path, import_status FROM tracks").all();
-  const used = new Map(
-    rows.map((row) => [portablePathKey(row.source_path), String(row.id)]),
-  );
+  const used = new Map(rows.map((row) => [portablePathKey(row.source_path), String(row.id)]));
   const update = db.prepare("UPDATE tracks SET source_path = ? WHERE id = ?");
   const returnToInbox = db.prepare(`
     UPDATE tracks SET import_status = 'staged' WHERE id = ?
@@ -1310,21 +1393,23 @@ export const configureLibraryRoot = (dbPath, requestedRoot, { force = false } = 
         ? resolved
         : resolveStoredTrackPath(portable || stored, root);
       if (
-        rootChanged
-        && row.import_status !== "staged"
-        && !isPathInsideLibraryRoot(resolvedForNewRoot, root)
+        rootChanged &&
+        row.import_status !== "staged" &&
+        !isPathInsideLibraryRoot(resolvedForNewRoot, root)
       ) {
         returnToInbox.run(row.id);
       }
     }
-    const updatePlaylist = db.prepare(
-      "UPDATE playlists SET source_path = ? WHERE id = ?",
-    );
-    for (const playlist of db.prepare(`
+    const updatePlaylist = db.prepare("UPDATE playlists SET source_path = ? WHERE id = ?");
+    for (const playlist of db
+      .prepare(
+        `
       SELECT id, source_path
       FROM playlists
       WHERE source_path IS NOT NULL AND source_path <> ''
-    `).all()) {
+    `,
+      )
+      .all()) {
       const stored = String(playlist.source_path);
       const resolved = resolveStoredTrackPath(stored, previousRoot);
       const portable = toStoredTrackPath(resolved, root);
@@ -1338,16 +1423,10 @@ export const configureLibraryRoot = (dbPath, requestedRoot, { force = false } = 
 };
 
 export const resolveLibraryPath = (dbPath, storedPath, libraryRoot) =>
-  resolveStoredTrackPath(
-    storedPath,
-    normalizeLibraryRoot(libraryRoot) ?? getLibraryRoot(dbPath),
-  );
+  resolveStoredTrackPath(storedPath, normalizeLibraryRoot(libraryRoot) ?? getLibraryRoot(dbPath));
 
 export const storeLibraryPath = (dbPath, filePath, libraryRoot) =>
-  toStoredTrackPath(
-    filePath,
-    normalizeLibraryRoot(libraryRoot) ?? getLibraryRoot(dbPath),
-  );
+  toStoredTrackPath(filePath, normalizeLibraryRoot(libraryRoot) ?? getLibraryRoot(dbPath));
 
 export const resolveTrackPath = (dbPath, storedPath, libraryRoot) => {
   const resolved = resolveLibraryPath(dbPath, storedPath, libraryRoot);
@@ -1385,14 +1464,19 @@ export const searchTrackIds = (dbPath, query, limit = 0) => {
   const db = openDatabase(dbPath);
   const bounded = Number(limit) > 0 ? Math.min(Number(limit), 100_000) : 100_000;
   try {
-    return db.prepare(`
+    return db
+      .prepare(
+        `
       SELECT t.id AS id
       FROM tracks_fts f
       JOIN tracks t ON t.rowid = f.rowid
       WHERE tracks_fts MATCH ?
       ORDER BY bm25(tracks_fts)
       LIMIT ?
-    `).all(match, bounded).map((row) => String(row.id));
+    `,
+      )
+      .all(match, bounded)
+      .map((row) => String(row.id));
   } catch {
     // A malformed FTS expression must degrade to "no index answer" rather than
     // breaking search; the caller falls back to its own filtering.
@@ -1440,9 +1524,10 @@ const formatDuration = (seconds) => {
 export const technicalTrackFields = (row) => ({
   sample_rate_hz: row.sample_rate_hz > 0 ? row.sample_rate_hz : undefined,
   bit_depth: row.bit_depth > 0 ? row.bit_depth : undefined,
-  file_size_bytes: typeof row.file_size_bytes === "number" && row.file_size_bytes >= 0
-    ? row.file_size_bytes
-    : undefined,
+  file_size_bytes:
+    typeof row.file_size_bytes === "number" && row.file_size_bytes >= 0
+      ? row.file_size_bytes
+      : undefined,
 });
 
 export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
@@ -1451,8 +1536,7 @@ export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   artist: row.artist || "Unknown Artist",
   artist_credits: Array.isArray(row.artist_credits) ? row.artist_credits : [],
   album_artist: row.album_artist || undefined,
-  album_artist_credits:
-    Array.isArray(row.album_artist_credits) ? row.album_artist_credits : [],
+  album_artist_credits: Array.isArray(row.album_artist_credits) ? row.album_artist_credits : [],
   artists: row.album_artist || undefined,
   album: row.album || "Unknown Album",
   track_number: row.track_number ?? undefined,
@@ -1488,8 +1572,8 @@ export const rowToTrack = (row, { dbPath, libraryRoot } = {}) => ({
   replaygain_album_peak: row.replaygain_album_peak ?? undefined,
   loudness_source: row.loudness_source ?? undefined,
   is_missing:
-    Number(row.is_missing) === 1
-    || (dbPath && !path.isAbsolute(resolveLibraryPath(dbPath, row.source_path, libraryRoot)))
+    Number(row.is_missing) === 1 ||
+    (dbPath && !path.isAbsolute(resolveLibraryPath(dbPath, row.source_path, libraryRoot)))
       ? 1
       : 0,
   musicbrainz_trackid: row.musicbrainz_trackid || undefined,
@@ -1514,9 +1598,7 @@ const TRACK_SELECT = `
 
 const legacyCreditPayload = (displayText, exceptions, legacyMusicBrainzId) => {
   const parsed = parseLegacyArtistCredits(displayText, exceptions);
-  const onlyMusicBrainzId = parsed.length === 1
-    ? musicBrainzArtistId(legacyMusicBrainzId)
-    : null;
+  const onlyMusicBrainzId = parsed.length === 1 ? musicBrainzArtistId(legacyMusicBrainzId) : null;
   return parsed.map((credit) => ({
     artistId: "legacy:" + normalizeArtistName(credit.name),
     name: credit.name,
@@ -1538,21 +1620,25 @@ const hydratedArtistCreditPayload = (row, structured, exceptions) => ({
 export const loadTracks = (dbPath, libraryRoot, artistSeparatorExceptions = []) => {
   if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
   const db = openDatabase(dbPath);
-  const rows = db
-    .prepare(`${TRACK_SELECT} ORDER BY added_at DESC`)
-    .all();
-  const creditsByTrack = loadArtistCredits(db, rows.map((row) => row.id));
+  const rows = db.prepare(`${TRACK_SELECT} ORDER BY added_at DESC`).all();
+  const creditsByTrack = loadArtistCredits(
+    db,
+    rows.map((row) => row.id),
+  );
   const snapshot = { library: [], inbox: [] };
   for (const row of rows) {
     (row.import_status === "staged" ? snapshot.inbox : snapshot.library).push(
-      rowToTrack({
-        ...row,
-        ...hydratedArtistCreditPayload(
-          row,
-          creditsByTrack.get(String(row.id)),
-          artistSeparatorExceptions,
-        ),
-      }, { dbPath, libraryRoot })
+      rowToTrack(
+        {
+          ...row,
+          ...hydratedArtistCreditPayload(
+            row,
+            creditsByTrack.get(String(row.id)),
+            artistSeparatorExceptions,
+          ),
+        },
+        { dbPath, libraryRoot },
+      ),
     );
   }
   return snapshot;
@@ -1567,68 +1653,86 @@ export const loadRecentlyPlayed = (
   if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
   const db = openDatabase(dbPath);
   const rows = db
-    .prepare(`${TRACK_SELECT} WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?`)
+    .prepare(
+      `${TRACK_SELECT} WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?`,
+    )
     .all(Math.max(0, Number(limit) || 0));
-  const creditsByTrack = loadArtistCredits(db, rows.map((row) => row.id));
-  return rows.map((row) => rowToTrack({
-    ...row,
-    ...hydratedArtistCreditPayload(
-      row,
-      creditsByTrack.get(String(row.id)),
-      artistSeparatorExceptions,
+  const creditsByTrack = loadArtistCredits(
+    db,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) =>
+    rowToTrack(
+      {
+        ...row,
+        ...hydratedArtistCreditPayload(
+          row,
+          creditsByTrack.get(String(row.id)),
+          artistSeparatorExceptions,
+        ),
+      },
+      { dbPath, libraryRoot },
     ),
-  }, { dbPath, libraryRoot }));
+  );
 };
 
 export const loadPlaylists = (dbPath, libraryRoot) => {
   if (libraryRoot) configureLibraryRoot(dbPath, libraryRoot);
   const db = openDatabase(dbPath);
   const trackIdsByPlaylist = new Map();
-  for (const row of db.prepare(`
+  for (const row of db
+    .prepare(
+      `
     SELECT playlist_id, track_id
     FROM playlist_tracks
     ORDER BY playlist_id, position ASC
-  `).all()) {
+  `,
+    )
+    .all()) {
     const playlistId = String(row.playlist_id);
     const ids = trackIdsByPlaylist.get(playlistId) ?? [];
     ids.push(String(row.track_id));
     trackIdsByPlaylist.set(playlistId, ids);
   }
-  const playlists = db.prepare(`
+  const playlists = db
+    .prepare(
+      `
     SELECT id, name, folder_id, sort_order, source_path,
       source_mtime_ms, source_size, source_sync_error, last_synced_at
     FROM playlists
     ORDER BY folder_id, sort_order ASC, created_at DESC, id
-  `).all().map((playlist) => ({
-    id: String(playlist.id),
-    name: playlist.name,
-    folder_id: playlist.folder_id == null ? null : String(playlist.folder_id),
-    sort_order: Number(playlist.sort_order) || 0,
-    source_path: playlist.source_path == null
-      ? null
-      : resolveLibraryPath(dbPath, playlist.source_path),
-    source_mtime_ms: playlist.source_mtime_ms == null
-      ? null
-      : Number(playlist.source_mtime_ms),
-    source_size: playlist.source_size == null ? null : Number(playlist.source_size),
-    source_sync_error: playlist.source_sync_error == null
-      ? null
-      : String(playlist.source_sync_error),
-    last_synced_at: playlist.last_synced_at == null
-      ? null
-      : Number(playlist.last_synced_at),
-    track_ids: trackIdsByPlaylist.get(String(playlist.id)) ?? [],
-  }));
-  const folders = db.prepare(`
+  `,
+    )
+    .all()
+    .map((playlist) => ({
+      id: String(playlist.id),
+      name: playlist.name,
+      folder_id: playlist.folder_id == null ? null : String(playlist.folder_id),
+      sort_order: Number(playlist.sort_order) || 0,
+      source_path:
+        playlist.source_path == null ? null : resolveLibraryPath(dbPath, playlist.source_path),
+      source_mtime_ms: playlist.source_mtime_ms == null ? null : Number(playlist.source_mtime_ms),
+      source_size: playlist.source_size == null ? null : Number(playlist.source_size),
+      source_sync_error:
+        playlist.source_sync_error == null ? null : String(playlist.source_sync_error),
+      last_synced_at: playlist.last_synced_at == null ? null : Number(playlist.last_synced_at),
+      track_ids: trackIdsByPlaylist.get(String(playlist.id)) ?? [],
+    }));
+  const folders = db
+    .prepare(
+      `
     SELECT id, name, parent_id, sort_order
     FROM playlist_folders
     ORDER BY parent_id, sort_order ASC, created_at ASC, name COLLATE NOCASE ASC
-  `).all().map((folder) => ({
-    id: String(folder.id),
-    name: folder.name,
-    parent_id: folder.parent_id == null ? null : String(folder.parent_id),
-    sort_order: Number(folder.sort_order) || 0,
-  }));
+  `,
+    )
+    .all()
+    .map((folder) => ({
+      id: String(folder.id),
+      name: folder.name,
+      parent_id: folder.parent_id == null ? null : String(folder.parent_id),
+      sort_order: Number(folder.sort_order) || 0,
+    }));
   return { playlists, folders };
 };
 
@@ -1647,14 +1751,22 @@ export const normalizeSearchText = (...values) =>
     .trim();
 
 export const refreshSearchText = (db, trackId) => {
-  const row = db.prepare(`
+  const row = db
+    .prepare(
+      `
     SELECT title, artist, album, album_artist, genre_json, comment_json,
       label, filename, year, track_number, disc_number, key, bpm
     FROM tracks WHERE id = ?
-  `).get(trackId);
+  `,
+    )
+    .get(trackId);
   if (!row) return;
   const parse = (raw) => {
-    try { return JSON.parse(raw || "[]"); } catch { return []; }
+    try {
+      return JSON.parse(raw || "[]");
+    } catch {
+      return [];
+    }
   };
   const structuredCredits = loadArtistCredits(db, [trackId]).get(String(trackId));
   const individualArtistNames = [
@@ -1662,10 +1774,20 @@ export const refreshSearchText = (db, trackId) => {
     ...(structuredCredits?.album_artist_credits ?? []),
   ].flatMap((credit) => [credit.name, credit.creditedName]);
   const searchText = normalizeSearchText(
-    row.title, row.artist, row.album, row.album_artist,
+    row.title,
+    row.artist,
+    row.album,
+    row.album_artist,
     individualArtistNames,
-    parse(row.genre_json), parse(row.comment_json), row.label, row.filename,
-    row.year, row.track_number, row.disc_number, row.key, row.bpm
+    parse(row.genre_json),
+    parse(row.comment_json),
+    row.label,
+    row.filename,
+    row.year,
+    row.track_number,
+    row.disc_number,
+    row.key,
+    row.bpm,
   );
   db.prepare("UPDATE tracks SET search_text = ? WHERE id = ?").run(searchText, trackId);
 };

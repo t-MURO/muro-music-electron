@@ -12,10 +12,8 @@ const normalizeSourcePath = (sourcePath) => {
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 };
 
-const sourceKey = (sourcePath) => crypto
-  .createHash("sha256")
-  .update(normalizeSourcePath(sourcePath))
-  .digest("hex");
+const sourceKey = (sourcePath) =>
+  crypto.createHash("sha256").update(normalizeSourcePath(sourcePath)).digest("hex");
 
 const isValidPeaks = (peaks) =>
   Array.isArray(peaks) && peaks.every((peak) => Number.isFinite(peak));
@@ -101,9 +99,11 @@ export const createWaveformCache = ({ cacheDir }) => {
         if (error?.code === "ENOENT") return;
         throw error;
       }
-      await Promise.all(entries
-        .filter((entry) => entry.startsWith(prefix) && entry.endsWith(".json"))
-        .map((entry) => fs.promises.rm(path.join(cacheDir, entry), { force: true })));
+      await Promise.all(
+        entries
+          .filter((entry) => entry.startsWith(prefix) && entry.endsWith(".json"))
+          .map((entry) => fs.promises.rm(path.join(cacheDir, entry), { force: true })),
+      );
     },
 
     async clear() {

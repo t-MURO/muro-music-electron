@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { KeyFinderClient } from "@neo-keyfinder/engine-client";
 
 // Fake engines are plain Node scripts, so this runs without the native binary.
-const fakeEngine = (source) => new KeyFinderClient({
-  executablePath: process.execPath,
-  args: ["-e", source],
-});
+const fakeEngine = (source) =>
+  new KeyFinderClient({
+    executablePath: process.execPath,
+    args: ["-e", source],
+  });
 
 const waitForExit = (client) => new Promise((resolve) => client.once("exit", resolve));
 
@@ -29,10 +30,12 @@ const expectRejection = (promise, label, pattern) =>
 {
   const client = fakeEngine("process.exit(3)");
   const exited = waitForExit(client);
-  const requests = Array.from({ length: 20 }, (_, index) => expectRejection(
-    client.request("health", { padding: "x".repeat(64 * 1024), index }, { timeoutMs: 10_000 }),
-    "Request to an exited engine",
-  ));
+  const requests = Array.from({ length: 20 }, (_, index) =>
+    expectRejection(
+      client.request("health", { padding: "x".repeat(64 * 1024), index }, { timeoutMs: 10_000 }),
+      "Request to an exited engine",
+    ),
+  );
   await Promise.all(requests);
   const exit = await withTimeout(exited, "Exit event");
   assert.equal(exit.code, 3);
@@ -45,16 +48,20 @@ const expectRejection = (promise, label, pattern) =>
 {
   const client = fakeEngine("setInterval(() => {}, 1_000);");
   const exited = waitForExit(client);
-  const requests = Array.from({ length: 5 }, () => expectRejection(
-    client.request("health", { padding: "x".repeat(64 * 1024) }, { timeoutMs: 10_000 }),
-    "Request to a closed engine",
-  ));
+  const requests = Array.from({ length: 5 }, () =>
+    expectRejection(
+      client.request("health", { padding: "x".repeat(64 * 1024) }, { timeoutMs: 10_000 }),
+      "Request to a closed engine",
+    ),
+  );
   client.close();
-  requests.push(expectRejection(
-    client.request("health", {}, { timeoutMs: 10_000 }),
-    "Request after close",
-    /KeyFinder engine was closed/,
-  ));
+  requests.push(
+    expectRejection(
+      client.request("health", {}, { timeoutMs: 10_000 }),
+      "Request after close",
+      /KeyFinder engine was closed/,
+    ),
+  );
   await Promise.all(requests);
   await withTimeout(exited, "Exit after close");
 }

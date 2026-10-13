@@ -32,15 +32,17 @@ assert.equal(decoded.payloadType, 0);
 
 // --- Frame reader handles split and coalesced frames ------------------------
 
-const first = frameCastMessage(encodeCastMessage({ ...original, payloadUtf8: "{\"n\":1}" }));
-const second = frameCastMessage(encodeCastMessage({ ...original, payloadUtf8: "{\"n\":2}" }));
+const first = frameCastMessage(encodeCastMessage({ ...original, payloadUtf8: '{"n":1}' }));
+const second = frameCastMessage(encodeCastMessage({ ...original, payloadUtf8: '{"n":2}' }));
 const received = [];
-const readFrames = createFrameReader((message) => received.push(decodeCastMessage(message).payloadUtf8));
+const readFrames = createFrameReader((message) =>
+  received.push(decodeCastMessage(message).payloadUtf8),
+);
 
 readFrames(first.subarray(0, 3));
 assert.equal(received.length, 0);
 readFrames(Buffer.concat([first.subarray(3), second]));
-assert.deepEqual(received, ["{\"n\":1}", "{\"n\":2}"]);
+assert.deepEqual(received, ['{"n":1}', '{"n":2}']);
 
 const oversizedFrame = Buffer.alloc(4);
 oversizedFrame.writeUInt32BE(MAX_CAST_FRAME_BYTES + 1);
@@ -55,13 +57,14 @@ assert.equal(query.readUInt16BE(query.length - 2), 0x8001); // QU bit + IN
 
 // --- mDNS response parsing with name compression ----------------------------
 
-const encodeName = (name) => Buffer.concat([
-  ...name.split(".").map((label) => {
-    const bytes = Buffer.from(label, "utf8");
-    return Buffer.concat([Buffer.from([bytes.length]), bytes]);
-  }),
-  Buffer.from([0]),
-]);
+const encodeName = (name) =>
+  Buffer.concat([
+    ...name.split(".").map((label) => {
+      const bytes = Buffer.from(label, "utf8");
+      return Buffer.concat([Buffer.from([bytes.length]), bytes]);
+    }),
+    Buffer.from([0]),
+  ]);
 const pointerTo = (offset) => Buffer.from([0xc0 | (offset >> 8), offset & 0xff]);
 const uint16 = (value) => {
   const buffer = Buffer.alloc(2);
@@ -102,7 +105,12 @@ const ptrRecord = record(serviceName, 12, ptrRdata);
 // record's name + type + class + ttl + rdlength.
 const instanceNameOffset = 12 + serviceName.length + 2 + 2 + 4 + 2;
 
-const srvRdata = Buffer.concat([uint16(0), uint16(0), uint16(8009), encodeName("chromecast-abc.local")]);
+const srvRdata = Buffer.concat([
+  uint16(0),
+  uint16(0),
+  uint16(8009),
+  encodeName("chromecast-abc.local"),
+]);
 const srvRecord = record(pointerTo(instanceNameOffset), 33, srvRdata);
 
 const txtRdata = Buffer.concat(

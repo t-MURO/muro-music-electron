@@ -3,15 +3,18 @@ import { createPortal } from "react-dom";
 import { invoke } from "@muro/desktop/runtime";
 import { convertFileSrc } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
-import { ClipboardCopy, ClipboardPaste, Disc3, Download, ImagePlus, LoaderCircle } from "lucide-react";
+import {
+  ClipboardCopy,
+  ClipboardPaste,
+  Disc3,
+  Download,
+  ImagePlus,
+  LoaderCircle,
+} from "lucide-react";
 import { t } from "../../i18n";
 import { notify, useSettingsStore } from "../../stores";
 import { artistSeparatorExceptionKey } from "../../lib/metadata/artistSeparators";
-import type {
-  AlbumCoverCandidate,
-  Track,
-  TrackMetadataUpdates,
-} from "../../types";
+import type { AlbumCoverCandidate, Track, TrackMetadataUpdates } from "../../types";
 import {
   albumArtistCredits,
   editedArtistCredits,
@@ -19,7 +22,11 @@ import {
   legacyArtistCredits,
   trackArtistCredits,
 } from "../../utils/artistCredits";
-import { cacheClipboardCoverArt, clipboardHasImage, copyImageToClipboard } from "../../desktop/clipboard";
+import {
+  cacheClipboardCoverArt,
+  clipboardHasImage,
+  copyImageToClipboard,
+} from "../../desktop/clipboard";
 import { AlbumCoverPickerModal } from "./AlbumCoverPickerModal";
 import { Popover, PopoverHeader, PopoverItem } from "./Popover";
 
@@ -30,9 +37,11 @@ type FetchedCoverArt = {
   provider?: "cover-art-archive" | "deezer" | "brave-search" | null;
 };
 
-type CoverArtLookupResult = FetchedCoverArt | {
-  candidates: AlbumCoverCandidate[];
-};
+type CoverArtLookupResult =
+  | FetchedCoverArt
+  | {
+      candidates: AlbumCoverCandidate[];
+    };
 
 type EditTrackModalProps = {
   isOpen: boolean;
@@ -151,9 +160,7 @@ export const EditTrackModal = ({
   onCacheCoverCandidate,
 }: EditTrackModalProps) => {
   const isBatch = tracks.length > 1;
-  const artistSeparatorExceptions = useSettingsStore(
-    (state) => state.artistSeparatorExceptions,
-  );
+  const artistSeparatorExceptions = useSettingsStore((state) => state.artistSeparatorExceptions);
   const artistSeparatorExceptionKeys = useMemo(
     () => new Set(artistSeparatorExceptions.map(artistSeparatorExceptionKey)),
     [artistSeparatorExceptions],
@@ -175,14 +182,18 @@ export const EditTrackModal = ({
       track.artist,
       ...trackArtistCredits(track).flatMap((credit) => [credit.name, credit.creditedName]),
       explicitAlbumArtistDisplay(track),
-      ...albumArtistCredits(track, { fallbackToTrack: false })
-        .flatMap((credit) => [credit.name, credit.creditedName]),
+      ...albumArtistCredits(track, { fallbackToTrack: false }).flatMap((credit) => [
+        credit.name,
+        credit.creditedName,
+      ]),
     ]);
     return {
       artist: buildSuggestions(people),
       albumArtist: buildSuggestions(people),
       album: buildSuggestions(libraryTracks.map((track) => track.album)),
-      genre: buildSuggestions(libraryTracks.flatMap((track) => track.genre?.split(/\s*,\s*/g) ?? [])),
+      genre: buildSuggestions(
+        libraryTracks.flatMap((track) => track.genre?.split(/\s*,\s*/g) ?? []),
+      ),
       label: buildSuggestions(libraryTracks.map((track) => track.label)),
     };
   }, [libraryTracks]);
@@ -256,7 +267,7 @@ export const EditTrackModal = ({
         });
       }
     },
-    [isBatch]
+    [isBatch],
   );
 
   // Cover art from current track(s) for display
@@ -283,7 +294,7 @@ export const EditTrackModal = ({
       const filePath = Array.isArray(result) ? result[0] : result;
       const cached = await invoke<{ fullPath: string; thumbPath: string }>(
         "cache_cover_art_from_file",
-        { filePath }
+        { filePath },
       );
 
       updateField("coverArtPath", cached.fullPath);
@@ -302,7 +313,11 @@ export const EditTrackModal = ({
     try {
       const result = await onFetchCoverArt(track.id, {
         album: form.album.trim() || track.album,
-        artist: form.artists.trim() || form.artist.trim() || explicitAlbumArtistDisplay(track) || track.artist,
+        artist:
+          form.artists.trim() ||
+          form.artist.trim() ||
+          explicitAlbumArtistDisplay(track) ||
+          track.artist,
       });
       if (!result) {
         notify.info(t("edit.coverArtFetchNotFound"));
@@ -316,23 +331,36 @@ export const EditTrackModal = ({
       updateField("coverArtPath", cached.fullPath);
       updateField("coverArtThumbPath", cached.thumbPath);
       setCoverPreview(convertFileSrc(cached.fullPath));
-      notify.success(cached.provider === "deezer"
-        ? t("edit.coverArtFetchedFromDeezer")
-        : t("edit.coverArtFetched"));
+      notify.success(
+        cached.provider === "deezer"
+          ? t("edit.coverArtFetchedFromDeezer")
+          : t("edit.coverArtFetched"),
+      );
     } catch (error) {
       notify.error(error instanceof Error ? error.message : t("edit.coverArtFetchFailed"));
     } finally {
       setIsFetchingCover(false);
     }
-  }, [form.album, form.artist, form.artists, isFetchingCover, onFetchCoverArt, tracks, updateField]);
+  }, [
+    form.album,
+    form.artist,
+    form.artists,
+    isFetchingCover,
+    onFetchCoverArt,
+    tracks,
+    updateField,
+  ]);
 
-  const handleCacheCoverCandidate = useCallback(async (candidate: AlbumCoverCandidate) => {
-    const cached = await onCacheCoverCandidate(candidate);
-    updateField("coverArtPath", cached.fullPath);
-    updateField("coverArtThumbPath", cached.thumbPath);
-    setCoverPreview(convertFileSrc(cached.fullPath));
-    notify.success(t("toast.cover.selectedFromBrave"));
-  }, [onCacheCoverCandidate, updateField]);
+  const handleCacheCoverCandidate = useCallback(
+    async (candidate: AlbumCoverCandidate) => {
+      const cached = await onCacheCoverCandidate(candidate);
+      updateField("coverArtPath", cached.fullPath);
+      updateField("coverArtThumbPath", cached.thumbPath);
+      setCoverPreview(convertFileSrc(cached.fullPath));
+      notify.success(t("toast.cover.selectedFromBrave"));
+    },
+    [onCacheCoverCandidate, updateField],
+  );
 
   const handlePasteCoverArt = useCallback(async () => {
     if (isPastingCover) return;
@@ -377,7 +405,7 @@ export const EditTrackModal = ({
       const currentRating = form.rating;
       updateField("rating", currentRating === newRating ? 0 : newRating);
     },
-    [form.rating, updateField]
+    [form.rating, updateField],
   );
 
   const handleSave = useCallback(async () => {
@@ -416,9 +444,10 @@ export const EditTrackModal = ({
       const creditsForEditedValue = (
         value: string,
         previous = [] as ReturnType<typeof trackArtistCredits>,
-      ) => artistSeparatorExceptionKeys.has(artistSeparatorExceptionKey(value))
-        ? legacyArtistCredits(value)
-        : editedArtistCredits(value, previous);
+      ) =>
+        artistSeparatorExceptionKeys.has(artistSeparatorExceptionKey(value))
+          ? legacyArtistCredits(value)
+          : editedArtistCredits(value, previous);
       if (isBatch) {
         if (dirtyFields.has("artist")) {
           updates.artistCredits = creditsForEditedValue(form.artist);
@@ -427,15 +456,17 @@ export const EditTrackModal = ({
           updates.albumArtistCredits = creditsForEditedValue(form.artists);
         }
       } else if (firstTrack) {
-        updates.artistCredits = form.artist === firstTrack.artist
-          ? firstTrack.artistCredits
-          : creditsForEditedValue(form.artist, trackArtistCredits(firstTrack));
-        updates.albumArtistCredits = form.artists === explicitAlbumArtistDisplay(firstTrack)
-          ? firstTrack.albumArtistCredits
-          : creditsForEditedValue(
-              form.artists,
-              albumArtistCredits(firstTrack, { fallbackToTrack: false }),
-            );
+        updates.artistCredits =
+          form.artist === firstTrack.artist
+            ? firstTrack.artistCredits
+            : creditsForEditedValue(form.artist, trackArtistCredits(firstTrack));
+        updates.albumArtistCredits =
+          form.artists === explicitAlbumArtistDisplay(firstTrack)
+            ? firstTrack.albumArtistCredits
+            : creditsForEditedValue(
+                form.artists,
+                albumArtistCredits(firstTrack, { fallbackToTrack: false }),
+              );
       }
 
       // Cover art is embedded only when it was explicitly changed. This avoids
@@ -455,15 +486,7 @@ export const EditTrackModal = ({
       saveInFlightRef.current = false;
       setIsSaving(false);
     }
-  }, [
-    artistSeparatorExceptionKeys,
-    dirtyFields,
-    form,
-    isBatch,
-    onClose,
-    onSave,
-    tracks,
-  ]);
+  }, [artistSeparatorExceptionKeys, dirtyFields, form, isBatch, onClose, onSave, tracks]);
 
   if (!isOpen || typeof document === "undefined") {
     return null;
@@ -501,9 +524,7 @@ export const EditTrackModal = ({
               : t("edit.title.single")}
           </h2>
           <p className="mt-[var(--spacing-xs)] text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
-            {isBatch
-              ? t("edit.subtitle.batch")
-              : t("edit.subtitle.single")}
+            {isBatch ? t("edit.subtitle.batch") : t("edit.subtitle.single")}
           </p>
         </div>
 
@@ -541,9 +562,14 @@ export const EditTrackModal = ({
                   )}
                 </div>
               )}
-              <div className={`absolute inset-0 flex items-center justify-center transition-colors ${isFetchingCover || isPastingCover ? "bg-black/45" : "bg-black/0 group-hover:bg-black/40"}`}>
+              <div
+                className={`absolute inset-0 flex items-center justify-center transition-colors ${isFetchingCover || isPastingCover ? "bg-black/45" : "bg-black/0 group-hover:bg-black/40"}`}
+              >
                 {isFetchingCover || isPastingCover ? (
-                  <LoaderCircle className="h-6 w-6 animate-spin text-white" aria-label={t("edit.coverArtFetching")} />
+                  <LoaderCircle
+                    className="h-6 w-6 animate-spin text-white"
+                    aria-label={t("edit.coverArtFetching")}
+                  />
                 ) : (
                   <ImagePlus className="h-6 w-6 text-white opacity-0 transition-opacity group-hover:opacity-100" />
                 )}
@@ -663,20 +689,19 @@ export const EditTrackModal = ({
             <div className="mb-[var(--spacing-xs)] flex items-center gap-2 text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
               <span>{t("edit.field.rating")}</span>
               {isBatch && mixedFields.has("rating") && (
-                <span className="text-[9px] font-normal text-[var(--color-text-muted)]" data-mixed-field="rating">
+                <span
+                  className="text-[9px] font-normal text-[var(--color-text-muted)]"
+                  data-mixed-field="rating"
+                >
                   {t("edit.placeholder.mixed")}
                 </span>
               )}
             </div>
-            <div
-              className="flex items-center gap-1"
-              onMouseLeave={() => {}}
-            >
+            <div className="flex items-center gap-1" onMouseLeave={() => {}}>
               {[1, 2, 3, 4, 5].map((star) => {
                 const fill = Math.max(0, Math.min(1, displayRating - (star - 1)));
-                const ratingActionLabel = displayRating === star
-                  ? "Clear rating"
-                  : `Set rating to ${star} stars`;
+                const ratingActionLabel =
+                  displayRating === star ? "Clear rating" : `Set rating to ${star} stars`;
                 return (
                   <button
                     key={star}
@@ -755,7 +780,9 @@ export const EditTrackModal = ({
         >
           <PopoverHeader>{t("edit.coverArtMenu")}</PopoverHeader>
           <PopoverItem
-            onClick={() => { void handleCopyCoverArt(); }}
+            onClick={() => {
+              void handleCopyCoverArt();
+            }}
             disabled={!form.coverArtPath}
             className="disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             dataTestId="copy-cover-art-menu-item"
@@ -764,7 +791,9 @@ export const EditTrackModal = ({
             {t("edit.copyCoverArt")}
           </PopoverItem>
           <PopoverItem
-            onClick={() => { void handlePasteCoverArt(); }}
+            onClick={() => {
+              void handlePasteCoverArt();
+            }}
             disabled={!clipboardImageAvailable || isPastingCover}
             className="disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             dataTestId="paste-cover-art-menu-item"
@@ -773,7 +802,9 @@ export const EditTrackModal = ({
             {t("edit.pasteCoverArt")}
           </PopoverItem>
           <PopoverItem
-            onClick={() => { void handleFetchCoverArt(); }}
+            onClick={() => {
+              void handleFetchCoverArt();
+            }}
             dataTestId="fetch-cover-art-menu-item"
           >
             <Download className="h-4 w-4 opacity-60" />
@@ -783,11 +814,13 @@ export const EditTrackModal = ({
         {coverCandidates.length > 0 && (
           <AlbumCoverPickerModal
             album={form.album.trim() || tracks[0]?.album || ""}
-            artist={form.artists.trim()
-              || form.artist.trim()
-              || (tracks[0] ? explicitAlbumArtistDisplay(tracks[0]) : "")
-              || tracks[0]?.artist
-              || ""}
+            artist={
+              form.artists.trim() ||
+              form.artist.trim() ||
+              (tracks[0] ? explicitAlbumArtistDisplay(tracks[0]) : "") ||
+              tracks[0]?.artist ||
+              ""
+            }
             candidates={coverCandidates}
             onApply={handleCacheCoverCandidate}
             onClose={() => setCoverCandidates([])}
@@ -795,7 +828,7 @@ export const EditTrackModal = ({
         )}
       </form>
     </div>,
-    document.body
+    document.body,
   );
 };
 
@@ -832,9 +865,8 @@ const Field = ({
   actionTestId,
   onAction,
 }: FieldProps) => {
-  const listId = autocompleteName && suggestions.length > 0
-    ? `edit-${autocompleteName}-suggestions`
-    : undefined;
+  const listId =
+    autocompleteName && suggestions.length > 0 ? `edit-${autocompleteName}-suggestions` : undefined;
   return (
     <div className={className}>
       <div className="mb-[var(--spacing-xs)] flex min-h-4 items-center justify-between gap-2">
@@ -866,18 +898,16 @@ const Field = ({
       />
       {listId && (
         <datalist id={listId}>
-          {suggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}
+          {suggestions.map((suggestion) => (
+            <option key={suggestion} value={suggestion} />
+          ))}
         </datalist>
       )}
     </div>
   );
 };
 
-function assignUpdate(
-  updates: TrackMetadataUpdates,
-  field: keyof FormState,
-  form: FormState
-) {
+function assignUpdate(updates: TrackMetadataUpdates, field: keyof FormState, form: FormState) {
   switch (field) {
     case "title":
       updates.title = form.title;

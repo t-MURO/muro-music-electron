@@ -87,7 +87,10 @@ export const WindowChrome = () => {
       onDoubleClick={toggleMaximize}
     >
       {isMac ? (
-        <div className="window-no-drag group ml-3 flex items-center gap-2" data-window-controls="mac">
+        <div
+          className="window-no-drag group ml-3 flex items-center gap-2"
+          data-window-controls="mac"
+        >
           <button
             className="mac-window-control bg-[#ff5f57]"
             onClick={() => void controlWindow("close")}
@@ -95,7 +98,10 @@ export const WindowChrome = () => {
             title="Close"
             type="button"
           >
-            <X className="h-2 w-2 opacity-0 transition-opacity group-hover:opacity-70" strokeWidth={3} />
+            <X
+              className="h-2 w-2 opacity-0 transition-opacity group-hover:opacity-70"
+              strokeWidth={3}
+            />
           </button>
           <button
             className="mac-window-control bg-[#febc2e]"
@@ -104,7 +110,10 @@ export const WindowChrome = () => {
             title="Minimize"
             type="button"
           >
-            <Minus className="h-2 w-2 opacity-0 transition-opacity group-hover:opacity-70" strokeWidth={3} />
+            <Minus
+              className="h-2 w-2 opacity-0 transition-opacity group-hover:opacity-70"
+              strokeWidth={3}
+            />
           </button>
           <button
             className="mac-window-control bg-[#28c840]"
@@ -113,7 +122,10 @@ export const WindowChrome = () => {
             title={isMaximized ? "Restore" : "Maximize"}
             type="button"
           >
-            <Square className="h-1.5 w-1.5 opacity-0 transition-opacity group-hover:opacity-70" strokeWidth={3} />
+            <Square
+              className="h-1.5 w-1.5 opacity-0 transition-opacity group-hover:opacity-70"
+              strokeWidth={3}
+            />
           </button>
         </div>
       ) : (
@@ -188,7 +200,10 @@ export const WindowChrome = () => {
       </nav>
 
       {isMac && (
-        <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2" data-window-brand>
+        <div
+          className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2"
+          data-window-brand
+        >
           <img className="h-4 w-4 rounded-[4px]" src={appLogo} alt="" />
           <span className="text-[12px] font-medium tracking-[0.01em] text-[var(--color-text-secondary)]">
             Muro Music

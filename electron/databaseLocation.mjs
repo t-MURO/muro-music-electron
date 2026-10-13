@@ -24,9 +24,10 @@ export const isSqliteDatabaseFile = (filePath) => {
   }
 };
 
-const samePath = (left, right) => process.platform === "win32"
-  ? path.resolve(left).toLocaleLowerCase() === path.resolve(right).toLocaleLowerCase()
-  : path.resolve(left) === path.resolve(right);
+const samePath = (left, right) =>
+  process.platform === "win32"
+    ? path.resolve(left).toLocaleLowerCase() === path.resolve(right).toLocaleLowerCase()
+    : path.resolve(left) === path.resolve(right);
 
 export const createDatabaseLocationStore = ({ userDataDir }) => {
   const configDirectory = path.resolve(userDataDir);
@@ -47,9 +48,8 @@ export const createDatabaseLocationStore = ({ userDataDir }) => {
   const writeConfig = (databasePath) => {
     const next = {
       version: CONFIG_VERSION,
-      databasePath: databasePath && !samePath(databasePath, defaultPath)
-        ? path.resolve(databasePath)
-        : null,
+      databasePath:
+        databasePath && !samePath(databasePath, defaultPath) ? path.resolve(databasePath) : null,
     };
     fs.mkdirSync(configDirectory, { recursive: true });
     const temporaryPath = `${configPath}.${process.pid}.tmp`;
@@ -59,9 +59,7 @@ export const createDatabaseLocationStore = ({ userDataDir }) => {
   };
 
   const getDbPath = () => {
-    const configured = typeof config?.databasePath === "string"
-      ? config.databasePath.trim()
-      : "";
+    const configured = typeof config?.databasePath === "string" ? config.databasePath.trim() : "";
     return configured && path.isAbsolute(configured) ? path.resolve(configured) : defaultPath;
   };
 
@@ -86,13 +84,13 @@ export const createDatabaseLocationStore = ({ userDataDir }) => {
      */
     migrateLegacyLocation(legacyDbPath) {
       if (config !== null) return { ...describe(), migrated: false };
-      const candidate = typeof legacyDbPath === "string" && path.isAbsolute(legacyDbPath.trim())
-        ? path.resolve(legacyDbPath.trim())
-        : null;
-      const accepted = candidate !== null && (
-        samePath(path.dirname(candidate), configDirectory)
-        || isSqliteDatabaseFile(candidate)
-      );
+      const candidate =
+        typeof legacyDbPath === "string" && path.isAbsolute(legacyDbPath.trim())
+          ? path.resolve(legacyDbPath.trim())
+          : null;
+      const accepted =
+        candidate !== null &&
+        (samePath(path.dirname(candidate), configDirectory) || isSqliteDatabaseFile(candidate));
       writeConfig(accepted ? candidate : null);
       return {
         ...describe(),

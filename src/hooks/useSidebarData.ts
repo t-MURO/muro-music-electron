@@ -11,16 +11,12 @@ type UseSidebarDataArgs = {
   onPlaylistDragOver: (id: string) => void;
   onCreatePlaylist: () => void;
   onCreatePlaylistFolder: () => void;
-  onImportPlaylist: () => void;
-  onImportPlaylistFolder: () => void;
-  onExportAllPlaylists: () => void;
+  onImportPlaylist: () => void | Promise<void>;
+  onImportPlaylistFolder: () => void | Promise<void>;
+  onExportAllPlaylists: () => void | Promise<void>;
   selectedPlaylistIds: ReadonlySet<string>;
   onPlaylistSelectionChange: (ids: string[]) => void;
-  onPlaylistReorder: (
-    sourceId: string,
-    targetId: string,
-    placement: "before" | "after",
-  ) => void;
+  onPlaylistReorder: (sourceId: string, targetId: string, placement: "before" | "after") => void;
   onPlaylistContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onPlaylistFolderContextMenu: (event: React.MouseEvent<HTMLButtonElement>, id: string) => void;
   onCreateSmartCrate: () => void;
@@ -94,6 +90,6 @@ export const useSidebarData = ({
       onEditSmartCrate,
       onViewChange,
       view,
-    ]
+    ],
   );
 };

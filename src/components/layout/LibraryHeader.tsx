@@ -1,17 +1,8 @@
-import {
-  LayoutGrid,
-  List,
-  Search,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
+import { LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../i18n";
 import { AdvancedFilterPopover } from "../library/AdvancedFilterPopover";
-import {
-  countAdvancedTrackFilters,
-  type AdvancedTrackFilters,
-} from "../../utils/trackFilters";
+import { countAdvancedTrackFilters, type AdvancedTrackFilters } from "../../utils/trackFilters";
 import { matchesShortcut, shortcutDisplayParts } from "../../keyboard/shortcuts";
 import { useSettingsStore } from "../../stores";
 
@@ -48,13 +39,12 @@ export const LibraryHeader = ({
 }: LibraryHeaderProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const filterRef = useRef<HTMLDivElement>(null);
-  const configuredSearchShortcut = useSettingsStore(
-    (state) => state.keyboardShortcuts.focusSearch,
+  const configuredSearchShortcut = useSettingsStore((state) => state.keyboardShortcuts.focusSearch);
+  const searchShortcut = shortcutDisplayParts(configuredSearchShortcut).join(
+    window.muro?.platform === "darwin" ? "" : " ",
   );
-  const searchShortcut = shortcutDisplayParts(configuredSearchShortcut)
-    .join(window.muro?.platform === "darwin" ? "" : " ");
   const [compactTable, setCompactTable] = useState(
-    () => window.localStorage.getItem("muro-table-density") === "compact"
+    () => window.localStorage.getItem("muro-table-density") === "compact",
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const activeFilterCount = countAdvancedTrackFilters(advancedFilters);
@@ -96,14 +86,24 @@ export const LibraryHeader = ({
 
   return (
     <header className="library-command-bar shrink-0 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div className={`min-h-[68px] items-center px-4 ${isSettings ? "flex" : `library-command-bar-inner library-command-bar-inner--${contentMode}`}`}>
+      <div
+        className={`min-h-[68px] items-center px-4 ${isSettings ? "flex" : `library-command-bar-inner library-command-bar-inner--${contentMode}`}`}
+      >
         <div className="library-command-title min-w-0 shrink-0" data-library-title>
           <div className="min-w-0">
             <div className="flex items-baseline gap-2.5">
-              <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">{title}</h2>
-              {!isSettings && <span className="text-xs tabular-nums text-[var(--color-text-muted)]">{resultCount.toLocaleString()} {resultLabel ?? contentMode}</span>}
+              <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
+                {title}
+              </h2>
+              {!isSettings && (
+                <span className="text-xs tabular-nums text-[var(--color-text-muted)]">
+                  {resultCount.toLocaleString()} {resultLabel ?? contentMode}
+                </span>
+              )}
             </div>
-            {isSettings && subtitle && <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>}
+            {isSettings && subtitle && (
+              <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">{subtitle}</p>
+            )}
           </div>
         </div>
 
@@ -126,7 +126,14 @@ export const LibraryHeader = ({
                   onChange={(event) => onSearchChange(event.target.value)}
                 />
                 {searchQuery ? (
-                  <button className="toolbar-icon-button absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2" onClick={() => onSearchChange("")} aria-label={t("search.clear")} type="button"><X className="h-3.5 w-3.5" /></button>
+                  <button
+                    className="toolbar-icon-button absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2"
+                    onClick={() => onSearchChange("")}
+                    aria-label={t("search.clear")}
+                    type="button"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 ) : (
                   <kbd
                     className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] px-1.5 py-0.5 text-[10px] text-[var(--color-text-muted)]"
@@ -150,7 +157,10 @@ export const LibraryHeader = ({
                   >
                     <SlidersHorizontal className="h-4 w-4" />
                     {activeFilterCount > 0 && (
-                      <span className="absolute -right-1.5 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--color-accent)] px-1 text-[9px] font-bold leading-none text-white shadow-sm" data-advanced-filter-count>
+                      <span
+                        className="absolute -right-1.5 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-[var(--color-accent)] px-1 text-[9px] font-bold leading-none text-white shadow-sm"
+                        data-advanced-filter-count
+                      >
                         {activeFilterCount > 99 ? "99+" : activeFilterCount}
                       </span>
                     )}
@@ -167,10 +177,30 @@ export const LibraryHeader = ({
                 </div>
               )}
             </div>
-            {contentMode === "tracks" && <div className="library-view-toggle">
-              <button className="toolbar-icon-button toolbar-view-button" onClick={onShowColumns} title={t("columns.choose")} aria-label={t("columns.choose")} data-library-columns type="button"><LayoutGrid className="h-4 w-4" /></button>
-              <button className={`toolbar-icon-button ${compactTable ? "toolbar-view-button" : ""}`} onClick={() => setCompactTable((value) => !value)} title={t("table.compact.toggle")} aria-label={t("table.compact.toggle")} aria-pressed={compactTable} type="button"><List className="h-4 w-4" /></button>
-            </div>}
+            {contentMode === "tracks" && (
+              <div className="library-view-toggle">
+                <button
+                  className="toolbar-icon-button toolbar-view-button"
+                  onClick={onShowColumns}
+                  title={t("columns.choose")}
+                  aria-label={t("columns.choose")}
+                  data-library-columns
+                  type="button"
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  className={`toolbar-icon-button ${compactTable ? "toolbar-view-button" : ""}`}
+                  onClick={() => setCompactTable((value) => !value)}
+                  title={t("table.compact.toggle")}
+                  aria-label={t("table.compact.toggle")}
+                  aria-pressed={compactTable}
+                  type="button"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

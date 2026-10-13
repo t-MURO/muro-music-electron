@@ -42,11 +42,7 @@ export const MisplacedTracksModal = ({
       className="modal-overlay-animate fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-[var(--spacing-lg)] backdrop-blur-sm"
       data-library-structure-modal
       onPointerDown={(event) => {
-        if (
-          !repairing &&
-          event.target === event.currentTarget &&
-          event.button === 0
-        ) {
+        if (!repairing && event.target === event.currentTarget && event.button === 0) {
           onClose();
         }
       }}
@@ -133,14 +129,16 @@ export const MisplacedTracksModal = ({
             onClick={onRepair}
             type="button"
           >
-            {repairing
-              ? <LoaderCircle className="h-4 w-4 animate-spin" />
-              : <FolderTree className="h-4 w-4" />}
+            {repairing ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <FolderTree className="h-4 w-4" />
+            )}
             {repairing ? t("structure.repairing") : t("structure.repair")}
           </button>
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

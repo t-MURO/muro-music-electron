@@ -30,8 +30,7 @@ export const buildMSearch = (searchTarget = MEDIA_RENDERER_TARGET) =>
 export const parseSsdpResponse = (text) => {
   const source = String(text ?? "");
   if (!/^HTTP\/1\.1\s+200/i.test(source)) return null;
-  const header = (name) =>
-    new RegExp(`^${name}:\\s*(.+)$`, "im").exec(source)?.[1]?.trim() ?? null;
+  const header = (name) => new RegExp(`^${name}:\\s*(.+)$`, "im").exec(source)?.[1]?.trim() ?? null;
   const location = header("LOCATION");
   if (!location) return null;
   return {
@@ -45,7 +44,10 @@ export const parseSsdpResponse = (text) => {
 // The stable device identity is the uuid portion of the USN.
 export const usnUuid = (usn) => /uuid:([^:\s]+)/i.exec(String(usn ?? ""))?.[1] ?? null;
 
-const normalizedHostname = (value) => String(value ?? "").replace(/^\[|\]$/g, "").toLowerCase();
+const normalizedHostname = (value) =>
+  String(value ?? "")
+    .replace(/^\[|\]$/g, "")
+    .toLowerCase();
 
 // An SSDP response is unauthenticated UDP. Only follow a description URL
 // hosted by the machine that sent the packet, otherwise any LAN peer could
@@ -53,10 +55,12 @@ const normalizedHostname = (value) => String(value ?? "").replace(/^\[|\]$/g, ""
 export const isTrustedDescriptionLocation = (location, remoteAddress) => {
   try {
     const url = new URL(location);
-    return (url.protocol === "http:" || url.protocol === "https:")
-      && !url.username
-      && !url.password
-      && normalizedHostname(url.hostname) === normalizedHostname(remoteAddress);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password &&
+      normalizedHostname(url.hostname) === normalizedHostname(remoteAddress)
+    );
   } catch {
     return false;
   }
@@ -75,10 +79,10 @@ export const parseDeviceDescription = (xml, locationUrl) => {
     try {
       const resolved = new URL(value, base);
       if (
-        (resolved.protocol !== "http:" && resolved.protocol !== "https:")
-        || resolved.username
-        || resolved.password
-        || normalizedHostname(resolved.hostname) !== normalizedHostname(location.hostname)
+        (resolved.protocol !== "http:" && resolved.protocol !== "https:") ||
+        resolved.username ||
+        resolved.password ||
+        normalizedHostname(resolved.hostname) !== normalizedHostname(location.hostname)
       ) {
         return null;
       }
@@ -88,11 +92,12 @@ export const parseDeviceDescription = (xml, locationUrl) => {
     }
   };
 
-  const services = [...source.matchAll(/<service(?:\s[^>]*)?>([\s\S]*?)<\/service>/gi)]
-    .map((match) => ({
+  const services = [...source.matchAll(/<service(?:\s[^>]*)?>([\s\S]*?)<\/service>/gi)].map(
+    (match) => ({
       serviceType: extractXmlValue(match[1], "serviceType") ?? "",
       controlUrl: resolveUrl(extractXmlValue(match[1], "controlURL")),
-    }));
+    }),
+  );
 
   const findService = (fragment) =>
     services.find((service) => service.serviceType.includes(fragment))?.controlUrl ?? null;
@@ -106,7 +111,11 @@ export const parseDeviceDescription = (xml, locationUrl) => {
   };
 };
 
-export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, now = Date.now } = {}) => {
+export const createDlnaDiscovery = ({
+  onUpdate,
+  fetchImpl = globalThis.fetch,
+  now = Date.now,
+} = {}) => {
   const devices = new Map(); // uuid -> full record incl. control URLs
   const describedLocations = new Map(); // location -> uuid | null (fetch once)
   let sockets = [];
@@ -136,9 +145,10 @@ export const createDlnaDiscovery = ({ onUpdate, fetchImpl = globalThis.fetch, no
     try {
       const descriptionResponse = await fetchImpl(response.location, {
         redirect: "error",
-        signal: typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
-          ? AbortSignal.timeout(DESCRIPTION_TIMEOUT_MS)
-          : undefined,
+        signal:
+          typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+            ? AbortSignal.timeout(DESCRIPTION_TIMEOUT_MS)
+            : undefined,
       });
       if (!descriptionResponse.ok) {
         // A transient HTTP failure (e.g. the device answered SSDP but its

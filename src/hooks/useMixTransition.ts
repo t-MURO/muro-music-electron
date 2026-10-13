@@ -56,19 +56,16 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
 
   // Computes (or reuses) a beat grid and mirrors it into the library store.
   // Returns null when analysis fails so the transition degrades to a fade.
-  const resolveGrid = useCallback(
-    async (track: Track): Promise<BeatGrid | null> => {
-      try {
-        const grid = await getOrComputeBeatGrid(track);
-        useLibraryStore.getState().updateTrack(track.id, { beatGrid: grid });
-        return grid;
-      } catch (error) {
-        console.warn(`Beat-grid analysis failed for ${track.title}:`, error);
-        return null;
-      }
-    },
-    []
-  );
+  const resolveGrid = useCallback(async (track: Track): Promise<BeatGrid | null> => {
+    try {
+      const grid = await getOrComputeBeatGrid(track);
+      useLibraryStore.getState().updateTrack(track.id, { beatGrid: grid });
+      return grid;
+    } catch (error) {
+      console.warn(`Beat-grid analysis failed for ${track.title}:`, error);
+      return null;
+    }
+  }, []);
 
   const cancelAutomaticMix = useCallback(async () => {
     autoMixGenRef.current += 1;
@@ -78,30 +75,33 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
     await playbackCancelTransition().catch(() => undefined);
   }, []);
 
-  const prepareTransition = useCallback(async (a: Track, b: Track) => {
-    const gridA = await resolveGrid(a);
-    const gridB = await resolveGrid(b);
-    const failedTitles = [gridA ? null : a.title, gridB ? null : b.title].filter(
-      (title): title is string => title !== null
-    );
-    if (failedTitles.length > 0) {
-      notify.error(t("toast.mix.beatAnalysisFailed", { titles: failedTitles.join(", ") }));
-    }
-    const plan = planTransition({
-      gridA,
-      gridB,
-      durationASec: a.durationSeconds,
-      durationBSec: b.durationSeconds,
-      bars: mixBars,
-    });
-    return { gridA, gridB, plan };
-  }, [mixBars, resolveGrid]);
+  const prepareTransition = useCallback(
+    async (a: Track, b: Track) => {
+      const gridA = await resolveGrid(a);
+      const gridB = await resolveGrid(b);
+      const failedTitles = [gridA ? null : a.title, gridB ? null : b.title].filter(
+        (title): title is string => title !== null,
+      );
+      if (failedTitles.length > 0) {
+        notify.error(t("toast.mix.beatAnalysisFailed", { titles: failedTitles.join(", ") }));
+      }
+      const plan = planTransition({
+        gridA,
+        gridB,
+        durationASec: a.durationSeconds,
+        durationBSec: b.durationSeconds,
+        bars: mixBars,
+      });
+      return { gridA, gridB, plan };
+    },
+    [mixBars, resolveGrid],
+  );
 
   const reportFallbackMode = useCallback((gridA: BeatGrid | null, gridB: BeatGrid | null) => {
     notify.info(
       gridA && gridB
         ? "Tempos too far apart - using a simple blend"
-        : "Beat analysis unavailable - using a simple blend"
+        : "Beat analysis unavailable - using a simple blend",
     );
   }, []);
 
@@ -134,9 +134,61 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
           notify.info(
             gridA && gridB
               ? "Tempos too far apart — using a simple blend"
-              : "Beat analysis unavailable — using a simple blend"
+              : "Beat analysis unavailable — using a simple blend",
           );
         }
+      } catch {
+        notify.error(t("toast.mix.startFailed"));
+      } finally {
+        manualMixInFlightRef.current = false;
+      }
+    },
+    [allTracks, cancelAutomaticMix, enabled, mixPreservePitch, playTrack, prepareTransition, seek],
+  );
+
+  const mixCurrentWith = useCallback(
+    async (nextTrackId: string) => {
+      if (!enabled || manualMixInFlightRef.current) return;
+      const playback = usePlaybackStore.getState();
+      const outgoingId = playback.currentTrack?.id;
+      if (!playback.isPlaying || !outgoingId) {
+        notify.error(t("toast.mix.needsPlayingTrack"));
+        return;
+      }
+      const automaticTransition = autoArmedRef.current || autoArmPendingRef.current;
+      if (playback.transition !== null && !automaticTransition) {
+        notify.info(t("toast.mix.alreadyRunning"));
+        return;
+      }
+      if (outgoingId === nextTrackId) {
+        notify.error(t("toast.mix.chooseOther"));
+        return;
+      }
+      const outgoing = allTracks.find((track) => track.id === outgoingId);
+      const incoming = allTracks.find((track) => track.id === nextTrackId);
+      if (!outgoing || !incoming) {
+        notify.error(t("toast.tracks.notFound"));
+        return;
+      }
+
+      manualMixInFlightRef.current = true;
+      await cancelAutomaticMix();
+      try {
+        notify.info(t("toast.mix.analyzing"));
+        const { gridA, gridB, plan } = await prepareTransition(outgoing, incoming);
+        const latestPlayback = usePlaybackStore.getState();
+        if (!latestPlayback.isPlaying || latestPlayback.currentTrack?.id !== outgoing.id) {
+          notify.error(t("toast.mix.trackChanged"));
+          return;
+        }
+        const transitionEnd = plan.startAtSec + plan.durationSec;
+        if (latestPlayback.currentPosition >= transitionEnd - 0.5) {
+          notify.error(t("toast.mix.tooCloseToEnd"));
+          return;
+        }
+
+        await playbackTransitionTo(toTransitionTarget(incoming), plan, mixPreservePitch);
+        if (plan.mode === "fade") reportFallbackMode(gridA, gridB);
       } catch {
         notify.error(t("toast.mix.startFailed"));
       } finally {
@@ -148,67 +200,10 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
       cancelAutomaticMix,
       enabled,
       mixPreservePitch,
-      playTrack,
       prepareTransition,
-      seek,
-    ]
+      reportFallbackMode,
+    ],
   );
-
-  const mixCurrentWith = useCallback(async (nextTrackId: string) => {
-    if (!enabled || manualMixInFlightRef.current) return;
-    const playback = usePlaybackStore.getState();
-    const outgoingId = playback.currentTrack?.id;
-    if (!playback.isPlaying || !outgoingId) {
-      notify.error(t("toast.mix.needsPlayingTrack"));
-      return;
-    }
-    const automaticTransition = autoArmedRef.current || autoArmPendingRef.current;
-    if (playback.transition !== null && !automaticTransition) {
-      notify.info(t("toast.mix.alreadyRunning"));
-      return;
-    }
-    if (outgoingId === nextTrackId) {
-      notify.error(t("toast.mix.chooseOther"));
-      return;
-    }
-    const outgoing = allTracks.find((track) => track.id === outgoingId);
-    const incoming = allTracks.find((track) => track.id === nextTrackId);
-    if (!outgoing || !incoming) {
-      notify.error(t("toast.tracks.notFound"));
-      return;
-    }
-
-    manualMixInFlightRef.current = true;
-    await cancelAutomaticMix();
-    try {
-      notify.info(t("toast.mix.analyzing"));
-      const { gridA, gridB, plan } = await prepareTransition(outgoing, incoming);
-      const latestPlayback = usePlaybackStore.getState();
-      if (!latestPlayback.isPlaying || latestPlayback.currentTrack?.id !== outgoing.id) {
-        notify.error(t("toast.mix.trackChanged"));
-        return;
-      }
-      const transitionEnd = plan.startAtSec + plan.durationSec;
-      if (latestPlayback.currentPosition >= transitionEnd - 0.5) {
-        notify.error(t("toast.mix.tooCloseToEnd"));
-        return;
-      }
-
-      await playbackTransitionTo(toTransitionTarget(incoming), plan, mixPreservePitch);
-      if (plan.mode === "fade") reportFallbackMode(gridA, gridB);
-    } catch {
-      notify.error(t("toast.mix.startFailed"));
-    } finally {
-      manualMixInFlightRef.current = false;
-    }
-  }, [
-    allTracks,
-    cancelAutomaticMix,
-    enabled,
-    mixPreservePitch,
-    prepareTransition,
-    reportFallbackMode,
-  ]);
 
   // Clear finished transitions and advance the queue when the mix engine
   // handed playback to the queued track.

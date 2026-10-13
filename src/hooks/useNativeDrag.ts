@@ -119,15 +119,13 @@ export const useNativeDrag = (onImport: (paths: string[]) => void) => {
 
               const paths = payload.paths;
               if (paths?.length) {
-                showStatus(
-                  `Imported ${paths.length} file${paths.length === 1 ? "" : "s"}`
-                );
+                showStatus(`Imported ${paths.length} file${paths.length === 1 ? "" : "s"}`);
                 onImportRef.current(paths);
               } else {
                 showStatus("Drop received, no files found");
               }
             }
-          }
+          },
         );
       } catch (error) {
         console.error("Failed to set up native drag listener:", error);

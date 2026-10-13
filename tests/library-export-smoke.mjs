@@ -3,11 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import {
-  closeDatabases,
-  loadTracks,
-  openDatabase,
-} from "../electron/database.mjs";
+import { closeDatabases, loadTracks, openDatabase } from "../electron/database.mjs";
 import {
   exportItunesLibrary,
   exportOrganizedLibrary,
@@ -95,22 +91,30 @@ try {
     184,
   );
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO playlist_folders(id, name, parent_id, sort_order, created_at)
     VALUES ('folder-root', 'Sets', NULL, 0, 1)
-  `).run();
-  db.prepare(`
+  `,
+  ).run();
+  db.prepare(
+    `
     INSERT INTO playlist_folders(id, name, parent_id, sort_order, created_at)
     VALUES ('folder-nested', 'Deep/Nested', 'folder-root', 0, 2)
-  `).run();
-  db.prepare(`
+  `,
+  ).run();
+  db.prepare(
+    `
     INSERT INTO playlists(id, name, folder_id, sort_order, created_at)
     VALUES ('playlist-root', 'Root Mix', NULL, 0, 1)
-  `).run();
-  db.prepare(`
+  `,
+  ).run();
+  db.prepare(
+    `
     INSERT INTO playlists(id, name, folder_id, sort_order, created_at)
     VALUES ('playlist-nested', 'Nested:Mix', 'folder-nested', 0, 2)
-  `).run();
+  `,
+  ).run();
   const addPlaylistTrack = db.prepare(`
     INSERT INTO playlist_tracks(playlist_id, track_id, position) VALUES (?, ?, ?)
   `);
@@ -119,13 +123,15 @@ try {
   addPlaylistTrack.run("playlist-nested", "track-2", 0);
   addPlaylistTrack.run("playlist-nested", "track-missing", 1);
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tracks
     SET genre_json = ?, comment_json = ?, rating = 4, play_count = 7,
       bitrate_kbps = 320, sample_rate_hz = 44100, file_size_bytes = 123456,
       last_played_at = '2026-07-31T12:00:00.000Z'
     WHERE id = 'track-1'
-  `).run(JSON.stringify(["House & Techno"]), JSON.stringify(["Peak <time>"]));
+  `,
+  ).run(JSON.stringify(["House & Techno"]), JSON.stringify(["Peak <time>"]));
   db.prepare("UPDATE tracks SET is_missing = 1 WHERE id = 'track-missing'").run();
 
   const itunesExportPath = path.join(destinationDirectory, "Muro Music Library.xml");
@@ -143,7 +149,7 @@ try {
     playlistEntriesSkipped: 0,
   });
   const itunesXml = fs.readFileSync(itunesExportPath, "utf8");
-  assert.ok(itunesXml.startsWith("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+  assert.ok(itunesXml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
   assert.match(itunesXml, /Apple\/\/DTD PLIST 1\.0/);
   assert.match(itunesXml, /<key>Tracks<\/key>/);
   assert.match(itunesXml, /<key>Playlists<\/key>/);
@@ -151,7 +157,10 @@ try {
   assert.match(itunesXml, /<string>House &amp; Techno<\/string>/);
   assert.match(itunesXml, /<string>Peak &lt;time&gt;<\/string>/);
   assert.match(itunesXml, /<string>Fallback &amp; Artist<\/string>/);
-  assert.match(itunesXml, /<key>Location<\/key>\s*<string>file:\/\/localhost\/.*01%20-%20First\.mp3<\/string>/);
+  assert.match(
+    itunesXml,
+    /<key>Location<\/key>\s*<string>file:\/\/localhost\/.*01%20-%20First\.mp3<\/string>/,
+  );
   assert.match(itunesXml, /<key>Name<\/key>\s*<string>Deep\/Nested<\/string>/);
   assert.match(itunesXml, /<key>Parent Persistent ID<\/key>\s*<string>[A-F0-9]{16}<\/string>/);
   assert.match(itunesXml, /<key>Folder<\/key>\s*<true\/>/);
@@ -236,35 +245,25 @@ try {
   assert.equal(secondResult.librarySwitchRequested, true);
   assert.equal(secondResult.librarySwitched, true);
   assert.equal(secondResult.librarySwitchError, null);
-  const switchedPaths = db.prepare(`
+  const switchedPaths = db
+    .prepare(
+      `
     SELECT id, source_path FROM tracks ORDER BY id
-  `).all();
+  `,
+    )
+    .all();
   assert.deepEqual(switchedPaths, [
     {
       id: "track-1",
-      source_path: [
-        "Album-Artist",
-        "Album-Name",
-        "Disc 1",
-        path.basename(firstSource),
-      ].join("/"),
+      source_path: ["Album-Artist", "Album-Name", "Disc 1", path.basename(firstSource)].join("/"),
     },
     {
       id: "track-2",
-      source_path: [
-        "Album-Artist",
-        "Album-Name",
-        "Disc 2",
-        path.basename(secondSource),
-      ].join("/"),
+      source_path: ["Album-Artist", "Album-Name", "Disc 2", path.basename(secondSource)].join("/"),
     },
     {
       id: "track-3",
-      source_path: [
-        "Fallback & Artist",
-        "Single Album",
-        path.basename(fallbackSource),
-      ].join("/"),
+      source_path: ["Fallback & Artist", "Single Album", path.basename(fallbackSource)].join("/"),
     },
   ]);
   assert.equal(
@@ -272,10 +271,12 @@ try {
     secondResult.exportRoot,
   );
   assert.deepEqual(
-    loadTracks(dbPath).library.map((track) => track.source_path).sort(),
+    loadTracks(dbPath)
+      .library.map((track) => track.source_path)
+      .sort(),
     [firstExport, secondExport, fallbackExport]
       .map((originalExportPath) =>
-        originalExportPath.replace(result.exportRoot, secondResult.exportRoot)
+        originalExportPath.replace(result.exportRoot, secondResult.exportRoot),
       )
       .sort(),
     "the runtime resolves stored portable paths against the switched library root",

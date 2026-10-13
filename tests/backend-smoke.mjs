@@ -65,12 +65,24 @@ legacyDb.exec(`
 `);
 legacyDb.close();
 const migratedLegacyDb = openDatabase(legacyDbPath);
-assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlist_folders)").all()
-  .some((column) => column.name === "parent_id"));
-assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlists)").all()
-  .some((column) => column.name === "sort_order"));
-assert.ok(migratedLegacyDb.prepare("PRAGMA table_info(playlists)").all()
-  .some((column) => column.name === "source_path"));
+assert.ok(
+  migratedLegacyDb
+    .prepare("PRAGMA table_info(playlist_folders)")
+    .all()
+    .some((column) => column.name === "parent_id"),
+);
+assert.ok(
+  migratedLegacyDb
+    .prepare("PRAGMA table_info(playlists)")
+    .all()
+    .some((column) => column.name === "sort_order"),
+);
+assert.ok(
+  migratedLegacyDb
+    .prepare("PRAGMA table_info(playlists)")
+    .all()
+    .some((column) => column.name === "source_path"),
+);
 assert.deepEqual(
   migratedLegacyDb.prepare("SELECT id, sort_order FROM playlists ORDER BY sort_order").all(),
   [
@@ -121,7 +133,9 @@ const keyFinder = {
     waveformGenerationCount += 1;
     return { peaks: Array(points).fill(0.5) };
   },
-  close: () => { keyFinderClosed = true; },
+  close: () => {
+    keyFinderClosed = true;
+  },
 };
 const backend = createBackend({
   dbPath,
@@ -133,53 +147,68 @@ const backend = createBackend({
     metadataFetchAttempts += 1;
     const metadataQuery = new URL(String(url)).searchParams.get("query") ?? "";
     if (metadataFetchAttempts === 1 || metadataQuery.includes("Offline Track")) {
-      const connectionReset = Object.assign(new Error("TLS connection reset"), { code: "ECONNRESET" });
+      const connectionReset = Object.assign(new Error("TLS connection reset"), {
+        code: "ECONNRESET",
+      });
       throw new TypeError("fetch failed", { cause: connectionReset });
     }
     assert.ok(String(url).startsWith("https://musicbrainz.org/ws/2/recording/?"));
-    return new Response(JSON.stringify({
-      recordings: [{
-        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        title: "Retry Track",
-        score: 100,
-        "artist-credit": [{
-          name: "Retry Artist",
-          artist: {
-            id: "11111111-1111-4111-8111-111111111111",
-            name: "Retry Artist",
+    return new Response(
+      JSON.stringify({
+        recordings: [
+          {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            title: "Retry Track",
+            score: 100,
+            "artist-credit": [
+              {
+                name: "Retry Artist",
+                artist: {
+                  id: "11111111-1111-4111-8111-111111111111",
+                  name: "Retry Artist",
+                },
+                joinphrase: " feat. ",
+              },
+              {
+                name: "Guest Alias",
+                artist: {
+                  id: "22222222-2222-4222-8222-222222222222",
+                  name: "Guest Artist",
+                },
+              },
+            ],
+            releases: [
+              {
+                id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                title: "Retry Album",
+                date: "2026-01-01",
+                country: "DE",
+                status: "Official",
+                "artist-credit": [
+                  {
+                    name: "Retry Artist",
+                    artist: {
+                      id: "11111111-1111-4111-8111-111111111111",
+                      name: "Retry Artist",
+                    },
+                    joinphrase: " & ",
+                  },
+                  {
+                    name: "Release Artist",
+                    artist: {
+                      id: "33333333-3333-4333-8333-333333333333",
+                      name: "Release Artist",
+                    },
+                  },
+                ],
+                "release-group": { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
+              },
+            ],
           },
-          joinphrase: " feat. ",
-        }, {
-          name: "Guest Alias",
-          artist: {
-            id: "22222222-2222-4222-8222-222222222222",
-            name: "Guest Artist",
-          },
-        }],
-        releases: [{
-          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-          title: "Retry Album",
-          date: "2026-01-01",
-          country: "DE",
-          status: "Official",
-          "artist-credit": [{
-            name: "Retry Artist",
-            artist: {
-              id: "11111111-1111-4111-8111-111111111111",
-              name: "Retry Artist",
-            },
-            joinphrase: " & ",
-          }, {
-            name: "Release Artist",
-            artist: {
-              id: "33333333-3333-4333-8333-333333333333",
-              name: "Release Artist",
-            },
-          }],
-          "release-group": { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
-        }],
-      }],
-    }), { headers: { "content-type": "application/json" } });
+        ],
+      }),
+      { headers: { "content-type": "application/json" } },
+    );
   },
 });
 
@@ -193,10 +222,13 @@ try {
     const outsideAudioPath = path.join(outsideDirectory, "outside.wav");
     const outsideImagePath = path.join(outsideDirectory, "outside.png");
     writeSilentWav(outsideAudioPath);
-    fs.writeFileSync(outsideImagePath, Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-      "base64",
-    ));
+    fs.writeFileSync(
+      outsideImagePath,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
     const isAccessDenied = (error) => error?.code === "PATH_ACCESS_DENIED";
 
     for (const command of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
@@ -224,7 +256,10 @@ try {
 
     const deniedPlaylistExport = path.join(outsideDirectory, "exported.m3u8");
     await assert.rejects(
-      backend.invoke("export_playlist_file", { playlistId: "none", filePath: deniedPlaylistExport }),
+      backend.invoke("export_playlist_file", {
+        playlistId: "none",
+        filePath: deniedPlaylistExport,
+      }),
       isAccessDenied,
     );
     assert.equal(fs.existsSync(deniedPlaylistExport), false);
@@ -259,20 +294,33 @@ try {
       ["scan_watched_folder", { folder: outsideDirectory }],
       ["accept_tracks", { trackIds: [], libraryFolder: outsideDirectory }],
       ["validate_library_structure", { libraryRoot: outsideDirectory }],
-      ["create_playlist", {
-        id: "denied-linked",
-        name: "Denied",
-        sourcePath: path.join(outsideDirectory, "list.m3u"),
-      }],
-      ["update_track_metadata", { trackIds: ["missing"], updates: { coverArtPath: outsideImagePath } }],
-      ["start_track_analysis", {
-        tracks: [{ id: "missing", sourcePath: outsideAudioPath }],
-        writeAuthorization: true,
-      }],
+      [
+        "create_playlist",
+        {
+          id: "denied-linked",
+          name: "Denied",
+          sourcePath: path.join(outsideDirectory, "list.m3u"),
+        },
+      ],
+      [
+        "update_track_metadata",
+        { trackIds: ["missing"], updates: { coverArtPath: outsideImagePath } },
+      ],
+      [
+        "start_track_analysis",
+        {
+          tracks: [{ id: "missing", sourcePath: outsideAudioPath }],
+          writeAuthorization: true,
+        },
+      ],
       ["cast_load_track", { sourcePath: outsideAudioPath }],
       ["dlna_load_track", { sourcePath: outsideAudioPath }],
     ]) {
-      await assert.rejects(backend.invoke(command, args), isAccessDenied, `${command} must be denied`);
+      await assert.rejects(
+        backend.invoke(command, args),
+        isAccessDenied,
+        `${command} must be denied`,
+      );
     }
     assert.deepEqual(fs.readdirSync(outsideDirectory).sort(), ["outside.png", "outside.wav"]);
 
@@ -295,10 +343,12 @@ try {
 
     // An Inbox track may live outside the library root; the database
     // reference is what makes it playable, and only while it exists.
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO tracks(id, title, filename, source_path, import_status, added_at, updated_at)
       VALUES ('outside-inbox', 'Outside', 'outside.wav', ?, 'staged', 0, 0)
-    `).run(outsideAudioPath);
+    `,
+    ).run(outsideAudioPath);
     assert.equal(backend.canReadPath(outsideAudioPath), true);
     await backend.invoke("reject_tracks", { trackIds: ["outside-inbox"] });
     assert.equal(backend.canReadPath(outsideAudioPath), false);
@@ -317,29 +367,35 @@ try {
   assert.equal(metadataResults[0].title, "Retry Track");
   assert.equal(metadataResults[0].albumMatch, true);
   assert.equal(metadataResults[0].artist, "Retry Artist feat. Guest Alias");
-  assert.deepEqual(metadataResults[0].artistCredits, [{
-    name: "Retry Artist",
-    creditedName: "Retry Artist",
-    joinPhrase: " feat. ",
-    musicBrainzId: "11111111-1111-4111-8111-111111111111",
-  }, {
-    name: "Guest Artist",
-    creditedName: "Guest Alias",
-    joinPhrase: "",
-    musicBrainzId: "22222222-2222-4222-8222-222222222222",
-  }]);
+  assert.deepEqual(metadataResults[0].artistCredits, [
+    {
+      name: "Retry Artist",
+      creditedName: "Retry Artist",
+      joinPhrase: " feat. ",
+      musicBrainzId: "11111111-1111-4111-8111-111111111111",
+    },
+    {
+      name: "Guest Artist",
+      creditedName: "Guest Alias",
+      joinPhrase: "",
+      musicBrainzId: "22222222-2222-4222-8222-222222222222",
+    },
+  ]);
   assert.equal(metadataResults[0].albumArtist, "Retry Artist & Release Artist");
-  assert.deepEqual(metadataResults[0].albumArtistCredits, [{
-    name: "Retry Artist",
-    creditedName: "Retry Artist",
-    joinPhrase: " & ",
-    musicBrainzId: "11111111-1111-4111-8111-111111111111",
-  }, {
-    name: "Release Artist",
-    creditedName: "Release Artist",
-    joinPhrase: "",
-    musicBrainzId: "33333333-3333-4333-8333-333333333333",
-  }]);
+  assert.deepEqual(metadataResults[0].albumArtistCredits, [
+    {
+      name: "Retry Artist",
+      creditedName: "Retry Artist",
+      joinPhrase: " & ",
+      musicBrainzId: "11111111-1111-4111-8111-111111111111",
+    },
+    {
+      name: "Release Artist",
+      creditedName: "Release Artist",
+      joinPhrase: "",
+      musicBrainzId: "33333333-3333-4333-8333-333333333333",
+    },
+  ]);
   await assert.rejects(
     backend.invoke("search_track_metadata", {
       title: "Offline Track",
@@ -393,15 +449,20 @@ try {
         const requestUrl = new URL(String(url));
         assert.equal(requestUrl.searchParams.get("safesearch"), "strict");
         assert.ok(requestUrl.searchParams.get("q")?.includes('"Missing Album"'));
-        return new Response(JSON.stringify({
-          results: [{
-            title: "Missing Album cover",
-            source: "label.example",
-            thumbnail: { src: "https://imgs.search.brave.com/missing-album.jpg" },
-            properties: { width: 1400, height: 1400 },
-            confidence: "high",
-          }],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            results: [
+              {
+                title: "Missing Album cover",
+                source: "label.example",
+                thumbnail: { src: "https://imgs.search.brave.com/missing-album.jpg" },
+                properties: { width: 1400, height: 1400 },
+                confidence: "high",
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).startsWith("https://musicbrainz.org/ws/2/release-group/")) {
         const query = new URL(String(url)).searchParams.get("query") ?? "";
@@ -410,9 +471,12 @@ try {
             headers: { "content-type": "application/json" },
           });
         }
-        return new Response(JSON.stringify({
-          "release-groups": [{ id: releaseGroupId, title: "Cover Album", score: 100 }],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            "release-groups": [{ id: releaseGroupId, title: "Cover Album", score: 100 }],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).startsWith("https://api.deezer.com/search/album?")) {
         const requestUrl = new URL(String(url));
@@ -422,37 +486,45 @@ try {
             headers: { "content-type": "application/json" },
           });
         }
-        return new Response(JSON.stringify({
-          data: [
-            {
-              id: 123,
-              title: "Deezer Album",
-              artist: { name: "Wrong Artist" },
-              cover_xl: "https://cdn-images.dzcdn.net/images/cover/wrong/1000x1000.jpg",
-            },
-            {
-              id: 456,
-              title: "Deezer Album",
-              artist: { name: "Deezer Artist" },
-              cover_xl: "https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg",
-            },
-          ],
-          total: 2,
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 123,
+                title: "Deezer Album",
+                artist: { name: "Wrong Artist" },
+                cover_xl: "https://cdn-images.dzcdn.net/images/cover/wrong/1000x1000.jpg",
+              },
+              {
+                id: 456,
+                title: "Deezer Album",
+                artist: { name: "Deezer Artist" },
+                cover_xl: "https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg",
+              },
+            ],
+            total: 2,
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url) === `https://coverartarchive.org/release-group/${releaseGroupId}`) {
-        return new Response(JSON.stringify({
-          images: [{
-            front: true,
-            approved: true,
-            image: `http://coverartarchive.org/release/${releaseId}/front-original.jpg`,
-            thumbnails: {
-              250: `http://coverartarchive.org/release/${releaseId}/front-250.jpg`,
-              500: `http://coverartarchive.org/release/${releaseId}/front-500.jpg`,
-              1200: `http://coverartarchive.org/release/${releaseId}/front-1200.jpg`,
-            },
-          }],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            images: [
+              {
+                front: true,
+                approved: true,
+                image: `http://coverartarchive.org/release/${releaseId}/front-original.jpg`,
+                thumbnails: {
+                  250: `http://coverartarchive.org/release/${releaseId}/front-250.jpg`,
+                  500: `http://coverartarchive.org/release/${releaseId}/front-500.jpg`,
+                  1200: `http://coverartarchive.org/release/${releaseId}/front-1200.jpg`,
+                },
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url) === `https://coverartarchive.org/release-group/${missingReleaseGroupId}`) {
         return new Response("not found", { status: 404 });
@@ -462,10 +534,7 @@ try {
           headers: { "content-type": "image/jpeg" },
         });
       }
-      if (
-        String(url)
-        === "https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg"
-      ) {
+      if (String(url) === "https://cdn-images.dzcdn.net/images/cover/right/1000x1000.jpg") {
         return new Response(Buffer.from("deezer cover image"), {
           headers: { "content-type": "image/jpeg" },
         });
@@ -480,17 +549,18 @@ try {
     cacheCoverBytesImpl: async (bytes, cacheDir) => {
       const content = Buffer.from(bytes).toString();
       assert.ok(
-        content === "cover art archive image"
-          || content === "deezer cover image"
-          || content === "brave cover image",
+        content === "cover art archive image" ||
+          content === "deezer cover image" ||
+          content === "brave cover image",
         "only expected cover providers should be cached",
       );
       await fs.promises.mkdir(cacheDir, { recursive: true });
-      const prefix = content === "deezer cover image"
-        ? "deezer"
-        : content === "brave cover image"
-          ? "brave"
-          : "archive";
+      const prefix =
+        content === "deezer cover image"
+          ? "deezer"
+          : content === "brave cover image"
+            ? "brave"
+            : "archive";
       const fullPath = path.join(cacheDir, `${prefix}-full.jpg`);
       const thumbPath = path.join(cacheDir, `${prefix}-thumb.jpg`);
       await fs.promises.writeFile(fullPath, bytes);
@@ -511,9 +581,13 @@ try {
   );
   assert.ok(fs.existsSync(fetchedCover.fullPath));
   assert.ok(fs.existsSync(fetchedCover.thumbPath));
-  const unchangedTrackCover = coverDb.prepare(`
+  const unchangedTrackCover = coverDb
+    .prepare(
+      `
     SELECT cover_art_path, cover_art_thumb_path FROM tracks WHERE id = 'cover-track-1'
-  `).get();
+  `,
+    )
+    .get();
   assert.equal(unchangedTrackCover.cover_art_path, null);
   assert.equal(unchangedTrackCover.cover_art_thumb_path, null);
 
@@ -554,9 +628,13 @@ try {
     coverFetchCalls.some((url) => url.startsWith("https://musicbrainz.org/ws/2/release-group/")),
     "manual cover fetch should fall back to MusicBrainz when the file has no release IDs",
   );
-  const manualTrackCover = coverDb.prepare(`
+  const manualTrackCover = coverDb
+    .prepare(
+      `
     SELECT cover_art_path, cover_art_thumb_path FROM tracks WHERE id = 'cover-track-manual'
-  `).get();
+  `,
+    )
+    .get();
   assert.equal(manualTrackCover.cover_art_path, null);
   assert.equal(manualTrackCover.cover_art_thumb_path, null);
 
@@ -570,11 +648,15 @@ try {
     null,
     null,
   );
-  coverDb.prepare(`
+  coverDb
+    .prepare(
+      `
     UPDATE tracks
     SET artist = 'Deezer Artist', album = 'Deezer Album'
     WHERE id = 'cover-track-deezer'
-  `).run();
+  `,
+    )
+    .run();
   const deezerCover = await albumCoverService.fetchCoverForTrack(coverDb, {
     trackId: "cover-track-deezer",
   });
@@ -607,13 +689,19 @@ try {
     null,
     missingReleaseGroupId,
   );
-  assert.equal(await albumCoverService.fetchCoverForTrack(coverDb, {
-    trackId: "cover-track-missing",
-  }), null);
+  assert.equal(
+    await albumCoverService.fetchCoverForTrack(coverDb, {
+      trackId: "cover-track-missing",
+    }),
+    null,
+  );
   const fetchCountBeforeNegativeCache = coverFetchCalls.length;
-  assert.equal(await albumCoverService.fetchCoverForTrack(coverDb, {
-    trackId: "cover-track-missing",
-  }), null);
+  assert.equal(
+    await albumCoverService.fetchCoverForTrack(coverDb, {
+      trackId: "cover-track-missing",
+    }),
+    null,
+  );
   assert.equal(
     coverFetchCalls.length,
     fetchCountBeforeNegativeCache,
@@ -662,7 +750,10 @@ try {
     path.join(directory, "fallback-cover-cache"),
     "fallback-cover.mp3",
   );
-  assert.ok(recoveredEmbeddedCover, "a valid front cover should be preferred over malformed artwork");
+  assert.ok(
+    recoveredEmbeddedCover,
+    "a valid front cover should be preferred over malformed artwork",
+  );
   assert.ok(fs.existsSync(recoveredEmbeddedCover.fullPath));
   assert.ok(fs.existsSync(recoveredEmbeddedCover.thumbPath));
   const validImportPath = path.join(directory, "valid-import.wav");
@@ -671,7 +762,11 @@ try {
     dbPath,
     paths: [validImportPath],
   });
-  assert.equal(validImport.imported.length, 1, "a valid audio file should import through the real metadata path");
+  assert.equal(
+    validImport.imported.length,
+    1,
+    "a valid audio file should import through the real metadata path",
+  );
   assert.equal(validImport.imported[0].source_path, validImportPath);
   assert.equal(validImport.imported[0].sample_rate_hz, 8_000);
   assert.equal(validImport.imported[0].bit_depth, 16);
@@ -697,7 +792,8 @@ try {
     "concurrent imports return only the row that SQLite persisted",
   );
   assert.equal(
-    db.prepare("SELECT COUNT(*) AS count FROM tracks WHERE source_path = ?")
+    db
+      .prepare("SELECT COUNT(*) AS count FROM tracks WHERE source_path = ?")
       .get(concurrentImportPath).count,
     1,
     "concurrent imports persist one canonical track",
@@ -801,7 +897,11 @@ try {
     libraryFolder: watchedImportPath,
   });
   assert.equal(acceptedWatchedTrack.accepted, 1);
-  assert.equal(acceptedWatchedTrack.moved.length, 0, "a file already in the library root stays in place");
+  assert.equal(
+    acceptedWatchedTrack.moved.length,
+    0,
+    "a file already in the library root stays in place",
+  );
   await backend.invoke("reject_tracks", {
     dbPath,
     trackIds: [watchedDropTrack.id],
@@ -827,7 +927,9 @@ try {
   const selectedCoverPath = path.join(directory, "selected-cover.png");
   const highResolutionCover = await sharp({
     create: { width: 2000, height: 1500, channels: 3, background: "#c92f49" },
-  }).png().toBuffer();
+  })
+    .png()
+    .toBuffer();
   fs.writeFileSync(selectedCoverPath, highResolutionCover);
   const cachedClipboardCover = await backend.invoke("cache_cover_art_from_bytes", {
     bytes: highResolutionCover,
@@ -835,11 +937,15 @@ try {
   assert.ok(fs.existsSync(cachedClipboardCover.fullPath));
   assert.ok(fs.existsSync(cachedClipboardCover.thumbPath));
   assert.deepEqual(
-    await sharp(cachedClipboardCover.fullPath).metadata().then(({ width, height }) => ({ width, height })),
+    await sharp(cachedClipboardCover.fullPath)
+      .metadata()
+      .then(({ width, height }) => ({ width, height })),
     { width: 1600, height: 1200 },
   );
   assert.deepEqual(
-    await sharp(cachedClipboardCover.thumbPath).metadata().then(({ width, height }) => ({ width, height })),
+    await sharp(cachedClipboardCover.thumbPath)
+      .metadata()
+      .then(({ width, height }) => ({ width, height })),
     { width: 192, height: 192 },
   );
   const cachedSelectedCover = await backend.invoke("cache_cover_art_from_file", {
@@ -871,35 +977,53 @@ try {
     );
   }
   assert.deepEqual(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT cover_art_path, cover_art_thumb_path FROM tracks
       WHERE id IN (?, ?) ORDER BY id
-    `).all(validImport.imported[0].id, secondValidImport.imported[0].id),
+    `,
+      )
+      .all(validImport.imported[0].id, secondValidImport.imported[0].id),
     [
-      { cover_art_path: cachedSelectedCover.fullPath, cover_art_thumb_path: cachedSelectedCover.thumbPath },
-      { cover_art_path: cachedSelectedCover.fullPath, cover_art_thumb_path: cachedSelectedCover.thumbPath },
+      {
+        cover_art_path: cachedSelectedCover.fullPath,
+        cover_art_thumb_path: cachedSelectedCover.thumbPath,
+      },
+      {
+        cover_art_path: cachedSelectedCover.fullPath,
+        cover_art_thumb_path: cachedSelectedCover.thumbPath,
+      },
     ],
   );
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tracks SET sample_rate_hz = NULL, bit_depth = NULL, file_size_bytes = NULL
     WHERE id = ?
-  `).run(validImport.imported[0].id);
+  `,
+  ).run(validImport.imported[0].id);
   assert.deepEqual(await backend.invoke("scan_technical_metadata", { dbPath, limit: 10 }), {
     checked: 1,
     updated: 1,
     failed: 0,
     remaining: 0,
     // The renderer patches these by id rather than reloading the library.
-    tracks: [{
-      id: validImport.imported[0].id,
-      sample_rate_hz: 8_000,
-      bit_depth: 16,
-      file_size_bytes: fs.statSync(validImportPath).size,
-    }],
+    tracks: [
+      {
+        id: validImport.imported[0].id,
+        sample_rate_hz: 8_000,
+        bit_depth: 16,
+        file_size_bytes: fs.statSync(validImportPath).size,
+      },
+    ],
   });
-  const rescannedTechnicalMetadata = db.prepare(`
+  const rescannedTechnicalMetadata = db
+    .prepare(
+      `
     SELECT sample_rate_hz, bit_depth, file_size_bytes FROM tracks WHERE id = ?
-  `).get(validImport.imported[0].id);
+  `,
+    )
+    .get(validImport.imported[0].id);
   assert.deepEqual(rescannedTechnicalMetadata, {
     sample_rate_hz: 8_000,
     bit_depth: 16,
@@ -927,8 +1051,30 @@ try {
       duration_seconds, bitrate_kbps, added_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, 'staged', ?, ?, ?, ?)
   `);
-  insertTrack.run("track-1", "Smoke Test", "Muro", "Checks", "smoke.mp3", firstSourcePath, 90, 320, now, now);
-  insertTrack.run("track-2", "Smoke Test 2", "Muro", "Checks", "smoke-2.mp3", secondSourcePath, 90, 320, now, now);
+  insertTrack.run(
+    "track-1",
+    "Smoke Test",
+    "Muro",
+    "Checks",
+    "smoke.mp3",
+    firstSourcePath,
+    90,
+    320,
+    now,
+    now,
+  );
+  insertTrack.run(
+    "track-2",
+    "Smoke Test 2",
+    "Muro",
+    "Checks",
+    "smoke-2.mp3",
+    secondSourcePath,
+    90,
+    320,
+    now,
+    now,
+  );
   let snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.inbox.length, 2);
   assert.equal(snapshot.library.length, 0);
@@ -989,12 +1135,14 @@ try {
     folderId: "folder-1",
   });
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.folders, [{
-    id: "folder-1",
-    name: "Weekend Sets",
-    parent_id: null,
-    sort_order: 0,
-  }]);
+  assert.deepEqual(playlists.folders, [
+    {
+      id: "folder-1",
+      name: "Weekend Sets",
+      parent_id: null,
+      sort_order: 0,
+    },
+  ]);
   assert.equal(playlists.playlists[0].folder_id, "folder-1");
 
   await backend.invoke("create_playlist", {
@@ -1004,7 +1152,10 @@ try {
     folderId: "folder-1",
   });
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-1", "playlist-2"]);
+  assert.deepEqual(
+    playlists.playlists.map((playlist) => playlist.id),
+    ["playlist-1", "playlist-2"],
+  );
   await backend.invoke("reorder_playlists", {
     dbPath,
     items: [
@@ -1013,28 +1164,39 @@ try {
     ],
   });
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-2", "playlist-1"]);
+  assert.deepEqual(
+    playlists.playlists.map((playlist) => playlist.id),
+    ["playlist-2", "playlist-1"],
+  );
   assert.deepEqual(
     await backend.invoke("delete_playlists", { dbPath, playlistIds: ["playlist-2"] }),
     { deleted: 1 },
   );
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-1"]);
+  assert.deepEqual(
+    playlists.playlists.map((playlist) => playlist.id),
+    ["playlist-1"],
+  );
   assert.deepEqual(
     await backend.invoke("restore_playlists", {
       dbPath,
-      playlists: [{
-        id: "playlist-2",
-        name: "Later Set",
-        folderId: "folder-1",
-        sortOrder: 0,
-        trackIds: [],
-      }],
+      playlists: [
+        {
+          id: "playlist-2",
+          name: "Later Set",
+          folderId: "folder-1",
+          sortOrder: 0,
+          trackIds: [],
+        },
+      ],
     }),
     { restored: 1 },
   );
   playlists = await backend.invoke("load_playlists", { dbPath });
-  assert.deepEqual(playlists.playlists.map((playlist) => playlist.id), ["playlist-2", "playlist-1"]);
+  assert.deepEqual(
+    playlists.playlists.map((playlist) => playlist.id),
+    ["playlist-2", "playlist-1"],
+  );
   await backend.invoke("delete_playlist", { dbPath, playlistId: "playlist-2" });
 
   await backend.invoke("create_playlist_folder", {
@@ -1103,19 +1265,28 @@ try {
   );
   const catchUpPlaylistSync = await backend.invoke("configure_playlist_sync", { dbPath });
   assert.equal(catchUpPlaylistSync.changed, 1);
-  const syncedNewTrack = db.prepare(`
+  const syncedNewTrack = db
+    .prepare(
+      `
     SELECT id, import_status
     FROM tracks
     WHERE source_path = ?
-  `).get(playlistSyncNewPath);
+  `,
+    )
+    .get(playlistSyncNewPath);
   assert.ok(syncedNewTrack);
   assert.deepEqual(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT track_id
       FROM playlist_tracks
       WHERE playlist_id = 'playlist-source-linked'
       ORDER BY position
-    `).all().map((row) => row.track_id),
+    `,
+      )
+      .all()
+      .map((row) => row.track_id),
     ["track-2", syncedNewTrack.id],
   );
   assert.equal(
@@ -1143,20 +1314,20 @@ try {
     ["#EXTM3U", playlistSyncNewPath, firstSourcePath].join("\r\n"),
     "utf8",
   );
-  await waitFor(
-    () => {
-      const ids = db.prepare(`
+  await waitFor(() => {
+    const ids = db
+      .prepare(
+        `
         SELECT track_id
         FROM playlist_tracks
         WHERE playlist_id = 'playlist-source-linked'
         ORDER BY position
-      `).all().map((row) => row.track_id);
-      return ids.length === 2
-        && ids[0] === syncedNewTrack.id
-        && ids[1] === "track-1";
-    },
-    "the linked M3U playlist should automatically follow source-file changes",
-  );
+      `,
+      )
+      .all()
+      .map((row) => row.track_id);
+    return ids.length === 2 && ids[0] === syncedNewTrack.id && ids[1] === "track-1";
+  }, "the linked M3U playlist should automatically follow source-file changes");
   await backend.invoke("delete_playlist", {
     dbPath,
     playlistId: "playlist-source-linked",
@@ -1175,11 +1346,7 @@ try {
     sourcePath: emptyLinkedPlaylistPath,
   });
   await backend.invoke("configure_playlist_sync", { dbPath });
-  fs.writeFileSync(
-    emptyLinkedPlaylistPath,
-    ["#EXTM3U", firstSourcePath].join("\r\n"),
-    "utf8",
-  );
+  fs.writeFileSync(emptyLinkedPlaylistPath, ["#EXTM3U", firstSourcePath].join("\r\n"), "utf8");
   const emptyPlaylistSync = await backend.invoke("sync_playlist_source", {
     dbPath,
     playlistId: "playlist-empty-linked",
@@ -1189,11 +1356,18 @@ try {
     ["track-1"],
     "an imported empty M3U should populate when its first song is added",
   );
-  assert.equal(db.prepare(`
+  assert.equal(
+    db
+      .prepare(
+        `
     SELECT track_id
     FROM playlist_tracks
     WHERE playlist_id = 'playlist-empty-linked'
-  `).get()?.track_id, "track-1");
+  `,
+      )
+      .get()?.track_id,
+    "track-1",
+  );
   await backend.invoke("delete_playlist", {
     dbPath,
     playlistId: "playlist-empty-linked",
@@ -1209,14 +1383,22 @@ try {
   fs.writeFileSync(alphaPlaylistPath, firstSourcePath, "utf8");
   fs.writeFileSync(betaPlaylistPath, `[playlist]\r\nFile1=${secondSourcePath}\r\n`, "utf8");
   fs.writeFileSync(gammaPlaylistPath, firstSourcePath, "utf8");
-  fs.writeFileSync(path.join(playlistBundlePath, "local-song.mp3"), "smoke audio placeholder", "utf8");
+  fs.writeFileSync(
+    path.join(playlistBundlePath, "local-song.mp3"),
+    "smoke audio placeholder",
+    "utf8",
+  );
   fs.writeFileSync(path.join(playlistBundlePath, "notes.txt"), "not a playlist", "utf8");
   const playlistFolderScan = await backend.invoke("list_playlist_files", {
     directoryPath: playlistBundlePath,
   });
   assert.equal(playlistFolderScan.name, "playlist-bundle");
   assert.equal(playlistFolderScan.audioFileCount, 1);
-  assert.deepEqual(playlistFolderScan.files, [alphaPlaylistPath, betaPlaylistPath, gammaPlaylistPath]);
+  assert.deepEqual(playlistFolderScan.files, [
+    alphaPlaylistPath,
+    betaPlaylistPath,
+    gammaPlaylistPath,
+  ]);
   assert.deepEqual(playlistFolderScan.entries, [
     { path: alphaPlaylistPath, relativePath: "alpha.m3u8", folderPath: null },
     { path: betaPlaylistPath, relativePath: "nested/beta.PLS", folderPath: "nested" },
@@ -1337,182 +1519,226 @@ try {
         const isFallbackArtist = requestedArtist === "Fallback Muro";
         const isPremiumArtist = requestedArtist === "Premium Muro";
         const isLastFmArtist = requestedArtist === "LastFm Muro";
-        return new Response(JSON.stringify({
-          artists: [{
-            id: isFallbackArtist
-              ? fallbackArtistId
-              : isLastFmArtist
-                ? lastFmArtistId
-              : isPremiumArtist
-                ? premiumArtistId
-                : artistId,
-            name: requestedArtist,
-            score: 100,
-          }],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            artists: [
+              {
+                id: isFallbackArtist
+                  ? fallbackArtistId
+                  : isLastFmArtist
+                    ? lastFmArtistId
+                    : isPremiumArtist
+                      ? premiumArtistId
+                      : artistId,
+                name: requestedArtist,
+                score: 100,
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (
-        String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`)
-        || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${fallbackArtistId}?`)
-        || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${premiumArtistId}?`)
-        || String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${lastFmArtistId}?`)
+        String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${artistId}?`) ||
+        String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${fallbackArtistId}?`) ||
+        String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${premiumArtistId}?`) ||
+        String(url).startsWith(`https://musicbrainz.org/ws/2/artist/${lastFmArtistId}?`)
       ) {
         const isFallbackArtist = String(url).includes(fallbackArtistId);
         const isPremiumArtist = String(url).includes(premiumArtistId);
         const isLastFmArtist = String(url).includes(lastFmArtistId);
-        return new Response(JSON.stringify({
-          id: isFallbackArtist
-            ? fallbackArtistId
-            : isPremiumArtist
-              ? premiumArtistId
-              : isLastFmArtist
-                ? lastFmArtistId
-                : artistId,
-          name: isFallbackArtist
-            ? "Fallback Muro"
-            : isPremiumArtist
-              ? "Premium Muro"
-              : isLastFmArtist
-                ? "LastFm Muro"
-                : "Muro",
-          type: "Person",
-          country: isPremiumArtist || isLastFmArtist ? null : "DE",
-          area: isPremiumArtist || isLastFmArtist ? null : { name: "Berlin" },
-          "life-span": isPremiumArtist || isLastFmArtist ? {} : { begin: "1990" },
-          genres: isPremiumArtist || isLastFmArtist ? [] : [{ name: "electronic" }, { name: "house" }],
-          relations: [
-            {
-              type: "wikipedia",
-              url: { resource: isFallbackArtist
-                ? "https://en.wikipedia.org/wiki/Fallback_Muro"
-                : isPremiumArtist
-                  ? "https://en.wikipedia.org/wiki/Premium_Muro"
-                  : isLastFmArtist
-                    ? "https://en.wikipedia.org/wiki/LastFm_Muro"
-                  : "https://en.wikipedia.org/wiki/Muro_(musician)" },
-            },
-            ...(!isFallbackArtist && !isPremiumArtist && !isLastFmArtist
-              ? [{ type: "wikidata", url: { resource: "https://www.wikidata.org/wiki/Q123456" } }]
-              : []),
-          ],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            id: isFallbackArtist
+              ? fallbackArtistId
+              : isPremiumArtist
+                ? premiumArtistId
+                : isLastFmArtist
+                  ? lastFmArtistId
+                  : artistId,
+            name: isFallbackArtist
+              ? "Fallback Muro"
+              : isPremiumArtist
+                ? "Premium Muro"
+                : isLastFmArtist
+                  ? "LastFm Muro"
+                  : "Muro",
+            type: "Person",
+            country: isPremiumArtist || isLastFmArtist ? null : "DE",
+            area: isPremiumArtist || isLastFmArtist ? null : { name: "Berlin" },
+            "life-span": isPremiumArtist || isLastFmArtist ? {} : { begin: "1990" },
+            genres:
+              isPremiumArtist || isLastFmArtist ? [] : [{ name: "electronic" }, { name: "house" }],
+            relations: [
+              {
+                type: "wikipedia",
+                url: {
+                  resource: isFallbackArtist
+                    ? "https://en.wikipedia.org/wiki/Fallback_Muro"
+                    : isPremiumArtist
+                      ? "https://en.wikipedia.org/wiki/Premium_Muro"
+                      : isLastFmArtist
+                        ? "https://en.wikipedia.org/wiki/LastFm_Muro"
+                        : "https://en.wikipedia.org/wiki/Muro_(musician)",
+                },
+              },
+              ...(!isFallbackArtist && !isPremiumArtist && !isLastFmArtist
+                ? [{ type: "wikidata", url: { resource: "https://www.wikidata.org/wiki/Q123456" } }]
+                : []),
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url) === "https://www.wikidata.org/wiki/Special:EntityData/Q123456.json") {
-        return new Response(JSON.stringify({
-          entities: {
-            Q123456: {
-              sitelinks: { enwiki: { title: "Muro (musician)" } },
-              claims: {
-                P18: [{
-                  rank: "preferred",
-                  mainsnak: { datavalue: { value: "Muro artist portrait.jpg" } },
-                }],
+        return new Response(
+          JSON.stringify({
+            entities: {
+              Q123456: {
+                sitelinks: { enwiki: { title: "Muro (musician)" } },
+                claims: {
+                  P18: [
+                    {
+                      rank: "preferred",
+                      mainsnak: { datavalue: { value: "Muro artist portrait.jpg" } },
+                    },
+                  ],
+                },
               },
             },
-          },
-        }), { headers: { "content-type": "application/json" } });
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).startsWith("https://commons.wikimedia.org/w/api.php?")) {
         const requestUrl = new URL(String(url));
         assert.equal(requestUrl.searchParams.get("titles"), "File:Muro artist portrait.jpg");
         assert.equal(requestUrl.searchParams.get("iiurlwidth"), "800");
-        return new Response(JSON.stringify({
-          query: {
-            pages: [{
-              imageinfo: [{
-                thumburl: "https://upload.wikimedia.org/muro-commons.jpg",
-                descriptionurl: "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
-                extmetadata: {
-                  Artist: { value: "<a href=\"https://example.test\">Smoke Photographer</a>" },
-                  LicenseShortName: { value: "CC BY-SA 4.0" },
-                  LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/4.0/" },
+        return new Response(
+          JSON.stringify({
+            query: {
+              pages: [
+                {
+                  imageinfo: [
+                    {
+                      thumburl: "https://upload.wikimedia.org/muro-commons.jpg",
+                      descriptionurl:
+                        "https://commons.wikimedia.org/wiki/File:Muro_artist_portrait.jpg",
+                      extmetadata: {
+                        Artist: { value: '<a href="https://example.test">Smoke Photographer</a>' },
+                        LicenseShortName: { value: "CC BY-SA 4.0" },
+                        LicenseUrl: { value: "https://creativecommons.org/licenses/by-sa/4.0/" },
+                      },
+                    },
+                  ],
                 },
-              }],
-            }],
-          },
-        }), { headers: { "content-type": "application/json" } });
+              ],
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).includes("/api/rest_v1/page/summary/")) {
         const isFallbackArtist = String(url).includes("Fallback_Muro");
         const isPremiumArtist = String(url).includes("Premium_Muro");
         const isLastFmArtist = String(url).includes("LastFm_Muro");
-        return new Response(JSON.stringify({
-          extract: isPremiumArtist || isLastFmArtist
-            ? null
-            : `${isFallbackArtist ? "Fallback Muro" : "Muro"} is an electronic musician used by the smoke test.`,
-          description: isPremiumArtist || isLastFmArtist ? null : "Electronic musician",
-          thumbnail: isFallbackArtist || isPremiumArtist || isLastFmArtist
-            ? undefined
-            : { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
-          content_urls: { desktop: { page: isFallbackArtist
-            ? "https://en.wikipedia.org/wiki/Fallback_Muro"
-            : isPremiumArtist
-              ? "https://en.wikipedia.org/wiki/Premium_Muro"
-              : isLastFmArtist
-                ? "https://en.wikipedia.org/wiki/LastFm_Muro"
-              : "https://en.wikipedia.org/wiki/Muro_(musician)" } },
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            extract:
+              isPremiumArtist || isLastFmArtist
+                ? null
+                : `${isFallbackArtist ? "Fallback Muro" : "Muro"} is an electronic musician used by the smoke test.`,
+            description: isPremiumArtist || isLastFmArtist ? null : "Electronic musician",
+            thumbnail:
+              isFallbackArtist || isPremiumArtist || isLastFmArtist
+                ? undefined
+                : { source: "https://upload.wikimedia.org/muro-smoke.jpg" },
+            content_urls: {
+              desktop: {
+                page: isFallbackArtist
+                  ? "https://en.wikipedia.org/wiki/Fallback_Muro"
+                  : isPremiumArtist
+                    ? "https://en.wikipedia.org/wiki/Premium_Muro"
+                    : isLastFmArtist
+                      ? "https://en.wikipedia.org/wiki/LastFm_Muro"
+                      : "https://en.wikipedia.org/wiki/Muro_(musician)",
+              },
+            },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).startsWith("https://ws.audioscrobbler.com/2.0/?")) {
         const requestUrl = new URL(String(url));
         lastFmAuthorization = requestUrl.searchParams.get("api_key");
         assert.equal(requestUrl.searchParams.get("method"), "artist.getinfo");
         assert.equal(requestUrl.searchParams.get("mbid"), lastFmArtistId);
-        return new Response(JSON.stringify({
-          artist: {
-            name: "LastFm Muro",
-            mbid: lastFmArtistId,
-            url: "http://www.last.fm/music/LastFm+Muro",
-            image: [{ size: "extralarge", "#text": "https://lastfm.example/ignored.jpg" }],
-            bio: {
-              content: "Last.fm &amp; community biography.<br>Built for smoke. <a href=\"https://www.last.fm/music/LastFm+Muro/+wiki\">Read more on Last.fm</a>",
+        return new Response(
+          JSON.stringify({
+            artist: {
+              name: "LastFm Muro",
+              mbid: lastFmArtistId,
+              url: "http://www.last.fm/music/LastFm+Muro",
+              image: [{ size: "extralarge", "#text": "https://lastfm.example/ignored.jpg" }],
+              bio: {
+                content:
+                  'Last.fm &amp; community biography.<br>Built for smoke. <a href="https://www.last.fm/music/LastFm+Muro/+wiki">Read more on Last.fm</a>',
+              },
+              tags: {
+                tag: [{ name: "Techno" }, { name: "Minimal" }, { name: "techno" }],
+              },
+              similar: {
+                artist: [
+                  {
+                    name: "Neighbor One",
+                    mbid: "55555555-5555-4555-8555-555555555555",
+                    url: "http://www.last.fm/music/Neighbor+One",
+                  },
+                ],
+              },
             },
-            tags: {
-              tag: [{ name: "Techno" }, { name: "Minimal" }, { name: "techno" }],
-            },
-            similar: {
-              artist: [{
-                name: "Neighbor One",
-                mbid: "55555555-5555-4555-8555-555555555555",
-                url: "http://www.last.fm/music/Neighbor+One",
-              }],
-            },
-          },
-        }), { headers: { "content-type": "application/json" } });
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).startsWith("https://api.search.brave.com/res/v1/images/search?")) {
         const requestUrl = new URL(String(url));
         braveAuthorization = options.headers?.["X-Subscription-Token"] ?? null;
         assert.equal(
           requestUrl.searchParams.get("q"),
-          "\"Unknown Underground Artist\" musician DJ artist portrait",
+          '"Unknown Underground Artist" musician DJ artist portrait',
         );
         assert.equal(requestUrl.searchParams.get("country"), "ALL");
         assert.equal(requestUrl.searchParams.get("search_lang"), "en");
         assert.equal(requestUrl.searchParams.get("count"), "15");
         assert.equal(requestUrl.searchParams.get("safesearch"), "strict");
-        return new Response(JSON.stringify({
-          type: "images",
-          results: [{
-            type: "image_result",
-            title: "Unknown Underground Artist press portrait",
-            url: "https://label.example/artists/unknown-underground-artist",
-            source: "label.example",
-            thumbnail: {
-              src: "https://imgs.search.brave.com/muro-brave.jpg",
-              width: 500,
-              height: 500,
-            },
-            properties: {
-              url: "https://label.example/images/unknown-underground-artist.jpg",
-              width: 1600,
-              height: 1600,
-            },
-            meta_url: { hostname: "label.example" },
-            confidence: "high",
-          }],
-          extra: { might_be_offensive: false },
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            type: "images",
+            results: [
+              {
+                type: "image_result",
+                title: "Unknown Underground Artist press portrait",
+                url: "https://label.example/artists/unknown-underground-artist",
+                source: "label.example",
+                thumbnail: {
+                  src: "https://imgs.search.brave.com/muro-brave.jpg",
+                  width: 500,
+                  height: 500,
+                },
+                properties: {
+                  url: "https://label.example/images/unknown-underground-artist.jpg",
+                  width: 1600,
+                  height: 1600,
+                },
+                meta_url: { hostname: "label.example" },
+                confidence: "high",
+              },
+            ],
+            extra: { might_be_offensive: false },
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url).startsWith("https://api.deezer.com/search/artist?")) {
         const requestUrl = new URL(String(url));
@@ -1522,49 +1748,79 @@ try {
             headers: { "content-type": "application/json" },
           });
         }
-        return new Response(JSON.stringify({
-          data: [{
-            id: 987654,
-            name: "Fallback Muro",
-            picture_xl: "https://cdn-images.dzcdn.net/images/artist/fallback/1000x1000.jpg",
-          }],
-          total: 1,
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: 987654,
+                name: "Fallback Muro",
+                picture_xl: "https://cdn-images.dzcdn.net/images/artist/fallback/1000x1000.jpg",
+              },
+            ],
+            total: 1,
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
-      if (String(url) === `https://www.theaudiodb.com/api/v2/json/lookup/artist_mb/${premiumArtistId}`) {
+      if (
+        String(url) === `https://www.theaudiodb.com/api/v2/json/lookup/artist_mb/${premiumArtistId}`
+      ) {
         theAudioDbAuthorization = options.headers?.["X-API-KEY"] ?? null;
-        return new Response(JSON.stringify({
-          lookup: [{
-            idArtist: "654321",
-            strArtist: "Premium Muro",
-            intFormedYear: "2005",
-            strBiography: "Premium biography supplied by TheAudioDB.",
-            strGenre: "Electronic; House",
-            strStyle: "Downtempo",
-            strCountry: "Germany",
-            strArtistThumb: "https://assets.theaudiodb.com/premium-muro.jpg",
-            strMusicBrainzID: premiumArtistId,
-          }],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            lookup: [
+              {
+                idArtist: "654321",
+                strArtist: "Premium Muro",
+                intFormedYear: "2005",
+                strBiography: "Premium biography supplied by TheAudioDB.",
+                strGenre: "Electronic; House",
+                strStyle: "Downtempo",
+                strCountry: "Germany",
+                strArtistThumb: "https://assets.theaudiodb.com/premium-muro.jpg",
+                strMusicBrainzID: premiumArtistId,
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url) === `https://webservice.fanart.tv/v3.2/music/${fallbackArtistId}`) {
         fanartAuthorization = options.headers?.["api-key"] ?? null;
-        return new Response(JSON.stringify({
-          artistthumb: [
-            { url: "https://assets.fanart.tv/fallback-low.jpg", likes: "2", width: "1000", height: "1000" },
-            { url: "https://assets.fanart.tv/fallback-best.jpg", likes: "12", width: "1000", height: "1000" },
-          ],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            artistthumb: [
+              {
+                url: "https://assets.fanart.tv/fallback-low.jpg",
+                likes: "2",
+                width: "1000",
+                height: "1000",
+              },
+              {
+                url: "https://assets.fanart.tv/fallback-best.jpg",
+                likes: "12",
+                width: "1000",
+                height: "1000",
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url) === `https://webservice.fanart.tv/v3.2/music/${premiumArtistId}`) {
-        return new Response(JSON.stringify({
-          artistthumb: [{
-            url: "https://assets.fanart.tv/premium-fanart.jpg",
-            likes: "8",
-            width: "1200",
-            height: "1200",
-          }],
-        }), { headers: { "content-type": "application/json" } });
+        return new Response(
+          JSON.stringify({
+            artistthumb: [
+              {
+                url: "https://assets.fanart.tv/premium-fanart.jpg",
+                likes: "8",
+                width: "1200",
+                height: "1200",
+              },
+            ],
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
       }
       if (String(url) === "https://upload.wikimedia.org/muro-smoke.jpg") {
         return new Response(Buffer.from("smoke image"), {
@@ -1601,10 +1857,7 @@ try {
           headers: { "content-type": "image/jpeg" },
         });
       }
-      if (
-        String(url)
-        === "https://cdn-images.dzcdn.net/images/artist/fallback/1000x1000.jpg"
-      ) {
+      if (String(url) === "https://cdn-images.dzcdn.net/images/artist/fallback/1000x1000.jpg") {
         return new Response(Buffer.from("deezer artist image"), {
           headers: { "content-type": "image/jpeg" },
         });
@@ -1635,11 +1888,15 @@ try {
     "the clicked MBID must keep a homonymous profile separate from the name-only cache",
   );
   const homonymousArtistKey = "mbid:" + fallbackArtistId;
-  const sameNameProfileBeforeIdentityImageEdit = db.prepare(`
+  const sameNameProfileBeforeIdentityImageEdit = db
+    .prepare(
+      `
     SELECT profile_json
     FROM artist_profiles
     WHERE artist_key = 'muro'
-  `).get().profile_json;
+  `,
+    )
+    .get().profile_json;
   const identityImageCandidates = await artistProfileService.searchImages(db, "Muro", {
     musicBrainzId: fallbackArtistId,
     fanartApiKey: "smoke-fanart-key",
@@ -1663,20 +1920,30 @@ try {
   assert.equal(identitySelectedProfile.imageSelection, "manual");
   assert.equal(identitySelectedProfile.imageUrl, "https://assets.fanart.tv/fallback-low.jpg");
   assert.equal(
-    db.prepare(`
+    db
+      .prepare(
+        `
       SELECT profile_json
       FROM artist_profiles
       WHERE artist_key = 'muro'
-    `).get().profile_json,
+    `,
+      )
+      .get().profile_json,
     sameNameProfileBeforeIdentityImageEdit,
     "saving an identity image must not overwrite the same-name profile",
   );
   assert.equal(
-    JSON.parse(db.prepare(`
+    JSON.parse(
+      db
+        .prepare(
+          `
       SELECT profile_json
       FROM artist_profiles
       WHERE artist_key = ?
-    `).get(homonymousArtistKey).profile_json).imageUrl,
+    `,
+        )
+        .get(homonymousArtistKey).profile_json,
+    ).imageUrl,
     "https://assets.fanart.tv/fallback-low.jpg",
   );
   const refreshedIdentityManualProfile = await artistProfileService.getProfile(db, "Muro", {
@@ -1692,15 +1959,25 @@ try {
   const artistFetchCount = artistFetchCalls.length;
   const cachedArtistProfile = await artistProfileService.getProfile(db, "Muro");
   assert.equal(cachedArtistProfile.cacheState, "fresh");
-  assert.equal(artistFetchCalls.length, artistFetchCount, "fresh artist profiles should not be fetched again");
-  const cachedProfileRow = db.prepare(`
+  assert.equal(
+    artistFetchCalls.length,
+    artistFetchCount,
+    "fresh artist profiles should not be fetched again",
+  );
+  const cachedProfileRow = db
+    .prepare(
+      `
     SELECT profile_json FROM artist_profiles WHERE artist_key = 'muro'
-  `).get();
+  `,
+    )
+    .get();
   const legacyCachedProfile = JSON.parse(cachedProfileRow.profile_json);
   delete legacyCachedProfile.profileVersion;
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE artist_profiles SET profile_json = ? WHERE artist_key = 'muro'
-  `).run(JSON.stringify(legacyCachedProfile));
+  `,
+  ).run(JSON.stringify(legacyCachedProfile));
   const fetchCountBeforeProfileUpgrade = artistFetchCalls.length;
   const upgradedArtistProfile = await artistProfileService.getProfile(db, "Muro");
   assert.equal(upgradedArtistProfile.profileVersion, 2);
@@ -1723,7 +2000,10 @@ try {
   assert.equal(fallbackProfile.fanartAttempted, true);
   assert.equal(fallbackProfile.fanartUrl, `https://fanart.tv/artist/${fallbackArtistId}/`);
   assert.equal(fanartAuthorization, "smoke-fanart-key");
-  assert.ok(fs.existsSync(fallbackProfile.imagePath), "Fanart.tv fallback should be cached on disk");
+  assert.ok(
+    fs.existsSync(fallbackProfile.imagePath),
+    "Fanart.tv fallback should be cached on disk",
+  );
   assert.ok(
     artistFetchCalls.includes("https://assets.fanart.tv/fallback-best.jpg"),
     "the most-liked Fanart.tv artist thumbnail should be selected",
@@ -1810,7 +2090,11 @@ try {
   assert.ok(fs.existsSync(braveSelectedProfile.imagePath));
   const fallbackFetchCount = artistFetchCalls.length;
   await artistProfileService.getProfile(db, "Fallback Muro", { fanartApiKey: "smoke-fanart-key" });
-  assert.equal(artistFetchCalls.length, fallbackFetchCount, "cached Fanart.tv images should not be fetched again");
+  assert.equal(
+    artistFetchCalls.length,
+    fallbackFetchCount,
+    "cached Fanart.tv images should not be fetched again",
+  );
   const premiumWithoutKey = await artistProfileService.getProfile(db, "Premium Muro");
   assert.equal(premiumWithoutKey.biography, null);
   assert.equal(premiumWithoutKey.imageUrl, null);
@@ -1872,11 +2156,13 @@ try {
   assert.equal(lastFmProfile.lastFmUrl, "https://www.last.fm/music/LastFm+Muro");
   assert.equal(lastFmProfile.biography, "Last.fm & community biography. Built for smoke.");
   assert.deepEqual(lastFmProfile.genres, ["Techno", "Minimal"]);
-  assert.deepEqual(lastFmProfile.similarArtists, [{
-    name: "Neighbor One",
-    musicBrainzId: "55555555-5555-4555-8555-555555555555",
-    url: "https://www.last.fm/music/Neighbor+One",
-  }]);
+  assert.deepEqual(lastFmProfile.similarArtists, [
+    {
+      name: "Neighbor One",
+      musicBrainzId: "55555555-5555-4555-8555-555555555555",
+      url: "https://www.last.fm/music/Neighbor+One",
+    },
+  ]);
   assert.equal(lastFmProfile.imageUrl, null, "Last.fm artwork must not be used");
   const lastFmFetchCount = artistFetchCalls.length;
   await artistProfileService.getProfile(db, "LastFm Muro", {
@@ -1888,7 +2174,8 @@ try {
     "cached Last.fm profiles should not be fetched again",
   );
   assert.deepEqual(
-    artistProfileService.loadCachedProfiles(db)
+    artistProfileService
+      .loadCachedProfiles(db)
       .map((profile) => profile.artistKey)
       .sort(),
     [
@@ -1903,10 +2190,12 @@ try {
   db.prepare("UPDATE artist_profiles SET fetched_at = 0 WHERE artist_key = ?").run("muro");
   const fetchCountBeforeStaleBackgroundScan = artistFetchCalls.length;
   assert.equal(
-    (await artistProfileService.scanProfiles(db, {
-      limit: 1,
-      theAudioDbApiKey: "smoke-theaudiodb-key",
-    })).checked,
+    (
+      await artistProfileService.scanProfiles(db, {
+        limit: 1,
+        theAudioDbApiKey: "smoke-theaudiodb-key",
+      })
+    ).checked,
     0,
     "background scans should not refresh an existing stale profile",
   );
@@ -1943,7 +2232,9 @@ try {
     totalArtists: 2,
   });
   assert.ok(
-    artistProfileService.loadCachedProfiles(db).some((profile) => profile.artistKey === "periodic muro"),
+    artistProfileService
+      .loadCachedProfiles(db)
+      .some((profile) => profile.artistKey === "periodic muro"),
     "background scans should persist newly discovered artists",
   );
   assert.equal((await artistProfileService.scanProfiles(db, { limit: 1 })).checked, 0);
@@ -1972,13 +2263,13 @@ try {
     settings: analysisSettings,
     writeAuthorization: true,
   });
-  assert.deepEqual(
-    await backend.invoke("cancel_track_analysis", { jobId: "job-1" }),
-    { cancelled: true },
-  );
+  assert.deepEqual(await backend.invoke("cancel_track_analysis", { jobId: "job-1" }), {
+    cancelled: true,
+  });
   assert.deepEqual(await backend.invoke("recycle_keyfinder", {}), { recycled: true });
   assert.equal(
-    (await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 })).peaks.length,
+    (await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 }))
+      .peaks.length,
     64,
   );
   await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 });
@@ -1989,11 +2280,19 @@ try {
   );
 
   await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 128 });
-  assert.equal(waveformGenerationCount, 2, "a different point count should generate a new waveform");
+  assert.equal(
+    waveformGenerationCount,
+    2,
+    "a different point count should generate a new waveform",
+  );
 
   fs.appendFileSync(firstSourcePath, " updated");
   await backend.invoke("generate_track_waveform", { sourcePath: firstSourcePath, points: 64 });
-  assert.equal(waveformGenerationCount, 3, "source metadata changes should invalidate cached peaks");
+  assert.equal(
+    waveformGenerationCount,
+    3,
+    "source metadata changes should invalidate cached peaks",
+  );
 
   const removeOnly = await backend.invoke("delete_tracks", {
     dbPath,
@@ -2005,8 +2304,9 @@ try {
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 1);
   assert.deepEqual(
-    (await backend.invoke("load_playlists", { dbPath }))
-      .playlists.find((playlist) => playlist.id === "playlist-1")?.track_ids,
+    (await backend.invoke("load_playlists", { dbPath })).playlists.find(
+      (playlist) => playlist.id === "playlist-1",
+    )?.track_ids,
     ["track-2"],
   );
 
@@ -2020,8 +2320,9 @@ try {
   snapshot = await backend.invoke("load_tracks", { dbPath });
   assert.equal(snapshot.library.length, 0);
   assert.deepEqual(
-    (await backend.invoke("load_playlists", { dbPath }))
-      .playlists.find((playlist) => playlist.id === "playlist-1")?.track_ids,
+    (await backend.invoke("load_playlists", { dbPath })).playlists.find(
+      (playlist) => playlist.id === "playlist-1",
+    )?.track_ids,
     [],
   );
   await backend.invoke("clear_tracks", { dbPath });

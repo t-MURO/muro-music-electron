@@ -48,7 +48,10 @@ export const createCastService = ({
   let sessionOpChain = Promise.resolve();
   const runSessionOp = (operation) => {
     const result = sessionOpChain.then(operation, operation);
-    sessionOpChain = result.then(() => undefined, () => undefined);
+    sessionOpChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 
@@ -127,9 +130,10 @@ export const createCastService = ({
     cleanupSession();
     setState("error", {
       code: CAST_ERROR_CODES.sessionEnded,
-      message: error instanceof Error && error.message
-        ? error.message
-        : "The cast session ended unexpectedly",
+      message:
+        error instanceof Error && error.message
+          ? error.message
+          : "The cast session ended unexpectedly",
     });
   };
 
@@ -139,11 +143,14 @@ export const createCastService = ({
     activeSession.statusTimer = setInterval(() => {
       if (!activeSession.adapter.hasMediaSession() || activeSession.polling) return;
       activeSession.polling = true;
-      activeSession.adapter.getMediaStatus().catch(() => {
-        // Poll failures are transient; a dead session surfaces via "close".
-      }).finally(() => {
-        activeSession.polling = false;
-      });
+      activeSession.adapter
+        .getMediaStatus()
+        .catch(() => {
+          // Poll failures are transient; a dead session surfaces via "close".
+        })
+        .finally(() => {
+          activeSession.polling = false;
+        });
     }, STATUS_POLL_INTERVAL_MS);
   };
 
@@ -215,9 +222,10 @@ export const createCastService = ({
         } catch (error) {
           adapter.close();
           const payload = {
-            code: error?.code === CAST_ERROR_CODES.connectTimeout
-              ? CAST_ERROR_CODES.connectTimeout
-              : CAST_ERROR_CODES.connectFailed,
+            code:
+              error?.code === CAST_ERROR_CODES.connectTimeout
+                ? CAST_ERROR_CODES.connectTimeout
+                : CAST_ERROR_CODES.connectFailed,
             message: error instanceof Error ? error.message : String(error),
           };
           setState("error", payload);
@@ -261,72 +269,81 @@ export const createCastService = ({
       autoplay,
     }) {
       return runSessionOp(async () => {
-      const activeSession = requireSession();
+        const activeSession = requireSession();
 
-      const contentType = castContentTypeFor(sourcePath);
-      if (!contentType) {
-        throw createCastError(
-          CAST_ERROR_CODES.unsupportedFormat,
-          "This format cannot be cast yet",
-        );
-      }
-      try {
-        const stats = await fs.promises.stat(String(sourcePath));
-        if (!stats.isFile()) throw new Error("not a file");
-      } catch {
-        throw createCastError(
-          CAST_ERROR_CODES.loadFailed,
-          "The track file is missing or unreadable",
-        );
-      }
-
-      mediaServer.revokeAuthorizations();
-      const trackAuthorization = mediaServer.authorizeFile(String(sourcePath), "media");
-      const trackUrl = mediaServer.urlFor(trackAuthorization.path, { preferHost: activeSession.host });
-      if (!trackUrl) {
-        throw createCastError(
-          CAST_ERROR_CODES.mediaServerUnreachable,
-          "No local network address is reachable by the cast device",
-        );
-      }
-      let imageUrl = null;
-      if (coverArtPath && fs.existsSync(String(coverArtPath))) {
-        const artworkAuthorization = mediaServer.authorizeFile(String(coverArtPath), "artwork");
-        imageUrl = mediaServer.urlFor(artworkAuthorization.path, { preferHost: activeSession.host });
-      }
-
-      setState("loading");
-      try {
-        const status = await activeSession.adapter.loadMedia({
-          contentId: trackUrl,
-          contentType,
-          title,
-          artist,
-          album,
-          imageUrl,
-          duration: durationSeconds,
-          currentTime: Math.max(0, Number(startPositionSecs) || 0),
-          autoplay: autoplay !== false,
-        });
-        activeSession.loadedTrack = {
-          trackId: trackId ?? null,
-          title: title ?? "",
-          artist: artist ?? "",
-          album: album ?? "",
-          durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
-        };
-        handleMediaStatus(status);
-        return publicState();
-      } catch (error) {
-        if (session === activeSession) {
-          setState("connected", toCastErrorPayload(
-            error?.code ? error : createCastError(CAST_ERROR_CODES.loadFailed, String(error?.message ?? error)),
-          ));
+        const contentType = castContentTypeFor(sourcePath);
+        if (!contentType) {
+          throw createCastError(
+            CAST_ERROR_CODES.unsupportedFormat,
+            "This format cannot be cast yet",
+          );
         }
-        throw error?.code
-          ? error
-          : createCastError(CAST_ERROR_CODES.loadFailed, String(error?.message ?? error));
-      }
+        try {
+          const stats = await fs.promises.stat(String(sourcePath));
+          if (!stats.isFile()) throw new Error("not a file");
+        } catch {
+          throw createCastError(
+            CAST_ERROR_CODES.loadFailed,
+            "The track file is missing or unreadable",
+          );
+        }
+
+        mediaServer.revokeAuthorizations();
+        const trackAuthorization = mediaServer.authorizeFile(String(sourcePath), "media");
+        const trackUrl = mediaServer.urlFor(trackAuthorization.path, {
+          preferHost: activeSession.host,
+        });
+        if (!trackUrl) {
+          throw createCastError(
+            CAST_ERROR_CODES.mediaServerUnreachable,
+            "No local network address is reachable by the cast device",
+          );
+        }
+        let imageUrl = null;
+        if (coverArtPath && fs.existsSync(String(coverArtPath))) {
+          const artworkAuthorization = mediaServer.authorizeFile(String(coverArtPath), "artwork");
+          imageUrl = mediaServer.urlFor(artworkAuthorization.path, {
+            preferHost: activeSession.host,
+          });
+        }
+
+        setState("loading");
+        try {
+          const status = await activeSession.adapter.loadMedia({
+            contentId: trackUrl,
+            contentType,
+            title,
+            artist,
+            album,
+            imageUrl,
+            duration: durationSeconds,
+            currentTime: Math.max(0, Number(startPositionSecs) || 0),
+            autoplay: autoplay !== false,
+          });
+          activeSession.loadedTrack = {
+            trackId: trackId ?? null,
+            title: title ?? "",
+            artist: artist ?? "",
+            album: album ?? "",
+            durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+          };
+          handleMediaStatus(status);
+          return publicState();
+        } catch (error) {
+          if (session === activeSession) {
+            setState(
+              "connected",
+              toCastErrorPayload(
+                error?.code
+                  ? error
+                  : createCastError(CAST_ERROR_CODES.loadFailed, String(error?.message ?? error)),
+              ),
+            );
+          }
+          throw error?.code
+            ? error
+            : createCastError(CAST_ERROR_CODES.loadFailed, String(error?.message ?? error));
+        }
       });
     },
 

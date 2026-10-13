@@ -39,7 +39,10 @@ export const createDlnaService = ({
   let sessionOpChain = Promise.resolve();
   const runSessionOp = (operation) => {
     const result = sessionOpChain.then(operation, operation);
-    sessionOpChain = result.then(() => undefined, () => undefined);
+    sessionOpChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   };
 
@@ -103,9 +106,10 @@ export const createDlnaService = ({
     // SetAVTransportURI and Play, and the synthetic post-load status is pushed
     // here too. Neither is a real end-of-track, so never advance the queue
     // from a sample taken during a load.
-    const finished = sessionState === "loading" || session.suppressFinished
-      ? false
-      : isDlnaFinishedTransition(previous, nextStatus);
+    const finished =
+      sessionState === "loading" || session.suppressFinished
+        ? false
+        : isDlnaFinishedTransition(previous, nextStatus);
     session.lastStatus = nextStatus;
     if (!["connecting", "loading", "disconnecting", "error"].includes(sessionState)) {
       const derived = dlnaSessionStateForStatus(nextStatus);
@@ -121,9 +125,8 @@ export const createDlnaService = ({
     cleanupSession();
     setState("error", {
       code: DLNA_ERROR_CODES.sessionEnded,
-      message: error instanceof Error && error.message
-        ? error.message
-        : "The device stopped responding",
+      message:
+        error instanceof Error && error.message ? error.message : "The device stopped responding",
     });
   };
 
@@ -144,11 +147,13 @@ export const createDlnaService = ({
       // Busy renderers answer with an empty transport state while probing a
       // stream (observed on the Denon AVR-S760H); skip the transient sample.
       if (!transport.transportState) return;
-      handleStatus(normalizeTransportStatus({
-        transportState: transport.transportState,
-        positionSecs: position.positionSecs,
-        durationSecs: position.durationSecs ?? activeSession.loadedTrack?.durationSeconds,
-      }));
+      handleStatus(
+        normalizeTransportStatus({
+          transportState: transport.transportState,
+          positionSecs: position.positionSecs,
+          durationSecs: position.durationSecs ?? activeSession.loadedTrack?.durationSeconds,
+        }),
+      );
     } catch (error) {
       if (session !== activeSession) return;
       activeSession.pollFailures = (activeSession.pollFailures ?? 0) + 1;
@@ -274,103 +279,114 @@ export const createDlnaService = ({
       startPositionSecs,
     }) {
       return runSessionOp(async () => {
-      const activeSession = requireSession();
+        const activeSession = requireSession();
 
-      const contentType = dlnaContentTypeFor(sourcePath);
-      if (!contentType) {
-        throw createDlnaError(
-          DLNA_ERROR_CODES.unsupportedFormat,
-          "This format cannot be played on this device yet",
-        );
-      }
-      try {
-        const stats = await fs.promises.stat(String(sourcePath));
-        if (!stats.isFile()) throw new Error("not a file");
-      } catch {
-        throw createDlnaError(
-          DLNA_ERROR_CODES.loadFailed,
-          "The track file is missing or unreadable",
-        );
-      }
-
-      mediaServer.revokeAuthorizations();
-      const trackAuthorization = mediaServer.authorizeFile(String(sourcePath), "media");
-      const trackUrl = mediaServer.urlFor(trackAuthorization.path, { preferHost: activeSession.host });
-      if (!trackUrl) {
-        throw createDlnaError(
-          DLNA_ERROR_CODES.mediaServerUnreachable,
-          "No local network address is reachable by the device",
-        );
-      }
-      let artUrl = null;
-      if (coverArtPath && fs.existsSync(String(coverArtPath))) {
-        const artworkAuthorization = mediaServer.authorizeFile(String(coverArtPath), "artwork");
-        artUrl = mediaServer.urlFor(artworkAuthorization.path, { preferHost: activeSession.host });
-      }
-
-      setState("loading");
-      try {
-        await activeSession.client.setUri({
-          url: trackUrl,
-          metadata: buildDidlMetadata({
-            url: trackUrl,
-            contentType,
-            title,
-            artist,
-            album,
-            artUrl,
-            durationSeconds,
-          }),
-        });
-        // Play issued before the renderer registers the URI silently drops
-        // back to STOPPED (observed on the Denon AVR-S760H) — wait for the
-        // media to be registered first.
-        for (let attempt = 0; attempt < 10; attempt += 1) {
-          const mediaInfo = await activeSession.client.getMediaInfo().catch(() => null);
-          if (mediaInfo?.currentUri) break;
-          await new Promise((resolve) => setTimeout(resolve, 300));
-        }
-        await activeSession.client.play();
-        const startAt = Math.max(0, Number(startPositionSecs) || 0);
-        if (startAt > 0) {
-          await activeSession.client.seek(startAt).catch(() => {
-            // Some renderers reject seeks while still transitioning; the
-            // track then simply starts from the beginning.
-          });
-        }
-        if (session !== activeSession) {
-          // A concurrent teardown (poll-failure or a superseding op) ended
-          // this session while the SOAP calls were in flight. Do not resurrect
-          // it with a "playing" state that has no device behind it.
+        const contentType = dlnaContentTypeFor(sourcePath);
+        if (!contentType) {
           throw createDlnaError(
-            DLNA_ERROR_CODES.sessionEnded,
-            "The playback session ended during load",
+            DLNA_ERROR_CODES.unsupportedFormat,
+            "This format cannot be played on this device yet",
           );
         }
-        activeSession.loadedTrack = {
-          trackId: trackId ?? null,
-          title: title ?? "",
-          artist: artist ?? "",
-          album: album ?? "",
-          durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
-        };
-        handleStatus(normalizeTransportStatus({
-          transportState: "TRANSITIONING",
-          positionSecs: startAt,
-          durationSecs: durationSeconds,
-        }));
-        setState("playing");
-        return publicState();
-      } catch (error) {
-        if (session === activeSession) {
-          setState("connected", toDlnaErrorPayload(
-            error?.code ? error : createDlnaError(DLNA_ERROR_CODES.loadFailed, String(error?.message ?? error)),
-          ));
+        try {
+          const stats = await fs.promises.stat(String(sourcePath));
+          if (!stats.isFile()) throw new Error("not a file");
+        } catch {
+          throw createDlnaError(
+            DLNA_ERROR_CODES.loadFailed,
+            "The track file is missing or unreadable",
+          );
         }
-        throw error?.code
-          ? error
-          : createDlnaError(DLNA_ERROR_CODES.loadFailed, String(error?.message ?? error));
-      }
+
+        mediaServer.revokeAuthorizations();
+        const trackAuthorization = mediaServer.authorizeFile(String(sourcePath), "media");
+        const trackUrl = mediaServer.urlFor(trackAuthorization.path, {
+          preferHost: activeSession.host,
+        });
+        if (!trackUrl) {
+          throw createDlnaError(
+            DLNA_ERROR_CODES.mediaServerUnreachable,
+            "No local network address is reachable by the device",
+          );
+        }
+        let artUrl = null;
+        if (coverArtPath && fs.existsSync(String(coverArtPath))) {
+          const artworkAuthorization = mediaServer.authorizeFile(String(coverArtPath), "artwork");
+          artUrl = mediaServer.urlFor(artworkAuthorization.path, {
+            preferHost: activeSession.host,
+          });
+        }
+
+        setState("loading");
+        try {
+          await activeSession.client.setUri({
+            url: trackUrl,
+            metadata: buildDidlMetadata({
+              url: trackUrl,
+              contentType,
+              title,
+              artist,
+              album,
+              artUrl,
+              durationSeconds,
+            }),
+          });
+          // Play issued before the renderer registers the URI silently drops
+          // back to STOPPED (observed on the Denon AVR-S760H) — wait for the
+          // media to be registered first.
+          for (let attempt = 0; attempt < 10; attempt += 1) {
+            const mediaInfo = await activeSession.client.getMediaInfo().catch(() => null);
+            if (mediaInfo?.currentUri) break;
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          }
+          await activeSession.client.play();
+          const startAt = Math.max(0, Number(startPositionSecs) || 0);
+          if (startAt > 0) {
+            await activeSession.client.seek(startAt).catch(() => {
+              // Some renderers reject seeks while still transitioning; the
+              // track then simply starts from the beginning.
+            });
+          }
+          if (session !== activeSession) {
+            // A concurrent teardown (poll-failure or a superseding op) ended
+            // this session while the SOAP calls were in flight. Do not resurrect
+            // it with a "playing" state that has no device behind it.
+            throw createDlnaError(
+              DLNA_ERROR_CODES.sessionEnded,
+              "The playback session ended during load",
+            );
+          }
+          activeSession.loadedTrack = {
+            trackId: trackId ?? null,
+            title: title ?? "",
+            artist: artist ?? "",
+            album: album ?? "",
+            durationSeconds: Number.isFinite(durationSeconds) ? durationSeconds : null,
+          };
+          handleStatus(
+            normalizeTransportStatus({
+              transportState: "TRANSITIONING",
+              positionSecs: startAt,
+              durationSecs: durationSeconds,
+            }),
+          );
+          setState("playing");
+          return publicState();
+        } catch (error) {
+          if (session === activeSession) {
+            setState(
+              "connected",
+              toDlnaErrorPayload(
+                error?.code
+                  ? error
+                  : createDlnaError(DLNA_ERROR_CODES.loadFailed, String(error?.message ?? error)),
+              ),
+            );
+          }
+          throw error?.code
+            ? error
+            : createDlnaError(DLNA_ERROR_CODES.loadFailed, String(error?.message ?? error));
+        }
       });
     },
 

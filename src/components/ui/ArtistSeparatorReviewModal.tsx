@@ -43,16 +43,17 @@ export const ArtistSeparatorReviewModal = ({
 
   const normalizedArtist = artist.trim();
   const fieldLabel = candidate.field === "albumArtist" ? "Album artist" : "Artist";
-  const canApply = (
+  const canApply =
     !isApplying &&
     normalizedArtist.length > 0 &&
-    normalizedArtist !== candidate.originalValue.trim()
-  );
+    normalizedArtist !== candidate.originalValue.trim();
 
   return createPortal(
     <div
       className="modal-overlay-animate fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-[var(--spacing-lg)] backdrop-blur-sm"
-      onClick={() => { if (!isApplying) onClose(); }}
+      onClick={() => {
+        if (!isApplying) onClose();
+      }}
       data-artist-separator-modal
     >
       <div
@@ -115,8 +116,8 @@ export const ArtistSeparatorReviewModal = ({
 
           <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
             Applying updates Muro’s database and attempts to update the artist tag in the source
-            audio file. Skip ignores only this occurrence; Save exception ignores this exact name
-            in future scans everywhere it appears.
+            audio file. Skip ignores only this occurrence; Save exception ignores this exact name in
+            future scans everywhere it appears.
           </p>
         </div>
 
@@ -151,7 +152,9 @@ export const ArtistSeparatorReviewModal = ({
             type="button"
             className="rounded-[var(--radius-md)] bg-[var(--color-accent)] px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50"
             disabled={!canApply}
-            onClick={() => { void onApply(normalizedArtist); }}
+            onClick={() => {
+              void onApply(normalizedArtist);
+            }}
             data-artist-separator-apply
           >
             {isApplying ? "Applying…" : position === total ? "Apply" : "Apply & next"}

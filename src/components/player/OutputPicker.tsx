@@ -13,10 +13,7 @@ import {
   remoteStartDiscovery,
   remoteStopDiscovery,
 } from "../../utils/remoteOutputApi";
-import {
-  connectToRemoteDevice,
-  disconnectFromRemote,
-} from "../../utils/remoteOutputController";
+import { connectToRemoteDevice, disconnectFromRemote } from "../../utils/remoteOutputController";
 import { playbackSetOutputDevice } from "../../utils/playbackApi";
 
 const PROTOCOL_BADGES = { cast: "Cast", dlna: "DLNA" } as const;
@@ -24,7 +21,13 @@ const PROTOCOL_BADGES = { cast: "Cast", dlna: "DLNA" } as const;
 const rowClass = (selected: boolean) =>
   `flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2 py-2 text-left text-[12px] hover:bg-[var(--color-bg-hover)] ${selected ? "text-[var(--color-accent)]" : "text-[var(--color-text-primary)]"}`;
 
-const SectionHeading = ({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) => (
+const SectionHeading = ({
+  icon,
+  children,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) => (
   <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
     {icon}
     {children}
@@ -53,9 +56,8 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
 
   const isConnecting = sessionState === "connecting" || sessionState === "loading";
   const hasSessionError = sessionState === "error" && lastError !== null;
-  const connectedKey = outputActive && protocol && deviceId
-    ? remoteDeviceKey(protocol, deviceId)
-    : null;
+  const connectedKey =
+    outputActive && protocol && deviceId ? remoteDeviceKey(protocol, deviceId) : null;
 
   useEffect(() => {
     void remoteStartDiscovery();
@@ -66,24 +68,26 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
     };
   }, []);
 
-  const handleSelectLocal = useCallback(async (targetDeviceId: string, label: string) => {
-    setBusyKey(`local:${targetDeviceId}`);
-    try {
-      if (useRemoteOutputStore.getState().protocol) {
-        await disconnectFromRemote();
+  const handleSelectLocal = useCallback(
+    async (targetDeviceId: string, label: string) => {
+      setBusyKey(`local:${targetDeviceId}`);
+      try {
+        if (useRemoteOutputStore.getState().protocol) {
+          await disconnectFromRemote();
+        }
+        await playbackSetOutputDevice(targetDeviceId);
+        setAudioOutputDevice(targetDeviceId, label);
+      } catch {
+        notify.error(t("output.switchFailed"));
+      } finally {
+        setBusyKey(null);
       }
-      await playbackSetOutputDevice(targetDeviceId);
-      setAudioOutputDevice(targetDeviceId, label);
-    } catch {
-      notify.error(t("output.switchFailed"));
-    } finally {
-      setBusyKey(null);
-    }
-  }, [setAudioOutputDevice]);
+    },
+    [setAudioOutputDevice],
+  );
 
   const handleSelectNetwork = useCallback(async (deviceKey: string) => {
-    const device = useRemoteOutputStore.getState().devices
-      .find((entry) => entry.key === deviceKey);
+    const device = useRemoteOutputStore.getState().devices.find((entry) => entry.key === deviceKey);
     if (!device) return;
     setBusyKey(deviceKey);
     try {
@@ -108,10 +112,7 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
     void remoteStartDiscovery();
   }, []);
 
-  const localEntries = [
-    { deviceId: "", label: t("output.systemDefault") },
-    ...localDevices,
-  ];
+  const localEntries = [{ deviceId: "", label: t("output.systemDefault") }, ...localDevices];
 
   return (
     <div
@@ -130,18 +131,20 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
           <button
             key={key}
             className={rowClass(isSelected)}
-            onClick={() => void handleSelectLocal(device.deviceId, device.deviceId === "" ? "" : device.label)}
+            onClick={() =>
+              void handleSelectLocal(device.deviceId, device.deviceId === "" ? "" : device.label)
+            }
             disabled={busyKey !== null || isConnecting}
             role="menuitem"
             type="button"
             data-output-local-device={device.deviceId || "default"}
           >
             <span className="min-w-0 truncate font-medium">{device.label}</span>
-            {busyKey === key
-              ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-              : isSelected
-                ? <Check className="h-3.5 w-3.5 shrink-0" />
-                : null}
+            {busyKey === key ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            ) : isSelected ? (
+              <Check className="h-3.5 w-3.5 shrink-0" />
+            ) : null}
           </button>
         );
       })}
@@ -151,7 +154,10 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
           {t("output.section.network")}
         </SectionHeading>
         {scanning && (
-          <span className="flex items-center gap-1.5 pr-2 pt-1 text-[10px] text-[var(--color-text-muted)]" role="status">
+          <span
+            className="flex items-center gap-1.5 pr-2 pt-1 text-[10px] text-[var(--color-text-muted)]"
+            role="status"
+          >
             <Loader2 className="h-3 w-3 animate-spin" />
             {t("player.output.scanning")}
           </span>
@@ -180,7 +186,9 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
           <button
             key={device.key}
             className={rowClass(isConnected)}
-            onClick={() => (isConnected ? void handleDisconnect() : void handleSelectNetwork(device.key))}
+            onClick={() =>
+              isConnected ? void handleDisconnect() : void handleSelectNetwork(device.key)
+            }
             disabled={busyKey !== null || isBusy || isConnecting}
             role="menuitem"
             type="button"
@@ -193,11 +201,11 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
                 {device.model ? ` · ${device.model}` : ""}
               </span>
             </span>
-            {isBusy
-              ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-              : isConnected
-                ? <Check className="h-3.5 w-3.5 shrink-0" />
-                : null}
+            {isBusy ? (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            ) : isConnected ? (
+              <Check className="h-3.5 w-3.5 shrink-0" />
+            ) : null}
           </button>
         );
       })}

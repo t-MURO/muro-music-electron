@@ -12,8 +12,8 @@ const CENTER = 120;
 const pointOnCircle = (radius: number, angle: number) => {
   const radians = (angle * Math.PI) / 180;
   return {
-    x: CENTER + (radius * Math.cos(radians)),
-    y: CENTER + (radius * Math.sin(radians)),
+    x: CENTER + radius * Math.cos(radians),
+    y: CENTER + radius * Math.sin(radians),
   };
 };
 
@@ -38,7 +38,7 @@ const ringSegmentPath = (
 
 const segments = Array.from({ length: 12 }, (_, index) => {
   const number = index === 0 ? 12 : index;
-  const centerAngle = -90 + (index * 30);
+  const centerAngle = -90 + index * 30;
   return [
     {
       code: `${number}B`,
@@ -53,11 +53,7 @@ const segments = Array.from({ length: 12 }, (_, index) => {
   ];
 }).flat();
 
-export const CamelotWheel = ({
-  currentCode,
-  selectedCode,
-  onSelectCode,
-}: CamelotWheelProps) => {
+export const CamelotWheel = ({ currentCode, selectedCode, onSelectCode }: CamelotWheelProps) => {
   const compatibleCodes = useMemo(
     () => new Set(getCompatibleCamelotCodes(currentCode)),
     [currentCode],
@@ -66,8 +62,18 @@ export const CamelotWheel = ({
 
   return (
     <div className="mx-auto w-full max-w-[280px]" data-camelot-wheel>
-      <svg viewBox="0 0 240 240" className="block h-auto w-full" aria-label={`Camelot wheel, current key ${currentCode}`}>
-        <circle cx={CENTER} cy={CENTER} r="112" fill="var(--color-bg-primary)" stroke="var(--color-border)" />
+      <svg
+        viewBox="0 0 240 240"
+        className="block h-auto w-full"
+        aria-label={`Camelot wheel, current key ${currentCode}`}
+      >
+        <circle
+          cx={CENTER}
+          cy={CENTER}
+          r="112"
+          fill="var(--color-bg-primary)"
+          stroke="var(--color-border)"
+        />
         {segments.map(({ code, path, label }) => {
           const isCurrent = code === currentCode;
           const isCompatible = compatibleCodes.has(code);
@@ -96,12 +102,17 @@ export const CamelotWheel = ({
                 }
               }}
             >
-              <title>{code}{isCurrent ? " - current key" : isCompatible ? " - compatible mix" : ""}</title>
+              <title>
+                {code}
+                {isCurrent ? " - current key" : isCompatible ? " - compatible mix" : ""}
+              </title>
               <path
                 d={path}
                 fill={fill}
                 fillOpacity={fillOpacity}
-                stroke={isCurrent || isSelected ? "#ffffff" : isCompatible ? fill : "var(--color-border)"}
+                stroke={
+                  isCurrent || isSelected ? "#ffffff" : isCompatible ? fill : "var(--color-border)"
+                }
                 strokeWidth={isCurrent || isSelected ? 2.4 : isCompatible ? 1.4 : 0.8}
                 className="transition-opacity hover:opacity-80"
               />
@@ -143,13 +154,41 @@ export const CamelotWheel = ({
             stroke={selectedCode === null ? "#ffffff" : "var(--color-border)"}
             strokeWidth="1.5"
           />
-          <text x={CENTER} y="116" fill="#172126" fontSize="15" fontWeight="800" textAnchor="middle">{currentCode}</text>
-          <text x={CENTER} y="131" fill="#334047" fontSize="8.5" fontWeight="700" letterSpacing="1" textAnchor="middle">AUTO MIX</text>
+          <text
+            x={CENTER}
+            y="116"
+            fill="#172126"
+            fontSize="15"
+            fontWeight="800"
+            textAnchor="middle"
+          >
+            {currentCode}
+          </text>
+          <text
+            x={CENTER}
+            y="131"
+            fill="#334047"
+            fontSize="8.5"
+            fontWeight="700"
+            letterSpacing="1"
+            textAnchor="middle"
+          >
+            AUTO MIX
+          </text>
         </g>
       </svg>
       <div className="mt-1 flex items-center justify-center gap-3 text-[9px] text-[var(--color-text-muted)]">
-        <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full ring-1 ring-white" style={{ backgroundColor: currentColor }} />Current</span>
-        <span className="flex items-center gap-1"><i className="h-1.5 w-1.5 rounded-full border border-white/80" />Compatible outline</span>
+        <span className="flex items-center gap-1">
+          <i
+            className="h-1.5 w-1.5 rounded-full ring-1 ring-white"
+            style={{ backgroundColor: currentColor }}
+          />
+          Current
+        </span>
+        <span className="flex items-center gap-1">
+          <i className="h-1.5 w-1.5 rounded-full border border-white/80" />
+          Compatible outline
+        </span>
         <span>Click to filter</span>
       </div>
     </div>

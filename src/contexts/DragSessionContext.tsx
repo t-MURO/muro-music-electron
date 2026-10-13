@@ -122,14 +122,10 @@ export const DragSessionProvider = ({ children }: DragSessionProviderProps) => {
       isNativeFileDragAllowed,
       markAsInternalDrag,
       isInternalDragTransfer,
-    ]
+    ],
   );
 
-  return (
-    <DragSessionContext.Provider value={value}>
-      {children}
-    </DragSessionContext.Provider>
-  );
+  return <DragSessionContext.Provider value={value}>{children}</DragSessionContext.Provider>;
 };
 
 /**

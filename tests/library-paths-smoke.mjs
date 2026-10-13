@@ -46,20 +46,26 @@ fs.writeFileSync(playlistSource, "#EXTM3U\r\n../Artist/Album/song.flac\r\n");
 
 try {
   const db = openDatabase(dbPath);
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO tracks(
       id, title, artist, album, filename, source_path, import_status, added_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, 'accepted', 1, 1)
-  `).run("inside", "Inside", "Artist", "Album", "song.flac", firstSource);
-  db.prepare(`
+  `,
+  ).run("inside", "Inside", "Artist", "Album", "song.flac", firstSource);
+  db.prepare(
+    `
     INSERT INTO tracks(
       id, title, artist, album, filename, source_path, import_status, added_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, 'accepted', 1, 1)
-  `).run("outside", "Outside", "Artist", "Album", "outside.mp3", outsideSource);
-  db.prepare(`
+  `,
+  ).run("outside", "Outside", "Artist", "Album", "outside.mp3", outsideSource);
+  db.prepare(
+    `
     INSERT INTO playlists(id, name, sort_order, source_path, created_at)
     VALUES ('portable-playlist', 'Portable Mix', 0, ?, 1)
-  `).run(playlistSource);
+  `,
+  ).run(playlistSource);
 
   const configured = configureLibraryRoot(dbPath, firstRoot);
   assert.equal(configured.libraryRoot, firstRoot);
@@ -78,17 +84,15 @@ try {
     "legacy Library tracks outside the sole root return to the Inbox",
   );
   assert.equal(
-    db.prepare("SELECT source_path FROM playlists WHERE id = 'portable-playlist'").get().source_path,
+    db.prepare("SELECT source_path FROM playlists WHERE id = 'portable-playlist'").get()
+      .source_path,
     "Playlists/Portable Mix.m3u8",
   );
   assert.equal(
     loadTracks(dbPath).library.find((track) => track.id === "inside")?.source_path,
     firstSource,
   );
-  assert.equal(
-    loadPlaylists(dbPath).playlists[0].source_path,
-    playlistSource,
-  );
+  assert.equal(loadPlaylists(dbPath).playlists[0].source_path, playlistSource);
 
   // Every load passes the current root; an unchanged root must not scan the
   // tracks table or open a write transaction.
@@ -109,7 +113,11 @@ try {
     db.prepare = originalPrepare;
   }
   assert.deepEqual(unchanged, { libraryRoot: firstRoot, migrated: 0 });
-  assert.equal(totalChanges(), changesBeforeReload, "loading under an unchanged root writes nothing");
+  assert.equal(
+    totalChanges(),
+    changesBeforeReload,
+    "loading under an unchanged root writes nothing",
+  );
   assert.equal(
     preparedSql.some((sql) => /UPDATE|INSERT|SELECT id, source_path, import_status/.test(sql)),
     false,
@@ -136,14 +144,8 @@ try {
     playlistSource,
     "playlist sources are rebased with track sources",
   );
-  assert.equal(
-    toStoredTrackPath(secondSource, secondRoot),
-    relativePath,
-  );
-  assert.equal(
-    resolveStoredTrackPath(relativePath, secondRoot),
-    secondSource,
-  );
+  assert.equal(toStoredTrackPath(secondSource, secondRoot), relativePath);
+  assert.equal(resolveStoredTrackPath(relativePath, secondRoot), secondSource);
 } finally {
   closeDatabases();
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });

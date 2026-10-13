@@ -16,8 +16,7 @@ export type Album = {
 
 const normalize = (value: string) => value.trim().toLocaleLowerCase();
 
-const getAlbumArtist = (track: Track) =>
-  albumArtistDisplay(track).trim() || "Unknown artist";
+const getAlbumArtist = (track: Track) => albumArtistDisplay(track).trim() || "Unknown artist";
 
 const compareAlbumTracks = (left: Track, right: Track) => {
   const leftDisc = left.discNumber ?? 1;
@@ -51,8 +50,9 @@ export const groupTracksIntoAlbums = (tracks: Track[]): Album[] => {
   return Array.from(groups, ([id, albumTracks]) => {
     const orderedTracks = [...albumTracks].sort(compareAlbumTracks);
     const representative = orderedTracks[0];
-    const coverTrack = orderedTracks.find((track) => track.coverArtPath)
-      ?? orderedTracks.find((track) => track.coverArtThumbPath);
+    const coverTrack =
+      orderedTracks.find((track) => track.coverArtPath) ??
+      orderedTracks.find((track) => track.coverArtThumbPath);
     const years = orderedTracks
       .map((track) => track.year)
       .filter((year): year is number => typeof year === "number");
@@ -64,8 +64,8 @@ export const groupTracksIntoAlbums = (tracks: Track[]): Album[] => {
       new Set(
         orderedTracks
           .map((track) => track.genre?.trim())
-          .filter((genre): genre is string => Boolean(genre))
-      )
+          .filter((genre): genre is string => Boolean(genre)),
+      ),
     );
 
     return {
@@ -78,7 +78,7 @@ export const groupTracksIntoAlbums = (tracks: Track[]): Album[] => {
       coverArtThumbPath: coverTrack?.coverArtThumbPath,
       durationSeconds: orderedTracks.reduce(
         (total, track) => total + (track.durationSeconds || 0),
-        0
+        0,
       ),
       genres,
       tracks: orderedTracks,
@@ -87,7 +87,7 @@ export const groupTracksIntoAlbums = (tracks: Track[]): Album[] => {
     left.title.localeCompare(right.title, undefined, {
       numeric: true,
       sensitivity: "base",
-    })
+    }),
   );
 };
 
@@ -103,7 +103,7 @@ export const filterAlbumsBySearch = (albums: Album[], query: string) => {
         album.year?.toString() ?? "",
         album.genres.join(" "),
         ...album.tracks.map((track) => `${track.title} ${track.artist}`),
-      ].join(" ")
+      ].join(" "),
     );
     return terms.every((term) => searchable.includes(term));
   });

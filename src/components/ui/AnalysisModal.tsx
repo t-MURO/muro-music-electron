@@ -46,9 +46,8 @@ const FALLBACK_TRACK_DURATION_SECONDS = 180;
 const analysisWorkerCount = (performance: "stable" | "fast" | "maximum") => {
   if (performance === "stable") return 1;
   if (performance === "fast") return 2;
-  const available = typeof navigator === "undefined"
-    ? 4
-    : Number(navigator.hardwareConcurrency) || 4;
+  const available =
+    typeof navigator === "undefined" ? 4 : Number(navigator.hardwareConcurrency) || 4;
   return Math.max(1, Math.min(4, available));
 };
 
@@ -108,9 +107,7 @@ export const AnalysisModal = ({
       return;
     }
 
-    analysisIndexRef.current = new Map(
-      tracks.map((track, index) => [track.id, index])
-    );
+    analysisIndexRef.current = new Map(tracks.map((track, index) => [track.id, index]));
     setAnalyses(
       tracks.map((track) => ({
         track,
@@ -118,7 +115,7 @@ export const AnalysisModal = ({
         error: null,
         writeError: null,
         rawBpm: 0,
-      }))
+      })),
     );
     setProgress({ current: 0, total: tracks.length });
     setEtaSeconds(null);
@@ -139,12 +136,14 @@ export const AnalysisModal = ({
     let nextTrackIndex = 0;
     let completedTracks = 0;
     let completedWork = 0;
-    const trackWork = new Map(tracks.map((track) => [
-      track.id,
-      Number.isFinite(track.durationSeconds) && track.durationSeconds > 0
-        ? track.durationSeconds
-        : FALLBACK_TRACK_DURATION_SECONDS,
-    ]));
+    const trackWork = new Map(
+      tracks.map((track) => [
+        track.id,
+        Number.isFinite(track.durationSeconds) && track.durationSeconds > 0
+          ? track.durationSeconds
+          : FALLBACK_TRACK_DURATION_SECONDS,
+      ]),
+    );
     const totalWork = [...trackWork.values()].reduce((total, duration) => total + duration, 0);
 
     const updateEta = (completedWork: number) => {
@@ -158,16 +157,13 @@ export const AnalysisModal = ({
       const workPerSecond = completedWork / elapsedSeconds;
       if (workPerSecond <= 0) return;
       const estimate = (totalWork - completedWork) / workPerSecond;
-      setEtaSeconds((previous) => previous === null
-        ? estimate
-        : (previous * 0.7) + (estimate * 0.3));
+      setEtaSeconds((previous) => (previous === null ? estimate : previous * 0.7 + estimate * 0.3));
     };
 
     const updateAggregateEta = () => {
       const activeWork = [...trackProgress.entries()].reduce(
-        (total, [trackId, fraction]) => (
-          total + ((trackWork.get(trackId) ?? FALLBACK_TRACK_DURATION_SECONDS) * fraction)
-        ),
+        (total, [trackId, fraction]) =>
+          total + (trackWork.get(trackId) ?? FALLBACK_TRACK_DURATION_SECONDS) * fraction,
         0,
       );
       updateEta(completedWork + activeWork);
@@ -289,11 +285,14 @@ export const AnalysisModal = ({
                 completedWork += trackWork.get(track.id) ?? FALLBACK_TRACK_DURATION_SECONDS;
               }
               updateAggregateEta();
-              setProgress({ current: Math.min(completedTracks, tracks.length), total: tracks.length });
+              setProgress({
+                current: Math.min(completedTracks, tracks.length),
+                total: tracks.length,
+              });
             }
             if (nextTrackIndex < tracks.length) {
               await new Promise((resolve) =>
-                window.setTimeout(resolve, ANALYSIS_BATCH_COOLDOWN_MS)
+                window.setTimeout(resolve, ANALYSIS_BATCH_COOLDOWN_MS),
               );
             }
           }
@@ -304,11 +303,11 @@ export const AnalysisModal = ({
       } catch (error) {
         if (disposed) return;
         const message = error instanceof Error ? error.message : "Analysis failed";
-        setAnalyses((previous) => previous.map((analysis) =>
-          analysis.result || analysis.error
-            ? analysis
-            : { ...analysis, error: message }
-        ));
+        setAnalyses((previous) =>
+          previous.map((analysis) =>
+            analysis.result || analysis.error ? analysis : { ...analysis, error: message },
+          ),
+        );
       } finally {
         if (!disposed) setIsAnalyzing(false);
       }
@@ -338,18 +337,14 @@ export const AnalysisModal = ({
     setAnalyses((prev) =>
       prev.map((a) => {
         if (a.result && a.rawBpm > 0) {
-          const normalizedBpm = normalizeBpm(
-            a.rawBpm,
-            selectedRange.min,
-            selectedRange.max
-          );
+          const normalizedBpm = normalizeBpm(a.rawBpm, selectedRange.min, selectedRange.max);
           return {
             ...a,
             result: { ...a.result, bpm: normalizedBpm },
           };
         }
         return a;
-      })
+      }),
     );
   }, [selectedRange]);
 
@@ -426,9 +421,8 @@ export const AnalysisModal = ({
   const successfulCount = analyses.filter((analysis) => analysis.result !== null).length;
   const failedCount = analyses.filter((analysis) => analysis.error !== null).length;
   const writeWarningCount = analyses.filter((analysis) => analysis.writeError !== null).length;
-  const progressPercent = progress.total > 0
-    ? Math.min(100, (progress.current / progress.total) * 100)
-    : 0;
+  const progressPercent =
+    progress.total > 0 ? Math.min(100, (progress.current / progress.total) * 100) : 0;
   const etaLabel = isAnalyzing
     ? etaSeconds === null
       ? t("analysis.etaCalculating")
@@ -454,10 +448,12 @@ export const AnalysisModal = ({
               {t("analysis.title")}
             </div>
             <div className="mt-0.5 flex justify-between gap-2 text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
-              <span>{t("analysis.progress", {
-                current: String(progress.current),
-                total: String(progress.total),
-              })}</span>
+              <span>
+                {t("analysis.progress", {
+                  current: String(progress.current),
+                  total: String(progress.total),
+                })}
+              </span>
               <span className="truncate">{etaLabel}</span>
             </div>
           </div>
@@ -504,20 +500,24 @@ export const AnalysisModal = ({
               : isCancelled
                 ? t("analysis.cancelled")
                 : allComplete
-                ? t("analysis.complete")
-                : t("analysis.subtitle")}
+                  ? t("analysis.complete")
+                  : t("analysis.subtitle")}
           </p>
           {tracks.length > 1 && (
             <div className="mt-[var(--spacing-sm)]">
               <div className="mb-1 flex items-center justify-between text-[var(--font-size-xs)] text-[var(--color-text-secondary)]">
-                <span>{t("analysis.progress", {
-                  current: String(progress.current),
-                  total: String(progress.total),
-                })}</span>
-                <span>{t("analysis.resultSummary", {
-                  success: String(successfulCount),
-                  failed: String(failedCount),
-                })}</span>
+                <span>
+                  {t("analysis.progress", {
+                    current: String(progress.current),
+                    total: String(progress.total),
+                  })}
+                </span>
+                <span>
+                  {t("analysis.resultSummary", {
+                    success: String(successfulCount),
+                    failed: String(failedCount),
+                  })}
+                </span>
               </div>
               <div className="mb-1 text-[var(--font-size-xs)] text-[var(--color-text-muted)]">
                 {etaLabel}
@@ -549,19 +549,14 @@ export const AnalysisModal = ({
               value={`${selectedRange.min}-${selectedRange.max}`}
               onChange={(e) => {
                 const [min, max] = e.target.value.split("-").map(Number);
-                const range = BPM_RANGES.find(
-                  (r) => r.min === min && r.max === max
-                );
+                const range = BPM_RANGES.find((r) => r.min === min && r.max === max);
                 if (range) {
                   setSelectedRange(range);
                 }
               }}
             >
               {BPM_RANGES.map((range) => (
-                <option
-                  key={`${range.min}-${range.max}`}
-                  value={`${range.min}-${range.max}`}
-                >
+                <option key={`${range.min}-${range.max}`} value={`${range.min}-${range.max}`}>
                   {range.label}
                 </option>
               ))}
@@ -598,9 +593,7 @@ export const AnalysisModal = ({
                         BPM
                       </div>
                       <div className="text-[var(--font-size-xl)] font-bold text-[var(--color-text-primary)]">
-                        {analyses[0].result.bpm > 0
-                          ? analyses[0].result.bpm.toFixed(1)
-                          : "N/A"}
+                        {analyses[0].result.bpm > 0 ? analyses[0].result.bpm.toFixed(1) : "N/A"}
                       </div>
                     </div>
                     <div className="rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)] p-[var(--spacing-md)] text-center">
@@ -635,61 +628,76 @@ export const AnalysisModal = ({
             // Multiple tracks table view
             <div className="overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]">
               <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_70px_60px] border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)] text-[var(--font-size-xs)] font-medium text-[var(--color-text-secondary)]">
-                <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)]">{t("columns.title")}</div>
-                <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)]">{t("columns.artist")}</div>
+                <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)]">
+                  {t("columns.title")}
+                </div>
+                <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)]">
+                  {t("columns.artist")}
+                </div>
                 <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right">BPM</div>
-                <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right">{t("columns.key")}</div>
+                <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right">
+                  {t("columns.key")}
+                </div>
               </div>
               <div ref={resultsScrollRef} className="max-h-[360px] overflow-auto">
-                <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+                <div
+                  className="relative w-full"
+                  style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+                >
                   {rowVirtualizer.getVirtualItems().map((virtualRow) => {
                     const analysis = analyses[virtualRow.index];
                     if (!analysis) return null;
                     return (
-                    <div
-                      key={analysis.track.id}
-                      title={analysis.error ?? analysis.writeError ?? undefined}
-                      className="absolute left-0 top-0 grid w-full grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_70px_60px] border-b border-[var(--color-border)]"
-                      style={{ transform: `translateY(${virtualRow.start}px)`, height: `${virtualRow.size}px` }}
-                    >
-                      <div className="flex min-w-0 items-center gap-1 px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] text-[var(--color-text-primary)]">
-                        <span className="truncate">{analysis.track.title}</span>
-                        {analysis.writeError && (
-                          <span className="shrink-0 font-bold text-amber-500" aria-label={analysis.writeError}>!</span>
-                        )}
+                      <div
+                        key={analysis.track.id}
+                        title={analysis.error ?? analysis.writeError ?? undefined}
+                        className="absolute left-0 top-0 grid w-full grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_70px_60px] border-b border-[var(--color-border)]"
+                        style={{
+                          transform: `translateY(${virtualRow.start}px)`,
+                          height: `${virtualRow.size}px`,
+                        }}
+                      >
+                        <div className="flex min-w-0 items-center gap-1 px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] text-[var(--color-text-primary)]">
+                          <span className="truncate">{analysis.track.title}</span>
+                          {analysis.writeError && (
+                            <span
+                              className="shrink-0 font-bold text-amber-500"
+                              aria-label={analysis.writeError}
+                            >
+                              !
+                            </span>
+                          )}
+                        </div>
+                        <div className="truncate px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] text-[var(--color-text-muted)]">
+                          {analysis.track.artist}
+                        </div>
+                        <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right text-[var(--font-size-sm)]">
+                          {analysis.error ? (
+                            <span className="text-red-500">Error</span>
+                          ) : analysis.result ? (
+                            <span className="font-medium text-[var(--color-text-primary)]">
+                              {analysis.result.bpm > 0 ? analysis.result.bpm.toFixed(1) : "N/A"}
+                            </span>
+                          ) : isAnalyzing ? (
+                            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                          ) : (
+                            <span className="text-[var(--color-text-muted)]">-</span>
+                          )}
+                        </div>
+                        <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right text-[var(--font-size-sm)]">
+                          {analysis.error ? (
+                            <span className="text-red-500">-</span>
+                          ) : analysis.result ? (
+                            <span className="font-medium text-[var(--color-text-primary)]">
+                              {analysis.result.camelot}
+                            </span>
+                          ) : isAnalyzing ? (
+                            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
+                          ) : (
+                            <span className="text-[var(--color-text-muted)]">-</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="truncate px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--font-size-sm)] text-[var(--color-text-muted)]">
-                        {analysis.track.artist}
-                      </div>
-                      <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right text-[var(--font-size-sm)]">
-                        {analysis.error ? (
-                          <span className="text-red-500">Error</span>
-                        ) : analysis.result ? (
-                          <span className="font-medium text-[var(--color-text-primary)]">
-                            {analysis.result.bpm > 0
-                              ? analysis.result.bpm.toFixed(1)
-                              : "N/A"}
-                          </span>
-                        ) : isAnalyzing ? (
-                          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                        ) : (
-                          <span className="text-[var(--color-text-muted)]">-</span>
-                        )}
-                      </div>
-                      <div className="px-[var(--spacing-md)] py-[var(--spacing-sm)] text-right text-[var(--font-size-sm)]">
-                        {analysis.error ? (
-                          <span className="text-red-500">-</span>
-                        ) : analysis.result ? (
-                          <span className="font-medium text-[var(--color-text-primary)]">
-                            {analysis.result.camelot}
-                          </span>
-                        ) : isAnalyzing ? (
-                          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-                        ) : (
-                          <span className="text-[var(--color-text-muted)]">-</span>
-                        )}
-                      </div>
-                    </div>
                     );
                   })}
                 </div>
@@ -737,6 +745,6 @@ export const AnalysisModal = ({
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };

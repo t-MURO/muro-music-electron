@@ -33,9 +33,7 @@ export const AppLayout = ({
       </div>
 
       {/* Main content - grid-column: 2, grid-row: 1 / 3 */}
-      <div className="col-start-2 row-span-2 row-start-1 flex flex-col overflow-hidden">
-        {main}
-      </div>
+      <div className="col-start-2 row-span-2 row-start-1 flex flex-col overflow-hidden">{main}</div>
 
       {/* Queue/Detail panel - grid-column: 3, grid-row: 1 / 3 */}
       <div className="col-start-3 row-span-2 row-start-1 relative">

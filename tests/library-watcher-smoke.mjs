@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  closeDatabases,
-  loadTracks,
-  openDatabase,
-} from "../electron/database.mjs";
+import { closeDatabases, loadTracks, openDatabase } from "../electron/database.mjs";
 import { createLibraryWatcher } from "../electron/libraryWatcher.mjs";
 import {
   acceptInboxTracks,
@@ -103,9 +99,9 @@ const run = async () => {
     "the dropped file to be imported",
   );
 
-  const row = db.prepare("SELECT import_status FROM tracks WHERE source_path = ?").get(
-    "dropped.mp3",
-  );
+  const row = db
+    .prepare("SELECT import_status FROM tracks WHERE source_path = ?")
+    .get("dropped.mp3");
   assert.ok(row, "the dropped file reached the database");
   assert.equal(row.import_status, "staged", "watched imports land in the Inbox, not the library");
 
@@ -130,22 +126,22 @@ const run = async () => {
   const rescan = await watcher.scanNow({ dbPath, folder: watchDir });
   assert.equal(rescan.imported, 0, "a second scan is a no-op");
 
-  const droppedRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
-    "dropped.mp3",
-  );
-  const offlineRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get(
-    "offline.mp3",
-  );
-  db.prepare(`
+  const droppedRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get("dropped.mp3");
+  const offlineRow = db.prepare("SELECT id FROM tracks WHERE source_path = ?").get("offline.mp3");
+  db.prepare(
+    `
     UPDATE tracks
     SET artist = 'Track Artist', album_artist = 'Album Artist', album = 'First Album'
     WHERE id = ?
-  `).run(droppedRow.id);
-  db.prepare(`
+  `,
+  ).run(droppedRow.id);
+  db.prepare(
+    `
     UPDATE tracks
     SET artist = 'Fallback Artist', album_artist = NULL, album = 'Second Album'
     WHERE id = ?
-  `).run(offlineRow.id);
+  `,
+  ).run(offlineRow.id);
 
   const existingAlbumFolder = path.join(watchDir, "Fallback Artist", "Second Album");
   fs.mkdirSync(existingAlbumFolder, { recursive: true });
@@ -158,12 +154,7 @@ const run = async () => {
     organize: true,
     libraryFolder: watchDir,
   });
-  const organizedDropped = path.join(
-    watchDir,
-    "Album Artist",
-    "First Album",
-    "dropped.mp3",
-  );
+  const organizedDropped = path.join(watchDir, "Album Artist", "First Album", "dropped.mp3");
   const organizedOffline = path.join(existingAlbumFolder, "offline (2).mp3");
   assert.equal(accepted.moved.length, 2, "accepted watched imports are organized");
   assert.equal(
@@ -171,11 +162,7 @@ const run = async () => {
     true,
     "Album Artist is preferred when it is present",
   );
-  assert.equal(
-    fs.existsSync(organizedOffline),
-    true,
-    "Artist is used when Album Artist is absent",
-  );
+  assert.equal(fs.existsSync(organizedOffline), true, "Artist is used when Album Artist is absent");
   assert.equal(
     fs.readFileSync(existingCollision, "utf8"),
     "existing file must not be overwritten",
@@ -183,11 +170,15 @@ const run = async () => {
   );
   assert.equal(fs.existsSync(dropped), false, "the first Inbox file was moved");
   assert.equal(fs.existsSync(offline), false, "the second Inbox file was moved");
-  const organizedRow = db.prepare(`
+  const organizedRow = db
+    .prepare(
+      `
     SELECT import_status, source_path, filename
     FROM tracks
     WHERE id = ?
-  `).get(offlineRow.id);
+  `,
+    )
+    .get(offlineRow.id);
   assert.equal(organizedRow.import_status, "accepted", "the organized track is accepted");
   assert.equal(
     organizedRow.source_path,
@@ -213,11 +204,13 @@ const run = async () => {
     true,
     "staging an Inbox track does not move it into the library folder",
   );
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tracks
     SET artist = 'Outside Artist', album_artist = NULL, album = 'Outside Album'
     WHERE id = ?
-  `).run(outsideTrack.id);
+  `,
+  ).run(outsideTrack.id);
 
   const acceptedOutside = await acceptInboxTracks({
     dbPath,
@@ -225,12 +218,7 @@ const run = async () => {
     organize: true,
     libraryFolder: watchDir,
   });
-  const organizedOutside = path.join(
-    watchDir,
-    "Outside Artist",
-    "Outside Album",
-    "outside.mp3",
-  );
+  const organizedOutside = path.join(watchDir, "Outside Artist", "Outside Album", "outside.mp3");
   assert.equal(acceptedOutside.moved.length, 1);
   assert.equal(
     fs.existsSync(organizedOutside),
@@ -264,34 +252,39 @@ const run = async () => {
 
   // Editing metadata after import can make an organized path stale. Validation
   // reports only accepted, existing files already within the library root.
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tracks
     SET artist = 'Renamed Artist', album_artist = NULL
     WHERE id = ?
-  `).run(offlineRow.id);
+  `,
+  ).run(offlineRow.id);
 
   const stagedPath = path.join(watchDir, "staged-wrong.mp3");
   fs.writeFileSync(stagedPath, buildMinimalMp3());
   const stagedTrack = await importAudioFile(dbPath, stagedPath, cacheDir);
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tracks SET artist = 'Staged Artist', album = 'Staged Album'
     WHERE id = ?
-  `).run(stagedTrack.id);
+  `,
+  ).run(stagedTrack.id);
 
   const acceptedOutsidePath = path.join(outsideFolder, "accepted-outside.mp3");
   fs.writeFileSync(acceptedOutsidePath, buildMinimalMp3());
   const acceptedOutsideTrack = await importAudioFile(dbPath, acceptedOutsidePath, cacheDir);
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE tracks
     SET artist = 'External Artist', album = 'External Album', import_status = 'accepted'
     WHERE id = ?
-  `).run(acceptedOutsideTrack.id);
+  `,
+  ).run(acceptedOutsideTrack.id);
 
   const unavailablePath = path.join(watchDir, "unavailable.mp3");
   fs.writeFileSync(unavailablePath, buildMinimalMp3());
   const unavailableTrack = await importAudioFile(dbPath, unavailablePath, cacheDir);
-  db.prepare("UPDATE tracks SET import_status = 'accepted' WHERE id = ?")
-    .run(unavailableTrack.id);
+  db.prepare("UPDATE tracks SET import_status = 'accepted' WHERE id = ?").run(unavailableTrack.id);
   fs.unlinkSync(unavailablePath);
 
   const validation = await validateLibraryStructure({ dbPath, libraryRoot: watchDir });
@@ -329,17 +322,30 @@ const run = async () => {
   const repairedPath = path.join(renamedAlbumFolder, "offline (2) (2).mp3");
   assert.equal(repaired.requested, 6);
   assert.equal(repaired.moved.length, 1, "the stale organized file is repaired");
-  assert.equal(repaired.skipped, 5, "staged, outside, unavailable, correct, and unknown rows are skipped");
+  assert.equal(
+    repaired.skipped,
+    5,
+    "staged, outside, unavailable, correct, and unknown rows are skipped",
+  );
   assert.deepEqual(repaired.failures, []);
   assert.equal(repaired.moved[0].sourcePath, repairedPath);
-  assert.equal(fs.existsSync(organizedOffline), false, "repair removes the file from the stale folder");
-  assert.equal(fs.existsSync(repairedPath), true, "repair uses a collision suffix in the correct folder");
+  assert.equal(
+    fs.existsSync(organizedOffline),
+    false,
+    "repair removes the file from the stale folder",
+  );
+  assert.equal(
+    fs.existsSync(repairedPath),
+    true,
+    "repair uses a collision suffix in the correct folder",
+  );
   assert.equal(
     fs.readFileSync(repairCollision, "utf8"),
     "repair must not overwrite this file",
     "repair leaves an existing destination untouched",
   );
-  const repairedRow = db.prepare("SELECT source_path, filename FROM tracks WHERE id = ?")
+  const repairedRow = db
+    .prepare("SELECT source_path, filename FROM tracks WHERE id = ?")
     .get(offlineRow.id);
   assert.equal(
     repairedRow.source_path,

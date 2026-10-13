@@ -1,12 +1,7 @@
 import { useCallback } from "react";
 import { commandManager } from "../command-manager/commandManager";
 import { useLibraryStore, useUIStore, notify } from "../stores";
-import {
-  deletePlaylists,
-  restorePlaylists,
-  setPlaylistTracks,
-  updatePlaylist,
-} from "../utils";
+import { deletePlaylists, restorePlaylists, setPlaylistTracks, updatePlaylist } from "../utils";
 import type { LibraryView } from "./useLibraryView";
 import { t } from "../i18n";
 
@@ -32,7 +27,7 @@ export const usePlaylistOperations = ({
     (playlist: { id: string; name: string }) => {
       openPlaylistEdit(playlist.id, playlist.name);
     },
-    [openPlaylistEdit]
+    [openPlaylistEdit],
   );
 
   const handleClosePlaylistEdit = useCallback(() => {
@@ -49,8 +44,8 @@ export const usePlaylistOperations = ({
           await updatePlaylist(playlistId, { name: nextName });
           setPlaylists((current) =>
             current.map((playlist) =>
-              playlist.id === playlistId ? { ...playlist, name: nextName } : playlist
-            )
+              playlist.id === playlistId ? { ...playlist, name: nextName } : playlist,
+            ),
           );
           return t("history.playlist.renamed", { previousName, nextName });
         },
@@ -58,10 +53,8 @@ export const usePlaylistOperations = ({
           await updatePlaylist(playlistId, { name: previousName });
           setPlaylists((current) =>
             current.map((playlist) =>
-              playlist.id === playlistId
-                ? { ...playlist, name: previousName }
-                : playlist
-            )
+              playlist.id === playlistId ? { ...playlist, name: previousName } : playlist,
+            ),
           );
           return t("history.playlist.renameUndone", { previousName, nextName });
         },
@@ -73,7 +66,7 @@ export const usePlaylistOperations = ({
         notify.error(t("toast.playlist.renameFailed"));
       }
     },
-    [playlists, setPlaylists]
+    [playlists, setPlaylists],
   );
 
   const handleDeletePlaylists = useCallback(
@@ -93,33 +86,31 @@ export const usePlaylistOperations = ({
         do: async () => {
           const result = await deletePlaylists([...ids]);
           if (result.deleted !== removed.length) {
-            throw new Error(t("history.playlist.deletePartial", {
-              actual: String(result.deleted),
-              expected: String(removed.length),
-            }));
+            throw new Error(
+              t("history.playlist.deletePartial", {
+                actual: String(result.deleted),
+                expected: String(removed.length),
+              }),
+            );
           }
-          setPlaylists((current) =>
-            current.filter((playlist) => !ids.has(playlist.id))
-          );
+          setPlaylists((current) => current.filter((playlist) => !ids.has(playlist.id)));
           if (wasOnDeletedPlaylist) {
             navigateToView("library");
           }
           return t(
-            removed.length === 1
-              ? "history.playlist.deleted.one"
-              : "history.playlist.deleted.many",
+            removed.length === 1 ? "history.playlist.deleted.one" : "history.playlist.deleted.many",
             { count: String(removed.length) },
           );
         },
         undo: async () => {
-          const result = await restorePlaylists(
-            removed.map(({ playlist }) => playlist),
-          );
+          const result = await restorePlaylists(removed.map(({ playlist }) => playlist));
           if (result.restored !== removed.length) {
-            throw new Error(t("history.playlist.restorePartial", {
-              actual: String(result.restored),
-              expected: String(removed.length),
-            }));
+            throw new Error(
+              t("history.playlist.restorePartial", {
+                actual: String(result.restored),
+                expected: String(removed.length),
+              }),
+            );
           }
           setPlaylists((current) => {
             const next = [...current];
@@ -150,7 +141,7 @@ export const usePlaylistOperations = ({
         notify.error(t("toast.playlist.deleteFailed"));
       }
     },
-    [navigateToView, playlists, setPlaylists, currentView]
+    [navigateToView, playlists, setPlaylists, currentView],
   );
 
   const handlePlaylistEditSubmit = useCallback(() => {
@@ -186,21 +177,23 @@ export const usePlaylistOperations = ({
           label: `Remove ${removedCount} tracks from playlist`,
           do: async () => {
             await setPlaylistTracks(playlistId, nextIds);
-            setPlaylists((current) => current.map((item) =>
-              item.id === playlistId ? { ...item, trackIds: nextIds } : item
-            ));
+            setPlaylists((current) =>
+              current.map((item) =>
+                item.id === playlistId ? { ...item, trackIds: nextIds } : item,
+              ),
+            );
             return t(
-              removedCount === 1
-                ? "history.playlist.removed.one"
-                : "history.playlist.removed.many",
+              removedCount === 1 ? "history.playlist.removed.one" : "history.playlist.removed.many",
               { count: String(removedCount), name: playlist.name },
             );
           },
           undo: async () => {
             await setPlaylistTracks(playlistId, previousIds);
-            setPlaylists((current) => current.map((item) =>
-              item.id === playlistId ? { ...item, trackIds: previousIds } : item
-            ));
+            setPlaylists((current) =>
+              current.map((item) =>
+                item.id === playlistId ? { ...item, trackIds: previousIds } : item,
+              ),
+            );
             return t(
               removedCount === 1
                 ? "history.playlist.tracksRestored.one"
@@ -213,7 +206,7 @@ export const usePlaylistOperations = ({
         notify.error(t("toast.playlist.removeFailed"));
       }
     },
-    [clearSelection, playlists, setPlaylists]
+    [clearSelection, playlists, setPlaylists],
   );
 
   return {

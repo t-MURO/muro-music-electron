@@ -1,10 +1,7 @@
 import { useRef } from "react";
 import { Cast, Loader2 } from "lucide-react";
 import { t } from "../../i18n";
-import {
-  useRemoteOutputStore,
-  selectRemoteOutputActive,
-} from "../../stores/remoteOutputStore";
+import { useRemoteOutputStore, selectRemoteOutputActive } from "../../stores/remoteOutputStore";
 import { OutputPickerPopover, useOutputPickerToggle } from "./OutputPicker";
 
 // Player-bar trigger for the shared output picker.
@@ -20,9 +17,10 @@ export const OutputMenu = () => {
   const isConnecting = sessionState === "connecting" || sessionState === "loading";
   const hasSessionError = sessionState === "error" && lastError !== null;
 
-  const buttonTitle = outputActive && deviceName
-    ? t("player.output.playingOn", { name: deviceName })
-    : t("player.output.tooltip");
+  const buttonTitle =
+    outputActive && deviceName
+      ? t("player.output.playingOn", { name: deviceName })
+      : t("player.output.tooltip");
   const buttonTone = outputActive
     ? "text-[var(--color-accent)]"
     : hasSessionError
@@ -42,9 +40,7 @@ export const OutputMenu = () => {
         data-output-button
         data-output-state={sessionState}
       >
-        {isConnecting
-          ? <Loader2 className="h-4 w-4 animate-spin" />
-          : <Cast className="h-4 w-4" />}
+        {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cast className="h-4 w-4" />}
       </button>
       {open && <OutputPickerPopover className="bottom-[calc(100%+10px)] right-0" />}
     </div>

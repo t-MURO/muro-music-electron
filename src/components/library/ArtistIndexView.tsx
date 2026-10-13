@@ -57,12 +57,13 @@ const artistImageSource = (profile?: ArtistProfile) => {
   return profile?.imageUrl || undefined;
 };
 
-const initials = (name: string) => name
-  .split(/\s+/)
-  .filter(Boolean)
-  .slice(0, 2)
-  .map((part) => part[0]?.toLocaleUpperCase())
-  .join("");
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toLocaleUpperCase())
+    .join("");
 
 type ArtistIndexViewProps = {
   items: ArtistIndexItem[];
@@ -87,12 +88,23 @@ export const ArtistIndexView = ({ items, profiles, onSelect }: ArtistIndexViewPr
               type="button"
             >
               <span className="artist-index-photo" aria-hidden="true">
-                {imageSource ? <img alt="" src={imageSource} /> : <span>{initials(artist.name) || <UserRound />}</span>}
+                {imageSource ? (
+                  <img alt="" src={imageSource} />
+                ) : (
+                  <span>{initials(artist.name) || <UserRound />}</span>
+                )}
               </span>
               <span className="artist-index-copy">
                 <strong>{profile?.name || artist.name}</strong>
-                {profile?.description && <span className="artist-index-description">{profile.description}</span>}
-                <span>{artist.trackCount.toLocaleString()} {artist.trackCount === 1 ? "track" : "tracks"} · {artist.albumCount.toLocaleString()} {artist.albumCount === 1 ? "album" : "albums"}</span>
+                {profile?.description && (
+                  <span className="artist-index-description">{profile.description}</span>
+                )}
+                <span>
+                  {artist.trackCount.toLocaleString()}{" "}
+                  {artist.trackCount === 1 ? "track" : "tracks"} ·{" "}
+                  {artist.albumCount.toLocaleString()}{" "}
+                  {artist.albumCount === 1 ? "album" : "albums"}
+                </span>
               </span>
               <ArrowRight className="artist-index-arrow" aria-hidden="true" />
             </button>

@@ -9,7 +9,8 @@ import { createDlnaDiscovery } from "../../electron/dlna/dlnaDiscovery.mjs";
 import { createDlnaClient, buildDidlMetadata } from "../../electron/dlna/dlnaClient.mjs";
 import { createLanMediaServer } from "../../electron/lanMediaServer.mjs";
 
-const audioPath = process.argv[2] ?? "C:/Users/Tadeo/Music/Music/Boston 168/303 Regiment/Rise Again.mp3";
+const audioPath =
+  process.argv[2] ?? "C:/Users/Tadeo/Music/Music/Boston 168/303 Regiment/Rise Again.mp3";
 const DISCOVERY_WINDOW_MS = 6_000;
 const PLAY_OBSERVATION_MS = 6_000;
 
@@ -24,7 +25,10 @@ const watchdog = setTimeout(() => {
 const discovery = createDlnaDiscovery({});
 const server = createLanMediaServer({
   onRequest: ({ method, url, range }) =>
-    log("server hit", `${method} ${url.replace(/\/(media|artwork)\/[^/]+\/[^/?]+/, "/$1/<tokens>")}${range ? ` range=${range}` : ""}`),
+    log(
+      "server hit",
+      `${method} ${url.replace(/\/(media|artwork)\/[^/]+\/[^/?]+/, "/$1/<tokens>")}${range ? ` range=${range}` : ""}`,
+    ),
 });
 let client = null;
 let exitCode = 0;
@@ -41,7 +45,10 @@ try {
     process.exit(3);
   }
   for (const device of devices) {
-    log("found", `${device.name} (${device.model}) at ${device.host}:${device.port} id=${device.id}`);
+    log(
+      "found",
+      `${device.name} (${device.model}) at ${device.host}:${device.port} id=${device.id}`,
+    );
   }
 
   const record = discovery.getDeviceRecord(devices[0].id);
@@ -93,7 +100,10 @@ try {
     await sleep(1_000);
     const position = await client.getPositionInfo();
     const transport = await client.getTransportInfo();
-    log("status", `state=${transport.transportState} position=${position.positionSecs} duration=${position.durationSecs}`);
+    log(
+      "status",
+      `state=${transport.transportState} position=${position.positionSecs} duration=${position.durationSecs}`,
+    );
     if (transport.transportState === "PLAYING") {
       sawPlaying = true;
       if (tick >= PLAY_OBSERVATION_MS / 1000) break;
@@ -112,14 +122,21 @@ try {
     client.getPositionInfo(),
     client.getTransportInfo(),
   ]);
-  log("after seek", `state=${afterSeekTransport.transportState} position=${afterSeekPos.positionSecs}`);
+  log(
+    "after seek",
+    `state=${afterSeekTransport.transportState} position=${afterSeekPos.positionSecs}`,
+  );
 
-  const playing = afterSeekTransport.transportState === "PLAYING"
-    || afterSeekTransport.transportState === "TRANSITIONING";
+  const playing =
+    afterSeekTransport.transportState === "PLAYING" ||
+    afterSeekTransport.transportState === "TRANSITIONING";
   const seeked = (afterSeekPos.positionSecs ?? 0) >= 55;
-  log("RESULT", playing && seeked
-    ? `SUCCESS — "${record.name}" played the local MP3 and honored the seek`
-    : `PARTIAL — state=${afterSeekTransport.transportState} position=${afterSeekPos.positionSecs}`);
+  log(
+    "RESULT",
+    playing && seeked
+      ? `SUCCESS — "${record.name}" played the local MP3 and honored the seek`
+      : `PARTIAL — state=${afterSeekTransport.transportState} position=${afterSeekPos.positionSecs}`,
+  );
   if (!playing || !seeked) exitCode = 4;
 } catch (spikeError) {
   console.error(`[spike] FAILED: ${spikeError.message}`);

@@ -73,7 +73,10 @@ export const PlayerBar = ({
   useEffect(() => {
     let cancelled = false;
     setPeaks([]);
-    if (!currentTrack?.sourcePath) return () => { cancelled = true; };
+    if (!currentTrack?.sourcePath)
+      return () => {
+        cancelled = true;
+      };
     setWaveformLoading(true);
     getAudioWaveform(currentTrack.sourcePath, 768)
       .then((result) => {
@@ -85,54 +88,71 @@ export const PlayerBar = ({
       .finally(() => {
         if (!cancelled) setWaveformLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [currentTrack?.sourcePath]);
 
   const displayPosition = isSeeking ? seekValue : currentPosition;
-  const progress = duration > 0
-    ? Math.min(100, Math.max(0, (displayPosition / duration) * 100))
-    : 0;
+  const progress =
+    duration > 0 ? Math.min(100, Math.max(0, (displayPosition / duration) * 100)) : 0;
   const volumePercent = volume * 100;
 
-  const getSeekValue = useCallback((clientX: number) => {
-    if (!progressRef.current || duration <= 0) return 0;
-    const rect = progressRef.current.getBoundingClientRect();
-    const clamped = Math.min(Math.max(clientX - rect.left, 0), rect.width);
-    return (rect.width > 0 ? clamped / rect.width : 0) * duration;
-  }, [duration]);
+  const getSeekValue = useCallback(
+    (clientX: number) => {
+      if (!progressRef.current || duration <= 0) return 0;
+      const rect = progressRef.current.getBoundingClientRect();
+      const clamped = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+      return (rect.width > 0 ? clamped / rect.width : 0) * duration;
+    },
+    [duration],
+  );
 
-  const updateSeekValue = useCallback((clientX: number) => {
-    const value = getSeekValue(clientX);
-    setSeekValue(value);
-    return value;
-  }, [getSeekValue]);
+  const updateSeekValue = useCallback(
+    (clientX: number) => {
+      const value = getSeekValue(clientX);
+      setSeekValue(value);
+      return value;
+    },
+    [getSeekValue],
+  );
 
-  const handleSeekStart = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (duration <= 0) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    isSeekingRef.current = true;
-    setIsSeeking(true);
-    updateSeekValue(event.clientX);
-  }, [duration, updateSeekValue]);
+  const handleSeekStart = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (duration <= 0) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      isSeekingRef.current = true;
+      setIsSeeking(true);
+      updateSeekValue(event.clientX);
+    },
+    [duration, updateSeekValue],
+  );
 
-  const handleSeekMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (isSeekingRef.current) updateSeekValue(event.clientX);
-  }, [updateSeekValue]);
+  const handleSeekMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (isSeekingRef.current) updateSeekValue(event.clientX);
+    },
+    [updateSeekValue],
+  );
 
-  const handleSeekEnd = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (!isSeekingRef.current) return;
-    const value = updateSeekValue(event.clientX);
-    isSeekingRef.current = false;
-    setIsSeeking(false);
-    onSeekChange(value);
-  }, [onSeekChange, updateSeekValue]);
+  const handleSeekEnd = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (!isSeekingRef.current) return;
+      const value = updateSeekValue(event.clientX);
+      isSeekingRef.current = false;
+      setIsSeeking(false);
+      onSeekChange(value);
+    },
+    [onSeekChange, updateSeekValue],
+  );
 
   const handleSeekCancel = useCallback(() => {
     isSeekingRef.current = false;
     setIsSeeking(false);
   }, []);
 
-  const controlButtonClass = "player-bar-button flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]";
+  const controlButtonClass =
+    "player-bar-button flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]";
 
   const showTransitionBadge =
     transition != null && (transition.status === "armed" || transition.status === "active");
@@ -171,12 +191,20 @@ export const PlayerBar = ({
           data-now-playing-link
         >
           {currentTrack?.coverArtThumbPath ? (
-            <img src={convertFileSrc(currentTrack.coverArtThumbPath)} alt={`${currentTrack.title} cover`} className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-colors group-hover:border-[var(--color-accent)]" />
+            <img
+              src={convertFileSrc(currentTrack.coverArtThumbPath)}
+              alt={`${currentTrack.title} cover`}
+              className="h-[62px] w-[62px] shrink-0 rounded-[var(--radius-sm)] border border-[var(--color-border)] object-cover transition-colors group-hover:border-[var(--color-accent)]"
+            />
           ) : (
-            <div className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] transition-colors group-hover:border-[var(--color-accent)]"><Music2 className="h-5 w-5" /></div>
+            <div className="flex h-[62px] w-[62px] shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)] transition-colors group-hover:border-[var(--color-accent)]">
+              <Music2 className="h-5 w-5" />
+            </div>
           )}
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">{currentTrack ? currentTrack.title : t("player.empty.title")}</p>
+            <p className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">
+              {currentTrack ? currentTrack.title : t("player.empty.title")}
+            </p>
             {showTransitionBadge && transition ? (
               <div
                 className="mt-1 flex max-w-full items-center gap-1.5 rounded-[var(--radius-full)] border border-[var(--color-accent)] bg-[var(--color-accent-light)] px-2 py-1 text-[10px] font-semibold text-[var(--color-accent)] shadow-[0_0_14px_var(--color-accent-light)]"
@@ -186,28 +214,51 @@ export const PlayerBar = ({
                 aria-live="polite"
               >
                 <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-                  {isMixing && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-accent)] opacity-60" />}
+                  {isMixing && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-accent)] opacity-60" />
+                  )}
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-accent)]" />
                 </span>
                 <Blend className="h-3 w-3 shrink-0" aria-hidden="true" />
                 <span className="shrink-0 uppercase tracking-[0.08em]">
                   {isMixing ? "Mixing" : "Mix ready"}
                 </span>
-                {isMixing && <span className="shrink-0 tabular-nums" data-mix-percent>{transitionPercent}%</span>}
+                {isMixing && (
+                  <span className="shrink-0 tabular-nums" data-mix-percent>
+                    {transitionPercent}%
+                  </span>
+                )}
                 <ArrowRight className="h-3 w-3 shrink-0 opacity-70" aria-hidden="true" />
-                <span className="truncate text-[var(--color-text-primary)]">{transition.toTitle}</span>
+                <span className="truncate text-[var(--color-text-primary)]">
+                  {transition.toTitle}
+                </span>
               </div>
             ) : (
-              <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">{currentTrack ? currentTrack.artist : t("player.empty.subtitle")}</p>
+              <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-secondary)]">
+                {currentTrack ? currentTrack.artist : t("player.empty.subtitle")}
+              </p>
             )}
-            {currentTrack?.album && <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">{currentTrack.album}</p>}
+            {currentTrack?.album && (
+              <p className="mt-0.5 truncate text-[10px] text-[var(--color-text-muted)]">
+                {currentTrack.album}
+              </p>
+            )}
           </div>
         </button>
         {currentTrack && trackDetails && (
-          <div className="flex shrink-0 flex-col gap-1.5 border-l border-[var(--color-border-light)] pl-3" data-player-track-metadata>
+          <div
+            className="flex shrink-0 flex-col gap-1.5 border-l border-[var(--color-border-light)] pl-3"
+            data-player-track-metadata
+          >
             <div className="flex items-center gap-2 text-[10px] tabular-nums text-[var(--color-text-muted)]">
-              {trackDetails.bpm ? <span>{trackDetails.bpm.toFixed(1)} BPM</span> : <span>— BPM</span>}
-              <span className="font-semibold text-[var(--color-accent)]">{trackDetails.key || "—"}</span>
+              {trackDetails.bpm ? (
+                <span>{trackDetails.bpm.toFixed(1)} BPM</span>
+              ) : (
+                <span>— BPM</span>
+              )}
+              <span className="font-semibold text-[var(--color-accent)]">
+                {trackDetails.key || "—"}
+              </span>
             </div>
             <RatingCell
               compact
@@ -222,18 +273,65 @@ export const PlayerBar = ({
 
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center justify-center gap-2">
-          <button className={`${controlButtonClass} ${shuffleEnabled ? "text-[var(--color-accent)]" : ""}`} onClick={toggleShuffle} title={t("player.shuffle")} type="button"><Shuffle className="h-4 w-4" /></button>
-          <button className={controlButtonClass} onClick={onSkipPrevious} title={t("player.previous")} type="button"><SkipBack className="h-[18px] w-[18px]" /></button>
-          <button className="player-bar-play-button flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-accent)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-accent-light)]" onClick={onTogglePlay} title={t(isPlaying ? "player.pause" : "player.play")} type="button">
-            {isPlaying ? <Pause className="h-[18px] w-[18px]" fill="currentColor" /> : <Play className="h-[18px] w-[18px] translate-x-px" fill="currentColor" />}
+          <button
+            className={`${controlButtonClass} ${shuffleEnabled ? "text-[var(--color-accent)]" : ""}`}
+            onClick={toggleShuffle}
+            title={t("player.shuffle")}
+            type="button"
+          >
+            <Shuffle className="h-4 w-4" />
           </button>
-          <button className={controlButtonClass} onClick={onSkipNext} title={t("player.next")} type="button"><SkipForward className="h-[18px] w-[18px]" /></button>
-          <button className={`${controlButtonClass} ${repeatMode !== "off" ? "text-[var(--color-accent)]" : ""}`} onClick={toggleRepeat} title={t(repeatMode === "off" ? "player.repeat" : repeatMode === "all" ? "player.repeatAll" : "player.repeatOne")} type="button">
-            {repeatMode === "one" ? <Repeat1 className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+          <button
+            className={controlButtonClass}
+            onClick={onSkipPrevious}
+            title={t("player.previous")}
+            type="button"
+          >
+            <SkipBack className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            className="player-bar-play-button flex h-10 w-10 items-center justify-center rounded-full border border-[var(--color-accent)] bg-transparent text-[var(--color-text-primary)] hover:bg-[var(--color-accent-light)]"
+            onClick={onTogglePlay}
+            title={t(isPlaying ? "player.pause" : "player.play")}
+            type="button"
+          >
+            {isPlaying ? (
+              <Pause className="h-[18px] w-[18px]" fill="currentColor" />
+            ) : (
+              <Play className="h-[18px] w-[18px] translate-x-px" fill="currentColor" />
+            )}
+          </button>
+          <button
+            className={controlButtonClass}
+            onClick={onSkipNext}
+            title={t("player.next")}
+            type="button"
+          >
+            <SkipForward className="h-[18px] w-[18px]" />
+          </button>
+          <button
+            className={`${controlButtonClass} ${repeatMode !== "off" ? "text-[var(--color-accent)]" : ""}`}
+            onClick={toggleRepeat}
+            title={t(
+              repeatMode === "off"
+                ? "player.repeat"
+                : repeatMode === "all"
+                  ? "player.repeatAll"
+                  : "player.repeatOne",
+            )}
+            type="button"
+          >
+            {repeatMode === "one" ? (
+              <Repeat1 className="h-4 w-4" />
+            ) : (
+              <Repeat className="h-4 w-4" />
+            )}
           </button>
         </div>
         <div className="group flex min-w-0 items-center gap-2.5">
-          <span className="w-9 text-right text-[10px] tabular-nums text-[var(--color-text-secondary)]">{formatTime(displayPosition)}</span>
+          <span className="w-9 text-right text-[10px] tabular-nums text-[var(--color-text-secondary)]">
+            {formatTime(displayPosition)}
+          </span>
           <WaveformSeekBar
             peaks={peaks}
             progress={progress}
@@ -245,18 +343,37 @@ export const PlayerBar = ({
             onSeekCancel={handleSeekCancel}
             progressRef={progressRef}
           />
-          <span className="w-9 text-[10px] tabular-nums text-[var(--color-text-secondary)]">{formatTime(duration)}</span>
+          <span className="w-9 text-[10px] tabular-nums text-[var(--color-text-secondary)]">
+            {formatTime(duration)}
+          </span>
         </div>
-        {waveformLoading && <span className="sr-only" role="status">{t("player.waveform.generating")}</span>}
+        {waveformLoading && (
+          <span className="sr-only" role="status">
+            {t("player.waveform.generating")}
+          </span>
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-3 pr-2">
         <OutputMenu />
-        <button className={controlButtonClass} onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)} title={t(volume > 0 ? "player.mute" : "player.unmute")} type="button">
+        <button
+          className={controlButtonClass}
+          onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)}
+          title={t(volume > 0 ? "player.mute" : "player.unmute")}
+          type="button"
+        >
           {volume > 0 ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
         </button>
         <div className="player-volume-control relative h-1 w-[92px]">
-          <input type="range" min="0" max="100" value={volumePercent} onChange={(event) => onVolumeChange(Number(event.target.value) / 100)} className="absolute left-0 top-0 z-[2] h-full w-full cursor-pointer opacity-0" aria-label={t("player.volume")} />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={volumePercent}
+            onChange={(event) => onVolumeChange(Number(event.target.value) / 100)}
+            className="absolute left-0 top-0 z-[2] h-full w-full cursor-pointer opacity-0"
+            aria-label={t("player.volume")}
+          />
           <div className="player-volume-fill" style={{ width: `${volumePercent}%` }} />
         </div>
       </div>

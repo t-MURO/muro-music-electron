@@ -1,12 +1,32 @@
-import {
-  KeyFinderClient,
-  resolveKeyFinderBinary,
-} from "@neo-keyfinder/engine-client";
+import { KeyFinderClient, resolveKeyFinderBinary } from "@neo-keyfinder/engine-client";
 import { availableParallelism } from "node:os";
 
 const camelotCodes = [
-  "11B", "8A", "6B", "3A", "1B", "10A", "8B", "5A", "3B", "12A", "10B", "7A",
-  "5B", "2A", "12B", "9A", "7B", "4A", "2B", "11A", "9B", "6A", "4B", "1A", "",
+  "11B",
+  "8A",
+  "6B",
+  "3A",
+  "1B",
+  "10A",
+  "8B",
+  "5A",
+  "3B",
+  "12A",
+  "10B",
+  "7A",
+  "5B",
+  "2A",
+  "12B",
+  "9A",
+  "7B",
+  "4A",
+  "2B",
+  "11A",
+  "9B",
+  "6A",
+  "4B",
+  "1A",
+  "",
 ];
 
 const baseAnalysisSettings = {
@@ -40,7 +60,7 @@ const baseAnalysisSettings = {
 const outputModes = new Set(["none", "prepend", "append", "overwrite"]);
 const notationModes = new Set(["standard", "custom", "combined", "djCombined"]);
 
-const normalizeOutputMode = (value) => outputModes.has(value) ? value : "none";
+const normalizeOutputMode = (value) => (outputModes.has(value) ? value : "none");
 
 const createAnalysisSettings = (requestedSettings, writeAuthorization) => {
   const requestedOutputs = requestedSettings?.outputs ?? {};
@@ -55,8 +75,8 @@ const createAnalysisSettings = (requestedSettings, writeAuthorization) => {
     // Renaming source files would make Muro's stored source paths stale.
     filename: "none",
   };
-  const writesEnabled = Boolean(writeAuthorization) &&
-    Object.values(outputs).some((mode) => mode !== "none");
+  const writesEnabled =
+    Boolean(writeAuthorization) && Object.values(outputs).some((mode) => mode !== "none");
   const customCodes = Array.from({ length: camelotCodes.length }, (_, index) => {
     const value = requestedSettings?.customCodes?.[index];
     return typeof value === "string" ? value.slice(0, 32) : camelotCodes[index];
@@ -66,9 +86,10 @@ const createAnalysisSettings = (requestedSettings, writeAuthorization) => {
     ...baseAnalysisSettings,
     automaticWrites: writesEnabled,
     outputs,
-    delimiter: typeof requestedSettings?.delimiter === "string"
-      ? requestedSettings.delimiter.slice(0, 32)
-      : baseAnalysisSettings.delimiter,
+    delimiter:
+      typeof requestedSettings?.delimiter === "string"
+        ? requestedSettings.delimiter.slice(0, 32)
+        : baseAnalysisSettings.delimiter,
     notation: notationModes.has(requestedSettings?.notation)
       ? requestedSettings.notation
       : baseAnalysisSettings.notation,
@@ -87,7 +108,9 @@ const toEngineTrack = (track) => ({
   grouping: "",
   initialKey: String(track.key || ""),
   initialBpm: Number.isFinite(track.bpm) ? track.bpm : null,
-  durationMs: Number.isFinite(track.durationSeconds) ? Math.round(track.durationSeconds * 1000) : null,
+  durationMs: Number.isFinite(track.durationSeconds)
+    ? Math.round(track.durationSeconds * 1000)
+    : null,
   detectedKey: null,
   detectedCode: "",
   detectedBpm: null,
@@ -157,14 +180,20 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
             jobId: active.publicJobId,
             owner,
             sequence: 0,
-            payload: { cancelled: false, completed: active.tracks.length, total: active.tracks.length },
+            payload: {
+              cancelled: false,
+              completed: active.tracks.length,
+              total: active.tracks.length,
+            },
           });
         }
         cleanupActive(owner, active);
       }
       client.removeAllListeners();
     });
-    client.on("stderr", (message) => console.warn(`KeyFinder engine ${clientIndex + 1}: ${message.trimEnd()}`));
+    client.on("stderr", (message) =>
+      console.warn(`KeyFinder engine ${clientIndex + 1}: ${message.trimEnd()}`),
+    );
     client.on("protocolError", (error) => console.warn(error.message));
     return state;
   };
@@ -190,9 +219,9 @@ export const createKeyFinderService = ({ binaryDirectories, emit }) => {
 
   const selectClient = (poolSize) => {
     const states = Array.from({ length: poolSize }, (_, index) => getClient(index));
-    return states.reduce((selected, candidate) => (
-      candidate.activeOwners.size < selected.activeOwners.size ? candidate : selected
-    ));
+    return states.reduce((selected, candidate) =>
+      candidate.activeOwners.size < selected.activeOwners.size ? candidate : selected,
+    );
   };
 
   return {

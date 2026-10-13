@@ -38,13 +38,9 @@ const verifyResourceRoot = (resourceRoot, stage) => {
     if (!metadata.isFile() || metadata.size < 1_024) missing.push(relativePath);
   }
   if (missing.length > 0) {
-    throw new Error(
-      `${stage} is missing required native resources: ${missing.join(", ")}`,
-    );
+    throw new Error(`${stage} is missing required native resources: ${missing.join(", ")}`);
   }
-  console.log(
-    `Verified ${stage} native resources: ${expectedResources().join(", ")}`,
-  );
+  console.log(`Verified ${stage} native resources: ${expectedResources().join(", ")}`);
 };
 
 const verifyPackagedResources = async (context) => {

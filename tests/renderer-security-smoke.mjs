@@ -57,18 +57,26 @@ try {
   assert.equal(access.canRead(42), false);
   assert.throws(() => access.assertWritable(pickedFile, "file"), { code: PATH_ACCESS_DENIED });
   if (process.platform === "win32") {
-    assert.equal(access.canRead(pickedFile.toUpperCase()), true, "Windows paths compare case-insensitively");
-    assert.equal(access.canRead(`\\\\?\\${pickedFile}`), false, "device namespace paths are refused");
+    assert.equal(
+      access.canRead(pickedFile.toUpperCase()),
+      true,
+      "Windows paths compare case-insensitively",
+    );
+    assert.equal(
+      access.canRead(`\\\\?\\${pickedFile}`),
+      false,
+      "device namespace paths are refused",
+    );
   }
 
   // The database location lives in a main-process config file in userData.
   const userDataDir = path.join(temporaryDirectory, "userData");
   const legacyDatabase = path.join(temporaryDirectory, "custom", "library.db");
   fs.mkdirSync(path.dirname(legacyDatabase), { recursive: true });
-  fs.writeFileSync(legacyDatabase, Buffer.concat([
-    Buffer.from("SQLite format 3\0", "latin1"),
-    Buffer.alloc(84),
-  ]));
+  fs.writeFileSync(
+    legacyDatabase,
+    Buffer.concat([Buffer.from("SQLite format 3\0", "latin1"), Buffer.alloc(84)]),
+  );
 
   const freshInstall = createDatabaseLocationStore({ userDataDir });
   assert.equal(freshInstall.needsMigration(), true);
@@ -96,21 +104,26 @@ try {
   assert.equal(rejected.dbPath, path.join(rejectingDir, "muro.db"));
   assert.equal(rejected.rejectedLegacyPath, notADatabase);
   assert.equal(
-    createDatabaseLocationStore({ userDataDir: path.join(temporaryDirectory, "userData-new") })
-      .migrateLegacyLocation(path.join(temporaryDirectory, "nowhere", "new.db")).isDefault,
+    createDatabaseLocationStore({
+      userDataDir: path.join(temporaryDirectory, "userData-new"),
+    }).migrateLegacyLocation(path.join(temporaryDirectory, "nowhere", "new.db")).isDefault,
     true,
     "a non-existent path outside userData is not created",
   );
   const renamedDir = path.join(temporaryDirectory, "userData-renamed");
   assert.equal(
-    createDatabaseLocationStore({ userDataDir: renamedDir })
-      .migrateLegacyLocation(path.join(renamedDir, "muro-dev.db")).dbPath,
+    createDatabaseLocationStore({ userDataDir: renamedDir }).migrateLegacyLocation(
+      path.join(renamedDir, "muro-dev.db"),
+    ).dbPath,
     path.join(renamedDir, "muro-dev.db"),
     "the old in-userData file name setting is honoured",
   );
 
   assert.equal(freshInstall.resetToDefault().isDefault, true);
-  assert.equal(createDatabaseLocationStore({ userDataDir }).getDbPath(), path.join(userDataDir, "muro.db"));
+  assert.equal(
+    createDatabaseLocationStore({ userDataDir }).getDbPath(),
+    path.join(userDataDir, "muro.db"),
+  );
   assert.throws(() => freshInstall.setDbPath("relative.db"));
 } finally {
   fs.rmSync(temporaryDirectory, { recursive: true, force: true });
