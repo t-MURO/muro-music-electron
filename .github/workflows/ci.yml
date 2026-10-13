@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+          - ubuntu-latest
+
+    env:
+      CI: "true"
+
+    # Mirrors `npm run verify:release` (check -> test:ci:core -> vite build -> test:ci:ui)
+    # plus lint. No fpcalc or Neo KeyFinder binaries are needed: the core and UI smoke
+    # tests stub fingerprinting and the KeyFinder engine. `npm ci` runs the postinstall
+    # `electron-builder install-app-deps`, which rebuilds better-sqlite3 for Electron's
+    # ABI; the smoke runners execute database tests through Electron with
+    # ELECTRON_RUN_AS_NODE=1, so that matches.
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Enable once the codebase has been formatted with Prettier.
+      # - name: Check formatting
+      #   run: npm run format:check
+
+      - name: Type check and syntax check
+        run: npm run check
+
+      - name: Run core smoke tests
+        run: npm run test:ci:core
+
+      - name: Build renderer
+        run: npx --no-install vite build
+
+      - name: Prepare Linux display server and Electron sandbox
+        if: runner.os == 'Linux'
+        run: |
+          # Ubuntu 24.04 blocks unprivileged user namespaces via AppArmor, which makes
+          # Electron fall back to the (unconfigured) SUID sandbox helper and abort.
+          # Re-allow them so Chromium can use its namespace sandbox.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends --yes xvfb
+          fi
+
+      - name: Run Electron UI smoke tests
+        if: runner.os != 'Linux'
+        run: npm run test:ci:ui
+
+      - name: Run Electron UI smoke tests under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npm run test:ci:ui
