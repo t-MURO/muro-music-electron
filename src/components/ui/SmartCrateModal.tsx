@@ -63,19 +63,21 @@ const createRule = (field: SmartCrateField = "bpm"): SmartCrateRule => ({
 });
 
 export const SmartCrateModal = ({ isOpen, crate, onClose, onSave }: SmartCrateModalProps) => {
-  const [name, setName] = useState("");
-  const [match, setMatch] = useState<"all" | "any">("all");
-  const [rules, setRules] = useState<SmartCrateRule[]>([createRule()]);
+  // The form starts from the crate being edited. Callers mount the modal per
+  // crate (keyed by id), so it never has to reset itself in an effect, which
+  // could wipe input typed right after opening.
+  const [name, setName] = useState(() => crate?.name ?? "");
+  const [match, setMatch] = useState<"all" | "any">(() => crate?.match ?? "all");
+  const [rules, setRules] = useState<SmartCrateRule[]>(() =>
+    crate?.rules.length ? crate.rules.map((rule) => ({ ...rule })) : [createRule()],
+  );
   const nameRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    setName(crate?.name ?? "");
-    setMatch(crate?.match ?? "all");
-    setRules(crate?.rules.length ? crate.rules.map((rule) => ({ ...rule })) : [createRule()]);
     const focusId = window.setTimeout(() => nameRef.current?.focus(), 0);
     return () => window.clearTimeout(focusId);
-  }, [crate, isOpen]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -4211,13 +4211,20 @@ app.whenReady().then(async () => {
           document.querySelector('[data-smart-crate-add-rule]')
         );
         const smartCrateName = document.querySelector('[data-smart-crate-name]');
-        if (smartCrateName instanceof HTMLInputElement) {
+        const typeSmartCrateName = () => {
+          if (!(smartCrateName instanceof HTMLInputElement)) return;
           const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
           valueSetter?.call(smartCrateName, "Warm-up House");
           smartCrateName.dispatchEvent(new Event("input", { bubbles: true }));
-        }
+        };
+        typeSmartCrateName();
         await waitForCondition(() => {
           const saveButton = document.querySelector('[data-smart-crate-save]');
+          // Type again if a slow render replaced the value; clicking a still
+          // disabled Save button would silently create nothing.
+          if (smartCrateName instanceof HTMLInputElement && smartCrateName.value !== "Warm-up House") {
+            typeSmartCrateName();
+          }
           return Boolean(
             smartCrateName instanceof HTMLInputElement &&
             smartCrateName.value === "Warm-up House" &&

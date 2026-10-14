@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
@@ -167,7 +167,10 @@ export const QueuePanel = ({
     [],
   );
 
-  useEffect(() => {
+  // Re-register synchronously after each commit: with a passive effect, a
+  // mouseup that lands between the drop-target render and the effect would
+  // still see the previous (empty) drop target and drop nothing.
+  useLayoutEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (!dragStartRef.current) return;
       const { list, index, y: startY, itemY } = dragStartRef.current;

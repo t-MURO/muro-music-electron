@@ -2036,6 +2036,7 @@ function App() {
       {isSmartCrateModalOpen && (
         <Suspense fallback={null}>
           <SmartCrateModal
+            key={editingSmartCrate?.id ?? "new"}
             isOpen
             crate={editingSmartCrate}
             onClose={handleCloseSmartCrateModal}
