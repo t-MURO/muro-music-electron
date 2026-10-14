@@ -377,6 +377,8 @@
   "playback.crossfade.description": "Das Ende eines Titels mit dem Anfang des nächsten überlappen. Aus behält die lückenlose Übergabe bei.",
   "playback.crossfade.off": "Aus",
   "playback.crossfade.seconds": "{seconds}s",
+  "playback.restoreSession": "Letzte Sitzung beim Start wiederherstellen",
+  "playback.restoreSession.description": "Warteschlange und letzten Titel zurückholen, pausiert an der Stelle, an der du aufgehört hast.",
   "loudness.section": "Lautstärkeanpassung",
   "loudness.mode": "Normalisierung",
   "loudness.mode.description": "Lautstärkeunterschiede zwischen Titeln mit ReplayGain ausgleichen.",

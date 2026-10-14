@@ -40,6 +40,7 @@ export { useOrganizedLibraryExport } from "./useOrganizedLibraryExport";
 export { useKeyboardShortcuts, type KeyboardShortcutHandlers } from "./useKeyboardShortcuts";
 export { useCommandHistory } from "./useCommandHistory";
 export { useGaplessPlayback } from "./useGaplessPlayback";
+export { usePlaybackSession } from "./usePlaybackSession";
 export { useIndexedSearch } from "./useIndexedSearch";
 export { useLoudnessAnalysis } from "./useLoudnessAnalysis";
 export { useLibraryVerification, type MissingTrack } from "./useLibraryVerification";

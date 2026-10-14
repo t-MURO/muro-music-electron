@@ -73,6 +73,7 @@ import {
   useKeyboardShortcuts,
   useCommandHistory,
   useGaplessPlayback,
+  usePlaybackSession,
   useIndexedSearch,
   useArtistProfiles,
   useDatabaseLocation,
@@ -1300,6 +1301,10 @@ function App() {
     handleBackfillCoverArt,
     handleClearSongs,
   } = useLibraryInit();
+
+  // Bring back the last listening session (paused) once the library is known.
+  usePlaybackSession({ libraryLoading, allTracksById, playbackContextIdsRef, playbackSourceRef });
+
   const { organizedLibraryExportPending, organizedLibraryExportStatus, exportOrganizedLibrary } =
     useOrganizedLibraryExport();
 

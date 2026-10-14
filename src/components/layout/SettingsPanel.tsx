@@ -83,7 +83,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "general",
     label: "General",
     description: "Language, appearance, and playback",
-    keywords: "language theme dark light system playback seek",
+    keywords: "language theme dark light system playback seek restore session",
     icon: Settings2,
   },
   {
@@ -390,6 +390,8 @@ export const SettingsPanel = ({
   const replayGainReferenceLufs = useSettingsStore((s) => s.replayGainReferenceLufs);
   const setGaplessEnabled = useSettingsStore((s) => s.setGaplessEnabled);
   const setCrossfadeSeconds = useSettingsStore((s) => s.setCrossfadeSeconds);
+  const restoreLastSession = useSettingsStore((s) => s.restoreLastSession);
+  const setRestoreLastSession = useSettingsStore((s) => s.setRestoreLastSession);
   const setReplayGainMode = useSettingsStore((s) => s.setReplayGainMode);
   const setReplayGainPreampDb = useSettingsStore((s) => s.setReplayGainPreampDb);
   const setReplayGainPreventClipping = useSettingsStore((s) => s.setReplayGainPreventClipping);
@@ -705,6 +707,24 @@ export const SettingsPanel = ({
                         {t("playback.crossfade.description")}
                       </p>
                     </div>
+
+                    <label className="flex items-start gap-3">
+                      <input
+                        checked={restoreLastSession}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                        data-restore-session-toggle
+                        onChange={(event) => setRestoreLastSession(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-[var(--font-size-sm)] font-medium text-[var(--color-text-primary)]">
+                          {t("playback.restoreSession")}
+                        </span>
+                        <span className="mt-1 block text-[var(--font-size-xs)] leading-relaxed text-[var(--color-text-secondary)]">
+                          {t("playback.restoreSession.description")}
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </SettingsGroup>
 

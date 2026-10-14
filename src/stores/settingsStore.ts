@@ -108,6 +108,8 @@ type SettingsState = {
   replayGainPreventClipping: boolean;
   /** ReplayGain 2.0 pins this at -18 LUFS; -14 matches streaming services. */
   replayGainReferenceLufs: number;
+  /** Bring back the queue and the paused current track after a restart. */
+  restoreLastSession: boolean;
   watchFolderEnabled: boolean;
   /** Sole absolute path used as the library root and optionally watched for new audio. */
   watchedFolder: string;
@@ -145,6 +147,7 @@ type SettingsActions = {
   setReplayGainPreampDb: (preampDb: number) => void;
   setReplayGainPreventClipping: (preventClipping: boolean) => void;
   setReplayGainReferenceLufs: (referenceLufs: number) => void;
+  setRestoreLastSession: (enabled: boolean) => void;
   setWatchFolderEnabled: (enabled: boolean) => void;
   setOrganizeAcceptedTracks: (enabled: boolean) => void;
   setWatchedFolder: (folder: string) => void;
@@ -188,6 +191,7 @@ export const useSettingsStore = create<SettingsStore>()(
       replayGainPreampDb: 0,
       replayGainPreventClipping: true,
       replayGainReferenceLufs: -18,
+      restoreLastSession: true,
       watchFolderEnabled: false,
       watchedFolder: "",
       organizeAcceptedTracks: true,
@@ -244,6 +248,7 @@ export const useSettingsStore = create<SettingsStore>()(
         set({ replayGainPreventClipping }),
       setReplayGainReferenceLufs: (referenceLufs) =>
         set({ replayGainReferenceLufs: Math.max(-30, Math.min(-5, referenceLufs)) }),
+      setRestoreLastSession: (restoreLastSession) => set({ restoreLastSession }),
       setWatchFolderEnabled: (watchFolderEnabled) => set({ watchFolderEnabled }),
       setOrganizeAcceptedTracks: (organizeAcceptedTracks) => set({ organizeAcceptedTracks }),
       setWatchedFolder: (watchedFolder) => set({ watchedFolder }),
@@ -310,6 +315,7 @@ export const useSettingsStore = create<SettingsStore>()(
         replayGainPreampDb: state.replayGainPreampDb,
         replayGainPreventClipping: state.replayGainPreventClipping,
         replayGainReferenceLufs: state.replayGainReferenceLufs,
+        restoreLastSession: state.restoreLastSession,
         watchFolderEnabled: state.watchFolderEnabled,
         watchedFolder: state.watchedFolder,
         organizeAcceptedTracks: state.organizeAcceptedTracks,

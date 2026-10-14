@@ -559,37 +559,49 @@ const resumeTransitionPlayers = async (outgoing: HTMLAudioElement, incoming: HTM
   mix.notifyResume();
 };
 
+/** Point the playing element at a new track, leaving it paused at the start. */
+const loadTrack = async (player: HTMLAudioElement, args: Record<string, unknown>) => {
+  if (mix.isTransitionEngaged()) mix.cancelTransition();
+  // An explicit track change overrides whatever was queued up for the
+  // gapless hand-off.
+  discardPreload();
+  // Stop the previous source before changing tracks. This also makes
+  // repeated/rapid play requests deterministic on Windows.
+  player.pause();
+  // A normal play always runs at 1.0x, even on the element that just came
+  // out of a DJ transition at the matched tempo.
+  mix.resetElement(player);
+  currentTrack = {
+    id: String(args.id),
+    title: String(args.title),
+    artist: String(args.artist),
+    album: String(args.album),
+    source_path: String(args.sourcePath),
+    cover_art_path: args.coverArtPath as string | undefined,
+    cover_art_thumb_path: args.coverArtThumbPath as string | undefined,
+  };
+  durationHint = Number(args.durationHint) || 0;
+  currentGainFactor = Number(args.gainFactor) > 0 ? Number(args.gainFactor) : 1;
+  setMediaSessionMetadata(currentTrack);
+  await prepareElementVolume(player, currentGainFactor);
+  player.src = convertFileSrc(currentTrack.source_path);
+  player.currentTime = 0;
+  emitState();
+};
+
 const playbackInvoke = async <T>(command: string, args: Record<string, unknown>): Promise<T> => {
   const player = ensureAudio();
   switch (command) {
-    case "playback_play_file": {
-      if (mix.isTransitionEngaged()) mix.cancelTransition();
-      // An explicit play request overrides whatever was queued up for the
-      // gapless hand-off.
-      discardPreload();
-      // Stop the previous source before changing tracks. This also makes
-      // repeated/rapid play requests deterministic on Windows.
-      player.pause();
-      // A normal play always runs at 1.0x, even on the element that just came
-      // out of a DJ transition at the matched tempo.
-      mix.resetElement(player);
-      currentTrack = {
-        id: String(args.id),
-        title: String(args.title),
-        artist: String(args.artist),
-        album: String(args.album),
-        source_path: String(args.sourcePath),
-        cover_art_path: args.coverArtPath as string | undefined,
-        cover_art_thumb_path: args.coverArtThumbPath as string | undefined,
-      };
-      durationHint = Number(args.durationHint) || 0;
-      currentGainFactor = Number(args.gainFactor) > 0 ? Number(args.gainFactor) : 1;
-      setMediaSessionMetadata(currentTrack);
-      await prepareElementVolume(player, currentGainFactor);
-      player.src = convertFileSrc(currentTrack.source_path);
-      player.currentTime = 0;
-      emitState();
+    case "playback_play_file":
+      await loadTrack(player, args);
       await playWithTimeout(player, PLAYBACK_START_TIMEOUT_MS, "Track playback");
+      return undefined as T;
+    case "playback_load_file": {
+      // Like play_file, but stays paused at the requested position so a
+      // restored session only starts once the user presses play.
+      await loadTrack(player, args);
+      const position = Math.max(0, Number(args.positionSecs) || 0);
+      if (position > 0) await seekPlayer(player, position);
       return undefined as T;
     }
     case "playback_preload_next": {
@@ -835,6 +847,7 @@ export const invoke = <T>(command: string, args: Record<string, unknown> = {}): 
   if (command.startsWith("playback_")) {
     if (
       command === "playback_play_file" ||
+      command === "playback_load_file" ||
       command === "playback_pause" ||
       command === "playback_stop"
     ) {

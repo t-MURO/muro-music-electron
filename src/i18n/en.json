@@ -377,6 +377,8 @@
   "playback.crossfade.description": "Overlap the end of one track with the start of the next. Off keeps the plain gapless hand-off.",
   "playback.crossfade.off": "Off",
   "playback.crossfade.seconds": "{seconds}s",
+  "playback.restoreSession": "Restore last session on startup",
+  "playback.restoreSession.description": "Bring back the queue and the last track, paused where you left off.",
   "loudness.section": "Volume normalization",
   "loudness.mode": "Normalization",
   "loudness.mode.description": "Even out the volume difference between tracks using ReplayGain.",

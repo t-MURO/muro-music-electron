@@ -88,6 +88,11 @@ export const playbackSetCrossfade = (seconds: number) => {
   return invoke<void>("playback_set_crossfade", { seconds });
 };
 
+/** Loads a track paused at positionSecs without starting playback. */
+export const playbackLoadFile = (track: PreloadTrackPayload, positionSecs: number) => {
+  return invoke<void>("playback_load_file", { ...track, positionSecs });
+};
+
 export const playbackSetTrackGain = (gainFactor: number) => {
   return invoke<void>("playback_set_track_gain", { gainFactor });
 };
