@@ -2522,6 +2522,44 @@ app.whenReady().then(async () => {
           : "";
         const pausedRowUsesGreyHighlight = pausedRowColor.startsWith("rgba(148, 163, 184,");
         const mediaSessionPausedReady = navigator.mediaSession?.playbackState === "paused";
+        // Stop after this track must beat repeat-one and the queue: a track end
+        // leaves the paused track loaded instead of replaying or advancing, and
+        // the toggle disarms itself. Playback is paused here, so the short
+        // fixture file cannot end on its own during the check.
+        document.querySelector("[data-sleep-timer-button]")?.click();
+        (await waitForSelector("[data-sleep-stop-after-toggle]"))?.click();
+        const stopAfterArmed = await waitForCondition(() =>
+          document.querySelector("[data-sleep-timer-button]")
+            ?.getAttribute("data-sleep-stop-after") === "true"
+        );
+        const metadataBeforeStopAfter = navigator.mediaSession?.metadata;
+        const queuedBeforeStopAfter = document.querySelectorAll("[data-queue-track]").length;
+        await window.muro.invoke("test_emit_track_ended");
+        const stopAfterConsumed = await waitForCondition(() =>
+          document.querySelector("[data-sleep-timer-button]")
+            ?.getAttribute("data-sleep-stop-after") === "false"
+        );
+        // Give a wrongly triggered replay or advance time to surface.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const stopAfterTrackDebug = {
+          stopAfterArmed,
+          stopAfterConsumed,
+          metadataUnchanged: navigator.mediaSession?.metadata === metadataBeforeStopAfter,
+          queuedBefore: queuedBeforeStopAfter,
+          queuedAfter: document.querySelectorAll("[data-queue-track]").length,
+          playButtonTitle: document.querySelector(".player-bar-play-button")?.getAttribute("title") ?? null,
+          playingIndex: scroller.querySelector('[data-track-playing="true"]')
+            ?.getAttribute("data-track-index") ?? null,
+          expectedIndex: playingAfterSpace,
+        };
+        const stopAfterTrackReady = Boolean(
+          stopAfterTrackDebug.stopAfterArmed &&
+          stopAfterTrackDebug.stopAfterConsumed &&
+          stopAfterTrackDebug.metadataUnchanged &&
+          stopAfterTrackDebug.queuedAfter === stopAfterTrackDebug.queuedBefore &&
+          stopAfterTrackDebug.playButtonTitle === "Play" &&
+          stopAfterTrackDebug.playingIndex === playingAfterSpace
+        );
         document.querySelector("[data-output-button]")?.click();
         const castOutputDevice = await waitForSelector('[data-output-device="cast:cast-smoke"]');
         castOutputDevice?.click();
@@ -4568,6 +4606,8 @@ app.whenReady().then(async () => {
           repeatOneReady,
           repeatOneDebug,
           mediaSessionPausedReady,
+          stopAfterTrackReady,
+          stopAfterTrackDebug,
           remoteFallbackReady,
           playerMetadataReady,
           playerRatingSetToFour,
@@ -5076,6 +5116,13 @@ app.whenReady().then(async () => {
         fail(
           `Media Session integration failed: ` +
             `playing=${result.mediaSessionPlayingReady}, paused=${result.mediaSessionPausedReady}`,
+        );
+        return;
+      }
+      if (!result.stopAfterTrackReady) {
+        fail(
+          "Stop after this track did not hold playback at the track end: " +
+            JSON.stringify(result.stopAfterTrackDebug),
         );
         return;
       }

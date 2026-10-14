@@ -472,6 +472,8 @@ const beginCrossfade = (durationSeconds: number) => {
 
   void playWithTimeout(incoming, PLAYBACK_START_TIMEOUT_MS, "Crossfade playback")
     .then(() => {
+      // Cancelled while the incoming deck was starting: it is already parked.
+      if (!handoffInFlight || preloaded !== pending) return;
       crossfadeStartedAt = performance.now();
       stopCrossfade();
       crossfadeTimer = window.setInterval(() => {
@@ -652,6 +654,9 @@ const playbackInvoke = async <T>(command: string, args: Record<string, unknown>)
       return undefined as T;
     }
     case "playback_clear_preload":
+      // Unlike preloading null, this also abandons a crossfade into the staged
+      // track, so the playing track runs to its end at full volume.
+      cancelCrossfade();
       discardPreload();
       return undefined as T;
     case "playback_set_gapless":

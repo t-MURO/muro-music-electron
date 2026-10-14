@@ -42,6 +42,7 @@ export { useKeyboardShortcuts, type KeyboardShortcutHandlers } from "./useKeyboa
 export { useCommandHistory } from "./useCommandHistory";
 export { useGaplessPlayback } from "./useGaplessPlayback";
 export { usePlaybackSession } from "./usePlaybackSession";
+export { useSleepTimer } from "./useSleepTimer";
 export { useIndexedSearch } from "./useIndexedSearch";
 export { useLoudnessAnalysis } from "./useLoudnessAnalysis";
 export { useLibraryVerification, type MissingTrack } from "./useLibraryVerification";

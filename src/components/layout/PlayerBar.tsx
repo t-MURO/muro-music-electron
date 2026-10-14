@@ -19,6 +19,7 @@ import { getAudioWaveform } from "../../lib/keyfinder";
 import { useLibraryStore, usePlaybackStore } from "../../stores";
 import { RatingCell } from "../library/RatingCell";
 import { OutputMenu } from "../player/OutputMenu";
+import { SleepTimerMenu } from "../player/SleepTimerMenu";
 import { WaveformSeekBar } from "../player/WaveformSeekBar";
 
 const formatTime = (seconds: number) => {
@@ -356,6 +357,7 @@ export const PlayerBar = ({
 
       <div className="flex items-center justify-end gap-3 pr-2">
         <OutputMenu />
+        <SleepTimerMenu />
         <button
           className={controlButtonClass}
           onClick={() => onVolumeChange(volume > 0 ? 0 : 0.8)}

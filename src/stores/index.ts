@@ -51,6 +51,11 @@ export {
 export { useRecentlyPlayedStore, type RecentlyPlayedStore } from "./recentlyPlayedStore";
 export { useSmartCrateStore, type SmartCrateStore } from "./smartCrateStore";
 export {
+  useSleepTimerStore,
+  selectSleepTimerActive,
+  type SleepTimerStore,
+} from "./sleepTimerStore";
+export {
   useRemoteOutputStore,
   selectRemoteOutputActive,
   selectRemoteScanning,

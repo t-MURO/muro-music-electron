@@ -74,6 +74,7 @@ import {
   useCommandHistory,
   useGaplessPlayback,
   usePlaybackSession,
+  useSleepTimer,
   useIndexedSearch,
   useArtistProfiles,
   useDatabaseLocation,
@@ -90,10 +91,12 @@ import {
   useUIStore,
   useRecentlyPlayedStore,
   useSmartCrateStore,
+  useSleepTimerStore,
   selectAllTracks,
   notify,
   applyThemeMode,
 } from "./stores";
+import { SLEEP_TIMER_PRESET_MINUTES } from "./lib/sleepTimer";
 import {
   getPathForView,
   compareSortValues,
@@ -666,6 +669,10 @@ function App() {
       // The mix engine owns this track boundary and hands off playback itself.
       return;
     }
+    // Stop after this track (also the "end of current track" sleep option)
+    // beats the queue and both repeat modes. The ended track stays loaded at
+    // its end, so local and remote outputs are simply left paused there.
+    if (useSleepTimerStore.getState().consumeStopAfterCurrent()) return;
     advanceToNextRef.current();
   }, []);
 
@@ -811,6 +818,9 @@ function App() {
 
   // Gapless preload and crossfade hand-off
   useGaplessPlayback({ allTracksById, getPlaybackContext });
+
+  // Timed sleep: fade out, pause, restore the volume
+  useSleepTimer({ pause });
 
   // Play tracking (30-second threshold)
   usePlayTracking({ currentPosition, allTracks });
@@ -1914,6 +1924,36 @@ function App() {
     ],
   );
 
+  // Translated, so rebuilt on every render instead of memoized: `t` reads module
+  // state React cannot track, and a language switch must relabel them.
+  const paletteCommands = [
+    ...commandPaletteItems,
+    ...SLEEP_TIMER_PRESET_MINUTES.map((minutes) => ({
+      id: `sleep-timer-${minutes}`,
+      label: t("palette.sleep.minutes", { minutes: String(minutes) }),
+      keywords: "sleep timer pause later",
+      run: () => useSleepTimerStore.getState().startTimer(minutes),
+    })),
+    {
+      id: "sleep-timer-end-of-track",
+      label: t("palette.sleep.endOfTrack"),
+      keywords: "sleep timer pause",
+      run: () => useSleepTimerStore.getState().sleepAtEndOfTrack(),
+    },
+    {
+      id: "stop-after-track",
+      label: t("palette.sleep.stopAfterTrack"),
+      keywords: "pause end current song",
+      run: () => useSleepTimerStore.getState().toggleStopAfterCurrent(),
+    },
+    {
+      id: "sleep-timer-cancel",
+      label: t("palette.sleep.cancel"),
+      keywords: "sleep timer off stop after",
+      run: () => useSleepTimerStore.getState().cancelAll(),
+    },
+  ];
+
   return (
     <div
       className="theme-transition flex h-screen flex-col overflow-hidden bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)]"
@@ -1929,7 +1969,7 @@ function App() {
       <ShortcutHelpModal isOpen={isShortcutHelpOpen} onClose={() => setIsShortcutHelpOpen(false)} />
       <CommandPalette
         isOpen={isCommandPaletteOpen}
-        commands={commandPaletteItems}
+        commands={paletteCommands}
         onClose={() => setIsCommandPaletteOpen(false)}
       />
       <DragOverlay

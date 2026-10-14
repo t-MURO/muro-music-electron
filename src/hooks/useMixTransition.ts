@@ -4,6 +4,7 @@ import {
   useLibraryStore,
   usePlaybackStore,
   useSettingsStore,
+  useSleepTimerStore,
   notify,
   type TransitionUiState,
 } from "../stores";
@@ -46,6 +47,7 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
   const autoMix = useSettingsStore((s) => s.autoMix);
   const mixBars = useSettingsStore((s) => s.mixBars);
   const mixPreservePitch = useSettingsStore((s) => s.mixPreservePitch);
+  const stopAfterCurrent = useSleepTimerStore((s) => s.stopAfterCurrent);
 
   // Guards shared between the manual and auto-mix paths.
   const manualMixInFlightRef = useRef(false);
@@ -218,8 +220,10 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
   }, [transition, setQueue, setTransition]);
 
   // Auto-mix: arm a transition into queue[0] whenever a track is playing.
+  // Stop-after-this-track suspends it, cancelling a transition that is already
+  // armed or mixing (the outgoing deck ramps back to full).
   useEffect(() => {
-    if (!enabled || !autoMix) {
+    if (!enabled || !autoMix || stopAfterCurrent) {
       autoMixKeyRef.current = null;
       autoMixGenRef.current += 1;
       if (autoArmedRef.current || autoArmPendingRef.current) {
@@ -295,6 +299,7 @@ export const useMixTransition = ({ enabled, allTracks, playTrack, seek }: UseMix
     mixPreservePitch,
     nextQueuedId,
     resolveGrid,
+    stopAfterCurrent,
     transition,
   ]);
 

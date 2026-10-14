@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 import { listen } from "@muro/desktop/events";
 import type { Track } from "../types";
-import { usePlaybackStore, useSettingsStore } from "../stores";
+import { usePlaybackStore, useSettingsStore, useSleepTimerStore } from "../stores";
 import { isRemoteOutputActive } from "../stores/remoteOutputStore";
 import {
+  playbackClearPreload,
   playbackPreloadNext,
   playbackSetCrossfade,
   playbackSetGapless,
@@ -40,6 +41,7 @@ export const useGaplessPlayback = ({
   const repeatMode = usePlaybackStore((s) => s.repeatMode);
   const setQueue = usePlaybackStore((s) => s.setQueue);
   const setPlayingNext = usePlaybackStore((s) => s.setPlayingNext);
+  const stopAfterCurrent = useSleepTimerStore((s) => s.stopAfterCurrent);
 
   const getPlaybackContextRef = useRef(getPlaybackContext);
   useEffect(() => {
@@ -86,6 +88,14 @@ export const useGaplessPlayback = ({
       return;
     }
 
+    if (stopAfterCurrent) {
+      // Nothing may follow this track. Clearing (rather than preloading null)
+      // also abandons a crossfade that already started, so the boundary falls
+      // through to the renderer's track-end handler, which then does not advance.
+      playbackClearPreload().catch(() => undefined);
+      return;
+    }
+
     const next = peekNextTrack();
     if (!next || next.id === currentTrackId) {
       // Repeat-one replays the same element; there is nothing to stage.
@@ -115,6 +125,7 @@ export const useGaplessPlayback = ({
     replayGainMode,
     replayGainPreampDb,
     replayGainPreventClipping,
+    stopAfterCurrent,
   ]);
 
   // The runtime took the staged track by itself; drop it from the queue here so
