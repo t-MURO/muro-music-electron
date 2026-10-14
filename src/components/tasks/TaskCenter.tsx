@@ -376,7 +376,7 @@ export const TaskCenter = () => {
         type="button"
         className={`window-no-drag relative mr-2 inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-md)] border px-2 text-[11px] font-semibold transition-colors ${
           panelOpen
-            ? "border-[var(--color-border)] bg-[var(--color-bg-active)] text-[var(--color-text-primary)]"
+            ? "border-transparent bg-[var(--color-bg-active)] text-[var(--color-text-primary)]"
             : "border-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]"
         }`}
         onClick={togglePanel}

@@ -3,7 +3,8 @@ import { useStickyState } from "./useStickyState";
 import { parseDetailWidth } from "../utils";
 import { useResizable } from "./useResizable";
 
-const COLLAPSED_QUEUE_PANEL_WIDTH = 40;
+// Collapsed hides the panel; it is reopened from the window title bar.
+const COLLAPSED_QUEUE_PANEL_WIDTH = 0;
 
 export const useQueuePanel = () => {
   const [storedQueuePanelWidth, setQueuePanelWidth] = useStickyState(

@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AudioLines,
@@ -7,8 +7,6 @@ import {
   Maximize2,
   Minimize2,
   Music2,
-  PanelRightClose,
-  PanelRightOpen,
   Sparkles,
   X,
 } from "lucide-react";
@@ -23,7 +21,6 @@ import type { CurrentTrack } from "../../hooks";
 type QueuePanelProps = {
   collapsed: boolean;
   expanded: boolean;
-  onToggleCollapsed: () => void;
   onToggleExpanded: () => void;
   queueTracks: Track[];
   playingNextTracks: Track[];
@@ -68,7 +65,6 @@ const TRACK_ROW_HEIGHT = 49;
 export const QueuePanel = ({
   collapsed,
   expanded,
-  onToggleCollapsed,
   onToggleExpanded,
   queueTracks,
   playingNextTracks,
@@ -106,6 +102,9 @@ export const QueuePanel = ({
   const itemRefsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const sectionRefsRef = useRef<Map<PlaybackListKind, HTMLDivElement>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
+  // The now-playing card scrolls with the lists, above them.
+  const nowPlayingRef = useRef<HTMLDivElement>(null);
+  const [listOffset, setListOffset] = useState(0);
   const queueDuration = useMemo(
     () => queueTracks.reduce((total, track) => total + (track.durationSeconds || 0), 0),
     [queueTracks],
@@ -138,6 +137,7 @@ export const QueuePanel = ({
   const listVirtualizer = useVirtualizer({
     count: listItems.length,
     getScrollElement: () => containerRef.current,
+    scrollMargin: listOffset,
     estimateSize: (index) => {
       const item = listItems[index];
       if (item?.kind === "header") return SECTION_HEADER_HEIGHT;
@@ -150,6 +150,16 @@ export const QueuePanel = ({
   useLayoutEffect(() => {
     listVirtualizer.measure();
   }, [listVirtualizer, playingNextTracks.length, queueTracks.length]);
+
+  useEffect(() => {
+    const element = nowPlayingRef.current;
+    if (!element) return;
+    const updateOffset = () => setListOffset(element.offsetHeight);
+    updateOffset();
+    const observer = new ResizeObserver(updateOffset);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [collapsed, panelView]);
 
   const handleMouseDown = useCallback(
     (event: React.MouseEvent, list: PlaybackListKind, index: number) => {
@@ -194,7 +204,7 @@ export const QueuePanel = ({
       }
 
       const pointerOffset = container
-        ? event.clientY - container.getBoundingClientRect().top + container.scrollTop
+        ? event.clientY - container.getBoundingClientRect().top + container.scrollTop - listOffset
         : Number.POSITIVE_INFINITY;
       const playingNextRowsStart =
         SECTION_HEADER_HEIGHT + queueTracks.length * TRACK_ROW_HEIGHT + SECTION_HEADER_HEIGHT;
@@ -253,6 +263,7 @@ export const QueuePanel = ({
     dropIndex,
     endInternalDrag,
     dropList,
+    listOffset,
     onMovePlayingNextToQueue,
     onReorderPlayingNext,
     onReorderQueue,
@@ -266,26 +277,7 @@ export const QueuePanel = ({
       ? (dragList === "queue" ? queueTracks : playingNextTracks)[dragIndex]
       : null;
 
-  if (collapsed) {
-    return (
-      <aside className="flex h-full flex-col items-center border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)] py-5">
-        <button
-          className="toolbar-icon-button"
-          onClick={onToggleCollapsed}
-          title="Expand queue"
-          aria-label="Expand queue"
-          type="button"
-        >
-          <PanelRightOpen className="h-4 w-4" />
-        </button>
-        {(queueTracks.length > 0 || playingNextTracks.length > 0) && (
-          <span className="mt-6 text-[10px] tabular-nums text-[var(--color-accent)]">
-            {queueTracks.length + playingNextTracks.length}
-          </span>
-        )}
-      </aside>
-    );
-  }
+  if (collapsed) return null;
 
   return (
     <aside className="flex h-full flex-col overflow-hidden border-l border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
@@ -329,43 +321,34 @@ export const QueuePanel = ({
             <span className="truncate">Set</span>
           </button>
         </div>
-        {panelView !== "queue" && (
-          <button
-            className="toolbar-icon-button ml-auto"
-            onClick={onToggleExpanded}
-            title={expanded ? "Restore planning panel" : "Expand planning panel"}
-            aria-label={expanded ? "Restore planning panel" : "Expand planning panel"}
-            aria-pressed={expanded}
-            data-mix-expand
-            type="button"
-          >
-            {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-        )}
+        {/* Always laid out so the tabs keep their width when switching views. */}
         <button
-          className={`toolbar-icon-button ${panelView !== "queue" ? "" : "ml-auto"}`}
-          onClick={onToggleCollapsed}
-          title="Collapse queue"
-          aria-label="Collapse queue"
+          className={`toolbar-icon-button ${panelView === "queue" ? "invisible" : ""}`}
+          onClick={onToggleExpanded}
+          title={expanded ? "Restore planning panel" : "Expand planning panel"}
+          aria-label={expanded ? "Restore planning panel" : "Expand planning panel"}
+          aria-pressed={expanded}
+          aria-hidden={panelView === "queue" || undefined}
+          tabIndex={panelView === "queue" ? -1 : undefined}
+          data-mix-expand={panelView === "queue" ? undefined : true}
           type="button"
         >
-          <PanelRightClose className="h-4 w-4" />
+          {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
       </div>
 
       {panelView === "queue" ? (
         <>
-          <div className="min-h-[198px] border-b border-[var(--color-border)] pt-5">
-            <NowPlayingTrack currentTrack={currentTrack} trackDetails={currentTrackDetails} />
-          </div>
-
           <div className="min-h-0 flex-1 overflow-y-auto" ref={containerRef}>
+            <div ref={nowPlayingRef} className="border-b border-[var(--color-border)] py-4">
+              <NowPlayingTrack currentTrack={currentTrack} trackDetails={currentTrackDetails} />
+            </div>
             <div className="relative" style={{ height: `${listVirtualizer.getTotalSize()}px` }}>
               {listVirtualizer.getVirtualItems().map((virtualRow) => {
                 const item = listItems[virtualRow.index];
                 const wrapperStyle = {
                   height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
+                  transform: `translateY(${virtualRow.start - listOffset}px)`,
                 };
 
                 if (item.kind === "header") {
@@ -539,25 +522,29 @@ export const QueuePanel = ({
             </div>
           )}
         </>
-      ) : panelView === "mix" ? (
-        <MixSuggestions
-          tracks={allTracks}
-          currentTrack={currentTrackDetails}
-          queuedTrackIds={queueTracks.map((track) => track.id)}
-          currentPlaylistTrackIds={currentPlaylist?.trackIds}
-          onPlayTrack={onPlayTrack}
-          onPlayNext={onPlayNext}
-          onMixWithCurrent={onMixWithCurrent}
-        />
       ) : (
-        <SetPlanner
-          playlists={playlists}
-          tracks={libraryTracks}
-          currentPlaylistId={currentPlaylist?.id}
-          onReplaceQueue={onReplaceQueue}
-          onAddToQueue={onAddToQueue}
-          onCreatePlaylist={onCreatePlaylist}
-        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {panelView === "mix" ? (
+            <MixSuggestions
+              tracks={allTracks}
+              currentTrack={currentTrackDetails}
+              queuedTrackIds={queueTracks.map((track) => track.id)}
+              currentPlaylistTrackIds={currentPlaylist?.trackIds}
+              onPlayTrack={onPlayTrack}
+              onPlayNext={onPlayNext}
+              onMixWithCurrent={onMixWithCurrent}
+            />
+          ) : (
+            <SetPlanner
+              playlists={playlists}
+              tracks={libraryTracks}
+              currentPlaylistId={currentPlaylist?.id}
+              onReplaceQueue={onReplaceQueue}
+              onAddToQueue={onAddToQueue}
+              onCreatePlaylist={onCreatePlaylist}
+            />
+          )}
+        </div>
       )}
     </aside>
   );

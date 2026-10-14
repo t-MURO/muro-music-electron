@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
+import { useSuspendWindowDrag } from "../../hooks/useSuspendWindowDrag";
 
 type PopoverProps = {
   isOpen: boolean;
@@ -45,6 +46,7 @@ export const Popover = ({
     vertical: "down",
   });
   const panelRef = useRef<HTMLDivElement | null>(null);
+  useSuspendWindowDrag(isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -133,7 +135,7 @@ export const Popover = ({
   return createPortal(
     <div
       ref={panelRef}
-      className={`fixed z-50 overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--panel-border)] bg-[var(--panel-bg)]/95 text-sm shadow-[var(--shadow-lg)] backdrop-blur-xl transition-all duration-150 ease-out ${
+      className={`fixed z-50 overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--panel-border)] bg-[var(--panel-bg)]/95 text-sm shadow-[var(--shadow-lg)] backdrop-blur-xl transition-[opacity,transform] duration-150 ease-out ${
         isVisible ? "scale-100 opacity-100" : "scale-95 opacity-0"
       } ${className}`}
       onClick={(event) => event.stopPropagation()}

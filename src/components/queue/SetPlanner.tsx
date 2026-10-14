@@ -153,7 +153,7 @@ export const SetPlanner = ({
   const plannedIds = plan?.tracks.map((track) => track.id) ?? [];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-set-planner>
+    <div className="flex flex-1 flex-col" data-set-planner>
       <div className="shrink-0 space-y-3 border-b border-[var(--color-border)] px-4 py-4">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">
@@ -325,7 +325,7 @@ export const SetPlanner = ({
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto" data-set-planner-results>
+          <div className="flex-1" data-set-planner-results>
             {plan.tracks.map((track, index) => {
               const transition = index > 0 ? plan.transitions[index - 1] : null;
               return (

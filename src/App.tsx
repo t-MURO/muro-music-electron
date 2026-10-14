@@ -2135,7 +2135,12 @@ function App() {
         onSkip={() => advanceArtistSeparatorReview(false)}
         onClose={() => setArtistSeparatorReview(null)}
       />
-      <WindowChrome />
+      <WindowChrome
+        sidebarCollapsed={sidebarCollapsed}
+        queuePanelCollapsed={queuePanelCollapsed}
+        onToggleSidebar={toggleSidebarCollapsed}
+        onToggleQueuePanel={toggleQueuePanelCollapsed}
+      />
       <div
         className="app-shell-grid grid min-h-0 flex-1 grid-cols-[var(--sidebar-width)_1fr_var(--queue-width)] grid-rows-[1fr_auto_var(--media-controls-height)] overflow-hidden"
         data-app-shell-grid
@@ -2155,7 +2160,6 @@ function App() {
             <Sidebar
               {...sidebarProps}
               collapsed={sidebarCollapsed}
-              onToggleCollapsed={toggleSidebarCollapsed}
             />
           }
           main={
@@ -2563,7 +2567,6 @@ function App() {
             <QueuePanel
               collapsed={queuePanelCollapsed}
               expanded={queuePanelExpanded}
-              onToggleCollapsed={toggleQueuePanelCollapsed}
               onToggleExpanded={toggleQueuePanelExpanded}
               queueTracks={queueTracks}
               playingNextTracks={playingNextTracks}

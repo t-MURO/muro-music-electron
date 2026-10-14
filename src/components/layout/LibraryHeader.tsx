@@ -5,6 +5,7 @@ import { AdvancedFilterPopover } from "../library/AdvancedFilterPopover";
 import { countAdvancedTrackFilters, type AdvancedTrackFilters } from "../../utils/trackFilters";
 import { matchesShortcut, shortcutDisplayParts } from "../../keyboard/shortcuts";
 import { useSettingsStore } from "../../stores";
+import { useSuspendWindowDrag } from "../../hooks/useSuspendWindowDrag";
 
 type LibraryHeaderProps = {
   title: string;
@@ -47,6 +48,7 @@ export const LibraryHeader = ({
     () => window.localStorage.getItem("muro-table-density") === "compact",
   );
   const [filterOpen, setFilterOpen] = useState(false);
+  useSuspendWindowDrag(filterOpen);
   const activeFilterCount = countAdvancedTrackFilters(advancedFilters);
   const focusSearch = useCallback(() => {
     inputRef.current?.focus();

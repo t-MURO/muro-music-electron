@@ -8,6 +8,7 @@ import {
   selectRemoteScanning,
 } from "../../stores/remoteOutputStore";
 import { useAudioOutputDevices } from "../../hooks/useAudioOutputDevices";
+import { useSuspendWindowDrag } from "../../hooks/useSuspendWindowDrag";
 import {
   remoteDeviceKey,
   remoteStartDiscovery,
@@ -246,6 +247,7 @@ export const OutputPickerPopover = ({ className = "" }: { className?: string }) 
 // Shared open/close behavior for popover triggers.
 export const useOutputPickerToggle = (containerRef: React.RefObject<HTMLElement | null>) => {
   const [open, setOpen] = useState(false);
+  useSuspendWindowDrag(open);
 
   useEffect(() => {
     if (!open) return;

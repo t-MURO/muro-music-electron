@@ -1,4 +1,16 @@
-import { ChevronLeft, ChevronRight, Minus, Redo2, Square, Undo2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Minus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Redo2,
+  Square,
+  Undo2,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import appLogo from "../../assets/app-logo.png";
 import type { WindowControlAction } from "../../desktop/bridge";
@@ -10,7 +22,19 @@ type WindowMaximizedPayload = {
   maximized?: unknown;
 };
 
-export const WindowChrome = () => {
+type WindowChromeProps = {
+  sidebarCollapsed: boolean;
+  queuePanelCollapsed: boolean;
+  onToggleSidebar: () => void;
+  onToggleQueuePanel: () => void;
+};
+
+export const WindowChrome = ({
+  sidebarCollapsed,
+  queuePanelCollapsed,
+  onToggleSidebar,
+  onToggleQueuePanel,
+}: WindowChromeProps) => {
   const isMac = window.muro?.platform === "darwin";
   const [isMaximized, setIsMaximized] = useState(false);
   const { canGoBack, canGoForward, goBack, goForward } = useHistoryNavigation();
@@ -138,8 +162,25 @@ export const WindowChrome = () => {
         </div>
       )}
 
-      <nav
+      <div
         className={`window-history-controls window-no-drag ${isMac ? "ml-5" : "ml-1"}`}
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <button
+          className="window-history-button"
+          onClick={onToggleSidebar}
+          aria-label={sidebarCollapsed ? t("nav.aria.expand") : t("nav.aria.collapse")}
+          aria-pressed={!sidebarCollapsed}
+          title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+          data-toggle-sidebar
+          type="button"
+        >
+          {sidebarCollapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+        </button>
+      </div>
+
+      <nav
+        className="window-history-controls window-no-drag ml-1"
         aria-label="Navigation history"
         onDoubleClick={(event) => event.stopPropagation()}
       >
@@ -215,6 +256,23 @@ export const WindowChrome = () => {
       <div className="min-w-4 flex-1" />
 
       <TaskCenter />
+
+      <div
+        className={`window-history-controls window-no-drag ml-1 ${isMac ? "mr-3" : "mr-1"}`}
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <button
+          className="window-history-button"
+          onClick={onToggleQueuePanel}
+          aria-label={queuePanelCollapsed ? "Expand queue" : "Collapse queue"}
+          aria-pressed={!queuePanelCollapsed}
+          title={queuePanelCollapsed ? "Expand queue" : "Collapse queue"}
+          data-toggle-queue-panel
+          type="button"
+        >
+          {queuePanelCollapsed ? <PanelRightOpen /> : <PanelRightClose />}
+        </button>
+      </div>
 
       {!isMac && (
         <div className="window-no-drag flex h-full items-stretch" data-window-controls="desktop">

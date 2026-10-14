@@ -2103,35 +2103,32 @@ app.whenReady().then(async () => {
         playlistSection &&
         collectionSection.contains(playlistSection)
       );
-      const collapseQueueButton = document.querySelector('[aria-label="Collapse queue"]');
-      const expandedQueueWidthBeforeCollapse =
-        collapseQueueButton?.closest('aside')?.getBoundingClientRect().width ?? 0;
-      collapseQueueButton?.click();
-      await waitForCondition(() => {
-        const button = document.querySelector('[aria-label="Expand queue"]');
-        const panel = button?.closest('aside');
-        return Boolean(
-          button &&
-          panel &&
-          panel.querySelectorAll('button').length === 1 &&
-          panel.querySelectorAll('svg').length === 1 &&
-          Math.abs(panel.getBoundingClientRect().width - 40) < 0.1
-        );
-      }, 80);
-      const expandQueueButton = document.querySelector('[aria-label="Expand queue"]');
-      const collapsedQueuePanel = expandQueueButton?.closest('aside');
-      const collapsedQueueControlsReady = Boolean(
-        expandQueueButton &&
-        collapsedQueuePanel?.querySelectorAll('button').length === 1 &&
-        collapsedQueuePanel?.querySelectorAll('svg').length === 1
+      // The queue panel is toggled from the window title bar and hides entirely.
+      const queuePanelElement = () =>
+        document.querySelector('[data-panel-view="queue"]')?.closest('aside') ?? null;
+      const collapseQueueButton = document.querySelector(
+        '[data-window-chrome] [aria-label="Collapse queue"]'
       );
-      const collapsedQueueWidth = collapsedQueuePanel?.getBoundingClientRect().width ?? 0;
+      const expandedQueueWidthBeforeCollapse =
+        queuePanelElement()?.getBoundingClientRect().width ?? 0;
+      collapseQueueButton?.click();
+      await waitForCondition(
+        () =>
+          Boolean(document.querySelector('[data-window-chrome] [aria-label="Expand queue"]')) &&
+          !queuePanelElement(),
+        80
+      );
+      const expandQueueButton = document.querySelector(
+        '[data-window-chrome] [aria-label="Expand queue"]'
+      );
+      const collapsedQueueControlsReady = Boolean(expandQueueButton && !queuePanelElement());
+      const collapsedQueueWidth =
+        document.querySelector('[data-app-shell-grid]')?.style.getPropertyValue('--queue-width') ?? "";
       expandQueueButton?.click();
       await waitForCondition(() => {
-        const button = document.querySelector('[aria-label="Collapse queue"]');
-        const panelWidth = button?.closest('aside')?.getBoundingClientRect().width ?? 0;
+        const panelWidth = queuePanelElement()?.getBoundingClientRect().width ?? 0;
         return Boolean(
-          button &&
+          document.querySelector('[data-window-chrome] [aria-label="Collapse queue"]') &&
           expandedQueueWidthBeforeCollapse > 0 &&
           Math.abs(panelWidth - expandedQueueWidthBeforeCollapse) < 0.1
         );
@@ -4989,11 +4986,11 @@ app.whenReady().then(async () => {
         return;
       }
       if (!result.collapsedQueueControlsReady) {
-        fail("Collapsed queue sidebar still shows an extra control under Expand");
+        fail("Collapsing the queue did not hide the panel behind a title bar Expand button");
         return;
       }
-      if (result.collapsedQueueWidth > 40 || result.collapsedQueueWidth < 32) {
-        fail(`Collapsed queue sidebar is not compact: ${result.collapsedQueueWidth}px`);
+      if (result.collapsedQueueWidth !== "0px") {
+        fail(`Collapsed queue sidebar still takes space: ${result.collapsedQueueWidth}`);
         return;
       }
       if (!result.deleteModalReady) {

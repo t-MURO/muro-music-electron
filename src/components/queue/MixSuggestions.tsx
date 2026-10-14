@@ -173,7 +173,7 @@ export const MixSuggestions = ({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-mix-suggestions>
+    <div className="flex flex-1 flex-col" data-mix-suggestions>
       <div className="shrink-0 border-b border-[var(--color-border)] px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -295,7 +295,7 @@ export const MixSuggestions = ({
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex-1">
         {suggestions.length === 0 ? (
           <div className="flex h-full min-h-32 flex-col items-center justify-center px-7 text-center text-[var(--color-text-muted)]">
             <Music2 className="mb-3 h-5 w-5" />

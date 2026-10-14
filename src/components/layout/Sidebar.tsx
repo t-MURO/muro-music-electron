@@ -14,8 +14,6 @@ import {
   Inbox,
   ListMusic,
   Music2,
-  PanelLeftClose,
-  PanelLeftOpen,
   Pencil,
   Plus,
   RefreshCw,
@@ -41,7 +39,6 @@ type SidebarProps = {
   collapsed: boolean;
   currentView: LibraryView;
   draggingPlaylistId: string | null;
-  onToggleCollapsed: () => void;
   onViewChange: (view: LibraryView) => void;
   onPlaylistDrop: (event: React.DragEvent<HTMLButtonElement>, id: string) => void;
   onPlaylistDragEnter: (id: string) => void;
@@ -78,7 +75,6 @@ export const Sidebar = ({
   collapsed,
   currentView,
   draggingPlaylistId,
-  onToggleCollapsed,
   onViewChange,
   onPlaylistDrop,
   onPlaylistDragEnter,
@@ -385,24 +381,6 @@ export const Sidebar = ({
 
   return (
     <aside className="sidebar-shell flex h-full flex-col overflow-hidden border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
-      <div
-        className={`sidebar-titlebar flex h-[68px] shrink-0 items-center border-b border-[var(--color-border)] ${collapsed ? "justify-center px-2" : "justify-end px-3"}`}
-      >
-        <button
-          className="toolbar-icon-button sidebar-collapse-button shrink-0"
-          onClick={onToggleCollapsed}
-          title={collapsed ? "Expand navigation" : "Collapse navigation"}
-          aria-label={collapsed ? t("nav.aria.expand") : t("nav.aria.collapse")}
-          type="button"
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
-          ) : (
-            <PanelLeftClose className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-
       <nav
         className={`shrink-0 ${collapsed ? "px-2 py-3" : "px-3 py-4"}`}
         aria-label={t("nav.aria.library")}
