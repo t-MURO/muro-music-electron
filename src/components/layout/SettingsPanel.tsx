@@ -29,6 +29,7 @@ import { MissingTracksModal } from "../ui/MissingTracksModal";
 import { MisplacedTracksModal } from "../ui/MisplacedTracksModal";
 import { LibraryDataTools } from "./LibraryDataTools";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutSettings";
+import { ScrobblingSettings } from "./ScrobblingSettings";
 import type { ReplayGainMode } from "../../utils/replayGain";
 import {
   useSettingsStore,
@@ -98,7 +99,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: "metadata",
     label: "Metadata & Artwork",
     description: "Identification and online providers",
-    keywords: "metadata artwork cover acoustid musicbrainz lastfm theaudiodb fanart brave deezer",
+    keywords:
+      "metadata artwork cover acoustid musicbrainz lastfm theaudiodb fanart brave deezer scrobble scrobbling listenbrainz",
     icon: Tags,
   },
   {
@@ -1408,6 +1410,13 @@ export const SettingsPanel = ({
                       linkUrl="https://api.search.brave.com/"
                     />
                   </div>
+                </SettingsGroup>
+
+                <SettingsGroup
+                  title={t("scrobble.section")}
+                  description={t("scrobble.description")}
+                >
+                  <ScrobblingSettings />
                 </SettingsGroup>
               </div>
             </div>

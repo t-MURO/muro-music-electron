@@ -50,6 +50,8 @@ import { createAlbumCoverService } from "./albumCovers.mjs";
 import { createCastService } from "./cast/castService.mjs";
 import { createDlnaService } from "./dlna/dlnaService.mjs";
 import { createAcoustIdService } from "./acoustid.mjs";
+import { createCredentialStore } from "./scrobbling/credentials.mjs";
+import { createScrobbleService } from "./scrobbling/scrobbleService.mjs";
 import {
   exportAllPlaylists,
   exportItunesLibrary,
@@ -659,6 +661,11 @@ export const createBackend = ({
   castService: castServiceOverride,
   dlnaService: dlnaServiceOverride,
   acoustIdService: acoustIdServiceOverride,
+  scrobbleService: scrobbleServiceOverride,
+  scrobbleCredentialsPath = null,
+  safeStorage = null,
+  openExternal = null,
+  appVersion,
   fpcalcBinaryDirectories = [],
   dbPath: configuredDbPath,
   getDbPath = () => configuredDbPath,
@@ -868,9 +875,23 @@ export const createBackend = ({
     }
     return operation();
   };
+  const scrobbler =
+    scrobbleServiceOverride ??
+    createScrobbleService({
+      getDb: () => openDatabase(currentDbPath()),
+      credentials: createCredentialStore({ filePath: scrobbleCredentialsPath, safeStorage }),
+      openExternal,
+      clientVersion: appVersion,
+      onStatusChange: (status) => {
+        if (lastSender && !lastSender.isDestroyed?.()) {
+          emit(lastSender, "muro://scrobble-status", status);
+        }
+      },
+    });
   const commands = {
     ...castService.commands,
     ...dlnaService.commands,
+    ...scrobbler.commands,
     ...(castService.commands.cast_load_track
       ? {
           cast_load_track: (args) =>
@@ -2282,6 +2303,7 @@ export const createBackend = ({
       playlistSync.close();
       castService.close();
       dlnaService.close();
+      scrobbler.close();
       keyFinder.close();
       closeDatabases();
     },

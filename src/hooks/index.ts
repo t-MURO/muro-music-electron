@@ -27,6 +27,7 @@ export { useArtistProfiles, normalizeArtistProfileKey } from "./useArtistProfile
 export { useInboxOperations } from "./useInboxOperations";
 export { useFileImport, type ImportProgress, type PlaylistDropOperation } from "./useFileImport";
 export { usePlayTracking } from "./usePlayTracking";
+export { useScrobblingSync, SCROBBLE_SERVICE_LABELS } from "./useScrobbling";
 export {
   useViewConfig,
   type LibraryView,

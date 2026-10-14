@@ -70,6 +70,7 @@ import {
   useLibraryInit,
   useOrganizedLibraryExport,
   usePlayTracking,
+  useScrobblingSync,
   useKeyboardShortcuts,
   useCommandHistory,
   useGaplessPlayback,
@@ -822,8 +823,10 @@ function App() {
   // Timed sleep: fade out, pause, restore the volume
   useSleepTimer({ pause });
 
-  // Play tracking (30-second threshold)
+  // Play tracking (30-second threshold) and scrobbling
   usePlayTracking({ currentPosition, allTracks });
+  const openSettingsView = useCallback(() => navigateToView("settings"), [navigateToView]);
+  useScrobblingSync({ onOpenSettings: openSettingsView });
 
   // Skip handlers
   const handleSkipPrevious = useCallback(() => {

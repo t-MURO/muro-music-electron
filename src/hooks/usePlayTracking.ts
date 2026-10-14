@@ -4,12 +4,14 @@ import { useLibraryStore, usePlaybackStore, useRecentlyPlayedStore } from "../st
 import type { Track } from "../types";
 import {
   RECORD_PLAY_RETRY_DELAYS_MS,
+  hasReachedScrobbleThreshold,
   isPlayRestart,
   retryWithBackoff,
   revertRecentlyPlayed,
   revertRecordedPlay,
   type RecordedPlay,
 } from "../utils/playTracking";
+import { sendNowPlaying, submitScrobble } from "../utils/scrobblingApi";
 
 const PLAY_THRESHOLD_SECONDS = 30;
 const SYNC_INTERVAL_SECONDS = 10;
@@ -28,6 +30,10 @@ type ActiveSession = {
   // Set once this play has been counted. It stays set while recording is
   // retried and after it fails, so position updates never count it again.
   counted: boolean;
+  // When playback of this play actually began (ms); the scrobble timestamp.
+  startedAt: number | null;
+  // Set once handed to the scrobbler, so each play is scrobbled at most once.
+  scrobbled: boolean;
 };
 
 const createSession = (trackId: string | null, position: number): ActiveSession => ({
@@ -37,6 +43,8 @@ const createSession = (trackId: string | null, position: number): ActiveSession 
   lastSynced: 0,
   historyId: null,
   counted: false,
+  startedAt: null,
+  scrobbled: false,
 });
 
 export const usePlayTracking = ({ currentPosition, allTracks }: UsePlayTrackingArgs) => {
@@ -86,7 +94,29 @@ export const usePlayTracking = ({ currentPosition, allTracks }: UsePlayTrackingA
     const delta = currentPosition - session.lastPosition;
     session.lastPosition = currentPosition;
     if (!isPlaying) return;
+    if (session.startedAt === null) {
+      // The first moment this play is audible: announce it as now playing.
+      session.startedAt = Date.now();
+      sendNowPlaying(currentTrack.id, currentTrack.durationSeconds).catch((error) =>
+        console.error("Failed to send now playing:", error),
+      );
+    }
+    // Only steady progress counts as listening, so seeking ahead never brings
+    // a play closer to being counted or scrobbled.
     if (delta > 0 && delta < 2) session.accumulated += delta;
+
+    if (
+      !session.scrobbled &&
+      hasReachedScrobbleThreshold(session.accumulated, currentTrack.durationSeconds)
+    ) {
+      session.scrobbled = true;
+      submitScrobble({
+        trackId: currentTrack.id,
+        startedAt: session.startedAt,
+        listenedSeconds: session.accumulated,
+        durationSeconds: currentTrack.durationSeconds,
+      }).catch((error) => console.error("Failed to queue scrobble:", error));
+    }
 
     if (session.accumulated >= PLAY_THRESHOLD_SECONDS && !session.counted) {
       session.counted = true;

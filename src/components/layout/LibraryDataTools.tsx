@@ -27,6 +27,7 @@ import { AutomaticBackupSettings } from "./AutomaticBackupSettings";
 
 const SENSITIVE_SETTING_KEYS = [
   "lastFmApiKey",
+  "lastFmSharedSecret",
   "theAudioDbApiKey",
   "fanartApiKey",
   "braveSearchApiKey",

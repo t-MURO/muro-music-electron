@@ -9,6 +9,27 @@ export const PLAY_RESTART_WINDOW_SECONDS = 2;
 // given up on rather than retried on every position update.
 export const RECORD_PLAY_RETRY_DELAYS_MS = [2_000, 10_000, 30_000] as const;
 
+// Last.fm and ListenBrainz scrobble a track longer than 30 seconds once it
+// has played for half its length or four minutes, whichever comes first.
+// electron/scrobbling/scrobbleService.mjs checks the same rule again.
+export const SCROBBLE_MIN_TRACK_SECONDS = 30;
+export const SCROBBLE_MAX_LISTEN_SECONDS = 240;
+
+/** Seconds of listening before a play is scrobbled, or null for tracks that never are. */
+export const scrobbleThresholdSeconds = (durationSeconds: number | undefined): number | null => {
+  const duration = Number(durationSeconds);
+  if (!Number.isFinite(duration) || duration <= SCROBBLE_MIN_TRACK_SECONDS) return null;
+  return Math.min(duration / 2, SCROBBLE_MAX_LISTEN_SECONDS);
+};
+
+export const hasReachedScrobbleThreshold = (
+  listenedSeconds: number,
+  durationSeconds: number | undefined,
+): boolean => {
+  const threshold = scrobbleThresholdSeconds(durationSeconds);
+  return threshold !== null && listenedSeconds >= threshold;
+};
+
 export const isPlayRestart = (previousPosition: number, position: number): boolean =>
   position < PLAY_RESTART_WINDOW_SECONDS &&
   previousPosition - position >= PLAY_RESTART_WINDOW_SECONDS;

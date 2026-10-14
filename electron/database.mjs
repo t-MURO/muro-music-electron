@@ -394,6 +394,36 @@ const HISTORY_SCHEMA = `
     ON playlist_snapshots(created_at DESC);
 `;
 
+// Plays waiting to be sent to Last.fm or ListenBrainz, one row per service.
+// started_at is the Unix time (seconds) the play began, which both services
+// use as the listen timestamp. Rows are deleted once accepted; permanently
+// rejected ones stay as 'dropped' with the reason in last_error.
+const SCROBBLE_QUEUE_SCHEMA = `
+  CREATE TABLE IF NOT EXISTS scrobble_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service TEXT NOT NULL,
+    track_id TEXT REFERENCES tracks(id) ON DELETE SET NULL,
+    started_at INTEGER NOT NULL,
+    artist TEXT NOT NULL,
+    title TEXT NOT NULL,
+    album TEXT,
+    album_artist TEXT,
+    track_number INTEGER,
+    duration_seconds REAL,
+    recording_mbid TEXT,
+    release_mbid TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    created_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    UNIQUE(service, started_at, artist, title)
+  );
+  CREATE INDEX IF NOT EXISTS scrobble_queue_service_idx
+    ON scrobble_queue(service, status, started_at);
+`;
+
 /**
  * Full-text index over the already-normalized `tracks.search_text`.
  *
@@ -504,6 +534,7 @@ export const openDatabase = (dbPath) => {
   db.exec(ALBUM_COVER_CACHE_SCHEMA);
   db.exec(ACOUSTID_CACHE_SCHEMA);
   db.exec(HISTORY_SCHEMA);
+  db.exec(SCROBBLE_QUEUE_SCHEMA);
   db.exec(ARTIST_CREDIT_SCHEMA);
   const playlistColumns = new Set(
     db

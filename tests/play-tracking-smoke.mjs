@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import {
   RECORD_PLAY_RETRY_DELAYS_MS,
+  hasReachedScrobbleThreshold,
   isPlayRestart,
   retryWithBackoff,
   revertRecentlyPlayed,
   revertRecordedPlay,
+  scrobbleThresholdSeconds,
 } from "../src/utils/playTracking.ts";
+import { scrobbleThresholdSeconds as mainProcessScrobbleThreshold } from "../electron/scrobbling/scrobbleService.mjs";
 
 // Restarting, replaying or repeat-one jumps back to the start of the track.
 assert.equal(isPlayRestart(240, 0), true);
@@ -115,6 +118,24 @@ const play = {
   );
   assert.equal(afterReplay[0].playCount, 4);
   assert.equal(afterReplay[0].lastPlayedAt, "2026-10-01T10:00:00.000Z");
+}
+
+// Scrobbling: longer than 30 s, then half the track or four minutes.
+{
+  assert.equal(scrobbleThresholdSeconds(30), null);
+  assert.equal(scrobbleThresholdSeconds(0), null);
+  assert.equal(scrobbleThresholdSeconds(undefined), null);
+  assert.equal(scrobbleThresholdSeconds(45), 22.5);
+  assert.equal(scrobbleThresholdSeconds(200), 100);
+  assert.equal(scrobbleThresholdSeconds(1200), 240);
+  assert.equal(hasReachedScrobbleThreshold(99.9, 200), false);
+  assert.equal(hasReachedScrobbleThreshold(100, 200), true);
+  assert.equal(hasReachedScrobbleThreshold(240, 3600), true);
+  assert.equal(hasReachedScrobbleThreshold(600, 30), false);
+  // The renderer and the main process apply the same rule.
+  for (const duration of [0, 29, 30, 30.5, 31, 61, 200, 479, 480, 481, 7200]) {
+    assert.equal(scrobbleThresholdSeconds(duration), mainProcessScrobbleThreshold(duration));
+  }
 }
 
 console.log("Play tracking smoke test passed");

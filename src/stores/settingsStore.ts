@@ -94,6 +94,8 @@ type SettingsState = {
   mixBars: MixBars;
   mixPreservePitch: boolean;
   lastFmApiKey: string;
+  /** Last.fm API shared secret; signs scrobbling requests made with lastFmApiKey. */
+  lastFmSharedSecret: string;
   theAudioDbApiKey: string;
   fanartApiKey: string;
   braveSearchApiKey: string;
@@ -136,6 +138,7 @@ type SettingsActions = {
   setMixBars: (mixBars: MixBars) => void;
   setMixPreservePitch: (mixPreservePitch: boolean) => void;
   setLastFmApiKey: (lastFmApiKey: string) => void;
+  setLastFmSharedSecret: (lastFmSharedSecret: string) => void;
   setTheAudioDbApiKey: (theAudioDbApiKey: string) => void;
   setFanartApiKey: (fanartApiKey: string) => void;
   setBraveSearchApiKey: (braveSearchApiKey: string) => void;
@@ -179,6 +182,7 @@ export const useSettingsStore = create<SettingsStore>()(
       mixBars: 8,
       mixPreservePitch: true,
       lastFmApiKey: "",
+      lastFmSharedSecret: "",
       theAudioDbApiKey: "",
       fanartApiKey: "",
       braveSearchApiKey: "",
@@ -232,6 +236,7 @@ export const useSettingsStore = create<SettingsStore>()(
       setMixBars: (mixBars) => set({ mixBars }),
       setMixPreservePitch: (mixPreservePitch) => set({ mixPreservePitch }),
       setLastFmApiKey: (lastFmApiKey) => set({ lastFmApiKey }),
+      setLastFmSharedSecret: (lastFmSharedSecret) => set({ lastFmSharedSecret }),
       setTheAudioDbApiKey: (theAudioDbApiKey) => set({ theAudioDbApiKey }),
       setFanartApiKey: (fanartApiKey) => set({ fanartApiKey }),
       setBraveSearchApiKey: (braveSearchApiKey) => set({ braveSearchApiKey }),
@@ -303,6 +308,7 @@ export const useSettingsStore = create<SettingsStore>()(
         mixBars: state.mixBars,
         mixPreservePitch: state.mixPreservePitch,
         lastFmApiKey: state.lastFmApiKey,
+        lastFmSharedSecret: state.lastFmSharedSecret,
         theAudioDbApiKey: state.theAudioDbApiKey,
         fanartApiKey: state.fanartApiKey,
         braveSearchApiKey: state.braveSearchApiKey,

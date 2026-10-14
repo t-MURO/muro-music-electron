@@ -14,6 +14,7 @@ const MAX_SETTINGS_BYTES = 10 * 1024 * 1024;
 const MAX_SMART_CRATES_BYTES = 10 * 1024 * 1024;
 const SENSITIVE_SETTING_KEYS = new Set([
   "lastFmApiKey",
+  "lastFmSharedSecret",
   "theAudioDbApiKey",
   "fanartApiKey",
   "braveSearchApiKey",
@@ -129,6 +130,9 @@ export const createLibraryBackup = async ({
     const portableSnapshot = new Database(snapshotPath);
     try {
       portableSnapshot.prepare("DELETE FROM app_metadata WHERE key = 'library_root'").run();
+      // Pending scrobbles belong to this installation; restoring them would
+      // send plays a second time once they have already gone out from here.
+      portableSnapshot.prepare("DELETE FROM scrobble_queue").run();
     } finally {
       portableSnapshot.close();
     }

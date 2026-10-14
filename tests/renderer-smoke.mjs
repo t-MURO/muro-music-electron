@@ -903,6 +903,27 @@ app.whenReady().then(async () => {
       };
     }
     if (command === "list_tracks_needing_loudness") return [];
+    if (command.startsWith("scrobble_")) {
+      if (command === "scrobble_now_playing") return { sent: [] };
+      if (command === "scrobble_submit") return { queued: 0 };
+      const account = {
+        enabled: false,
+        connected: false,
+        userName: null,
+        needsReconnect: false,
+        reconnectReason: null,
+        lastError: null,
+        pending: 0,
+        dropped: 0,
+        retryAt: null,
+        lastDropped: null,
+      };
+      return {
+        credentialStorage: "encrypted",
+        lastfm: { ...account, configured: false, awaitingAuthorization: false },
+        listenbrainz: account,
+      };
+    }
     if (command === "update_track_loudness") return { updated: true };
     if (command === "recompute_album_gain") return { albums: 0, updated: 0 };
     if (command === "get_backup_status" || command === "run_scheduled_backup") {

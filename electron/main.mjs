@@ -7,6 +7,7 @@ import {
   ipcMain,
   nativeImage,
   protocol,
+  safeStorage,
   shell,
 } from "electron";
 import fs from "node:fs";
@@ -206,6 +207,11 @@ const startApplication = async () => {
       : [path.join(appRoot, "build", "fpcalc")],
     getDbPath: () => databaseLocation.getDbPath(),
     userDataDir: app.getPath("userData"),
+    // Scrobbling session keys and tokens live here, encrypted with safeStorage.
+    scrobbleCredentialsPath: path.join(app.getPath("userData"), "scrobbling.json"),
+    safeStorage,
+    openExternal: (url) => shell.openExternal(url),
+    appVersion: app.getVersion(),
   });
   const pathAccess = backend.pathAccess;
 
@@ -386,6 +392,7 @@ const startApplication = async () => {
       url.hostname === "api.search.brave.com" ||
       url.hostname === "api-dashboard.search.brave.com" ||
       url.hostname === "acoustid.org" ||
+      url.hostname === "listenbrainz.org" ||
       url.hostname.endsWith(".acoustid.org") ||
       url.hostname.endsWith(".fanart.tv");
     if (url.protocol !== "https:" || !allowedHost) throw new Error("External URL is not allowed");
