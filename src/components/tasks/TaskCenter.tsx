@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Ban,
   ChevronDown,
@@ -346,6 +346,13 @@ export const TaskCenter = () => {
     [],
   );
 
+  // Stable, so React calls it only on mount and unmount: an inline ref runs
+  // again on every render and would pull focus back into a closing panel.
+  const attachPanel = useCallback((node: HTMLDivElement | null) => {
+    if (node && !panelRef.current) node.focus({ preventScroll: true });
+    panelRef.current = node;
+  }, []);
+
   // Focus moves into the panel as it mounts (see its ref) and back to the
   // button when it closes, unless the user has already moved on elsewhere.
   const wasOpenRef = useRef(false);
@@ -413,10 +420,7 @@ export const TaskCenter = () => {
         className="w-[380px]"
       >
         <div
-          ref={(node) => {
-            if (node && !panelRef.current) node.focus({ preventScroll: true });
-            panelRef.current = node;
-          }}
+          ref={attachPanel}
           id={panelId}
           role="dialog"
           aria-labelledby={titleId}
