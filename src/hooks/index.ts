@@ -17,6 +17,7 @@ export { useTrackEdit } from "./useTrackEdit";
 export { useTrackDeletion } from "./useTrackDeletion";
 export { useSidebarData } from "./useSidebarData";
 export { useDatabaseLocation } from "./useDatabaseLocation";
+export { useAutomaticBackups } from "./useAutomaticBackups";
 export { useAudioPlayback, type AudioPlaybackState, type CurrentTrack } from "./useAudioPlayback";
 export { useMixTransition } from "./useMixTransition";
 export { usePlaylistOperations } from "./usePlaylistOperations";

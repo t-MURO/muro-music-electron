@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { commandManager } from "../command-manager/commandManager";
 import { useLibraryStore, useSettingsStore, useUIStore, notify } from "../stores";
 import { acceptTracks, rejectTracks, unacceptTracks } from "../utils";
+import { isSafetyBackupError } from "../utils/backups";
 import { t } from "../i18n";
 
 export const useInboxOperations = () => {
@@ -90,8 +91,8 @@ export const useInboxOperations = () => {
 
     try {
       await commandManager.execute(command);
-    } catch {
-      notify.error(t("toast.inbox.acceptFailed"));
+    } catch (error) {
+      notify.error(isSafetyBackupError(error) ? error.message : t("toast.inbox.acceptFailed"));
     }
   }, [
     clearSelection,

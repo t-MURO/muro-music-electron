@@ -22,6 +22,7 @@ import {
   technicalTrackFields,
 } from "./database.mjs";
 import { createLibraryBackup, restoreLibraryBackup } from "./dataArchive.mjs";
+import { createAutomaticBackups, SAFETY_BACKUP_FAILED } from "./automaticBackups.mjs";
 import {
   createPlaylistSnapshot,
   deletePlaylistSnapshot,
@@ -662,6 +663,7 @@ export const createBackend = ({
   dbPath: configuredDbPath,
   getDbPath = () => configuredDbPath,
   pathAccess: pathAccessOverride,
+  userDataDir,
 }) => {
   const artistCacheDir = artistProfileCacheDir ?? path.join(path.dirname(cacheDir), "artists");
   const restoredArtworkDir = path.join(path.dirname(cacheDir), "restored-artwork");
@@ -842,6 +844,30 @@ export const createBackend = ({
     emit,
     getSender: () => lastSender,
   });
+  const backups = createAutomaticBackups({
+    userDataDir: userDataDir ?? path.dirname(cacheDir),
+    getDbPath: currentDbPath,
+  });
+  /**
+   * Risky maintenance first writes a backup it can be undone from. Settings
+   * and Smart Crates live in renderer storage, so the renderer sends them
+   * along; the archive code strips secrets exactly as for manual backups. If
+   * the backup fails the operation is refused instead of running unprotected.
+   */
+  const withSafetySnapshot = async (action, backupState, operation) => {
+    try {
+      await backups.createPreMaintenanceSnapshot(action, {
+        settingsJson: backupState?.settingsJson,
+        smartCratesJson: backupState?.smartCratesJson,
+      });
+    } catch (error) {
+      // The prefix survives IPC (error codes do not), so the renderer can
+      // explain that nothing was changed in the user's language.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`${SAFETY_BACKUP_FAILED}: ${reason}`);
+    }
+    return operation();
+  };
   const commands = {
     ...castService.commands,
     ...dlnaService.commands,
@@ -935,15 +961,24 @@ export const createBackend = ({
         settingsJson,
         smartCratesJson,
       }),
-    restore_library_backup: async ({ dbPath, archivePath }) => {
-      const result = await restoreLibraryBackup({
-        dbPath,
-        archivePath: pathAccess.assertReadable(archivePath, "backup archive"),
-        artworkRoot: path.dirname(cacheDir),
-      });
+    restore_library_backup: async ({ dbPath, archivePath, backupState }) => {
+      const readableArchivePath = pathAccess.assertReadable(archivePath, "backup archive");
+      const result = await withSafetySnapshot("restore", backupState, () =>
+        restoreLibraryBackup({
+          dbPath,
+          archivePath: readableArchivePath,
+          artworkRoot: path.dirname(cacheDir),
+        }),
+      );
       referencedPathCache.clear();
       return result;
     },
+    get_backup_status: () => backups.status(),
+    set_backup_schedule: ({ frequency, retention }) =>
+      backups.setSchedule({ frequency, retention }),
+    /** The renderer asks hourly; whether a backup is due is decided here. */
+    run_scheduled_backup: ({ settingsJson, smartCratesJson, force }) =>
+      backups.runScheduled({ settingsJson, smartCratesJson, force: force === true }),
     load_cached_artist_profiles: ({ dbPath }) =>
       artistProfiles.loadCachedProfiles(openDatabase(dbPath)),
     get_artist_profile: ({
@@ -1035,21 +1070,24 @@ export const createBackend = ({
       await fs.promises.rm(artistCacheDir, { recursive: true, force: true });
     },
 
-    accept_tracks: ({ dbPath, trackIds, organize, libraryFolder }) =>
-      acceptInboxTracks({
-        dbPath,
-        trackIds,
-        organize,
-        libraryFolder: authorizedLibraryRoot(dbPath, libraryFolder),
-      }),
+    accept_tracks: ({ dbPath, trackIds, organize, libraryFolder, backupState }) => {
+      const authorizedFolder = authorizedLibraryRoot(dbPath, libraryFolder);
+      const accept = () =>
+        acceptInboxTracks({ dbPath, trackIds, organize, libraryFolder: authorizedFolder });
+      // Organizing renames files into the album structure. A plain accept
+      // only adopts Inbox files and is not treated as maintenance.
+      if (!organize || !Array.isArray(trackIds) || trackIds.length === 0) return accept();
+      return withSafetySnapshot("organize", backupState, accept);
+    },
     validate_library_structure: ({ dbPath, libraryRoot }) =>
       validateLibraryStructure({ dbPath, libraryRoot: authorizedLibraryRoot(dbPath, libraryRoot) }),
-    repair_library_structure: ({ dbPath, libraryRoot, trackIds }) =>
-      repairLibraryStructure({
-        dbPath,
-        libraryRoot: authorizedLibraryRoot(dbPath, libraryRoot),
-        trackIds,
-      }),
+    repair_library_structure: ({ dbPath, libraryRoot, trackIds, backupState }) => {
+      const authorizedRoot = authorizedLibraryRoot(dbPath, libraryRoot);
+      const repair = () =>
+        repairLibraryStructure({ dbPath, libraryRoot: authorizedRoot, trackIds });
+      if (!Array.isArray(trackIds) || trackIds.length === 0) return repair();
+      return withSafetySnapshot("organize", backupState, repair);
+    },
     unaccept_tracks: ({ dbPath, trackIds }) =>
       bulkTrackOperation(
         dbPath,
@@ -1060,13 +1098,16 @@ export const createBackend = ({
       referencedPathCache.clear();
       return bulkTrackOperation(dbPath, trackIds, "DELETE FROM tracks WHERE id IN");
     },
-    delete_tracks: async ({ dbPath, trackIds, deleteFromDisk }) => {
+    delete_tracks: async ({ dbPath, trackIds, deleteFromDisk, backupState }) => {
       const ids = [
         ...new Set(
           (Array.isArray(trackIds) ? trackIds : []).map((id) => String(id)).filter(Boolean),
         ),
       ];
       if (ids.length === 0) return { deletedTrackIds: [], failures: [] };
+      // Deleted files cannot come back, but their metadata, ratings and
+      // playlist entries can be restored from the safety backup.
+      if (deleteFromDisk) await withSafetySnapshot("delete", backupState, () => undefined);
       referencedPathCache.clear();
 
       let deletedTrackIds = ids;
@@ -1409,13 +1450,22 @@ export const createBackend = ({
         dbPath,
         destinationPath: pathAccess.assertWritable(destinationPath, "export destination"),
       }),
-    export_organized_library: ({ dbPath, destinationPath, useAsCurrentLibrary }, sender) =>
-      exportOrganizedLibrary({
-        dbPath,
-        destinationPath: pathAccess.assertWritable(destinationPath, "export folder"),
-        useAsCurrentLibrary: Boolean(useAsCurrentLibrary),
-        onProgress: (progress) => emit(sender, "muro://library-export-progress", progress),
-      }),
+    export_organized_library: (
+      { dbPath, destinationPath, useAsCurrentLibrary, backupState },
+      sender,
+    ) => {
+      const writableDestination = pathAccess.assertWritable(destinationPath, "export folder");
+      const exportLibrary = () =>
+        exportOrganizedLibrary({
+          dbPath,
+          destinationPath: writableDestination,
+          useAsCurrentLibrary: Boolean(useAsCurrentLibrary),
+          onProgress: (progress) => emit(sender, "muro://library-export-progress", progress),
+        });
+      // Switching to the exported copy rewrites every track path.
+      if (!useAsCurrentLibrary) return exportLibrary();
+      return withSafetySnapshot("organize", backupState, exportLibrary);
+    },
     add_tracks_to_playlist: ({ dbPath, playlistId, trackIds }) => {
       if (!trackIds.length) return;
       const db = openDatabase(dbPath);
@@ -2207,6 +2257,8 @@ export const createBackend = ({
       return handler(commandArgs, sender);
     },
     pathAccess,
+    /** Schedule, folder and retention of automatic backups (main-process owned). */
+    backups,
     /** Whether muro-file:// (and other read paths) may expose this file. */
     canReadPath: (filePath) => pathAccess.canRead(filePath),
     getDatabaseLocation: () => currentDbPath(),

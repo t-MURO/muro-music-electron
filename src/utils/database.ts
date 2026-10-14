@@ -3,6 +3,7 @@ import type { ImportedTrack, LibrarySnapshot, PlaylistSnapshot } from "./importA
 import type { AlbumCoverCandidate, ArtistImageCandidate, ArtistProfile } from "../types";
 import type { ArtistCreditInput } from "./artistCredits";
 import type { MetadataWriteResult } from "./tagWriteFailures";
+import { withSafetyBackup } from "./backups";
 
 // ============================================================================
 // Library Operations
@@ -30,11 +31,16 @@ export const acceptTracks = (
   trackIds: string[],
   options?: { organize?: boolean; libraryFolder?: string },
 ) => {
-  return invoke<AcceptTracksResult>("accept_tracks", {
+  const args = {
     trackIds,
     organize: options?.organize ?? false,
     libraryFolder: options?.libraryFolder ?? "",
-  });
+  };
+  // Organizing renames files, so the main process takes a safety backup first.
+  if (!args.organize) return invoke<AcceptTracksResult>("accept_tracks", args);
+  return withSafetyBackup((backupState) =>
+    invoke<AcceptTracksResult>("accept_tracks", { ...args, backupState }),
+  );
 };
 
 export type LibraryStructureIssue = {
@@ -69,10 +75,13 @@ export const validateLibraryStructure = (libraryRoot: string) =>
   });
 
 export const repairLibraryStructure = (libraryRoot: string, trackIds: string[]) =>
-  invoke<LibraryStructureRepairResult>("repair_library_structure", {
-    libraryRoot,
-    trackIds,
-  });
+  withSafetyBackup((backupState) =>
+    invoke<LibraryStructureRepairResult>("repair_library_structure", {
+      libraryRoot,
+      trackIds,
+      backupState,
+    }),
+  );
 
 export const unacceptTracks = (trackIds: string[]) => {
   return invoke<void>("unaccept_tracks", { trackIds });
@@ -88,10 +97,13 @@ export type DeleteTracksResult = {
 };
 
 export const deleteTracks = (trackIds: string[], deleteFromDisk: boolean) => {
-  return invoke<DeleteTracksResult>("delete_tracks", {
-    trackIds,
-    deleteFromDisk,
-  });
+  // Deleting files from disk is protected by a main-process safety backup.
+  if (!deleteFromDisk) {
+    return invoke<DeleteTracksResult>("delete_tracks", { trackIds, deleteFromDisk });
+  }
+  return withSafetyBackup((backupState) =>
+    invoke<DeleteTracksResult>("delete_tracks", { trackIds, deleteFromDisk, backupState }),
+  );
 };
 
 export const updateTrackBeatGrid = (trackId: string, beatGridJson: string) =>
@@ -497,7 +509,9 @@ export type LibraryRestoreResult = {
 };
 
 export const restoreLibraryBackup = (archivePath: string) =>
-  invoke<LibraryRestoreResult>("restore_library_backup", { archivePath });
+  withSafetyBackup((backupState) =>
+    invoke<LibraryRestoreResult>("restore_library_backup", { archivePath, backupState }),
+  );
 
 export type MetadataHistoryEntry = {
   id: number;
@@ -579,10 +593,20 @@ export type OrganizedLibraryExportResult = {
 };
 
 export const exportOrganizedLibrary = (destinationPath: string, useAsCurrentLibrary: boolean) =>
-  invoke<OrganizedLibraryExportResult>("export_organized_library", {
-    destinationPath,
-    useAsCurrentLibrary,
-  });
+  // Switching to the exported copy rewrites every track path, so the main
+  // process takes a safety backup first.
+  useAsCurrentLibrary
+    ? withSafetyBackup((backupState) =>
+        invoke<OrganizedLibraryExportResult>("export_organized_library", {
+          destinationPath,
+          useAsCurrentLibrary,
+          backupState,
+        }),
+      )
+    : invoke<OrganizedLibraryExportResult>("export_organized_library", {
+        destinationPath,
+        useAsCurrentLibrary,
+      });
 
 // ============================================================================
 // Backfill Operations

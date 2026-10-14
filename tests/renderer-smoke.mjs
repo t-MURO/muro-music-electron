@@ -905,6 +905,22 @@ app.whenReady().then(async () => {
     if (command === "list_tracks_needing_loudness") return [];
     if (command === "update_track_loudness") return { updated: true };
     if (command === "recompute_album_gain") return { albums: 0, updated: 0 };
+    if (command === "get_backup_status" || command === "run_scheduled_backup") {
+      const status = {
+        frequency: "weekly",
+        retention: 5,
+        preMaintenanceRetention: 3,
+        folder: path.join(temporaryDirectory, "backups"),
+        defaultFolder: path.join(temporaryDirectory, "backups"),
+        isDefaultFolder: true,
+        lastAutomaticBackupAt: null,
+        lastPreMaintenanceBackupAt: null,
+        nextAutomaticBackupAt: null,
+      };
+      return command === "get_backup_status"
+        ? status
+        : { created: false, backup: null, pruned: [], status };
+    }
     throw new Error(`Unexpected renderer smoke command: ${command}`);
   });
 

@@ -77,6 +77,7 @@ import {
   useIndexedSearch,
   useArtistProfiles,
   useDatabaseLocation,
+  useAutomaticBackups,
   normalizeArtistProfileKey,
   type LibraryView,
 } from "./hooks";
@@ -257,6 +258,7 @@ function App() {
   const setRecentlyAddedPeriodDays = useSettingsStore((s) => s.setRecentlyAddedPeriodDays);
   const keyboardShortcuts = useSettingsStore((s) => s.keyboardShortcuts);
   const databaseLocation = useDatabaseLocation();
+  useAutomaticBackups();
 
   useEffect(() => {
     applyThemeMode(theme);

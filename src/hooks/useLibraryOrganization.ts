@@ -8,6 +8,7 @@ import {
   type LibraryStructureRepairResult,
   type LibraryStructureValidationResult,
 } from "../utils/database";
+import { isSafetyBackupError } from "../utils/backups";
 import { importedTrackToTrack } from "../utils/importApi";
 
 export type LibraryStructureRepairOutcome = {
@@ -98,8 +99,8 @@ export const useLibraryOrganization = () => {
         );
       }
       return { repair: repairResult, validation } satisfies LibraryStructureRepairOutcome;
-    } catch {
-      notify.error(t("structure.repairFailed"));
+    } catch (error) {
+      notify.error(isSafetyBackupError(error) ? error.message : t("structure.repairFailed"));
       return null;
     } finally {
       busyRef.current = false;

@@ -205,6 +205,7 @@ const startApplication = async () => {
       ? [path.join(process.resourcesPath, "fpcalc")]
       : [path.join(appRoot, "build", "fpcalc")],
     getDbPath: () => databaseLocation.getDbPath(),
+    userDataDir: app.getPath("userData"),
   });
   const pathAccess = backend.pathAccess;
 
@@ -286,6 +287,25 @@ const startApplication = async () => {
     const next = databaseLocation.resetToDefault();
     backend.databaseLocationChanged(current.dbPath);
     return next;
+  });
+  // The automatic-backup folder is chosen here and persisted by the main
+  // process, so the renderer never names the folder backups are written to
+  // or pruned from.
+  registerTrustedHandler("muro:choose-backup-folder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Choose a folder for automatic backups",
+      defaultPath: backend.backups.folder(),
+      properties: ["openDirectory", "createDirectory"],
+    });
+    const selected = result.filePaths?.[0];
+    if (result.canceled || !selected) return null;
+    return backend.backups.setFolder(selected);
+  });
+  registerTrustedHandler("muro:reset-backup-folder", () => backend.backups.resetFolder());
+  registerTrustedHandler("muro:open-backup-folder", async () => {
+    const folder = await backend.backups.prepareFolder();
+    const error = await shell.openPath(folder);
+    if (error) throw new Error(error);
   });
   registerTrustedHandler("muro:clipboard-has-image", () => !clipboard.readImage().isEmpty());
   registerTrustedHandler("muro:cache-clipboard-cover-art", () => {

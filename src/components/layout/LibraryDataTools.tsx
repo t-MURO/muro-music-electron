@@ -22,6 +22,8 @@ import {
 } from "../../utils";
 import { notify, useLibraryStore, useSettingsStore } from "../../stores";
 import { recordMetadataWrite, showTagWriteFailures } from "../../utils/tagWriteFailures";
+import { readBackupState } from "../../utils/backups";
+import { AutomaticBackupSettings } from "./AutomaticBackupSettings";
 
 const SENSITIVE_SETTING_KEYS = [
   "lastFmApiKey",
@@ -131,11 +133,8 @@ export const LibraryDataTools = () => {
         filters: [{ name: "Muro Library Backup", extensions: ["murobackup"] }],
       });
       if (!destinationPath) return;
-      const result = await createLibraryBackup(
-        destinationPath,
-        window.localStorage.getItem("muro-settings") ?? "",
-        window.localStorage.getItem("muro-smart-crates") ?? "",
-      );
+      const { settingsJson, smartCratesJson } = readBackupState();
+      const result = await createLibraryBackup(destinationPath, settingsJson, smartCratesJson);
       setStatus(
         `Backup created: ${result.manifest.counts.tracks.toLocaleString()} tracks, ` +
           `${result.manifest.counts.playlists.toLocaleString()} playlists, ` +
@@ -253,6 +252,7 @@ export const LibraryDataTools = () => {
           </button>
         </div>
         {status && <p className="mt-3 text-[12px] text-[var(--color-text-secondary)]">{status}</p>}
+        <AutomaticBackupSettings />
       </section>
 
       <section className={cardClass} data-itunes-library-export>

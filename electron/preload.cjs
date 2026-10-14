@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld("muro", {
   chooseDatabaseLocation: (options = {}) =>
     ipcRenderer.invoke("muro:choose-database-location", options),
   resetDatabaseLocation: () => ipcRenderer.invoke("muro:reset-database-location"),
+  chooseBackupFolder: () => ipcRenderer.invoke("muro:choose-backup-folder"),
+  resetBackupFolder: () => ipcRenderer.invoke("muro:reset-backup-folder"),
+  openBackupFolder: () => ipcRenderer.invoke("muro:open-backup-folder"),
   clipboardHasImage: () => ipcRenderer.invoke("muro:clipboard-has-image"),
   cacheClipboardCoverArt: () => ipcRenderer.invoke("muro:cache-clipboard-cover-art"),
   copyImageToClipboard: (filePath) => ipcRenderer.invoke("muro:copy-image-to-clipboard", filePath),

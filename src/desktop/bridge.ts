@@ -6,6 +6,19 @@ export type DatabaseLocation = {
   isDefault: boolean;
 };
 
+export type BackupFrequency = "off" | "daily" | "weekly";
+export type BackupStatus = {
+  frequency: BackupFrequency;
+  retention: number;
+  preMaintenanceRetention: number;
+  folder: string;
+  defaultFolder: string;
+  isDefaultFolder: boolean;
+  lastAutomaticBackupAt: string | null;
+  lastPreMaintenanceBackupAt: string | null;
+  nextAutomaticBackupAt: string | null;
+};
+
 export type MuroBridge = {
   platform: string;
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -14,6 +27,9 @@ export type MuroBridge = {
   databaseLocation(): Promise<DatabaseLocation>;
   chooseDatabaseLocation(options: { mode: "open" | "create" }): Promise<DatabaseLocation | null>;
   resetDatabaseLocation(): Promise<DatabaseLocation | null>;
+  chooseBackupFolder(): Promise<BackupStatus | null>;
+  resetBackupFolder(): Promise<BackupStatus>;
+  openBackupFolder(): Promise<void>;
   clipboardHasImage(): Promise<boolean>;
   cacheClipboardCoverArt(): Promise<{ fullPath: string; thumbPath: string } | null>;
   copyImageToClipboard(filePath: string): Promise<boolean>;
