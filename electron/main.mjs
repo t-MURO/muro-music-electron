@@ -19,6 +19,7 @@ import { createMediaProtocolHandler } from "./fileProtocol.mjs";
 import { createKeyFinderService } from "./keyfinder.mjs";
 import { registerMediaShortcuts } from "./mediaShortcuts.mjs";
 import { createTrustedRendererUrlCheck } from "./rendererSecurity.mjs";
+import { createUpdateService } from "./updateCheck.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, "..");
@@ -54,6 +55,7 @@ let mainWindow = null;
 let backend = null;
 let databaseLocation = null;
 let mediaShortcutRegistration = null;
+let updates = null;
 
 const isTrustedRendererUrl = createTrustedRendererUrlCheck({
   developmentUrl: developmentRendererUrl,
@@ -313,6 +315,31 @@ const startApplication = async () => {
     const error = await shell.openPath(folder);
     if (error) throw new Error(error);
   });
+  // Update checks and installer downloads. The renderer only ever names the
+  // version it saw; release URLs and the downloaded file's path stay here.
+  updates = createUpdateService({
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    downloadsDir: () => app.getPath("downloads"),
+    emit: (name, payload) => {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+      mainWindow.webContents.send("muro:event", name, payload);
+    },
+    openPath: (filePath) => shell.openPath(filePath),
+    showItemInFolder: (filePath) => shell.showItemInFolder(filePath),
+    openExternal: (url) => shell.openExternal(url),
+  });
+  registerTrustedHandler("muro:update-status", () => updates.status());
+  registerTrustedHandler("muro:update-check", (_event, options) =>
+    updates.check({ manual: options?.manual === true }),
+  );
+  registerTrustedHandler("muro:update-download", (_event, version) =>
+    updates.download(String(version ?? "")),
+  );
+  registerTrustedHandler("muro:update-cancel-download", () => updates.cancelDownload());
+  registerTrustedHandler("muro:update-open-installer", () => updates.openInstaller());
+  registerTrustedHandler("muro:update-show-installer", () => updates.showInstaller());
+  registerTrustedHandler("muro:update-open-release-page", () => updates.openReleasePage());
   registerTrustedHandler("muro:clipboard-has-image", () => !clipboard.readImage().isEmpty());
   registerTrustedHandler("muro:cache-clipboard-cover-art", () => {
     const image = clipboard.readImage();
@@ -494,7 +521,10 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-app.on("before-quit", () => backend?.close());
+app.on("before-quit", () => {
+  updates?.dispose();
+  backend?.close();
+});
 app.on("will-quit", () => {
   unregisterApplicationMediaShortcuts();
 });

@@ -11,6 +11,8 @@ export type NotificationOptions = {
   /** Short per-item lines shown under the message, e.g. which files failed. */
   details?: string[];
   action?: NotificationAction;
+  /** Further buttons shown after `action`. */
+  actions?: NotificationAction[];
   /** Keeps the toast until the user dismisses it or it is replaced. */
   sticky?: boolean;
   /** Runs when the user closes the toast, not when it times out or is replaced. */

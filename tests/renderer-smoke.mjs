@@ -189,6 +189,38 @@ let libraryStructureValidationCount = 0;
 let libraryStructureRepairArgs = null;
 const shownItemPaths = [];
 let nativeDraggedFilePaths = [];
+// Update checks never reach GitHub here; the stubs below report an up-to-date
+// development build and count the checks the settings page asks for.
+let manualUpdateChecks = 0;
+let automaticUpdateChecks = 0;
+let updateLastCheckedAt = null;
+const smokeUpdateStatus = () => ({
+  currentVersion: "0.1.10",
+  automaticChecks: false,
+  checking: false,
+  lastCheckedAt: updateLastCheckedAt,
+  error: null,
+  latest: updateLastCheckedAt
+    ? {
+        version: "0.1.10",
+        name: "v0.1.10",
+        prerelease: true,
+        publishedAt: "2026-08-06T05:53:18Z",
+        hasInstaller: true,
+        installerName: "Muro-Music-Setup-0.1.10.exe",
+        installerSize: 1000,
+      }
+    : null,
+  updateAvailable: false,
+  download: {
+    state: "idle",
+    version: null,
+    fileName: null,
+    receivedBytes: 0,
+    totalBytes: 0,
+    error: null,
+  },
+});
 const copiedCoverPaths = [];
 // The main process owns the database location; no command may carry one.
 const commandsSentWithDbPath = new Set();
@@ -282,6 +314,13 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("muro:show-item-in-folder", (_event, filePath) => {
     shownItemPaths.push(filePath);
+  });
+  ipcMain.handle("muro:update-status", () => smokeUpdateStatus());
+  ipcMain.handle("muro:update-check", (_event, options = {}) => {
+    if (options?.manual === true) manualUpdateChecks += 1;
+    else automaticUpdateChecks += 1;
+    updateLastCheckedAt = new Date().toISOString();
+    return smokeUpdateStatus();
   });
   ipcMain.on("muro:start-file-drag", (_event, filePaths) => {
     nativeDraggedFilePaths = Array.isArray(filePaths) ? [...filePaths] : [];
@@ -926,6 +965,9 @@ app.whenReady().then(async () => {
     }
     if (command === "update_track_loudness") return { updated: true };
     if (command === "recompute_album_gain") return { albums: 0, updated: 0 };
+    if (command === "test_get_update_checks") {
+      return { manual: manualUpdateChecks, automatic: automaticUpdateChecks };
+    }
     if (command === "get_backup_status" || command === "run_scheduled_backup") {
       const status = {
         frequency: "weekly",
@@ -1447,6 +1489,27 @@ app.whenReady().then(async () => {
             ?.includes("Danger zone")
         );
 
+        document.querySelector('[data-settings-tab="general"]')?.click();
+        await waitForCondition(() => Boolean(
+          document.querySelector("[data-update-settings]")?.textContent
+            ?.includes("Installed version: 0.1.10") &&
+          document.querySelector("[data-update-auto-check]") instanceof HTMLInputElement &&
+          document.querySelector("[data-update-auto-check]").checked
+        ));
+        document.querySelector("[data-update-check-now]")?.click();
+        await waitForCondition(() =>
+          Boolean(document.querySelector("[data-update-status]")?.textContent
+            ?.includes("Muro Music is up to date."))
+        );
+        const updateChecks = await window.muro.invoke("test_get_update_checks");
+        const updateSettingsReady = Boolean(
+          document.querySelector("[data-update-status]")?.textContent
+            ?.includes("Muro Music is up to date.") &&
+          !document.querySelector("[data-update-available]") &&
+          updateChecks?.manual === 1 &&
+          updateChecks?.automatic === 0
+        );
+
         return {
           childCount: root.childElementCount,
           textLength: root.textContent?.trim().length ?? 0,
@@ -1465,6 +1528,7 @@ app.whenReady().then(async () => {
             analysisReady &&
             djReady &&
             advancedReady &&
+            updateSettingsReady &&
             playlistTooltipsReady
           ),
           settingsOrganizationDebug: {
@@ -1486,6 +1550,10 @@ app.whenReady().then(async () => {
             analysisReady,
             djReady,
             advancedReady,
+            updateSettingsReady,
+            updateChecks,
+            updateStatusText:
+              document.querySelector("[data-update-status]")?.textContent?.trim() ?? null,
             playlistTooltipsReady,
             unlabeledIconButtons: unlabeledIconButtons.map(
               (button) => button.outerHTML.slice(0, 180)

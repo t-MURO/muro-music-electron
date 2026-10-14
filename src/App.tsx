@@ -80,6 +80,7 @@ import {
   useArtistProfiles,
   useDatabaseLocation,
   useAutomaticBackups,
+  useUpdateCheck,
   normalizeArtistProfileKey,
   type LibraryView,
 } from "./hooks";
@@ -263,6 +264,7 @@ function App() {
   const keyboardShortcuts = useSettingsStore((s) => s.keyboardShortcuts);
   const databaseLocation = useDatabaseLocation();
   useAutomaticBackups();
+  useUpdateCheck();
 
   useEffect(() => {
     applyThemeMode(theme);

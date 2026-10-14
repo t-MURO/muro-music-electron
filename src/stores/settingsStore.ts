@@ -112,6 +112,10 @@ type SettingsState = {
   replayGainReferenceLufs: number;
   /** Bring back the queue and the paused current track after a restart. */
   restoreLastSession: boolean;
+  /** Look for a newer release on GitHub on startup and once a day. */
+  checkForUpdates: boolean;
+  /** A release the user chose not to be reminded about; "" for none. */
+  skippedUpdateVersion: string;
   watchFolderEnabled: boolean;
   /** Sole absolute path used as the library root and optionally watched for new audio. */
   watchedFolder: string;
@@ -151,6 +155,8 @@ type SettingsActions = {
   setReplayGainPreventClipping: (preventClipping: boolean) => void;
   setReplayGainReferenceLufs: (referenceLufs: number) => void;
   setRestoreLastSession: (enabled: boolean) => void;
+  setCheckForUpdates: (enabled: boolean) => void;
+  setSkippedUpdateVersion: (version: string) => void;
   setWatchFolderEnabled: (enabled: boolean) => void;
   setOrganizeAcceptedTracks: (enabled: boolean) => void;
   setWatchedFolder: (folder: string) => void;
@@ -196,6 +202,8 @@ export const useSettingsStore = create<SettingsStore>()(
       replayGainPreventClipping: true,
       replayGainReferenceLufs: -18,
       restoreLastSession: true,
+      checkForUpdates: true,
+      skippedUpdateVersion: "",
       watchFolderEnabled: false,
       watchedFolder: "",
       organizeAcceptedTracks: true,
@@ -254,6 +262,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setReplayGainReferenceLufs: (referenceLufs) =>
         set({ replayGainReferenceLufs: Math.max(-30, Math.min(-5, referenceLufs)) }),
       setRestoreLastSession: (restoreLastSession) => set({ restoreLastSession }),
+      setCheckForUpdates: (checkForUpdates) => set({ checkForUpdates }),
+      setSkippedUpdateVersion: (skippedUpdateVersion) => set({ skippedUpdateVersion }),
       setWatchFolderEnabled: (watchFolderEnabled) => set({ watchFolderEnabled }),
       setOrganizeAcceptedTracks: (organizeAcceptedTracks) => set({ organizeAcceptedTracks }),
       setWatchedFolder: (watchedFolder) => set({ watchedFolder }),
@@ -322,6 +332,8 @@ export const useSettingsStore = create<SettingsStore>()(
         replayGainPreventClipping: state.replayGainPreventClipping,
         replayGainReferenceLufs: state.replayGainReferenceLufs,
         restoreLastSession: state.restoreLastSession,
+        checkForUpdates: state.checkForUpdates,
+        skippedUpdateVersion: state.skippedUpdateVersion,
         watchFolderEnabled: state.watchFolderEnabled,
         watchedFolder: state.watchedFolder,
         organizeAcceptedTracks: state.organizeAcceptedTracks,

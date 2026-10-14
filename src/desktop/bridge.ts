@@ -19,6 +19,45 @@ export type BackupStatus = {
   nextAutomaticBackupAt: string | null;
 };
 
+export type UpdateCheckError = "network" | "timeout" | "rate-limited" | "http" | "invalid-response";
+export type UpdateDownloadError =
+  | "not-available"
+  | "network"
+  | "timeout"
+  | "http"
+  | "size-mismatch"
+  | "digest-mismatch"
+  | "write-failed"
+  | "invalid-response"
+  | "missing-file";
+export type UpdateStatus = {
+  currentVersion: string;
+  /** False in development builds, which only check when asked to. */
+  automaticChecks: boolean;
+  checking: boolean;
+  lastCheckedAt: string | null;
+  error: UpdateCheckError | null;
+  latest: {
+    version: string;
+    name: string;
+    prerelease: boolean;
+    publishedAt: string | null;
+    /** Whether the release has an installer for this platform and architecture. */
+    hasInstaller: boolean;
+    installerName: string | null;
+    installerSize: number | null;
+  } | null;
+  updateAvailable: boolean;
+  download: {
+    state: "idle" | "downloading" | "completed" | "failed";
+    version: string | null;
+    fileName: string | null;
+    receivedBytes: number;
+    totalBytes: number;
+    error: UpdateDownloadError | null;
+  };
+};
+
 export type MuroBridge = {
   platform: string;
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -30,6 +69,13 @@ export type MuroBridge = {
   chooseBackupFolder(): Promise<BackupStatus | null>;
   resetBackupFolder(): Promise<BackupStatus>;
   openBackupFolder(): Promise<void>;
+  getUpdateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(options: { manual: boolean }): Promise<UpdateStatus>;
+  downloadUpdate(version: string): Promise<UpdateStatus>;
+  cancelUpdateDownload(): Promise<UpdateStatus>;
+  openUpdateInstaller(): Promise<void>;
+  showUpdateInstaller(): Promise<void>;
+  openUpdateReleasePage(): Promise<void>;
   clipboardHasImage(): Promise<boolean>;
   cacheClipboardCoverArt(): Promise<{ fullPath: string; thumbPath: string } | null>;
   copyImageToClipboard(filePath: string): Promise<boolean>;

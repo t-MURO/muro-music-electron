@@ -30,6 +30,7 @@ import { MisplacedTracksModal } from "../ui/MisplacedTracksModal";
 import { LibraryDataTools } from "./LibraryDataTools";
 import { KeyboardShortcutSettings } from "./KeyboardShortcutSettings";
 import { ScrobblingSettings } from "./ScrobblingSettings";
+import { UpdateSettings } from "./UpdateSettings";
 import type { ReplayGainMode } from "../../utils/replayGain";
 import {
   useSettingsStore,
@@ -83,8 +84,9 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: "general",
     label: "General",
-    description: "Language, appearance, and playback",
-    keywords: "language theme dark light system playback seek restore session",
+    description: "Language, appearance, playback, and updates",
+    keywords:
+      "language theme dark light system playback seek restore session update updates version release download",
     icon: Settings2,
   },
   {
@@ -862,6 +864,10 @@ export const SettingsPanel = ({
                       </div>
                     </div>
                   </div>
+                </SettingsGroup>
+
+                <SettingsGroup title={t("update.section")} description={t("update.description")}>
+                  <UpdateSettings />
                 </SettingsGroup>
               </div>
             </div>

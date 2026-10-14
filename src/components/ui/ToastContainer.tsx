@@ -39,6 +39,10 @@ const Toast = ({ notification, onDismiss }: ToastProps) => {
         : "text-blue-500";
 
   const details = notification.details ?? [];
+  const actions = [
+    ...(notification.action ? [notification.action] : []),
+    ...(notification.actions ?? []),
+  ];
 
   return (
     <div className="flex max-w-md items-start gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] px-4 py-3 shadow-lg">
@@ -55,14 +59,19 @@ const Toast = ({ notification, onDismiss }: ToastProps) => {
             )}
           </ul>
         )}
-        {notification.action && (
-          <button
-            onClick={notification.action.onClick}
-            className="mt-2 text-sm font-medium text-[var(--color-accent)] hover:underline"
-            type="button"
-          >
-            {notification.action.label}
-          </button>
+        {actions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {actions.map((action, index) => (
+              <button
+                key={index}
+                onClick={action.onClick}
+                className="text-sm font-medium text-[var(--color-accent)] hover:underline"
+                type="button"
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <button

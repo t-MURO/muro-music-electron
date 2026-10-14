@@ -51,6 +51,7 @@ export {
 export { useRecentlyPlayedStore, type RecentlyPlayedStore } from "./recentlyPlayedStore";
 export { useSmartCrateStore, type SmartCrateStore } from "./smartCrateStore";
 export { useScrobbleStore, type ScrobbleStore } from "./scrobbleStore";
+export { useUpdateStore, type UpdateStore } from "./updateStore";
 export {
   useSleepTimerStore,
   selectSleepTimerActive,
