@@ -138,7 +138,8 @@
     ],
     "mac": {
       "category": "public.app-category.music",
-      "icon": "build/icons/icon.icns"
+      "icon": "build/icons/icon.icns",
+      "identity": "-"
     },
     "win": {
       "target": "nsis",
