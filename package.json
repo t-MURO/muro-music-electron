@@ -151,5 +151,11 @@
       "category": "Audio",
       "icon": "build/icons/icon.png"
     }
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true,
+    "electron-winstaller@5.4.0": true
   }
 }
