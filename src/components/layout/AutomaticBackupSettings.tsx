@@ -4,11 +4,11 @@ import { t, type MessageKey } from "../../i18n";
 import { notify } from "../../stores";
 import {
   BACKUP_STATUS_EVENT,
+  backUpNow,
   chooseBackupFolder,
   getBackupStatus,
   openBackupFolder,
   resetBackupFolder,
-  runScheduledBackup,
   setBackupSchedule,
   type BackupFrequency,
   type BackupStatus,
@@ -77,7 +77,7 @@ export const AutomaticBackupSettings = () => {
 
   const handleBackUpNow = () =>
     run(async () => {
-      const result = await runScheduledBackup(true);
+      const result = await backUpNow();
       if (result.backup) setMessage(t("backup.auto.created", { name: result.backup.fileName }));
       return result.status;
     });

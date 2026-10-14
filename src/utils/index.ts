@@ -142,6 +142,7 @@ export {
 } from "./database";
 export {
   importFiles,
+  cancelImport,
   importedTrackToTrack,
   type ImportedTrack,
   type ImportFilesResult,

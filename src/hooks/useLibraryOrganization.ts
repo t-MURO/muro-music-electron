@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
-import { notify, useLibraryStore, useSettingsStore } from "../stores";
+import { notify, startTask, useLibraryStore, useSettingsStore } from "../stores";
 import {
   loadTracks,
   repairLibraryStructure,
@@ -10,6 +10,7 @@ import {
 } from "../utils/database";
 import { isSafetyBackupError } from "../utils/backups";
 import { importedTrackToTrack } from "../utils/importApi";
+import { taskDetailsAction, taskErrorMessage, taskItemName } from "../utils/tasks";
 
 export type LibraryStructureRepairOutcome = {
   repair: LibraryStructureRepairResult;
@@ -22,6 +23,8 @@ export const useLibraryOrganization = () => {
   const setTracks = useLibraryStore((state) => state.setTracks);
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const busyRef = useRef(false);
+  // The task center's retry calls the latest repair.
+  const repairRef = useRef<() => Promise<unknown>>(() => Promise.resolve(null));
   const [validating, setValidating] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [lastResult, setLastResult] = useState<LibraryStructureValidationResult | null>(null);
@@ -49,22 +52,26 @@ export const useLibraryOrganization = () => {
 
     busyRef.current = true;
     setValidating(true);
+    const task = startTask({ kind: "organize", title: t("tasks.structure.validate") });
     try {
       const result = await validateLibraryStructure(libraryRoot);
       setLastResult(result);
       if (result.misplaced.length === 0) {
-        notify.success(t("structure.allCorrect", { checked: String(result.checked) }));
+        const message = t("structure.allCorrect", { checked: String(result.checked) });
+        task.succeed(message);
+        notify.success(message);
       } else {
-        notify.info(
-          t("structure.found", {
-            misplaced: String(result.misplaced.length),
-            checked: String(result.checked),
-          }),
-        );
+        const message = t("structure.found", {
+          misplaced: String(result.misplaced.length),
+          checked: String(result.checked),
+        });
+        task.succeed(message);
+        notify.info(message);
       }
       return result;
-    } catch {
-      notify.error(t("structure.failed"));
+    } catch (error) {
+      task.fail(taskErrorMessage(error));
+      notify.error(t("structure.failed"), { action: taskDetailsAction() });
       return null;
     } finally {
       busyRef.current = false;
@@ -78,11 +85,23 @@ export const useLibraryOrganization = () => {
 
     busyRef.current = true;
     setRepairing(true);
+    const task = startTask({
+      kind: "organize",
+      title: t("tasks.structure.repair"),
+      total: trackIds.length,
+    });
     try {
       const repairResult = await repairLibraryStructure(libraryRoot, trackIds);
+      task.progress(repairResult.requested, trackIds.length);
+      for (const failure of repairResult.failures) {
+        task.addError(taskItemName(failure.sourcePath), failure.message);
+      }
+      // Repairs only what is still misplaced, so running it again retries the failures.
+      if (repairResult.failures.length > 0) task.update({ retry: () => void repairRef.current() });
       await reloadLibrary();
       const validation = await validateLibraryStructure(libraryRoot);
       setLastResult(validation);
+      task.finish(t("tasks.structure.repairSummary", { moved: String(repairResult.moved.length) }));
 
       if (repairResult.failures.length > 0) {
         notify.error(
@@ -90,6 +109,7 @@ export const useLibraryOrganization = () => {
             moved: String(repairResult.moved.length),
             failed: String(repairResult.failures.length),
           }),
+          { action: taskDetailsAction() },
         );
       } else {
         notify.success(
@@ -100,13 +120,20 @@ export const useLibraryOrganization = () => {
       }
       return { repair: repairResult, validation } satisfies LibraryStructureRepairOutcome;
     } catch (error) {
-      notify.error(isSafetyBackupError(error) ? error.message : t("structure.repairFailed"));
+      task.fail(taskErrorMessage(error));
+      notify.error(isSafetyBackupError(error) ? error.message : t("structure.repairFailed"), {
+        action: taskDetailsAction(),
+      });
       return null;
     } finally {
       busyRef.current = false;
       setRepairing(false);
     }
   }, [lastResult, libraryRoot, reloadLibrary]);
+
+  useEffect(() => {
+    repairRef.current = repair;
+  }, [repair]);
 
   return {
     hasLibraryRoot: Boolean(libraryRoot),

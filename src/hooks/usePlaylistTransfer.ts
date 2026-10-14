@@ -1,6 +1,6 @@
 import { listen } from "@muro/desktop/events";
 import { useCallback, useEffect, useRef } from "react";
-import { useLibraryStore, notify } from "../stores";
+import { useLibraryStore, notify, startTask } from "../stores";
 import {
   addTracksToPlaylist,
   configurePlaylistSync,
@@ -19,11 +19,19 @@ import {
 } from "../utils";
 import { t } from "../i18n";
 import type { Playlist } from "../types";
+import { taskDetailsAction, taskErrorMessage, taskItemName } from "../utils/tasks";
 
 const normalizePath = (value: string) => value.replace(/\//g, "\\").toLocaleLowerCase();
 
 export const usePlaylistTransfer = () => {
   const sequenceRef = useRef(0);
+  // Task-center retries call the latest version of these.
+  const importPlaylistRef = useRef<(filePath: string) => Promise<string | null>>(() =>
+    Promise.resolve(null),
+  );
+  const exportAllPlaylistsRef = useRef<(destinationPath: string) => Promise<unknown>>(() =>
+    Promise.resolve(null),
+  );
   const setInboxTracks = useLibraryStore((state) => state.setInboxTracks);
   const setPlaylists = useLibraryStore((state) => state.setPlaylists);
   const setPlaylistFolders = useLibraryStore((state) => state.setPlaylistFolders);
@@ -205,14 +213,19 @@ export const usePlaylistTransfer = () => {
   );
 
   const importPlaylist = useCallback(
-    async (filePath: string) => {
+    async (filePath: string): Promise<string | null> => {
+      const task = startTask({
+        kind: "playlist",
+        title: t("tasks.playlistImport.title", { name: taskItemName(filePath) }),
+      });
       try {
         const result = await importPlaylistIntoStore(filePath);
         if (!result) {
+          task.fail(t("toast.playlist.noAvailableFiles"));
           notify.error(t("toast.playlist.noAvailableFiles"));
           return null;
         }
-        notify.success(
+        const message =
           result.skipped > 0
             ? t("toast.playlist.importedLinkedPartial", {
                 name: result.playlist.name,
@@ -222,16 +235,22 @@ export const usePlaylistTransfer = () => {
             : t("toast.playlist.importedLinked", {
                 name: result.playlist.name,
                 count: String(result.playlist.trackIds.length),
-              }),
-        );
+              });
+        task.succeed(message);
+        notify.success(message);
         return result.playlist.id;
-      } catch {
-        notify.error(t("toast.playlist.importFailed"));
+      } catch (error) {
+        task.update({ retry: () => void importPlaylistRef.current(filePath) });
+        task.fail(taskErrorMessage(error));
+        notify.error(t("toast.playlist.importFailed"), { action: taskDetailsAction() });
         return null;
       }
     },
     [importPlaylistIntoStore],
   );
+  useEffect(() => {
+    importPlaylistRef.current = importPlaylist;
+  }, [importPlaylist]);
 
   const importPlaylistFolder = useCallback(
     async (directoryPath: string) => {
@@ -244,12 +263,20 @@ export const usePlaylistTransfer = () => {
         const created = new Set(createdFolderIds);
         setPlaylistFolders((current) => current.filter((folder) => !created.has(folder.id)));
       };
+      const task = startTask({
+        kind: "playlist",
+        title: t("tasks.playlistFolderImport.title", { name: taskItemName(directoryPath) }),
+        // Stops between playlist files; playlists imported so far are kept.
+        cancel: true,
+      });
       try {
         const scan = await listPlaylistFiles(directoryPath);
         if (scan.files.length === 0) {
+          task.fail(t("toast.playlist.noPlaylistsInFolder"));
           notify.error(t("toast.playlist.noPlaylistsInFolder"));
           return null;
         }
+        task.progress(0, scan.entries.length);
 
         sequenceRef.current += 1;
         const rootFolder = {
@@ -292,33 +319,47 @@ export const usePlaylistTransfer = () => {
           }),
         );
         const playlistIds: string[] = [];
+        let processed = 0;
         for (const entry of scan.entries) {
+          if (task.cancelRequested) break;
+          task.setDetail(entry.relativePath);
           try {
             const folderId = folderIdByPath.get(entry.folderPath ?? "") ?? rootFolder.id;
             const result = await importPlaylistIntoStore(entry.path, folderId);
             if (result) playlistIds.push(result.playlist.id);
-          } catch {
+          } catch (error) {
             // Keep importing the remaining files and summarize partial failures.
+            task.addError(entry.relativePath, taskErrorMessage(error));
           }
+          processed += 1;
+          task.progress(processed, scan.entries.length);
         }
 
         if (playlistIds.length === 0) {
           await cleanupFolders();
-          notify.error(t("toast.playlist.importedNone", { count: String(scan.files.length) }));
+          if (task.cancelRequested) {
+            task.cancelled();
+            return null;
+          }
+          task.fail(t("toast.playlist.importedNone", { count: String(scan.files.length) }));
+          notify.error(t("toast.playlist.importedNone", { count: String(scan.files.length) }), {
+            action: taskDetailsAction(),
+          });
           return null;
         }
 
-        notify.success(
-          t("toast.playlistFolder.importedLinked", {
-            imported: String(playlistIds.length),
-            count: String(scan.files.length),
-            folder: rootFolder.name,
-          }),
-        );
+        const message = t("toast.playlistFolder.importedLinked", {
+          imported: String(playlistIds.length),
+          count: String(scan.files.length),
+          folder: rootFolder.name,
+        });
+        task.finish(message);
+        notify.success(message);
         return { folderId: rootFolder.id, playlistIds };
-      } catch {
+      } catch (error) {
         await cleanupFolders();
-        notify.error(t("toast.playlistFolder.importFailed"));
+        task.fail(taskErrorMessage(error));
+        notify.error(t("toast.playlistFolder.importFailed"), { action: taskDetailsAction() });
         return null;
       }
     },
@@ -337,18 +378,26 @@ export const usePlaylistTransfer = () => {
   }, []);
 
   const exportAllPlaylists = useCallback(async (destinationPath: string) => {
+    const task = startTask({ kind: "playlist", title: t("tasks.playlistExport.title") });
     try {
       const result = await exportAllPlaylistFiles(destinationPath);
-      notify.success(
+      const message =
         `Exported ${result.playlistsExported} playlists with ` +
-          `${result.playlistEntriesExported} track entries`,
-      );
+        `${result.playlistEntriesExported} track entries`;
+      task.succeed(message);
+      notify.success(message);
       return result;
-    } catch {
-      notify.error(t("toast.playlist.exportAllFailed"));
+    } catch (error) {
+      // Writing the same files again is harmless, so the whole export can be retried.
+      task.update({ retry: () => void exportAllPlaylistsRef.current(destinationPath) });
+      task.fail(taskErrorMessage(error));
+      notify.error(t("toast.playlist.exportAllFailed"), { action: taskDetailsAction() });
       return null;
     }
   }, []);
+  useEffect(() => {
+    exportAllPlaylistsRef.current = exportAllPlaylists;
+  }, [exportAllPlaylists]);
 
   return { importPlaylist, importPlaylistFolder, exportPlaylist, exportAllPlaylists };
 };

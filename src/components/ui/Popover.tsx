@@ -5,6 +5,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -14,6 +15,8 @@ type PopoverProps = {
   children: ReactNode;
   className?: string;
   onClose: () => void;
+  /** The popover's own toggle; pressing it is not an outside click, so it can close the popover. */
+  anchorRef?: RefObject<HTMLElement | null>;
 };
 
 const VIEWPORT_MARGIN = 8;
@@ -25,7 +28,14 @@ type ResolvedPosition = {
   vertical: "up" | "down";
 };
 
-export const Popover = ({ isOpen, position, children, className = "", onClose }: PopoverProps) => {
+export const Popover = ({
+  isOpen,
+  position,
+  children,
+  className = "",
+  onClose,
+  anchorRef,
+}: PopoverProps) => {
   const [shouldRender, setShouldRender] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [resolvedPosition, setResolvedPosition] = useState<ResolvedPosition>({
@@ -42,6 +52,7 @@ export const Popover = ({ isOpen, position, children, className = "", onClose }:
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && panelRef.current?.contains(target)) return;
+      if (target instanceof Node && anchorRef?.current?.contains(target)) return;
       onClose();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -56,7 +67,7 @@ export const Popover = ({ isOpen, position, children, className = "", onClose }:
       document.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [anchorRef, isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen) {

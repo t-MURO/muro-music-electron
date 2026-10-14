@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@muro/desktop/runtime";
 import { listen } from "@muro/desktop/events";
 import { open } from "@muro/desktop/dialogs";
-import { notify, useLibraryStore, useSettingsStore } from "../stores";
+import { notify, startTask, useLibraryStore, useSettingsStore } from "../stores";
 import { importedTrackToTrack, type ImportedTrack } from "../utils";
 import { t } from "../i18n";
+import { taskDetailsAction, taskErrorMessage } from "../utils/tasks";
 
 type WatchedImportPayload = {
   track: ImportedTrack;
@@ -72,17 +73,22 @@ export const useWatchedFolders = () => {
   const scanNow = useCallback(async () => {
     if (scanning || !watchedFolder) return;
     setScanning(true);
+    const task = startTask({ kind: "import", title: t("tasks.watchScan.title") });
     try {
       const result = await invoke<{ imported: number; scanned: number }>("scan_watched_folder", {
         folder: watchedFolder,
       });
       if (result.imported > 0) {
-        notify.success(t("watch.scan.imported", { count: String(result.imported) }));
+        const message = t("watch.scan.imported", { count: String(result.imported) });
+        task.succeed(message);
+        notify.success(message);
       } else {
+        task.succeed(t("watch.scan.nothingNew"));
         notify.info(t("watch.scan.nothingNew"));
       }
-    } catch {
-      notify.error(t("watch.scan.failed"));
+    } catch (error) {
+      task.fail(taskErrorMessage(error));
+      notify.error(t("watch.scan.failed"), { action: taskDetailsAction() });
     } finally {
       setScanning(false);
     }

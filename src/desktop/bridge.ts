@@ -79,6 +79,7 @@ export type MuroBridge = {
   clipboardHasImage(): Promise<boolean>;
   cacheClipboardCoverArt(): Promise<{ fullPath: string; thumbPath: string } | null>;
   copyImageToClipboard(filePath: string): Promise<boolean>;
+  copyTextToClipboard(text: string): Promise<boolean>;
   windowControl(action: WindowControlAction): Promise<boolean>;
   isWindowMaximized(): Promise<boolean>;
   openDialog(options: Record<string, unknown>): Promise<string | string[] | null>;

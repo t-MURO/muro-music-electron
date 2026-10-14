@@ -1,7 +1,14 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@muro/desktop/events";
 import { t } from "../i18n";
-import { notify, useNotificationStore, useSettingsStore, useUpdateStore } from "../stores";
+import {
+  notify,
+  startTask,
+  useNotificationStore,
+  useSettingsStore,
+  useUpdateStore,
+  type TaskHandle,
+} from "../stores";
 import {
   DOWNLOAD_ERROR_MESSAGES,
   UPDATE_STATUS_EVENT,
@@ -9,6 +16,7 @@ import {
   checkForUpdates,
   downloadPercent,
   downloadUpdate,
+  formatMegabytes,
   getUpdateStatus,
   openUpdateInstaller,
   openUpdateReleasePage,
@@ -66,10 +74,50 @@ const notifyUpdateAvailable = (status: UpdateStatus) => {
   });
 };
 
+let downloadTask: TaskHandle | null = null;
+
+/** Mirror the installer download in the task center. */
+const reflectDownloadTask = (download: UpdateStatus["download"]) => {
+  const version = download.version ?? "";
+  if (download.state === "downloading") {
+    downloadTask ??= startTask({
+      kind: "update",
+      key: "update-download",
+      title: t("tasks.update.title", { version }),
+      unit: "percent",
+      cancel: () => void cancelUpdateDownload().catch(reportFailure),
+    });
+    const total = download.totalBytes > 0 ? download.totalBytes : null;
+    downloadTask.progress(
+      download.receivedBytes,
+      total,
+      total === null
+        ? t("tasks.update.received", { received: formatMegabytes(download.receivedBytes) })
+        : t("tasks.update.receivedOf", {
+            received: formatMegabytes(download.receivedBytes),
+            total: formatMegabytes(total),
+          }),
+    );
+    return;
+  }
+  const task = downloadTask;
+  downloadTask = null;
+  if (!task) return;
+  if (download.state === "completed") {
+    task.succeed(t("update.download.done", { name: download.fileName ?? "" }));
+  } else if (download.state === "failed") {
+    task.update({ retry: () => void downloadUpdate(version).catch(reportFailure) });
+    task.fail(t(DOWNLOAD_ERROR_MESSAGES[download.error ?? "network"]));
+  } else {
+    task.cancelled();
+  }
+};
+
 /** Mirror the installer download in a toast so it can be followed from anywhere. */
 const reflectDownload = (previous: UpdateStatus["download"] | null, status: UpdateStatus) => {
   const { download } = status;
   const version = download.version ?? "";
+  reflectDownloadTask(download);
   if (download.state === "downloading") {
     const percent = downloadPercent(download);
     const previousPercent =

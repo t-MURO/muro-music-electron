@@ -355,6 +355,15 @@ const startApplication = async () => {
     clipboard.writeImage(image);
     return true;
   });
+  // Text only (task error reports); the renderer's own clipboard API is denied
+  // by the permission handler above.
+  registerTrustedHandler("muro:copy-text-to-clipboard", (_event, text) => {
+    if (typeof text !== "string" || text.length > 1_000_000) {
+      throw new Error("The text could not be copied");
+    }
+    clipboard.writeText(text);
+    return true;
+  });
   registerTrustedHandler("muro:window-is-maximized", (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     return window?.isMaximized() ?? false;

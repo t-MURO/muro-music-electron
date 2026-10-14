@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { useLibraryStore, useSettingsStore, useRecentlyPlayedStore, notify } from "../stores";
+import {
+  useLibraryStore,
+  useSettingsStore,
+  useRecentlyPlayedStore,
+  notify,
+  startTask,
+  type TaskHandle,
+} from "../stores";
 import {
   backfillCoverArt,
   backfillSearchText,
@@ -103,6 +110,13 @@ export const useLibraryInit = () => {
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // Shown in the task center only when the scan spans several batches; a
+    // single batch for a few new tracks is too quick to be worth listing.
+    let task: TaskHandle | null = null;
+    let checked = 0;
+    let failed = 0;
+    const summary = () =>
+      t("tasks.metadata.summary", { checked: String(checked), failed: String(failed) });
     const schedule = (delayMs: number) => {
       if (!cancelled) timer = setTimeout(() => void run(), delayMs);
     };
@@ -110,6 +124,21 @@ export const useLibraryInit = () => {
       try {
         const result = await scanTechnicalMetadata(TECHNICAL_SCAN_BATCH_SIZE);
         if (cancelled) return;
+        checked += result.checked;
+        failed += result.failed;
+        if (!task && result.remaining > 0) {
+          task = startTask({
+            kind: "metadata",
+            title: t("tasks.metadata.title"),
+            // Stops between batches; the scan resumes on the next start.
+            cancel: () => {
+              cancelled = true;
+              if (timer) clearTimeout(timer);
+              task?.cancelled(summary());
+            },
+          });
+        }
+        task?.progress(checked, checked + result.remaining);
         // Patch only the scanned rows; reloading the whole library per batch
         // made a large first scan cost one full load every 25 tracks.
         if (result.tracks?.length) {
@@ -123,14 +152,18 @@ export const useLibraryInit = () => {
           );
         }
         if (result.remaining > 0) schedule(CONTINUE_TECHNICAL_SCAN_DELAY_MS);
+        else task?.succeed(summary());
       } catch (error) {
         console.warn("Failed to scan technical track metadata", error);
+        task?.fail(error);
       }
     };
     schedule(INITIAL_TECHNICAL_SCAN_DELAY_MS);
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      // A library switch restarts the scan with a fresh task.
+      task?.cancelled();
     };
   }, [libraryRoot, patchTracks]);
 

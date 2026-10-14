@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@muro/desktop/runtime";
 import { analyzeAndStoreLoudness } from "../lib/loudness/service";
-import { notify, useLibraryStore, useSettingsStore } from "../stores";
+import { notify, startTask, useLibraryStore, useSettingsStore } from "../stores";
 import { loadTracks, importedTrackToTrack } from "../utils";
+import { taskDetailsAction, taskErrorMessage, taskItemName } from "../utils/tasks";
 import { t } from "../i18n";
 
 type PendingTrack = { id: string; source_path: string };
@@ -32,6 +33,8 @@ const IDLE_STATE: LoudnessScanState = {
 export const useLoudnessAnalysis = () => {
   const [state, setState] = useState<LoudnessScanState>(IDLE_STATE);
   const cancelRef = useRef(false);
+  // The task center's retry outlives this component (it lives in Settings).
+  const runRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const setTracks = useLibraryStore((s) => s.setTracks);
   const setInboxTracks = useLibraryStore((s) => s.setInboxTracks);
   const artistSeparatorExceptions = useSettingsStore(
@@ -63,22 +66,33 @@ export const useLoudnessAnalysis = () => {
     }
 
     setState({ running: true, analyzed: 0, total: pending.length, failed: 0 });
+    const task = startTask({
+      kind: "loudness",
+      title: t("tasks.loudness.title"),
+      total: pending.length,
+      cancel: () => {
+        cancelRef.current = true;
+      },
+    });
 
     let analyzed = 0;
     let failed = 0;
     for (const track of pending) {
       if (cancelRef.current) break;
+      task.setDetail(taskItemName(track.source_path));
       try {
         await analyzeAndStoreLoudness(
           { id: track.id, sourcePath: track.source_path },
           referenceLufs,
         );
         analyzed += 1;
-      } catch {
+      } catch (error) {
         // A single undecodable file must not end the scan.
         failed += 1;
+        task.addError(taskItemName(track.source_path), taskErrorMessage(error));
       }
       setState({ running: true, analyzed, total: pending.length, failed });
+      task.progress(analyzed + failed, pending.length);
     }
 
     // Album gain needs every track on a release, so it is derived once at the
@@ -99,6 +113,13 @@ export const useLoudnessAnalysis = () => {
     }
 
     setState({ running: false, analyzed, total: pending.length, failed });
+    const summary = t("tasks.loudness.summary", {
+      analyzed: String(analyzed),
+      failed: String(failed),
+    });
+    if (failed > 0) task.update({ retry: () => void runRef.current() });
+    if (cancelRef.current) task.cancelled(summary);
+    else task.finish(summary);
     cancelRef.current = false;
 
     if (failed > 0) {
@@ -107,11 +128,16 @@ export const useLoudnessAnalysis = () => {
           analyzed: String(analyzed),
           failed: String(failed),
         }),
+        { action: taskDetailsAction() },
       );
     } else {
       notify.success(t("loudness.scan.finished", { analyzed: String(analyzed) }));
     }
   }, [artistSeparatorExceptions, setInboxTracks, setTracks]);
+
+  useEffect(() => {
+    runRef.current = run;
+  }, [run]);
 
   return { ...state, run, cancel };
 };

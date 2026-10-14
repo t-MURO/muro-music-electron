@@ -4,6 +4,7 @@ import appLogo from "../../assets/app-logo.png";
 import type { WindowControlAction } from "../../desktop/bridge";
 import { useCommandHistory, useHistoryNavigation } from "../../hooks";
 import { t } from "../../i18n";
+import { TaskCenter } from "../tasks/TaskCenter";
 
 type WindowMaximizedPayload = {
   maximized?: unknown;
@@ -212,6 +213,8 @@ export const WindowChrome = () => {
       )}
 
       <div className="min-w-4 flex-1" />
+
+      <TaskCenter />
 
       {!isMac && (
         <div className="window-no-drag flex h-full items-stretch" data-window-controls="desktop">

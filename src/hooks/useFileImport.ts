@@ -1,8 +1,16 @@
 import { listen } from "@muro/desktop/events";
 import { useCallback, useEffect, useRef } from "react";
 import { commandManager, type Command } from "../command-manager/commandManager";
-import { useLibraryStore, useSettingsStore, useUIStore, notify } from "../stores";
 import {
+  useLibraryStore,
+  useSettingsStore,
+  useUIStore,
+  notify,
+  startTask,
+  type TaskHandle,
+} from "../stores";
+import {
+  cancelImport,
   createPlaylist,
   deletePlaylist,
   deleteTracks,
@@ -13,12 +21,17 @@ import {
 } from "../utils";
 import type { Playlist } from "../types";
 import { t } from "../i18n";
+import { taskDetailsAction, taskErrorMessage, taskItemName } from "../utils/tasks";
 
 export type ImportProgress = {
   imported: number;
   total: number;
   phase: "scanning" | "importing";
+  /** Set by imports started with an ID, so progress reaches the right task. */
+  importId?: string | null;
 };
+
+let importSequence = 0;
 
 export type PlaylistDropOperation = {
   playlistId: string;
@@ -37,6 +50,9 @@ export const useFileImport = ({
 }: UseFileImportArgs = {}) => {
   const playlistSequenceRef = useRef(0);
   const clearProgressTimerRef = useRef<number | null>(null);
+  // Background tasks of running imports, by import ID, for progress events.
+  const importTasksRef = useRef(new Map<string, TaskHandle>());
+  const handleImportPathsRef = useRef<(paths: string[]) => Promise<void>>(() => Promise.resolve());
 
   // Get state and actions from stores
   const playlists = useLibraryStore((s) => s.playlists);
@@ -153,6 +169,8 @@ export const useFileImport = ({
         return;
       }
 
+      let importId: string | null = null;
+      let task: TaskHandle | null = null;
       try {
         if (clearProgressTimerRef.current !== null && typeof window !== "undefined") {
           window.clearTimeout(clearProgressTimerRef.current);
@@ -175,18 +193,50 @@ export const useFileImport = ({
           }
         }
 
+        importId = `import-${Date.now()}-${++importSequence}`;
+        const taskImportId = importId;
+        task = startTask({
+          kind: "import",
+          title: t("tasks.import.title"),
+          detail: t("tasks.import.scanning"),
+          cancel: () => void cancelImport(taskImportId).catch(() => undefined),
+        });
+        importTasksRef.current.set(importId, task);
         const result = await importFiles(paths, {
           libraryFolder: watchedFolder,
+          importId,
         });
+        importTasksRef.current.delete(importId);
+        for (const failure of result.failures) {
+          task.addError(taskItemName(failure.path), failure.message);
+        }
+        const failedPaths = result.failures.map((failure) => failure.path);
+        if (failedPaths.length > 0) {
+          task.update({ retry: () => void handleImportPathsRef.current(failedPaths) });
+        }
         const imported = result.imported;
+        const summary = t("tasks.import.summary", {
+          imported: String(imported.length),
+          scanned: String(result.scanned),
+        });
+        if (result.cancelled) {
+          task.cancelled(summary);
+        } else if (result.scanned === 0 && failedPaths.length === 0) {
+          task.fail(t("toast.import.noSupportedFiles"));
+        } else {
+          task.finish(summary);
+        }
         if (imported.length === 0) {
-          if (result.scanned === 0) {
+          if (result.cancelled) {
+            notify.info(t("toast.import.cancelled"));
+          } else if (result.scanned === 0) {
             notify.error(t("toast.import.noSupportedFiles"));
           } else if (result.failures.length > 0) {
             notify.error(
               result.failures.length === 1
                 ? `Could not import ${result.failures[0].path.split(/[\\/]/).slice(-1)[0] || "audio file"}`
                 : `${result.failures.length} audio files could not be imported`,
+              { action: taskDetailsAction() },
             );
           } else {
             notify.success(t("toast.import.allKnown"));
@@ -244,7 +294,9 @@ export const useFileImport = ({
         setInboxTracks((current) => [...convertedTracks, ...current]);
         await commandManager.recordExecuted(command);
         if (result.failures.length > 0) {
-          notify.error(t("toast.import.someFailed", { count: String(result.failures.length) }));
+          notify.error(t("toast.import.someFailed", { count: String(result.failures.length) }), {
+            action: taskDetailsAction(),
+          });
         } else {
           notify.success(t("toast.import.succeeded", { count: String(imported.length) }));
         }
@@ -258,12 +310,20 @@ export const useFileImport = ({
           setImportProgress(null);
         }
       } catch (error) {
-        notify.error(t("toast.import.failed"));
+        if (importId) importTasksRef.current.delete(importId);
+        if (task && !task.finished) {
+          task.update({ retry: () => void handleImportPathsRef.current(paths) });
+          task.fail(taskErrorMessage(error));
+        }
+        notify.error(t("toast.import.failed"), task ? { action: taskDetailsAction() } : undefined);
         setImportProgress(null);
       }
     },
     [setImportProgress, setInboxTracks, onImportComplete, onPlaylistFolderDetected, watchedFolder],
   );
+  useEffect(() => {
+    handleImportPathsRef.current = handleImportPaths;
+  }, [handleImportPaths]);
 
   const handleCreatePlaylist = useCallback(
     async (name: string, initialTrackIds: string[] = []): Promise<string | null> => {
@@ -337,6 +397,11 @@ export const useFileImport = ({
             const payload = event.payload;
             if (!payload) {
               return;
+            }
+            if (payload.importId) {
+              importTasksRef.current
+                .get(payload.importId)
+                ?.progress(payload.imported, payload.total, null);
             }
             setImportProgress({
               imported: payload.imported,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "../desktop/events";
-import { notify, useLibraryStore, useSettingsStore } from "../stores";
+import { notify, startTask, useLibraryStore, useSettingsStore, type TaskHandle } from "../stores";
 import {
   exportOrganizedLibrary,
   importedTrackToTrack,
@@ -8,6 +8,7 @@ import {
   type OrganizedLibraryExportResult,
 } from "../utils";
 import { t } from "../i18n";
+import { taskDetailsAction, taskItemName } from "../utils/tasks";
 
 type OrganizedLibraryExportProgress = {
   phase: "music" | "playlists";
@@ -22,6 +23,7 @@ export const useOrganizedLibraryExport = () => {
   const setLibraryRoot = useSettingsStore((state) => state.setWatchedFolder);
   const artistSeparatorExceptions = useSettingsStore((state) => state.artistSeparatorExceptions);
   const pendingRef = useRef(false);
+  const taskRef = useRef<TaskHandle | null>(null);
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -30,6 +32,11 @@ export const useOrganizedLibraryExport = () => {
     let unlisten: (() => void) | null = null;
     void listen<OrganizedLibraryExportProgress>("muro://library-export-progress", ({ payload }) => {
       if (!active || !pendingRef.current || !payload) return;
+      taskRef.current?.progress(
+        payload.current,
+        payload.total > 0 ? payload.total : null,
+        t(payload.phase === "music" ? "tasks.export.music" : "tasks.export.playlists"),
+      );
       const subject = payload.phase === "music" ? "music files" : "playlists";
       setStatus(
         payload.total > 0
@@ -54,8 +61,26 @@ export const useOrganizedLibraryExport = () => {
       pendingRef.current = true;
       setPending(true);
       setStatus("Preparing organized library export…");
+      // Copying runs in the main process without a way to stop it, so no Cancel.
+      const task = startTask({ kind: "export", title: t("tasks.export.title") });
+      taskRef.current = task;
       try {
         const result = await exportOrganizedLibrary(destinationPath, useAsCurrentLibrary);
+        for (const failure of result.failures) {
+          task.addError(taskItemName(failure.sourcePath), failure.message);
+        }
+        if (result.librarySwitchRequested && !result.librarySwitched) {
+          task.addError(
+            result.exportRoot,
+            result.librarySwitchError ?? t("toast.export.doneNotSwitched"),
+          );
+        }
+        task.finish(
+          t("tasks.export.summary", {
+            files: result.filesCopied.toLocaleString(),
+            playlists: result.playlistsExported.toLocaleString(),
+          }),
+        );
         let rendererReloadError: string | null = null;
         if (result.librarySwitched) {
           try {
@@ -90,7 +115,10 @@ export const useOrganizedLibraryExport = () => {
         } else if (rendererReloadError) {
           notify.info(t("toast.export.restartNeeded"));
         } else if (result.tracksFailed > 0) {
-          notify.info(t("toast.export.completedWithSkips", { count: String(result.tracksFailed) }));
+          notify.info(
+            t("toast.export.completedWithSkips", { count: String(result.tracksFailed) }),
+            { action: taskDetailsAction() },
+          );
         } else if (result.librarySwitched) {
           notify.success(t("toast.export.doneSwitched"));
         } else {
@@ -99,11 +127,13 @@ export const useOrganizedLibraryExport = () => {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Failed to export the library";
+        task.fail(message);
         setStatus(message);
         notify.error(message);
         return null;
       } finally {
         pendingRef.current = false;
+        taskRef.current = null;
         setPending(false);
       }
     },

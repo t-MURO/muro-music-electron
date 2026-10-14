@@ -94,6 +94,7 @@ import {
   useRecentlyPlayedStore,
   useSmartCrateStore,
   useSleepTimerStore,
+  useTaskStore,
   selectAllTracks,
   notify,
   applyThemeMode,
@@ -1956,6 +1957,12 @@ function App() {
       label: t("palette.sleep.cancel"),
       keywords: "sleep timer off stop after",
       run: () => useSleepTimerStore.getState().cancelAll(),
+    },
+    {
+      id: "background-tasks",
+      label: t("palette.tasks"),
+      keywords: "jobs progress import analysis export backup errors",
+      run: () => useTaskStore.getState().openPanel(),
     },
   ];
 

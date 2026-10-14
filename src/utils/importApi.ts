@@ -94,6 +94,8 @@ export type ImportFilesResult = {
   imported: ImportedTrack[];
   scanned: number;
   failures: Array<{ path: string; message: string }>;
+  /** True when `cancelImport` stopped the import before every file was read. */
+  cancelled?: boolean;
 };
 
 // ============================================================================
@@ -104,13 +106,20 @@ export const importFiles = (
   paths: string[],
   options: {
     libraryFolder?: string;
+    /** Lets `cancelImport` stop this import and tags its progress events. */
+    importId?: string;
   } = {},
 ) => {
   return invoke<ImportFilesResult>("import_files", {
     paths,
     libraryFolder: options.libraryFolder ?? "",
+    importId: options.importId,
   });
 };
+
+/** Stop a running import before its next file; files already imported stay. */
+export const cancelImport = (importId: string) =>
+  invoke<{ cancelled: boolean }>("cancel_import", { importId });
 
 // ============================================================================
 // Type Conversion

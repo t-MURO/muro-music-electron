@@ -296,6 +296,7 @@ app.whenReady().then(async () => {
     copiedCoverPaths.push(filePath);
     return true;
   });
+  ipcMain.handle("muro:copy-text-to-clipboard", () => true);
   ipcMain.handle(
     "muro:window-is-maximized",
     (event) => BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false,
@@ -1345,6 +1346,23 @@ app.whenReady().then(async () => {
           itunesExportArgs && !Object.hasOwn(itunesExportArgs, "dbPath") &&
           itunesExportStatus?.textContent?.includes("Exported 250 tracks and 5 playlists")
         );
+        // The finished export is listed in the task center behind the title-bar button.
+        const finishedExportTask = () =>
+          document.querySelector(
+            '[data-task-center] [data-task-kind="export"][data-task-status="succeeded"]'
+          );
+        document.querySelector("[data-task-center-toggle]")?.click();
+        await waitForCondition(() =>
+          finishedExportTask()?.textContent?.includes("iTunes library export")
+        );
+        const taskCenterReady = Boolean(
+          document.querySelector("[data-task-center-toggle]")?.getAttribute("aria-expanded") ===
+            "true" &&
+          document.querySelector('[data-task-center][role="dialog"]') &&
+          finishedExportTask()?.textContent?.includes("iTunes library export")
+        );
+        document.querySelector("[data-task-center-toggle]")?.click();
+        await waitForCondition(() => !document.querySelector("[data-task-center]"));
         document.querySelector("[data-watch-add-folder]")?.click();
         await waitForCondition(() => Boolean(
           document.querySelector("[data-watch-add-folder]")?.textContent
@@ -1521,6 +1539,7 @@ app.whenReady().then(async () => {
             showKeyReady &&
             libraryReady &&
             itunesExportReady &&
+            taskCenterReady &&
             firstWatchedFolderReady &&
             singleWatchedFolderReady &&
             structureValidationShowsTracks &&
@@ -1540,6 +1559,7 @@ app.whenReady().then(async () => {
             itunesExportReady,
             itunesExportArgs,
             itunesExportStatus: itunesExportStatus?.textContent?.trim() ?? null,
+            taskCenterReady,
             firstWatchedFolderReady,
             singleWatchedFolderReady,
             persistedWatchedFolder,

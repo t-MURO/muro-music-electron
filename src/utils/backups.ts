@@ -2,6 +2,7 @@ import { emitLocal } from "@muro/desktop/events";
 import { invoke } from "@muro/desktop/runtime";
 import { bridge, type BackupFrequency, type BackupStatus } from "../desktop/bridge";
 import { t } from "../i18n";
+import { startTask } from "../stores/taskStore";
 import type { LibraryBackupResult } from "./database";
 
 export type { BackupFrequency, BackupStatus };
@@ -61,6 +62,29 @@ export const setBackupSchedule = (schedule: { frequency?: BackupFrequency; reten
 /** Writes an automatic backup if one is due, or always with `force`. */
 export const runScheduledBackup = (force = false) =>
   invoke<ScheduledBackupResult>("run_scheduled_backup", { ...readBackupState(), force });
+
+/** Retry for a failed backup task: write one now and refresh the backup settings. */
+export const retryBackupNow = () => {
+  void backUpNow()
+    .then((result) => emitBackupStatus(result.status))
+    .catch(() => undefined);
+};
+
+/** Write an automatic-folder backup now, reported in the task center. */
+export const backUpNow = async () => {
+  const task = startTask({ kind: "backup", title: t("tasks.backup.now") });
+  try {
+    const result = await runScheduledBackup(true);
+    task.succeed(
+      result.backup ? t("backup.auto.created", { name: result.backup.fileName }) : undefined,
+    );
+    return result;
+  } catch (error) {
+    task.update({ retry: retryBackupNow });
+    task.fail(error);
+    throw error;
+  }
+};
 
 export const chooseBackupFolder = (): Promise<BackupStatus | null> => bridge().chooseBackupFolder();
 

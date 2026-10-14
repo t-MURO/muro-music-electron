@@ -13,7 +13,7 @@ import {
   type AnalysisResult,
   type BpmRange,
 } from "../../lib/keyfinder";
-import { useSettingsStore } from "../../stores";
+import { startTask, useSettingsStore, type TaskHandle } from "../../stores";
 import type { Track } from "../../types";
 
 type TrackAnalysis = {
@@ -50,6 +50,9 @@ const analysisWorkerCount = (performance: "stable" | "fast" | "maximum") => {
     typeof navigator === "undefined" ? 4 : Number(navigator.hardwareConcurrency) || 4;
   return Math.max(1, Math.min(4, available));
 };
+
+const trackLabel = (track: Track) =>
+  [track.artist, track.title].filter(Boolean).join(" – ") || track.sourcePath;
 
 const formatEta = (seconds: number) => {
   const rounded = Math.max(0, Math.round(seconds));
@@ -99,6 +102,17 @@ export const AnalysisModal = ({
     overscan: 8,
   });
 
+  const handleCancel = useCallback(() => {
+    cancelRequestedRef.current = true;
+    setIsCancelled(true);
+    const activeJobIds = [...activeJobIdsRef.current];
+    activeJobIdsRef.current.clear();
+    for (const nativeJobId of activeJobIds) {
+      void cancelTrackAnalysis(nativeJobId).catch(() => undefined);
+    }
+    stopWaitingRef.current?.();
+  }, []);
+
   // Run one native KeyFinder job per jobId. Keyed on the job rather than the
   // tracks array so library updates while it runs (including the ones the
   // analysis causes) neither cancel it nor clear its results.
@@ -124,6 +138,11 @@ export const AnalysisModal = ({
 
     let disposed = false;
     let removeListener: (() => void) | undefined;
+    // Mirrors the run in the task center, so it stays visible while minimized.
+    // Closing the modal cancels the run, so the task ends with it.
+    let task: TaskHandle | null = null;
+    let succeededTracks = 0;
+    let failedTracks = 0;
     const finishedJobs = new Set<string>();
     const finishResolvers = new Map<string, () => void>();
     const stopWaiting = () => {
@@ -181,7 +200,9 @@ export const AnalysisModal = ({
             const engineTrack = event.payload.track;
             const analysisIndex = analysisIndexRef.current.get(engineTrack.id);
             if (analysisIndex === undefined) return;
+            const analyzedTrack = tracks[analysisIndex];
             if (engineTrack.status === "completed") {
+              succeededTracks += 1;
               const result = analysisResultFromTrack(engineTrack);
               setAnalyses((previous) => {
                 const next = [...previous];
@@ -198,6 +219,13 @@ export const AnalysisModal = ({
                 return next;
               });
             } else if (engineTrack.status === "failed") {
+              failedTracks += 1;
+              if (analyzedTrack) {
+                task?.addError(
+                  trackLabel(analyzedTrack),
+                  engineTrack.error?.message || "Analysis failed",
+                );
+              }
               setAnalyses((previous) => {
                 const next = [...previous];
                 const analysis = next[analysisIndex];
@@ -228,6 +256,14 @@ export const AnalysisModal = ({
           removeListener();
           return;
         }
+        // Started once the run survives its first await, so an effect that is
+        // torn down straight away (React's development double run) lists nothing.
+        task = startTask({
+          kind: "analysis",
+          title: t("tasks.analysis.title"),
+          total: tracks.length,
+          cancel: handleCancel,
+        });
 
         const runWorker = async () => {
           while (!disposed && !cancelRequestedRef.current) {
@@ -235,6 +271,7 @@ export const AnalysisModal = ({
             nextTrackIndex += ANALYSIS_BATCH_SIZE;
             if (offset >= tracks.length) return;
             const batch = tracks.slice(offset, offset + ANALYSIS_BATCH_SIZE);
+            task?.setDetail(trackLabel(batch[0]));
             try {
               const started = await startTrackAnalysis(batch, {
                 performance: analysisPerformance,
@@ -261,6 +298,10 @@ export const AnalysisModal = ({
             } catch (error) {
               if (disposed) return;
               const message = error instanceof Error ? error.message : "Analysis failed";
+              for (const track of batch) {
+                failedTracks += 1;
+                task?.addError(trackLabel(track), message);
+              }
               setAnalyses((previous) => {
                 const next = [...previous];
                 for (const track of batch) {
@@ -289,6 +330,7 @@ export const AnalysisModal = ({
                 current: Math.min(completedTracks, tracks.length),
                 total: tracks.length,
               });
+              task?.progress(Math.min(completedTracks, tracks.length), tracks.length);
             }
             if (nextTrackIndex < tracks.length) {
               await new Promise((resolve) =>
@@ -303,13 +345,22 @@ export const AnalysisModal = ({
       } catch (error) {
         if (disposed) return;
         const message = error instanceof Error ? error.message : "Analysis failed";
+        task?.fail(message);
         setAnalyses((previous) =>
           previous.map((analysis) =>
             analysis.result || analysis.error ? analysis : { ...analysis, error: message },
           ),
         );
       } finally {
-        if (!disposed) setIsAnalyzing(false);
+        if (!disposed) {
+          setIsAnalyzing(false);
+          const summary = t("tasks.analysis.summary", {
+            success: String(succeededTracks),
+            failed: String(failedTracks),
+          });
+          if (cancelRequestedRef.current) task?.cancelled(summary);
+          else task?.finish(summary);
+        }
       }
     };
 
@@ -317,6 +368,7 @@ export const AnalysisModal = ({
 
     return () => {
       disposed = true;
+      task?.cancelled();
       if (stopWaitingRef.current === stopWaiting) stopWaitingRef.current = null;
       removeListener?.();
       stopWaiting();
@@ -330,7 +382,7 @@ export const AnalysisModal = ({
     };
     // Settings and the tracks snapshot are read when the job starts; only a
     // new job (or closing the modal) should restart or cancel it.
-  }, [isOpen, jobId]);
+  }, [handleCancel, isOpen, jobId]);
 
   // Re-normalize BPM when range changes
   useEffect(() => {
@@ -377,17 +429,6 @@ export const AnalysisModal = ({
       setIsSaving(false);
     }
   }, [analyses, onAnalysisComplete, onClose]);
-
-  const handleCancel = useCallback(() => {
-    cancelRequestedRef.current = true;
-    setIsCancelled(true);
-    const activeJobIds = [...activeJobIdsRef.current];
-    activeJobIdsRef.current.clear();
-    for (const nativeJobId of activeJobIds) {
-      void cancelTrackAnalysis(nativeJobId).catch(() => undefined);
-    }
-    stopWaitingRef.current?.();
-  }, []);
 
   const handleClose = useCallback(() => {
     // Cancel any ongoing analysis when closing

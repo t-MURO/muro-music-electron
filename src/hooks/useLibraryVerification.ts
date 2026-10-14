@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
 import { invoke } from "@muro/desktop/runtime";
 import { open } from "@muro/desktop/dialogs";
-import { notify, useLibraryStore, useSettingsStore } from "../stores";
+import { notify, startTask, useLibraryStore, useSettingsStore } from "../stores";
 import { importedTrackToTrack, loadTracks } from "../utils";
 import { t } from "../i18n";
+import { taskDetailsAction, taskErrorMessage } from "../utils/tasks";
 
 export type MissingTrack = {
   id: string;
@@ -64,6 +65,7 @@ export const useLibraryVerification = () => {
   const verify = useCallback(async () => {
     if (verifying) return;
     setVerifying(true);
+    const task = startTask({ kind: "verify", title: t("tasks.verify.title") });
     try {
       const result = await invoke<VerifyResult>("verify_library_files");
       setLastResult(result);
@@ -71,17 +73,20 @@ export const useLibraryVerification = () => {
       await reloadLibrary();
 
       if (result.missing === 0) {
-        notify.success(t("verify.allPresent", { checked: String(result.checked) }));
+        const message = t("verify.allPresent", { checked: String(result.checked) });
+        task.succeed(message);
+        notify.success(message);
       } else {
-        notify.info(
-          t("verify.foundMissing", {
-            missing: String(result.missing),
-            checked: String(result.checked),
-          }),
-        );
+        const message = t("verify.foundMissing", {
+          missing: String(result.missing),
+          checked: String(result.checked),
+        });
+        task.succeed(message);
+        notify.info(message);
       }
-    } catch {
-      notify.error(t("verify.failed"));
+    } catch (error) {
+      task.fail(taskErrorMessage(error));
+      notify.error(t("verify.failed"), { action: taskDetailsAction() });
     } finally {
       setVerifying(false);
     }
@@ -120,6 +125,7 @@ export const useLibraryVerification = () => {
     if (typeof directory !== "string") return;
 
     setRelinking(true);
+    const task = startTask({ kind: "verify", title: t("tasks.relink.title") });
     try {
       const result = await invoke<AutoRelinkResult>("auto_relink_missing", {
         searchDir: directory,
@@ -129,11 +135,15 @@ export const useLibraryVerification = () => {
       await reloadLibrary();
 
       if (result.relinked === 0) {
+        task.succeed(t("verify.autoRelink.none"));
         notify.info(t("verify.autoRelink.none"));
       } else {
-        notify.success(t("verify.autoRelink.done", { count: String(result.relinked) }));
+        const message = t("verify.autoRelink.done", { count: String(result.relinked) });
+        task.succeed(message);
+        notify.success(message);
       }
     } catch (error) {
+      task.fail(taskErrorMessage(error));
       notify.error(error instanceof Error ? error.message : t("verify.relinkFailed"));
     } finally {
       setRelinking(false);

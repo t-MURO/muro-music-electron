@@ -780,6 +780,24 @@ try {
     paths: [secondValidImportPath],
   });
   assert.equal(secondValidImport.imported.length, 1);
+  // The import registers its ID before its first await, so a cancel sent right
+  // after the request stops it before the first file.
+  const cancelledImportPath = path.join(directory, "cancelled-import.wav");
+  writeSilentWav(cancelledImportPath);
+  const cancelledImportPending = backend.invoke("import_files", {
+    dbPath,
+    paths: [cancelledImportPath],
+    importId: "smoke-cancel",
+  });
+  assert.deepEqual(await backend.invoke("cancel_import", { importId: "smoke-cancel" }), {
+    cancelled: true,
+  });
+  const cancelledImport = await cancelledImportPending;
+  assert.equal(cancelledImport.cancelled, true);
+  assert.equal(cancelledImport.imported.length, 0, "a cancelled import stops before the next file");
+  assert.deepEqual(await backend.invoke("cancel_import", { importId: "smoke-cancel" }), {
+    cancelled: false,
+  });
   const concurrentImportPath = path.join(directory, "concurrent-import.wav");
   writeSilentWav(concurrentImportPath);
   const concurrentImports = await Promise.all([

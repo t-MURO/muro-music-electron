@@ -20,7 +20,8 @@ import {
   type PlaylistHistoryState,
   type PlaylistSnapshotEntry,
 } from "../../utils";
-import { notify, useLibraryStore, useSettingsStore } from "../../stores";
+import { notify, runTask, useLibraryStore, useSettingsStore } from "../../stores";
+import { t } from "../../i18n";
 import { recordMetadataWrite, showTagWriteFailures } from "../../utils/tagWriteFailures";
 import { readBackupState } from "../../utils/backups";
 import { AutomaticBackupSettings } from "./AutomaticBackupSettings";
@@ -135,12 +136,15 @@ export const LibraryDataTools = () => {
       });
       if (!destinationPath) return;
       const { settingsJson, smartCratesJson } = readBackupState();
-      const result = await createLibraryBackup(destinationPath, settingsJson, smartCratesJson);
-      setStatus(
-        `Backup created: ${result.manifest.counts.tracks.toLocaleString()} tracks, ` +
+      await runTask({ kind: "backup", title: t("tasks.backup.manual") }, async (task) => {
+        const result = await createLibraryBackup(destinationPath, settingsJson, smartCratesJson);
+        const message =
+          `Backup created: ${result.manifest.counts.tracks.toLocaleString()} tracks, ` +
           `${result.manifest.counts.playlists.toLocaleString()} playlists, ` +
-          `${result.manifest.counts.artworkFiles.toLocaleString()} artwork files.`,
-      );
+          `${result.manifest.counts.artworkFiles.toLocaleString()} artwork files.`;
+        task.succeed(message);
+        setStatus(message);
+      });
     });
 
   const handleRestore = () =>
@@ -187,7 +191,19 @@ export const LibraryDataTools = () => {
         filters: [{ name: "iTunes Library XML", extensions: ["xml"] }],
       });
       if (!destinationPath) return;
-      const result = await exportItunesLibrary(destinationPath);
+      const result = await runTask(
+        { kind: "export", title: t("tasks.itunesExport.title") },
+        async (task) => {
+          const exported = await exportItunesLibrary(destinationPath);
+          task.succeed(
+            t("tasks.itunesExport.summary", {
+              tracks: exported.tracksExported.toLocaleString(),
+              playlists: exported.playlistsExported.toLocaleString(),
+            }),
+          );
+          return exported;
+        },
+      );
       const skipped =
         result.playlistEntriesSkipped > 0
           ? ` ${result.playlistEntriesSkipped.toLocaleString()} playlist entries that point to Inbox tracks were skipped.`

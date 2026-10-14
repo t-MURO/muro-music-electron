@@ -1,6 +1,8 @@
 import { invoke } from "@muro/desktop/runtime";
 import { t } from "../i18n";
 import { notify, useNotificationStore } from "../stores/notificationStore";
+import { startTask, type TaskHandle } from "../stores/taskStore";
+import { taskDetailsAction } from "./tasks";
 
 export type TagWriteError = {
   trackId: string;
@@ -21,6 +23,7 @@ type PendingTagWrite = Omit<TagWriteError, "trackId"> & {
 };
 
 const TOAST_KEY = "tag-write-failures";
+const TASK_KEY = "tag-writes";
 
 // Fields that are saved in the library but not yet in the audio file, keyed by
 // track. Later edits merge over earlier ones, so a retry never writes back a
@@ -28,6 +31,10 @@ const TOAST_KEY = "tag-write-failures";
 // fields it actually wrote.
 const pending = new Map<string, PendingTagWrite>();
 let retrying = false;
+// The task-center entry for the current failures, so an unchanged list is not
+// reported again after every unrelated edit.
+let reportedTask: TaskHandle | null = null;
+let reportedSignature = "";
 
 /**
  * Record the outcome of a metadata write. Returns the number of files whose
@@ -74,6 +81,24 @@ const failureReason = (entry: PendingTagWrite) => {
   }
 };
 
+const pendingSignature = () =>
+  JSON.stringify([...pending].map(([trackId, entry]) => [trackId, entry.message, entry.reason]));
+
+const forgetReportedTask = () => {
+  reportedTask?.update({ retry: null });
+  reportedTask = null;
+  reportedSignature = "";
+};
+
+/** Settle `task` as failed, listing every file still behind the library. */
+const reportFailures = (task: TaskHandle) => {
+  for (const entry of pending.values()) task.addError(entry.fileName, failureReason(entry));
+  task.update({ retry: () => void retryTagWrites() });
+  task.fail(undefined, t("tasks.tags.failedSummary", { count: String(pending.size) }));
+  reportedTask = task;
+  reportedSignature = pendingSignature();
+};
+
 /**
  * Show one persistent toast listing every file whose tags are behind the
  * library, with a retry. Repeated failures update the same toast.
@@ -83,9 +108,13 @@ export const showTagWriteFailures = () => {
   if (retrying) return;
   const store = useNotificationStore.getState();
   if (pending.size === 0) {
+    forgetReportedTask();
     const shown = store.notifications.find((notification) => notification.id === TOAST_KEY);
     if (shown?.type === "error") store.removeNotification(TOAST_KEY);
     return;
+  }
+  if (pendingSignature() !== reportedSignature) {
+    reportFailures(startTask({ kind: "tags", key: TASK_KEY, title: t("tasks.tags.title") }));
   }
   const entries = [...pending.values()];
   notify.error(
@@ -97,9 +126,13 @@ export const showTagWriteFailures = () => {
       sticky: true,
       details: entries.map((entry) => `${entry.fileName}: ${failureReason(entry)}`),
       action: { label: t("toast.tagWrite.retry"), onClick: () => void retryTagWrites() },
+      actions: [taskDetailsAction()],
       // The library already holds the edits and the backend keeps each
       // track's last write error, so dismissing only forgets the retry.
-      onDismiss: () => pending.clear(),
+      onDismiss: () => {
+        pending.clear();
+        forgetReportedTask();
+      },
     },
   );
 };
@@ -112,6 +145,13 @@ export const retryTagWrites = async () => {
     key: TOAST_KEY,
     sticky: true,
   });
+  const task = startTask({
+    kind: "tags",
+    key: TASK_KEY,
+    title: t("tasks.tags.title"),
+    total: attempted,
+  });
+  let tried = 0;
 
   // Bulk edits fail with identical updates, so retry them in one call.
   const groups = new Map<string, { trackIds: string[]; updates: Record<string, unknown> }>();
@@ -134,16 +174,21 @@ export const retryTagWrites = async () => {
           if (entry) pending.set(trackId, { ...entry, message, reason: "unknown" });
         }
       }
+      tried += group.trackIds.length;
+      task.progress(tried, attempted);
     }
   } finally {
     retrying = false;
   }
 
   if (pending.size === 0) {
+    task.succeed(t("tasks.tags.retrySummary", { count: String(attempted) }));
+    forgetReportedTask();
     notify.success(t("toast.tagWrite.retrySucceeded", { count: String(attempted) }), {
       key: TOAST_KEY,
     });
   } else {
+    reportFailures(task);
     showTagWriteFailures();
   }
 };

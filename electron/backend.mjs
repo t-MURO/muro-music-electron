@@ -841,6 +841,9 @@ export const createBackend = ({
   // The watcher fires outside any invoke() call, so it keeps a reference to the
   // most recent sender rather than receiving one per event.
   let lastSender = null;
+  // Running file imports by renderer-chosen ID; cancel_import flags one so its
+  // loop stops before the next file. Tracks imported so far are kept.
+  const activeImports = new Map();
   const libraryWatcher = createLibraryWatcher({
     cacheDir,
     emit,
@@ -888,6 +891,56 @@ export const createBackend = ({
         }
       },
     });
+
+  // Imports one file at a time, reporting progress; a cancelled import stops
+  // before the next file and returns what it imported so far.
+  const importFilesWithProgress = async (
+    { paths, dbPath, libraryFolder, importKey = null, importState = null },
+    sender,
+  ) => {
+    const failures = [];
+    const inputPaths = (Array.isArray(paths) ? paths : []).filter((inputPath) => {
+      if (pathAccess.canRead(inputPath)) return true;
+      failures.push({
+        path: String(inputPath ?? ""),
+        message: createPathAccessError("file or folder").message,
+      });
+      return false;
+    });
+    const normalizedLibraryFolder = authorizedLibraryRoot(dbPath, libraryFolder);
+    const audioPaths = await collectAudioPaths(inputPaths);
+    if (normalizedLibraryFolder) {
+      configureLibraryRoot(dbPath, normalizedLibraryFolder);
+    }
+    const imported = [];
+    for (let index = 0; index < audioPaths.length; index += 1) {
+      if (importState?.cancelled) break;
+      try {
+        const audioPath = audioPaths[index];
+        const track = await importAudioFile(dbPath, audioPath, cacheDir);
+        if (track) imported.push(track);
+      } catch (error) {
+        console.warn(`Failed to import ${audioPaths[index]}:`, error);
+        failures.push({
+          path: audioPaths[index],
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+      emit(sender, "muro://import-progress", {
+        imported: index + 1,
+        total: audioPaths.length,
+        phase: "importing",
+        importId: importKey,
+      });
+    }
+    return {
+      imported,
+      scanned: audioPaths.length,
+      failures,
+      cancelled: Boolean(importState?.cancelled),
+    };
+  };
+
   const commands = {
     ...castService.commands,
     ...dlnaService.commands,
@@ -904,45 +957,25 @@ export const createBackend = ({
             dlnaService.commands.dlna_load_track(authorizedRemotePlayback(currentDbPath(), args)),
         }
       : {}),
-    async import_files({ paths, dbPath, libraryFolder }, sender) {
-      const failures = [];
-      const inputPaths = (Array.isArray(paths) ? paths : []).filter((inputPath) => {
-        if (pathAccess.canRead(inputPath)) return true;
-        failures.push({
-          path: String(inputPath ?? ""),
-          message: createPathAccessError("file or folder").message,
-        });
-        return false;
-      });
-      const normalizedLibraryFolder = authorizedLibraryRoot(dbPath, libraryFolder);
-      const audioPaths = await collectAudioPaths(inputPaths);
-      if (normalizedLibraryFolder) {
-        configureLibraryRoot(dbPath, normalizedLibraryFolder);
-      }
-      const imported = [];
-      for (let index = 0; index < audioPaths.length; index += 1) {
-        try {
-          const audioPath = audioPaths[index];
-          const track = await importAudioFile(dbPath, audioPath, cacheDir);
-          if (track) imported.push(track);
-        } catch (error) {
-          console.warn(`Failed to import ${audioPaths[index]}:`, error);
-          failures.push({
-            path: audioPaths[index],
-            message: error instanceof Error ? error.message : String(error),
-          });
+    async import_files({ paths, dbPath, libraryFolder, importId }, sender) {
+      const importKey = typeof importId === "string" && importId ? importId.slice(0, 100) : null;
+      const importState = { cancelled: false };
+      if (importKey) activeImports.set(importKey, importState);
+      try {
+        return await importFilesWithProgress(
+          { paths, dbPath, libraryFolder, importKey, importState },
+          sender,
+        );
+      } finally {
+        if (importKey && activeImports.get(importKey) === importState) {
+          activeImports.delete(importKey);
         }
-        emit(sender, "muro://import-progress", {
-          imported: index + 1,
-          total: audioPaths.length,
-          phase: "importing",
-        });
       }
-      return {
-        imported,
-        scanned: audioPaths.length,
-        failures,
-      };
+    },
+    cancel_import({ importId }) {
+      const importState = typeof importId === "string" ? activeImports.get(importId) : undefined;
+      if (importState) importState.cancelled = true;
+      return { cancelled: Boolean(importState) };
     },
 
     load_tracks: ({ dbPath, libraryRoot, artistSeparatorExceptions }) =>

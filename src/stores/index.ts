@@ -53,6 +53,15 @@ export { useSmartCrateStore, type SmartCrateStore } from "./smartCrateStore";
 export { useScrobbleStore, type ScrobbleStore } from "./scrobbleStore";
 export { useUpdateStore, type UpdateStore } from "./updateStore";
 export {
+  useTaskStore,
+  startTask,
+  runTask,
+  type Task,
+  type TaskHandle,
+  type TaskKind,
+  type TaskStore,
+} from "./taskStore";
+export {
   useSleepTimerStore,
   selectSleepTimerActive,
   type SleepTimerStore,
